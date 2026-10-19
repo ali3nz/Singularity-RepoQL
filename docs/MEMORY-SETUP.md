@@ -57,6 +57,14 @@ key for routine agent traffic.
 3. Use that user's key for day-to-day agent traffic instead of the admin key —
    scopes (`team_id`, `user_id`, `agent_id`) keep memory isolated per
    workspace/person/agent.
+4. Wire the plugin to that key: `python3 scripts/provision-secrets.py --memory-user-key <the key>`
+   (or set `MEMORY_USER_KEY` in the environment). The provisioner never
+   defaults the plugin to the admin key; `--allow-admin-plugin-key` exists
+   only as an explicit, temporary bring-up fallback.
+5. Loopback boundary: `scripts/start-memory-stack.sh` refuses to finish while
+   any `tdai-*` port is published on the wildcard interface (override ONLY with
+   `SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1`), because the quickstart upstream
+   publishes on all host interfaces by default.
 
 ## 4. Point your harness at the proxy
 

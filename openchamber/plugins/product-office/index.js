@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { mapOfficeEvent } from "./office-events.js";
 import { flushOfficeQueue } from "./office-transport.js";
 import { reconcileMemoryUnit, scopeForSession } from "./memory-reconcile.js";
+import { buildTurns } from "./memory-turns.js";
 
 // Configuration file locations may be overridden by environment variables.
 // The defaults match the standard Singularity/OpenChamber installation layout.
@@ -110,34 +111,45 @@ export default {
       let scope;
       try { scope = scopeForSession(session, "build"); }
       catch (error) { await ctx.storage.set("memory/debug/" + sessionID, { stage: "scope", error: String(error?.message || error) }); return; }
+      // Bounded rescan: messages before `through` already belong to closed,
+      // recorded turns, so each event only walks the new tail. An interrupted
+      // (still-open) turn stays inside the window until it is answered.
+      const progress = await ctx.storage.get("memory/progress/" + sessionID);
+      const through = Math.max(0, Math.min(Number(progress?.through) || 0, Number.MAX_SAFE_INTEGER - 1));
       const messages = await ctx.session.context({ sessionID });
-      const users = messages.filter(m => m?.type === "user").length;
-      const assistants = messages.filter(m => m?.type === "assistant").length;
-      await ctx.storage.set("memory/debug/" + sessionID, { stage: "scanned", total: messages.length, users, assistants, types: [...new Set(messages.map(m => m?.type))] });
-      for (let index = 0; index < messages.length; index++) {
-        const message = messages[index];
-        if (message?.type !== "user") continue;
-        const text = (typeof message.text === "string" ? message.text : (message.content || []).filter(p => p?.type === "text").map(p => p.text).join("\n")).trim();
-        const assistant = messages.slice(index + 1).find(m => m?.type === "assistant");
-        const reply = assistant ? (typeof assistant.text === "string" ? assistant.text : (assistant.content || []).filter(p => p?.type === "text").map(p => p.text).join("\n")).trim() : "";
-        if (!text || !reply) {
-          await ctx.storage.set("memory/debug/" + sessionID, { stage: "skipped-turn", index, hasText: !!text, hasReply: !!reply });
+      const window = messages.slice(through);
+      const users = window.filter(m => m?.type === "user").length;
+      const assistants = window.filter(m => m?.type === "assistant").length;
+      await ctx.storage.set("memory/debug/" + sessionID, { stage: "scanned", from: through, total: messages.length, users, assistants, types: [...new Set(window.map(m => m?.type))] });
+      let nextThrough = through;
+      for (const turn of buildTurns(window)) {
+        const start = through + turn.startIndex;
+        const end = through + turn.endIndex;
+        const taskId = sessionID + "-turn-" + turn.userIds[0];
+        if (await ctx.storage.get("memory/ready/" + taskId)) {
+          nextThrough = Math.max(nextThrough, end + 1);
           continue;
         }
-        const taskId = sessionID + "-turn-" + message.id;
-        if (await ctx.storage.get("memory/ready/" + taskId)) continue;
+        const userTs = messages[start]?.time?.created;
+        const replyTs = turn.replyEndIndex != null ? messages[through + turn.replyEndIndex]?.time?.created : undefined;
+        const userIso = typeof userTs === "number" ? new Date(userTs).toISOString() : new Date().toISOString();
+        const replyIso = typeof replyTs === "number"
+          ? new Date(replyTs + 1).toISOString()
+          : typeof userTs === "number" ? new Date(userTs + 1).toISOString() : new Date().toISOString();
         const unit = {
           session_id: sessionID,
           task_id: taskId,
           messages: [
-            { role: "user", content: text, recorded_at: new Date(message.time.created).toISOString() },
-            { role: "assistant", content: reply, recorded_at: new Date(message.time.created + 1).toISOString() }
+            { role: "user", content: turn.text, recorded_at: userIso },
+            { role: "assistant", content: turn.reply, recorded_at: replyIso }
           ]
         };
         await ctx.storage.set("memory/pending/" + taskId, { scope, unit });
         await flushMemory();
         await ctx.storage.set("memory/ready/" + taskId, true);
+        nextThrough = Math.max(nextThrough, end + 1);
       }
+      await ctx.storage.set("memory/progress/" + sessionID, { through: nextThrough });
     }
 
     void (async () => {

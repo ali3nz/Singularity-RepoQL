@@ -357,12 +357,27 @@ export function cleanErr(t) {
 
 function git(repoDir, args) {
   const r = spawnSync("git", ["-C", repoDir, ...args], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
-  return (r.stdout || "") + (r.stderr || "");
+  // Exit status matters: combined output alone can "succeed" with a straight
+  // face while git was missing or failed. Report both, never just the text.
+  return { ok: r.status === 0 && !r.error, code: r.status ?? -1, error: r.error, out: (r.stdout || "") + (r.stderr || "") };
+}
+
+/** `git rev-parse HEAD` only — commit provenance is resolved from Git itself. */
+function gitHead(repoDir) {
+  const r = git(repoDir, ["rev-parse", "HEAD"]);
+  if (!r.ok) return null;
+  const sha = r.out.trim();
+  return /^[0-9a-f]{7,40}$/i.test(sha) ? sha : null;
 }
 
 function ensureGitRepo(repoDir) {
+  // The git binary must exist and work; without it the commit step below
+  // records COMMIT UNVERIFIED instead of claiming provenance.
+  const avail = git(repoDir, ["--version"]);
+  if (!avail.ok) throw new Error("git unavailable: dream commit provenance requires git" );
   if (!existsSync(join(repoDir, ".git"))) {
-    git(repoDir, ["init", "-q"]);
+    const r = git(repoDir, ["init", "-q"]);
+    if (!r.ok) throw new Error(`git init failed (rc=${r.code}): ${cleanErr(r.error?.message || r.out)}`);
   }
 }
 
@@ -482,7 +497,7 @@ export async function runDream({
 
       if (def.write) {
         const pre = git(memfsRoot, ["status", "--porcelain"]);
-        if ((pre || "").trim()) {
+        if ((pre.out || "").trim()) {
           git(memfsRoot, ["add", "-A"]);
           git(memfsRoot, ["-c", "user.email=dream@singularity.local", "-c", "user.name=ghost-dream", "commit", "-m", `pre-dream checkpoint ${today}`]);
         }
@@ -547,7 +562,16 @@ export async function runDream({
         const entries = parseMemoryEntries(state.steps[def.id]);
         state.proposedEntries = entries.length;
         state.appliedEntries = applyMemoryEntries(memfsRoot, entries, today);
-        const files = (git(memfsRoot, ["status", "--porcelain"]) || "").split("\n").map((l) => l.slice(3).trim().replace(/^"|"$/g, "")).filter(Boolean);
+        const st = git(memfsRoot, ["status", "--porcelain"]);
+        const files = (st.out || "").split("\n").map((l) => l.slice(3).trim().replace(/^"|"$/g, "")).filter(Boolean);
+        if (!st.ok) {
+          // Without `git status` we cannot audit the writes: refuse to commit
+          // and record the failure instead of advancing on unverifiable state.
+          state.steps[def.id] += `\n[COMMIT UNAVAILABLE git status failed rc=${st.code}: ${cleanErr(st.error?.message || st.out)}]`;
+          results.push({ step: def.id + ":commit", status: "unavailable" });
+          saveState(agentDir, state);
+          continue;
+        }
         try {
           assertOwnMemfs(memfsRoot, files, siblingId);
         } catch (e) {
@@ -559,11 +583,22 @@ export async function runDream({
           continue;
         }
         if (files.length > 0) {
+          const before = gitHead(memfsRoot);
           git(memfsRoot, ["add", "-A"]);
           const cm = git(memfsRoot, ["-c", "user.email=dream@singularity.local", "-c", "user.name=ghost-dream", "commit", "-m", `dream ${today}`]);
-          const m = (cm || "").match(/\[[\w-]+\s+([0-9a-f]+)\]/);
-          state.commit = m ? m[1] : "committed";
-          state.changedFiles = files;
+          const after = gitHead(memfsRoot);
+          if (cm.ok && after && after !== before) {
+            // Commit provenance is resolved from Git itself, never guessed.
+            state.commit = after;
+            state.changedFiles = files;
+          } else {
+            // Files may be written but the commit did not verify: record that
+            // honestly, never claim a commit that cannot be resolved.
+            state.commit = null;
+            state.changedFiles = files;
+            state.steps[def.id] += `\n[COMMIT UNVERIFIED rc=${cm.code}: ${cleanErr(cm.error?.message || cm.out)}]`;
+            results.push({ step: def.id + ":commit", status: "failed", error: cleanErr(cm.error?.message || cm.out) });
+          }
         }
         saveState(agentDir, state);
       }

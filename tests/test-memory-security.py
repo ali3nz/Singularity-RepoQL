@@ -161,6 +161,10 @@ def test_wrapper(tmp: Path) -> None:
         env = os.environ.copy()
         env["MEMORY_CORE_PORT"] = str(server.server_address[1])
         env.pop("MEMORY_CORE_GATEWAY_API_KEY", None)
+        # The wrapper's loopback-boundary check is host-dependent (a real host
+        # may publish tdai-* wide): the fixture tests the startup pipeline, so
+        # pass the documented escape hatch the wrapper accepts.
+        env["SINGULARITY_ALLOW_WIDE_MEMORY_PORTS"] = "1"
         wrapper = subprocess.run(
             ["bash", str(scripts / "start-memory-stack.sh")],
             text=True,
@@ -206,6 +210,10 @@ def test_verifier(tmp: Path, valid: bool) -> None:
         env = os.environ.copy()
         env["MEMORY_CORE_PORT"] = str(server.server_address[1])
         env.pop("MEMORY_CORE_GATEWAY_API_KEY", None)
+        # The wrapper's loopback-boundary check is host-dependent (a real host
+        # may publish tdai-* wide): the fixture tests the startup pipeline, so
+        # pass the documented escape hatch the wrapper accepts.
+        env["SINGULARITY_ALLOW_WIDE_MEMORY_PORTS"] = "1"
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts/verify-memory-user-key.py"), str(key_file)],
             text=True,

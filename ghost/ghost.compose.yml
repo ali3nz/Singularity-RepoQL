@@ -1,67 +1,49 @@
 # Ghost — persistent companion agent that dreams (optional add-on).
 #
-# Runs:
-#   - ghost-gateway: lightweight OpenAI-compatible allowlist gateway (:18003 loopback)
-#   - ghost-dream:   daily checkpointed dream cycle (experiences -> related ->
-#                    patterns -> evolution -> consolidate -> summary) committing
-#                    provenance-stamped reflections into data/ghost/memory/
+# Runs ONE service:
+#   - ghost-dream:   daemon that wakes hourly for the checkpointed dream cycle
+#                    (experiences -> related -> patterns -> evolution ->
+#                    consolidate -> summary), committing provenance-stamped
+#                    reflections into data/ghost/memory/
+#
+# HOW DREAM TURNS EXECUTE
+#   dream.mjs speaks plain OpenAI-compatible HTTP, so in this compose it talks
+#   to the product-network LLM proxy (`proxy:8096`) directly. No docker-exec
+#   gateway runs in containers: the reflect-against-Ghost-agent gateway
+#   (ghost/ghost-gateway.mjs) shells out to `docker exec` and therefore only
+#   runs on the HOST (see ghost/systemd/ghost-gateway.service). Containers are
+#   deliberately NOT given a docker CLI or socket — mounting a docker socket
+#   into a container is an explicit operator action, never a default.
+#
+# If you run the host gateway, point the dream daemon at it instead:
+#   GATEWAY_URL=http://127.0.0.1:18003/v1 requires either running this service
+#   with network_mode: host or publishing the gateway on the compose network.
 #
 # Prerequisites:
 #   - secrets/ghost.env exists (create with `ghost/setup-ghost.sh` or copy from
 #     templates/product.env.example)
 #   - scripts/start.sh has created the `singularity-product-net` network and
-#     `data/ghost/` directory structure
+#     `data/ghost/` directory structure (host-side, including the git init for
+#     dream commit provenance)
 #
 # Run from the repository root:
 #   docker compose -f ghost/ghost.compose.yml up -d
 services:
-  ghost-gateway:
-    image: ${GHOST_NODE_IMAGE:-node:22-bookworm-slim}
-    container_name: singularity-ghost-gateway
-    working_dir: /app
-    command: ["node", "ghost/ghost-gateway.mjs"]
-    ports:
-      - "127.0.0.1:18003:18003"
-    env_file:
-      - ${GHOST_ENV_FILE:-../secrets/ghost.env}
-    environment:
-      GHOST_GATEWAY_HOST: "0.0.0.0"
-      GHOST_GATEWAY_PORT: "18003"
-      UPSTREAM_BASE: "${GHOST_UPSTREAM_BASE:-http://proxy:8096/openai/default/v1}"
-      GHOST_DATA_DIR: "/data/ghost"
-    volumes:
-      - ../ghost:/app/ghost:ro
-      - ../data/ghost:/data/ghost
-    networks:
-      product:
-        aliases: [ghost-gateway]
-    restart: unless-stopped
-    mem_limit: 256m
-    cpus: 0.5
-
   ghost-dream:
-    image: ${GHOST_NODE_IMAGE:-node:22-bookworm-slim}
+    # Non-slim bookworm: needs git for dream commit provenance in data/ghost/memory.
+    image: ${GHOST_NODE_IMAGE:-node:22-bookworm}
     container_name: singularity-ghost-dream
     working_dir: /app
-    command:
-      - /bin/sh
-      - -c
-      - |
-        while true; do
-          node ghost/dream.mjs --agent ghost --agent-dir /data/ghost || true
-          sleep "${GHOST_DREAM_CHECK_INTERVAL_SEC:-3600}"
-        done
+    command: ["/bin/sh", "-c", "while true; do node ghost/dream.mjs --agent ghost --agent-dir /data/ghost || true; sleep \"${GHOST_DREAM_CHECK_INTERVAL_SEC:-3600}\"; done"]
     env_file:
       - ${GHOST_ENV_FILE:-../secrets/ghost.env}
     environment:
-      GATEWAY_URL: "${GHOST_DREAM_GATEWAY_URL:-http://ghost-gateway:18003/v1}"
+      GATEWAY_URL: "${GHOST_DREAM_GATEWAY_URL:-http://proxy:8096/openai/default/v1}"
       GHOST_DATA_DIR: "/data/ghost"
       GHOST_TIMEZONE: "${GHOST_TIMEZONE:-UTC}"
     volumes:
       - ../ghost:/app/ghost:ro
       - ../data/ghost:/data/ghost
-    depends_on:
-      - ghost-gateway
     networks:
       - product
     restart: unless-stopped

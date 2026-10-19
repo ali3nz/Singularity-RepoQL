@@ -27,7 +27,14 @@ jobs:
           node --test openchamber/plugins/product-office/*.test.mjs
           node --test openchamber/plugins/runbook-nudge/*.test.mjs
           node --test scripts/cohere-quota.test.mjs
+          node --test scripts/extraction-failover.test.mjs
           node --test ghost/dream.test.mjs
+          node --test ghost/ghost-gateway.test.mjs
+
+      - name: Python tests
+        run: |
+          python3 tests/test-memory-security.py
+          python3 tests/test-memory-promote.py
 
       - name: Local validation (configs, syntax, references)
         run: bash tests/validate-local.sh

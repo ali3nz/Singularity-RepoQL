@@ -44,3 +44,49 @@ if [[ ! -s "$ADMIN_KEY_FILE" ]]; then
 fi
 chmod 600 "$ADMIN_KEY_FILE"
 python3 "$ROOT/scripts/verify-memory-user-key.py" "$ADMIN_KEY_FILE"
+
+# ── deployment boundary: loopback-only host publishing ───────────────────────
+# The vendored upstream startup scripts publish MemoryCore (8420), the memory
+# hub Panel/Knowledge (:8125/:8424) and the LLM proxy (:8096) on all host
+# interfaces, while the default gateway key starts empty. Exposure still
+# depends on the host firewall — so enforce the boundary here, on OUR side,
+# without forking the byte-exact upstream files. Unless explicitly overridden,
+# anything published on the wildcard (0.0.0.0/::) must be re-bound to loopback
+# (127.0.0.1) or deserve an explicit escape hatch.
+ALLOW_WIDE_MEMORY_PORTS=0
+if [[ "${SINGULARITY_ALLOW_WIDE_MEMORY_PORTS:-}" == "1" ]]; then ALLOW_WIDE_MEMORY_PORTS=1; fi
+# NOTE: under `set -euo pipefail` a command substitution is fatal when any
+# pipeline member exits nonzero (e.g. grep with no matches on hosts whose
+# containers are not tdai-*-named), so the loop greps inside the body and only
+# `echo` (rc=0) can end it. Wide publishing means the HOST IP is the wildcard
+# (see `docker port` output: 8420/tcp -> 0.0.0.0:8420).
+wide="$(docker ps --format '{{.Names}}' | while read -r name; do
+  case "$name" in
+    tdai-*)
+      docker port "$name" 2>/dev/null | awk -v n="$name" '
+        { h = $NF; sub(/:[0-9]+$/, "", h); if (h == "0.0.0.0" || h == "::" || h == "[::]") print n, $0 }
+      '
+      ;;
+  esac
+done
+)"
+if [[ -n "$wide" ]]; then
+  if [[ "$ALLOW_WIDE_MEMORY_PORTS" == 1 ]]; then
+    echo 'WARNING: Memory Core ports are published on the wildcard interface:' >&2
+    echo "$wide" >&2
+    echo '        continuing because SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 — make sure a host firewall enforces the boundary.' >&2
+  else
+    echo 'FAILED: Memory Core ports are published on the wildcard interface (0.0.0.0/::):' >&2
+    echo "$wide" >&2
+    cat >&2 <<'EOS'
+    The quickstart upstream publishes these on all interfaces by default;
+    re-bind them to loopback (e.g. in your own compose override: "ports: ['127.0.0.1:8420:8420']")
+    or pass SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 ONLY if your host firewall
+    guarantees the trusted-interface boundary. The agent-facing plugin speaks
+    to the core over the internal docker network, so loopback publishing is
+    enough.
+EOS
+    exit 1
+  fi
+fi
+printf 'boundary ok: Memory Core host publishing is loopback-only\n'

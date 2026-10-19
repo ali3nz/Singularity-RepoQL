@@ -26,8 +26,20 @@ Ghost is an optional persistent AI companion agent for OpenChamber and the Singu
    - **Checkpointed & bounded:** Each step is saved to `data/ghost/dreams/.state.json`. If a model provider times out or hits a rate limit, the next run resumes from the unfinished step. Capped at 1 dream/day and 25 minutes total runtime by default.
 4. **Headless OpenChamber Turn Runner (`ghost/ghost-turn.mjs`)**
    - Creates a fresh OpenChamber session, posts a scheduled wake or maintenance prompt to the `ghost` agent, polls until completion, and outputs structured JSON (`status`, `sessionId`, `durationSec`, `reply`).
-5. **Model Allowlist Gateway (`ghost/ghost-gateway.mjs`)**
-   - Optional lightweight OpenAI-compatible proxy (`127.0.0.1:18003/v1`) that restricts `/v1/models` and `/v1/chat/completions` to a configured model allowlist (`GHOST_MODELS`) and logs per-request latency and token usage (`ghost_calls.jsonl`, `ghost_usage.json`).
+5. **OpenChamber Turn Gateway (`ghost/ghost-gateway.mjs`, HOST-side)**
+   - Optional OpenAI-compatible endpoint (`127.0.0.1:18003/v1/chat/completions`)
+     that executes each request as ONE bounded turn of the Ghost agent on the
+     OpenChamber (opencode) runtime. Every turn shells out to `docker exec`,
+     so the gateway must run on the HOST (e.g. via `ghost/systemd/ghost-gateway.service`)
+     or inside a container that you yourself give a docker CLI + socket — it is
+     never granted container privileges by default and `ghost.compose.yml`
+     does not run it. If docker is not available to its process, the gateway
+     stays up, reports `execAvailable:false`, `/models` still works, and turn
+     requests are rejected with a clear configuration error (no crash).
+   - `/healthz` exposes live counters (`requests/completed/failed/rejected`,
+     inflight queue). The older documented `GHOST_MODELS` allowlist and
+     `ghost_calls.jsonl`/`ghost_usage.json` telemetry files were never part of
+     this implementation.
 
 ---
 
@@ -51,7 +63,18 @@ Ghost is an optional persistent AI companion agent for OpenChamber and the Singu
    docker compose -f ghost/ghost.compose.yml up -d
    ```
 
-   When `secrets/ghost.env` exists, `scripts/start.sh` automatically starts `singularity-ghost-gateway` (`127.0.0.1:18003` loopback) and `singularity-ghost-dream` on the `singularity-product-net` network. Full walkthrough: [`../docs/GHOST-SETUP.md`](../docs/GHOST-SETUP.md).
+   When `secrets/ghost.env` exists, `scripts/start.sh` automatically starts
+   `singularity-ghost-dream` on the `singularity-product-net` network. The
+   dream daemon calls the Memory Stack LLM proxy (`proxy:8096`) directly by
+   default; set `GHOST_DREAM_GATEWAY_URL` to override. To run the
+   reflect-against-Ghost-agent lanes, start the gateway on the host:
+
+   ```bash
+   node ghost/ghost-gateway.mjs        # binds 127.0.0.1:18003
+   # or: cp ghost/systemd/* /etc/systemd/system/ && systemctl enable --now ghost-gateway
+   ```
+
+   Full walkthrough: [`../docs/GHOST-SETUP.md`](../docs/GHOST-SETUP.md).
 
 ---
 
@@ -67,8 +90,8 @@ node ghost/ghost-memory.mjs recall "deployment rollback checklist"
 # Record a standalone note in MemoryCore
 node ghost/ghost-memory.mjs remember --role assistant --text "Prefer explicit healthcheck polling before marking a service ready"
 
-# Run a daily dream cycle against the gateway or any OpenAI-compatible endpoint
-GATEWAY_URL=http://127.0.0.1:18003/v1 node ghost/dream.mjs --agent ghost --agent-dir data/ghost --force
+# Run a daily dream cycle against the memory proxy or any OpenAI-compatible endpoint
+GATEWAY_URL=http://127.0.0.1:8096/openai/default/v1 node ghost/dream.mjs --agent ghost --agent-dir data/ghost --force
 
 # Run a headless OpenChamber turn as Ghost
 OPENCHAMBER_URL=http://127.0.0.1:3127 node ghost/ghost-turn.mjs --slot daily-review "Summarize today's open tasks and update digest.md"

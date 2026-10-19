@@ -1,7 +1,7 @@
 {
   "name": "Singularity-RepoQL",
   "version": "0.1.0-rc1",
-  "generated": "2026-10-19T12:06:20Z",
+  "generated": "2026-10-19T21:05:00Z",
   "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, optional Ghost persistent companion agent that dreams, and harness adapters.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {
@@ -49,7 +49,7 @@
       "note": "connects the OpenChamber bundle to the user's existing rql installation over MCP; RepoQL is installed and licensed separately (repoql.com)"
     },
     "memory_startup_safety": {
-      "path": "scripts/start-memory-stack.sh + scripts/redact-memory-startup.py + scripts/verify-memory-user-key.py",
+      "path": "scripts/start-memory-stack.sh + scripts/redact-memory-startup.py + scripts/verify-memory-user-key.py (and the loopback publishing boundary check)",
       "source": "authored for this repository",
       "vendored": false,
       "note": "runs the byte-exact Memory Core quickstart through streaming key-output redaction and verifies auth/verify data.valid=true without printing the admin key"

@@ -24,8 +24,11 @@ for f in scripts/*.mjs ghost/*.mjs openchamber/plugins/product-office/*.js \
 step "unit tests"
 check node --test scripts/cohere-quota.test.mjs
 check node --test scripts/setup-agent-profiles.test.mjs
+check node --test scripts/extraction-failover.test.mjs
 check node --test ghost/dream.test.mjs
+check node --test ghost/ghost-gateway.test.mjs
 check python3 tests/test-memory-security.py
+check python3 tests/test-memory-promote.py
 for f in openchamber/plugins/product-office/*.test.mjs \
          openchamber/plugins/runbook-nudge/*.test.mjs; do check node --test "$f"; done
 

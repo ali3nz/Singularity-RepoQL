@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cursor-based bounded promotion review over the memory store (zero model calls).
 
-One authenticated POST /v3/conversation/search per run; prints at most 12
+One authenticated POST /v3/conversation/query per run; prints at most 12
 compact candidates within a 4000-char combined-excerpt budget. The reviewing
 agent reads at most 2 records in full and submits through the existing gated
 surfaces only:
@@ -76,18 +76,27 @@ def auth_headers():
 
 
 def search(base, scope, limit):
+    """One bounded probe query for the promotion scanner.
+
+    Uses POST /v3/conversation/query (paginated listing). Do NOT use
+    /v3/conversation/search here: that endpoint requires a `query` field and
+    returns 400 without one, and this scanner must not depend on free-text
+    search to discover candidates.
+    """
     body = json.dumps(
         {
+            # Strict isolation: /v3 requires team/user/agent on every call.
             "team_id": scope["team_id"],
             "user_id": scope["user_id"],
             "agent_id": scope["agent_id"],
+            "offset": 0,
             "limit": max(limit, 1),
         }
     ).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     headers.update(auth_headers())
     req = urllib.request.Request(
-        base + "/v3/conversation/search",
+        base + "/v3/conversation/query",
         data=body,
         headers=headers,
         method="POST",
@@ -96,22 +105,33 @@ def search(base, scope, limit):
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        print("search failed:", exc.code, exc.reason, "- check scopes/auth (--probe re-runs)")
+        print("query failed:", exc.code, exc.reason, "- check scopes/auth (--probe re-runs)")
         sys.exit(7)
     except urllib.error.URLError as exc:
-        print("search unreachable:", exc.reason, "- is the memory core at", base, "?")
+        print("query unreachable:", exc.reason, "- is the memory core at", base, "?")
         sys.exit(7)
 
 
 def compact_records(doc):
+    """Normalize a memory-store response page into compact candidate rows.
+
+    The documented shape is {code, data: {messages: [...]}}; deployments vary,
+    so list- and flat-key fallbacks stay. Records missing an id, timestamp or
+    text are skipped rather than guessed.
+    """
     rows = []
-    if isinstance(doc, list):
+    if isinstance(doc, dict):
+        if isinstance(doc.get("data"), dict) and isinstance(doc["data"].get("messages"), list):
+            rows = doc["data"]["messages"]
+        elif isinstance(doc.get("data"), list):
+            rows = doc["data"]
+        else:
+            for key in ("records", "results", "conversations", "messages", "units"):
+                if isinstance(doc.get(key), list):
+                    rows = doc[key]
+                    break
+    elif isinstance(doc, list):
         rows = doc
-    elif isinstance(doc, dict):
-        for key in ("records", "results", "conversations", "messages", "data", "units"):
-            if isinstance(doc.get(key), list):
-                rows = doc[key]
-                break
     out = []
     for row in rows:
         if not isinstance(row, dict):
@@ -173,7 +193,7 @@ def main():
     ap.add_argument("--state-dir", default="data/selflearn")
     ap.add_argument(
         "--probe", action="store_true",
-        help="print the raw first search page and exit (schema reconnaissance)",
+        help="print the raw first query page and exit (schema reconnaissance)",
     )
     ap.add_argument("--mark-done", nargs="*", default=[], help="record ids as resolved")
     ap.add_argument("--defer", nargs="*", default=[], help="record ids as kept for later")

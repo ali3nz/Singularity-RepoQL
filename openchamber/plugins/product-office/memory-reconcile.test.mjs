@@ -30,6 +30,29 @@ test("partial write failure replays only missing messages", async () => {
   assert.equal((await reconcileMemoryUnit(f.request, scope, unit)).written, 1);
   assert.equal(f.rows.length, 2);
 });
+test("reconciliation queries by task_id and ignores rows without one", async () => {
+  // Verified against the deployed Memory Core image: /conversation/query
+  // accepts a task_id filter and echoes task_id on each row. The fixture
+  // asserts the REQUEST contract so a regression here fails loudly.
+  const seen = [];
+  const rows = [];
+  const request = async (path, body) => {
+    seen.push({ path, task_id: body.task_id });
+    if (path.endsWith("query")) {
+      return { messages: rows.filter(r => r.task_id === body.task_id), total: rows.length };
+    }
+    body.messages.forEach(m => rows.push({ ...m, task_id: body.task_id }));
+    return {};
+  };
+  const other = { session_id: "ses_test", task_id: "other-task", messages: [{ role: "user", content: "unrelated", recorded_at: "2026-10-17T00:00:00.000Z" }] };
+  await reconcileMemoryUnit(request, scope, other); // different task in the same session
+  assert.equal((await reconcileMemoryUnit(request, scope, unit)).written, 2);
+  assert.equal(rows.length, 3);
+  assert.ok(seen.every(s => s.task_id && (s.task_id === "other-task" || s.task_id === "turn-unique")));
+  // A second reconciliation of the same unit must recognise both stored rows
+  // by task_id even though the fixture's query response is now filtered.
+  assert.equal((await reconcileMemoryUnit(request, scope, unit)).written, 0);
+});
 test("project directory and user identity isolate scope", () => {
   const session = { projectID: "global", location: { directory: "/home/openchamber/workspaces/a" } };
   const a = scopeForSession(session, "build", "user-a");

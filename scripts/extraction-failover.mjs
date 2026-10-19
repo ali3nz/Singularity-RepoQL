@@ -44,18 +44,64 @@ if (LADDER.length === 0) throw new Error("No extraction providers configured (mi
 const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
 const state = { attempts: 0, failovers: 0, lastModel: null, lastError: null };
 
+const _rawMaxBody = Number(process.env.EXTRACTION_FAILOVER_MAX_BODY_BYTES);
+const MAX_BODY_BYTES = Math.min(64 * 1024 * 1024, Math.max(1024, Number.isFinite(_rawMaxBody) && _rawMaxBody > 0 ? _rawMaxBody : 8 * 1024 * 1024));
+
 function headersSentFor(res) { return res.headersSent === true; }
 
-function readBody(req) {
+function readBody(req, maxBytes) {
   return new Promise((resolve, reject) => {
+    let size = 0;
     const chunks = [];
-    req.on("data", c => chunks.push(c));
+    req.on("data", c => {
+      size += c.length;
+      // Bounded request body — the router buffers whole bodies, so an
+      // unbounded prompt must not balloon memory. Rejected with 413.
+      if (size > maxBytes) {
+        const err = new Error(`request body exceeds ${maxBytes} bytes`);
+        err.code = "BODY_TOO_LARGE";
+        req.pause();
+        reject(err);
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
 
-const server = http.createServer(async (req, res) => {
+// Deadline that spans headers AND body: a provider that answers headers then
+// stalls mid-body must still hit the hop timeout (AbortController covers both,
+// because the same controller signal governs fetch() and the stream reader).
+async function pumpBody(upstreamBody, res, controller) {
+  const reader = upstreamBody.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const flushed = res.write(Buffer.from(value));
+      if (!flushed) {
+        // Respect downstream backpressure — never buffer an unbounded
+        // provider stream behind a slow consumer.
+        await new Promise((resolve, reject) => {
+          const onDrain = () => { cleanup(); resolve(); };
+          const onAbort = () => { cleanup(); reject(controller.signal.reason || new Error("hopping over stalled stream")); };
+          const cleanup = () => {
+            res.off("drain", onDrain);
+            controller.signal.removeEventListener("abort", onAbort);
+          };
+          res.on("drain", onDrain);
+          controller.signal.addEventListener("abort", onAbort, { once: true });
+        });
+      }
+    }
+  } finally {
+    try { await reader.cancel(); } catch { /* already done */ }
+  }
+}
+
+export const server = http.createServer(async (req, res) => {
   if (req.url === "/health" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({ status: "ok", ...state, hopTimeoutMs: HOP_TIMEOUT_MS, ladder: LADDER.map(l => l.name) }));
@@ -66,8 +112,13 @@ const server = http.createServer(async (req, res) => {
   }
   let payload;
   try {
-    payload = JSON.parse((await readBody(req)).toString("utf8") || "{}");
-  } catch {
+    payload = JSON.parse((await readBody(req, MAX_BODY_BYTES)).toString("utf8") || "{}");
+  } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      state.lastError = { stage: "request", error: error.message, at: Date.now() };
+      res.writeHead(413, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: { message: error.message, hint: "raise EXTRACTION_FAILOVER_MAX_BODY_BYTES if this is a legitimate extraction prompt" } }));
+    }
     res.writeHead(400, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({ error: { message: "invalid JSON" } }));
   }
@@ -122,23 +173,20 @@ const server = http.createServer(async (req, res) => {
         return res.end(text || JSON.stringify({ error: { message: "upstream error" } }));
       }
       state.lastModel = provider.name;
-      clearTimeout(timer);
+      // NOTE: the hop timer is NOT cleared here. It stays armed through the
+      // response body so a provider that stalls mid-stream is still aborted;
+      // controller.abort() makes the pump below reject post-header, which the
+      // catch handles by destroying the connection (no retry after headers).
       res.writeHead(200, {
         "Content-Type": upstream.headers.get("content-type") || "application/json",
         "Cache-Control": "no-store",
       });
-      if (upstream.body) {
-        const reader = upstream.body.getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(Buffer.from(value));
-        }
-      }
+      if (upstream.body) await pumpBody(upstream.body, res, controller);
+      clearTimeout(timer);
       return res.end();
     } catch (error) {
       clearTimeout(timer);
-      state.lastError = { provider: provider.name, error: String(error?.name || error), at: Date.now() };
+      state.lastError = { provider: provider.name, error: String(error?.name || error), message: String(error?.message || "").slice(0, 200), cause: String(error?.cause?.code || error?.cause?.message || "").slice(0, 120), at: Date.now() };
       if (headersSentFor(res)) {
         // Headers are already sent, so a retry would append another provider's
         // body to a partially delivered stream. Abort the connection instead.

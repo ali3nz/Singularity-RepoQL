@@ -11,6 +11,13 @@ Creates, with restrictive permissions and without printing any values:
 Existing values are preserved: re-running fills in what is missing and never
 overwrites a key that already has a value. Nothing is printed except file
 paths and presence booleans.
+
+Least-privileged Memory Core identity (default): the OpenChamber plugin's
+runtime traffic uses a DEDICATED agent/business user key passed with
+--memory-user-key (or MEMORY_USER_KEY). The admin key from the memory stack
+startup is administrative — the plugin no longer falls back to it silently.
+Pass --allow-admin-plugin-key only while a scoped key is being provisioned
+(e.g. tests or bring-up), never as the routine configuration.
 """
 
 import argparse
@@ -69,7 +76,13 @@ def main() -> int:
                     help="in-network Memory Core endpoint the plugin resolves (default: %(default)s)")
     ap.add_argument("--memory-service-id", default=os.environ.get("MEMORY_SERVICE_ID", "default"))
     ap.add_argument("--memory-user-key", default=os.environ.get("MEMORY_USER_KEY", ""),
-                    help="Memory Core user key (sk-mem-...); default: read memory/upstream/.admin-key")
+                    help="Memory Core user key (sk-mem-...) for the OpenChamber plugin's runtime traffic; "
+                         "create a dedicated (business-user scoped) key and pass it here"
+                    )
+    ap.add_argument("--allow-admin-plugin-key", action="store_true",
+                    help="explicitly let the plugin fall back to the memory stack ADMIN key "
+                         "(bring-up convenience only — prefer a scoped runtime key)"
+                    )
     ap.add_argument("--office-base-url", default="http://product-office:8000")
     ap.add_argument("--with-ghost", action="store_true", help="also provision secrets/ghost.env for the optional Ghost companion agent add-on")
     args = ap.parse_args()
@@ -93,17 +106,26 @@ def main() -> int:
     if generated or not office_env.exists():
         write_env_file(office_env, office_values)
 
-    # 2. Memory Core identity for the plugin: prefer the generated admin key.
+    # 2. Memory Core identity for the plugin. Least-privileged by default: the
+    # plugin's runtime traffic must use its own scoped key, NOT the admin key.
     user_key = args.memory_user_key
-    if not user_key:
+    if not user_key and args.allow_admin_plugin_key:
         admin_key_file = base / "memory" / "upstream" / ".admin-key"
         if admin_key_file.exists():
             user_key = admin_key_file.read_text().strip()
+            print(
+                "warning: plugins provisioned with the ADMIN key "
+                "(--allow-admin-plugin-key). Replace it with a scoped "
+                "runtime key as soon as you can create one.",
+                file=sys.stderr,
+            )
     if not user_key:
         print(
-            "warning: no admin key at memory/upstream/.admin-key and none passed with\n"
-            "         --memory-user-key. memory.json is written with an empty userKey;\n"
-            "         start the memory stack, then re-run this script.",
+            "warning: no scoped runtime key passed with --memory-user-key. "
+            "memory.json is written with an empty userKey; create a "
+            "dedicated (least-privileged) Memory Core user key, then re-run "
+            "this script with --memory-user-key. Pass "
+            "--allow-admin-plugin-key only as an explicit temporary fallback.",
             file=sys.stderr,
         )
 

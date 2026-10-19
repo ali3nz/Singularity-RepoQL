@@ -5,6 +5,18 @@
 //
 // Binds to loopback (127.0.0.1:18003) by default so scheduled pipelines (such
 // as ghost/dream.mjs) can run step-by-step reflection against the Ghost lane.
+//
+// HOW TURNS RUN: the gateway shells out to `docker exec` for every turn, so it
+// must run on the HOST (or in a container that itself has a docker CLI and
+// socket — deliberately NOT granted by ghost.compose.yml). Two supported
+// modes:
+//   1. HOST process (recommended): run `node ghost/ghost-gateway.mjs` directly
+//      (or via ghost/systemd/ghost-gateway.service); the compose gateway
+//      service is retained without it.
+//   2. DIND container: build an image with docker CLI + this repo mounted and
+//      mount /var/run/docker.sock yourself — an explicit, documented act.
+// The compose service therefore fails turns with a clear configuration error
+// instead of crashing on a missing docker binary.
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
@@ -23,17 +35,58 @@ let inflight = 0;
 const queue = [];
 const stats = { requests: 0, completed: 0, failed: 0, rejected: 0, startedAt: new Date().toISOString() };
 
+// Execution-mode detection is done ONCE at startup: if the docker CLI is not
+// available (as inside the plain ghost.compose.yml gateway container), the
+// gateway stays up and answers /healthz with `execAvailable:false`, and every
+// turn is rejected with a configuration error instead of crashing.
+let EXEC_MODE = { dockerBin: process.env.GHOST_DOCKER_BIN || "docker", error: null };
+function detectExecMode() {
+  const probe = spawn(process.env.GHOST_DOCKER_BIN || "docker", ["version", "--format", "{{.Server.Version}}"], { stdio: "ignore" });
+  probe.on("error", (e) => {
+    EXEC_MODE = { ...EXEC_MODE, error: `docker CLI not available for this process: ${e?.message || e}. Run the gateway on the host (ghost/systemd) or in a docker-CLI-enabled container; see ghost/README.md.` };
+    console.error("[ghost-gateway] " + EXEC_MODE.error);
+  });
+  probe.on("close", (code) => {
+    if (code !== 0) {
+      EXEC_MODE = { ...EXEC_MODE, error: `docker probe exited ${code} — turns will be rejected until docker works for this process.` };
+      console.error("[ghost-gateway] " + EXEC_MODE.error);
+    } else {
+      console.log("[ghost-gateway] docker exec available; turn execution enabled");
+    }
+  });
+}
+
 function runTurn(label, prompt) {
   return new Promise((resolveTurn) => {
+    let killer = null;
+    const finish = (r) => { if (killer !== null) { try { clearTimeout(killer); } catch { /* already cleared */ } killer = null; } resolveTurn(r); };
+    if (EXEC_MODE.error) {
+      finish({ code: 127, content: "", usage: null, session: null, err: EXEC_MODE.error });
+      return;
+    }
     const modelArgs = MODEL ? ["--model", MODEL] : [];
     const args = ["exec", "-i", CTN, BIN, "run", "--agent", AGENT, ...modelArgs, "--format", "json", "--title", label, prompt];
-    const child = spawn("docker", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let child;
+    try {
+      // Read the docker binary per turn: tests (and podman-style migrations)
+      // may swap it between turns via GHOST_DOCKER_BIN.
+      child = spawn(process.env.GHOST_DOCKER_BIN || "docker", args, { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      finish({ code: 127, content: "", usage: null, session: null, err: `spawn docker failed: ${error?.message || error}` });
+      return;
+    }
+    killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, TURN_TIMEOUT_MS);
     let out = "", err = "";
-    const killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, TURN_TIMEOUT_MS);
     child.stdout.on("data", (d) => { out += d; if (out.length > 8e6) out = out.slice(-4e6); });
     child.stderr.on("data", (d) => { err += d; if (err.length > 2e5) err = err.slice(-1e5); });
+    // A spawn failure (ENOENT: no docker CLI) must reject the turn, never
+    // crash the gateway process via an unhandled "error" event. The turn is
+    // resolved with a failure; drain() records it exactly once.
+    child.on("error", (spawnError) => {
+      EXEC_MODE.error = `docker exec unavailable: ${spawnError?.message || spawnError}`;
+      finish({ code: 127, content: "", usage: null, session: null, err: EXEC_MODE.error });
+    });
     child.on("close", (code) => {
-      clearTimeout(killer);
       const texts = [];
       let usage = null, session = null;
       for (const line of out.split("\n")) {
@@ -51,7 +104,7 @@ function runTurn(label, prompt) {
           usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
         }
       }
-      resolveTurn({ code, content: texts.join("\n").trim(), usage, session, err: err.slice(-500) });
+      finish({ code, content: texts.join("\n").trim(), usage, session, err: err.slice(-500) });
     });
   });
 }
@@ -98,7 +151,7 @@ export const handler = async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, agent: AGENT, model: MODEL || "default", inflight, queued: queue.length, ...stats }));
+    res.end(JSON.stringify({ ok: true, execAvailable: !EXEC_MODE.error, agent: AGENT, model: MODEL || "default", inflight, queued: queue.length, ...stats }));
     return;
   }
   if (url.pathname === "/v1/models" || url.pathname === "/models") {
@@ -143,6 +196,7 @@ export const handler = async (req, res) => {
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  detectExecMode();
   for (const host of HOSTS) {
     const srv = createServer(handler);
     srv.listen(PORT, host, () => console.log(`ghost-gateway listening on http://${host}:${PORT} (agent=${AGENT})`));

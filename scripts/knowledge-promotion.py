@@ -104,6 +104,37 @@ def index_knowledge(title, body, truth_path, source_ref, supersedes_task_id=None
         return {"indexed": False, "reason": "index-failed: " + str(e)[:80], "task_id": task_id}
 
 
+def index_supersession(old_task_id, new_task_id, truth_name):
+    """Mark a superseded knowledge record as no longer current.
+
+    The old L0 record itself stays (append-only store), so recall is told
+    explicitly that it was replaced: a small tombstone unit that recite both
+    task ids. Idempotent by marker; failure is NON-fatal (promotion already
+    succeeded) and is reported, not swallowed.
+    """
+    if not old_task_id:
+        return {"tombstone": False, "reason": "nothing superseded"}
+    marker = "[kpromo-tombstone-" + old_task_id.split("-", 1)[-1] + "]"
+    scope = {"team_id": INDEX_TEAM, "user_id": INDEX_USER, "agent_id": INDEX_AGENT}
+    try:
+        found = _memory_call("/conversation/search", {**scope, "query": marker, "limit": 5})
+        msgs = (found.get("data") or {}).get("messages") or []
+        if any(marker in (m.get("content") or "") for m in msgs):
+            return {"tombstone": True, "reason": "already-recorded"}
+        _memory_call("/conversation/add", {
+            **scope, "session_id": INDEX_SESSION, "task_id": marker.strip("[]"),
+            "messages": [
+                {"role": "user", "content": (
+                    f"{marker} Knowledge note with task {old_task_id} (truth '{truth_name}') is SUPERSEDED.\n"
+                    f"Treat its content as superseded; the current note is {new_task_id}.\n"
+                ), "recorded_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())},
+            ],
+        })
+        return {"tombstone": True, "reason": "recorded"}
+    except Exception as e:
+        return {"tombstone": False, "reason": "tombstone-failed: " + str(e)[:80]}
+
+
 # ── store operations ────────────────────────────────────────────────────────
 
 def find_duplicate_proposal(chash):
@@ -205,8 +236,17 @@ def promote(proposal_path, truth_name, supersede=False, index=True):
 
     result = {"ok": True, "truth": str(target)}
     if index:
-        result["index"] = index_knowledge(meta["title"], body, str(target), meta["source"],
-                                          supersedes_task_id=superseded_task)
+        outcome = index_knowledge(meta["title"], body, str(target), meta["source"],
+                                  supersedes_task_id=superseded_task)
+        result["index"] = outcome
+        # Explicit partial success: the curated file promotion succeeded, so
+        # the caller must see BOTH facts — never a plain ok that a human
+        # could misread as fully promoted.
+        result["status"] = "promoted" if outcome.get("indexed") else "promoted-partial-index"
+        if superseded_task:
+            result["supersession"] = index_supersession(superseded_task, outcome.get("task_id", ""), truth_name)
+    else:
+        result["status"] = "promoted-unindexed"
     return target, result
 
 
@@ -217,6 +257,9 @@ def main():
     ap.add_argument("--truth-name")
     ap.add_argument("--supersede", action="store_true", help="replace an existing truth doc (archived to history/truth-superseded)")
     ap.add_argument("--no-index", action="store_true", help="skip MemoryCore indexing")
+    ap.add_argument("--retry-index", metavar="PROPOSAL",
+                    help="re-attempt MemoryCore indexing for an already promoted proposal "
+                         "(idempotent: the same content hash dedups; tombstone/supersession is re-recorded only if missing)")
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
 
@@ -235,6 +278,33 @@ def main():
             print(json.dumps({"ok": False, "reason": result}))
             sys.exit(1)
         print(json.dumps(result))
+    elif args.retry_index:
+        # Recoverable indexing: promotion already changed curated files; the
+        # index write can be retried independently without re-promoting.
+        p = Path(args.retry_index)
+        text = p.read_text()
+        meta = dict(re.findall(r"^(\w+): (.+)$", text, flags=re.M))
+        if meta.get("status") not in ("promoted", "proposed"):
+            print(json.dumps({"ok": False, "reason": f"proposal status is {meta.get('status')!r}; retry-index expects a promoted proposal"}))
+            sys.exit(1)
+        # Prefer the truth path recorded at promote time so the retried L0 unit
+        # matches exactly; fall back to the slug of the proposal title.
+        truth_path = None
+        promotions = AREAS["history"] / "promotions.jsonl"
+        if promotions.exists():
+            for line in promotions.read_text().splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if row.get("action") == "promote" and row.get("proposal") == str(p.resolve()):
+                    truth_path = row.get("truth")
+        truth_name = args.truth_name or slug(meta.get("title", "promoted-fact"))
+        target = Path(truth_path) if truth_path else AREAS["truth"] / f"{truth_name}.md"
+        body = text.split("---", 2)[-1].strip()
+        outcome = index_knowledge(meta["title"], body, str(target), meta.get("source", ""))
+        print(json.dumps({"ok": True, "truth": str(target), "index": outcome,
+                          "status": "indexed" if outcome.get("indexed") else "index-unavailable"}))
     elif args.list:
         for area, path in AREAS.items():
             files = sorted(p.name for p in path.glob("*.md")) if path.exists() else []

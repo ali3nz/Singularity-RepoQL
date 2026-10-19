@@ -52,24 +52,32 @@ Office:
 scripts/start.sh
 # or directly:
 docker compose -f ghost/ghost.compose.yml up -d
-docker logs singularity-ghost-gateway --tail 30
+docker logs singularity-ghost-dream --tail 30
 ```
 
-This starts two lightweight Node containers on `singularity-product-net`:
-- `singularity-ghost-gateway` (`127.0.0.1:18003` loopback) — OpenAI-compatible
-  model allowlist gateway that forwards to the Memory Stack proxy and records
-  call telemetry in `data/ghost/ghost_calls.jsonl` and
-  `data/ghost/ghost_usage.json`.
+This starts one container on `singularity-product-net`:
 - `singularity-ghost-dream` — background runner that checks hourly whether
   today's dream journal (`data/ghost/dreams/YYYY-MM-DD.md`) is due and runs the
-  checkpointed 6-step dream cycle once per day.
+  checkpointed 6-step dream cycle once per day. In compose, the dream
+  dispatcher talks OpenAI-compatible HTTP directly to the Memory Stack's LLM
+  proxy (`proxy:8096`), reported via
+  `GHOST_DREAM_GATEWAY_URL` (default `http://proxy:8096/openai/default/v1`).
+- **The docker-exec model gateway deliberately does NOT run in a container.**
+  `ghost/ghost-gateway.mjs` launches each turn with `docker exec` against the
+  OpenChamber container, so it requires the host's docker CLI. It runs on the
+  host (Option B below) or in a docker-CLI-enabled container that YOU mount a
+  docker socket into — an explicit operator action, never a default. Its
+  `/healthz` reports `execAvailable:false` and it cleanly rejects turns with a
+  configuration error when docker is not available to its process.
 
-### Option B — Host systemd timer
+### Option B — Host systemd units (gateway + dream timer)
 
-If you prefer running the dream cycle directly on a Linux host without a
-background container, copy the unit templates from `ghost/systemd/` into
-`/etc/systemd/system/`, run `systemctl daemon-reload`, and enable
-`ghost-gateway.service` and `ghost-dream.timer`.
+Copy the unit templates from `ghost/systemd/` into `/etc/systemd/system/` (edit
+`/opt/singularity-repoql` paths to your checkout), run
+`systemctl daemon-reload`, and enable `ghost-gateway.service` and
+`ghost-dream.timer`. The host gateway binds loopback `127.0.0.1:18003`; the
+host dream timer runs `dream.mjs` against it (edit `GATEWAY_URL` in
+`ghost-dream.service` to match, the unit default already points there).
 
 ## 3. How the three-tier memory and dream cycle work
 
@@ -97,6 +105,7 @@ node ghost/ghost-memory.mjs stats
 # 2. Run the Ghost dream unit test suite
 node --test ghost/dream.test.mjs
 
-# 3. Trigger an immediate dream cycle (when the gateway/proxy is running)
+# 3. Trigger an immediate dream cycle (dream talks to the memory proxy in
+#    compose, or to the host gateway at 127.0.0.1:18003/v1 if you run one)
 GATEWAY_URL=http://127.0.0.1:18003/v1 node ghost/dream.mjs --agent ghost --agent-dir data/ghost --force
 ```
