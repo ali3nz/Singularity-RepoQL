@@ -13,6 +13,11 @@
 // Env:
 //   AGENT_PROFILE_TEAM        MemoryCore team_id for agent profiles (default: openchamber-agents)
 //   AGENT_PROFILE_USER        MemoryCore user_id (default: the memory config user, else pilot-operator)
+//   AGENT_PROFILE_IDENTITY_MAP  optional path to an identity snapshot
+//                             ({ agents: { <name>: { team_id, user_id, agent_id } } }). When set, each
+//                             agent is bound to its mapped EXISTING identity: a stored charter there is
+//                             verified (no write); only a missing one is seeded. Agents absent from the
+//                             map fail. AGENT_PROFILE_TEAM/USER are ignored in this mode.
 //   SINGULARITY_MEMORY_CONFIG memory connection config
 //                             (default: data/opencode/config/product-secrets/memory.json)
 // Exit: 0 every profile present; 1 one or more failed; 2 usage error.
@@ -58,6 +63,34 @@ export function identityFor(name, env = process.env, baseIdentity = {}) {
   };
 }
 
+// Loads an identity snapshot ({ agents: { <name>: { team_id, user_id, agent_id } } }).
+// Used to bind variant agents to EXISTING MemoryCore identities (e.g. a shared MemoryCore)
+// instead of creating new scopes. Entries missing any of the three keys are dropped.
+export function loadIdentityMap(path) {
+  const j = JSON.parse(readFileSync(path, "utf8"));
+  if (!j || typeof j.agents !== "object" || j.agents === null) {
+    throw new Error("identity map has no agents object");
+  }
+  const map = {};
+  for (const [name, a] of Object.entries(j.agents)) {
+    if (a && a.team_id && a.user_id && a.agent_id) {
+      map[name] = { team_id: a.team_id, user_id: a.user_id, agent_id: a.agent_id };
+    }
+  }
+  return map;
+}
+
+// A search hit proves a charter only when it is this agent's charter: either the seeder's own
+// session, or the charter wording used by the shared roster ("OpenChamber agent role '<name>'"
+// or the seeder's "OpenChamber agent \"<name>\""). Any other stored message under the identity
+// (captured chat, notes) must not count, or the profile would be skipped and never seeded.
+export function isCharterFor(message, name, session) {
+  if (!message) return false;
+  if (message.session_id === session) return true;
+  const text = String(message.content ?? message.body ?? "");
+  return text.includes(`OpenChamber agent role '${name}'`) || text.includes(`OpenChamber agent "${name}"`);
+}
+
 export function readLedger(path) {
   if (!existsSync(path)) return { version: 1, profiles: {} };
   // A corrupt ledger must fail loudly: treating it as empty would re-seed every profile.
@@ -71,6 +104,7 @@ export async function provisionAgentProfiles({
   dryRun = false,
   env = process.env,
   cfg,
+  identityMap = null,
   fetchImpl = globalThis.fetch,
   now = () => new Date().toISOString(),
 }) {
@@ -81,17 +115,54 @@ export async function provisionAgentProfiles({
     writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2) + "\n", { mode: 0o600 });
   };
   for (const name of listAgents(agentsDir)) {
-    const identity = identityFor(name, env, cfg.identity);
+    // Map mode binds each agent to an existing identity; the env overrides are ignored there.
+    let identity;
+    if (identityMap) {
+      identity = identityMap[name];
+      if (!identity) {
+        results.push({ name, status: "failed", identity: { team_id: "-", user_id: "-", agent_id: name }, detail: "no identity in map" });
+        continue;
+      }
+    } else {
+      identity = identityFor(name, env, cfg.identity);
+    }
     const rec = ledger.profiles[name];
     // Present only when the recorded scope matches the requested scope; a changed
     // team or user override must re-seed, never report a profile that was not written.
-    if (rec?.seeded_at && rec.team_id === identity.team_id && rec.user_id === identity.user_id) {
+    if (rec?.seeded_at && rec.team_id === identity.team_id && rec.user_id === identity.user_id
+        && rec.agent_id === identity.agent_id) {
       results.push({ name, status: "present", identity });
       continue;
     }
     if (dryRun) {
-      results.push({ name, status: "would-seed", identity });
+      results.push({ name, status: identityMap ? "would-verify" : "would-seed", identity });
       continue;
+    }
+    if (identityMap) {
+      // Verify before seeding: any stored message under the mapped identity means the
+      // profile already exists (shared core), so writing a second charter would duplicate it.
+      let found;
+      try {
+        found = await callMemoryCore("/v3/conversation/search", {
+          ...identity,
+          query: `OpenChamber agent "${name}" charter`,
+          limit: 10,
+        }, cfg, fetchImpl);
+      } catch (err) {
+        results.push({ name, status: "failed", identity, detail: `verify request error: ${err?.name || "error"}` });
+        continue;
+      }
+      if (found.code !== 0) {
+        results.push({ name, status: "failed", identity, detail: `verify ${found.message || found.error || `code ${found.code ?? "?"}`}` });
+        continue;
+      }
+      if ((found.data?.messages || []).some((m) => isCharterFor(m, name, `agent-profile-${name}`))) {
+        ledger.profiles[name] = { ...identity, session_id: null, seeded_at: now(), source: "existing" };
+        saveLedger();
+        results.push({ name, status: "verified", identity });
+        continue;
+      }
+      // No existing profile under this identity: fall through and seed it.
     }
     const text = readFileSync(join(agentsDir, `${name}.md`), "utf8");
     const session = `agent-profile-${name}`;
@@ -129,12 +200,22 @@ async function main(argv) {
   }
   process.env.SINGULARITY_MEMORY_CONFIG ||= join(ROOT, "data/opencode/config/product-secrets/memory.json");
   const cfg = loadGhostMemoryConfig(process.env);
+  let identityMap = null;
+  if (process.env.AGENT_PROFILE_IDENTITY_MAP) {
+    try {
+      identityMap = loadIdentityMap(process.env.AGENT_PROFILE_IDENTITY_MAP);
+    } catch (err) {
+      console.error(`cannot read AGENT_PROFILE_IDENTITY_MAP: ${err.message}`);
+      return 2;
+    }
+  }
   const out = await provisionAgentProfiles({
     agentsDir: join(ROOT, "openchamber/agents"),
     ledgerPath: join(ROOT, "data/agent-profiles/ledger.json"),
     dryRun: argv.includes("--dry-run"),
     env: process.env,
     cfg,
+    identityMap,
   });
   for (const r of out.results) {
     const tail = r.detail ? `  - ${r.detail}` : "";

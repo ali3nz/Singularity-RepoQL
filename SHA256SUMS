@@ -1,5 +1,6 @@
 0c723d6335843cd057c90efb023e256246efa0a93a0fce1a6a6cc52bc3cb6c31  ./.github/workflows/ci.yml
 ab81d67b4554db53e0c38478076a998d9b7d2f34d0d7838efaeceff0c8dc0284  ./.gitignore
+695426e943174af72f2a2391c3f48ed02c52873628e79be9fbf1a117f9ab3d9d  ./.repoql/.gitignore
 c794b8151b1b09c6ef6a5dc9124ae0c0637cff3df41d910cf5f1a451a281589d  ./AGENTS.md
 2c95486d49817216a5f8f190003b7f46443166d876035c99157c8cafe1757054  ./INSTRUCTIONS.md
 5b7837017b32cc70e856046a4a5e9813306eea4d1c2babe1df5787cad64fe4cc  ./LICENSE
@@ -15,7 +16,7 @@ b7d1bfe20ba46238d0b8d9c09836e172396991abe0c1c0b2e8e72a99d35fc144  ./compose/extr
 6b56f607aee4c3db1b87d23874062b316b2a0490bc3548145b6f8b8cec569d33  ./docs/ARCHITECTURE.md
 5c265d37d6a5abd98685744bbb9041d629f3e6e9a890b3b30667c4d3aa982e62  ./docs/GHOST-SETUP.md
 a28c6beae6e467b11e7faf91a864124ceba5ba85ad4221b9bc3b384555c44ad0  ./docs/MEMORY-LOOP.md
-236c0d012493ee2187f4c68fadb72941f0c8ca3ec885ba1e69aae22843d32332  ./docs/MEMORY-SETUP.md
+9ad3927db622b4a855551f6338d58be7f1ff5e8566f7bd6133c5171b98becaa1  ./docs/MEMORY-SETUP.md
 7ac1a29f74dc401a50f5f1ef157f0ef54dd8f019b072c608aeb3e512819a16d0  ./docs/OFFICE-SETUP.md
 57c7a427c1d211c77aa7e19b192824f152a620dd2abb3105522a6df99dab1eba  ./docs/OPENCHAMBER-SETUP.md
 90a8299b23e0f320ab21a5e78348061e670f9f54884b546b7e66a9e4cf2813ec  ./docs/REPOQL-SETUP.md
@@ -91,14 +92,14 @@ a0831766e72c20f29219175127962f12de72f9acbd3b25fb1a4f215493f83c01  ./scripts/memo
 e2882b952fe21ea3d4964ab90bb01a9fdf7cb00201e9242f88ce12eab201edae  ./scripts/memory_turn_capture.py
 8fe33109d951523fb19bc6f053eaeb0e3f41f35f22611d1880f6fae29a8651ec  ./scripts/provision-secrets.py
 8f0ea41ec027955be2dd59789c0d7ea8ae06550b62d3e7a7c10a90b07e5f1929  ./scripts/redact-memory-startup.py
-07ac58685f5253e286f519aaa99aaa3200f0748bf01bcb3eef159bfb4d214b92  ./scripts/setup-agent-profiles.mjs
-e2bb5740f10135940fb8d8b18a02f11d16872e4f8582e6a39445071d87ba1ed3  ./scripts/setup-agent-profiles.test.mjs
+873edda614ec75c27ee298bb1142d7676485281fb444a2e47fb5547bf12cf89b  ./scripts/setup-agent-profiles.mjs
+3f5b0930936cd0d3a6565965003d45bd650205b19fc293dd18ff5fd27a833619  ./scripts/setup-agent-profiles.test.mjs
 f7f098d841677da3733d93d95df11cedf7aff201db006df19e821a1ac83801a3  ./scripts/start-memory-stack.sh
 2833d0e4e437a06595185b1c247ad4c7bf569e643c49db4b3ed8a5d918103b61  ./scripts/start.sh
 e99f9b57c65f8baee833b58684adaadc5350c47c55e816b043041b5284e8a51c  ./scripts/verify-memory-user-key.py
 6bd3249c5f6a29659cdaaedeaf605800f4ed2baa38c343031ebc45ec5643cfbe  ./templates/product.env.example
 b42f83e3870735718de55a634958e0fb371d7cbd20f2cf414be2a80c7f2bb3f1  ./tests/forbidden-refs.txt
-2323d22e597e00e8817e225f30f6c79725a0885a8cf6e6b8ee3737cc7c96f199  ./tests/scan-refs.sh
+7af86598423b3b11dacc40b4adb69f145386433f28445b737538d11da20e669a  ./tests/scan-refs.sh
 a72d65f2b25d62428a7d51e2faf4d890539a4b23ea1223c07a3d57b0217ab7a5  ./tests/test-memory-security.py
 d64150f20e761037346e3134ab4cce582e808716b0f49ff62430714dff26124d  ./tests/validate-local.sh
 0b9af95f887185ef8334ca94d5e478ee64539f7195886cbf12321e778fd7d94d  ./tests/validate-memory-loop.sh

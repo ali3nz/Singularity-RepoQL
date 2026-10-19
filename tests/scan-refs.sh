@@ -15,6 +15,7 @@ hits="$(grep -RnE -f "$CLEAN" \
   --exclude-dir=.git \
   --exclude-dir=upstream \
   --exclude-dir=node_modules \
+  --exclude-dir=.repoql \
   --exclude=forbidden-refs.txt \
   . || true)"
 

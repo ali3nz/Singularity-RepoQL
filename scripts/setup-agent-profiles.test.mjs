@@ -9,7 +9,9 @@ import {
   agentDescription,
   charterFor,
   identityFor,
+  isCharterFor,
   listAgents,
+  loadIdentityMap,
   provisionAgentProfiles,
   readLedger,
 } from "./setup-agent-profiles.mjs";
@@ -165,4 +167,129 @@ test("a corrupt ledger throws instead of re-seeding every profile", () => {
   mkdirSync(join(fx.ledgerPath, ".."), { recursive: true });
   writeFileSync(fx.ledgerPath, "{not json");
   assert.throws(() => readLedger(fx.ledgerPath));
+});
+
+// ---- identity-map mode (bind to existing MemoryCore identities; verify before seed) ----
+const mapFor = (names) =>
+  Object.fromEntries(names.map((n) => [n, { team_id: "team-shared", user_id: "usr-shared", agent_id: `agt-${n}` }]));
+const routedFetch = (calls, { search }) => async (url, init) => {
+  const body = JSON.parse(init.body);
+  calls.push({ url, body });
+  if (url.endsWith("/v3/conversation/search")) {
+    return new Response(JSON.stringify(search), { status: 200 });
+  }
+  return new Response(JSON.stringify({ code: 0, data: { accepted_ids: ["id-1"] } }), { status: 200 });
+};
+
+test("identity map: an existing charter is verified and nothing is written", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b") });
+  const calls = [];
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [{ id: "m1", content: "Role charter (seeded 2026-10-19): ... for the OpenChamber agent role 'board'." }] } } }),
+  });
+  assert.equal(out.failed, 0);
+  assert.equal(out.results[0].status, "verified");
+  assert.equal(calls.length, 1, "only the search, no conversation/add");
+  assert.equal(calls[0].url.endsWith("/v3/conversation/search"), true);
+  assert.equal(calls[0].body.team_id, "team-shared");
+  assert.equal(calls[0].body.agent_id, "agt-board");
+  const ledger = readLedger(ledgerPath);
+  assert.equal(ledger.profiles.board.agent_id, "agt-board");
+  assert.equal(ledger.profiles.board.source, "existing");
+});
+
+test("identity map: a missing charter is seeded under the mapped identity", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b") });
+  const calls = [];
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [] } } }),
+  });
+  assert.equal(out.results[0].status, "seeded");
+  assert.equal(calls.length, 2, "search then conversation/add");
+  assert.equal(calls[1].url.endsWith("/v3/conversation/add"), true);
+  assert.equal(calls[1].body.agent_id, "agt-board");
+});
+
+test("identity map: an agent absent from the map fails without contacting MemoryCore", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b"), explore: md("e") });
+  const calls = [];
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [] } } }),
+  });
+  const explore = out.results.find((r) => r.name === "explore");
+  assert.equal(explore.status, "failed");
+  assert.equal(explore.detail, "no identity in map");
+  assert.equal(calls.every((c) => c.body.agent_id !== undefined && c.body.agent_id !== "explore"), true);
+});
+
+test("identity map: a failed verify is reported and writes nothing", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b") });
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: async () => { throw new TypeError("fetch failed"); },
+  });
+  assert.equal(out.failed, 1);
+  assert.equal(out.results[0].status, "failed");
+  assert.equal(existsSync(ledgerPath), false);
+});
+
+test("identity map: dry run only reports would-verify and never calls MemoryCore", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b") });
+  const calls = [];
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, dryRun: true, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [] } } }),
+  });
+  assert.equal(out.results[0].status, "would-verify");
+  assert.equal(calls.length, 0);
+});
+
+test("loadIdentityMap keeps complete entries and rejects a map without agents", () => {
+  const dir = mkdtempSync(join(tmpdir(), "identity-map-"));
+  const good = join(dir, "good.json");
+  writeFileSync(good, JSON.stringify({ agents: {
+    board: { team_id: "t", user_id: "u", agent_id: "a" },
+    partial: { team_id: "t" },
+  } }));
+  assert.deepEqual(loadIdentityMap(good), { board: { team_id: "t", user_id: "u", agent_id: "a" } });
+  const bad = join(dir, "bad.json");
+  writeFileSync(bad, JSON.stringify({ teams: {} }));
+  assert.throws(() => loadIdentityMap(bad), /no agents object/);
+});
+
+test("identity map: an unrelated stored message does NOT count as a charter (seeds instead)", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b") });
+  const calls = [];
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [{ id: "m2", content: "user chat about lunch" }] } } }),
+  });
+  assert.equal(out.results[0].status, "seeded");
+  assert.equal(calls.some((c) => c.url.endsWith("/v3/conversation/add")), true);
+});
+
+test("isCharterFor accepts the seeder session and both charter wordings only", () => {
+  assert.equal(isCharterFor({ session_id: "agent-profile-board", content: "x" }, "board", "agent-profile-board"), true);
+  assert.equal(isCharterFor({ content: "for the OpenChamber agent role 'board'." }, "board", "agent-profile-board"), true);
+  assert.equal(isCharterFor({ content: 'OpenChamber agent "board" seeded' }, "board", "agent-profile-board"), true);
+  assert.equal(isCharterFor({ content: "OpenChamber agent role 'explore'" }, "board", "agent-profile-board"), false);
+  assert.equal(isCharterFor({ content: "lunch" }, "board", "agent-profile-board"), false);
+  assert.equal(isCharterFor(null, "board", "agent-profile-board"), false);
+});
+
+test("a ledger entry under a different agent_id is re-verified, not reported present", async () => {
+  const { agentsDir, ledgerPath } = fixture({ board: md("b") });
+  mkdirSync(join(ledgerPath, ".."), { recursive: true });
+  writeFileSync(ledgerPath, JSON.stringify({ version: 1, profiles: { board: {
+    team_id: "team-shared", user_id: "usr-shared", agent_id: "agt-OLD", seeded_at: "x" } } }));
+  const calls = [];
+  const out = await provisionAgentProfiles({
+    agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [] } } }),
+  });
+  assert.notEqual(out.results[0].status, "present");
+  assert.equal(calls[0].body.agent_id, "agt-board");
 });
