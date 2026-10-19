@@ -30,7 +30,7 @@ OpenCode configuration directory:
 | Repo path | Goes to (`<config-dir>/…`) | What it is |
 |---|---|---|
 | `openchamber/AGENTS.md` | `AGENTS.md` | runtime agent policy (memory usage, evidence honesty, permissions) |
-| `openchamber/agents/` | `agents/` | seven agent definitions (below) |
+| `openchamber/agents/` | `agents/` | eight agent definitions (below) |
 | `openchamber/opencode.jsonc` | `opencode.jsonc` | OpenCode config: compaction + plugin list |
 | `openchamber/dcp.jsonc` | `dcp.jsonc` | config for the DCP compaction plugin |
 | `openchamber/plugins/product-office/` | `plugins/product-office/` | the memory-capture plugin |
@@ -51,6 +51,7 @@ The shipped agents (all subagents except `standalone`, which is the primary):
 | `researcher-web` | evidence-driven web research |
 | `code-reviewer` | implementation critic for significant changes |
 | `quality-fixer` | write-capable fixer scoped to its staged context directory |
+| `board` | Board of Advisors — eight-persona strategic judgment panel (financial officer, tax strategist, attorney, corporate strategist, investment advisor, real estate advisor, estate planner, insurance & risk advisor) |
 
 ## 3. Provision credentials and start
 

@@ -134,26 +134,62 @@ tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh
 
 ## Install — give this to your agent
 
-> Clone `https://github.com/ali3nz/Singularity-RepoQL`, read `README.md`, and
-> install the memory stack for Claude Code by following “Quick start — memory
-> stack”. Do not install the optional components unless asked. For OpenChamber,
-> follow `docs/OPENCHAMBER-SETUP.md` exactly, and wire RepoQL per
-> `docs/REPOQL-SETUP.md` when `rql` is already installed. Report what you
-> installed and the verification results, using `tests/validate-memory-loop.sh`
-> and `tests/validate-repoql.sh` where they apply.
+Open [`INSTRUCTIONS.md`](INSTRUCTIONS.md) in this repository: it is the
+complete, Windows-specific walkthrough for both installs. Paste **one** of
+the briefs below to your agent (in the WSL2 terminal session where `rql` is
+installed). Do not run both.
 
+**Variant A — memory stack for Claude Code (no Claude Office, no
+OpenChamber):**
+
+```text
+Clone https://github.com/ali3nz/Singularity-RepoQL , open INSTRUCTIONS.md,
+and execute the "Variant A" section exactly as written.
+Windows only: this machine is Windows 11 with WSL2 and Docker Desktop, and
+rql is already installed and on PATH. Do not install Claude Office or
+OpenChamber. Report what you installed, every verification command and its
+output, and anything that did not match the documented behavior.
+```
+
+**Variant B — full stack with OpenChamber, the specialised agents
+(including the Board of Advisors) and Claude Office:**
+
+```text
+Clone https://github.com/ali3nz/Singularity-RepoQL , open INSTRUCTIONS.md,
+and execute the "Variant B" section exactly as written. Windows only: this machine is Windows 11 with WSL2 and
+Docker Desktop, and rql is already installed and on PATH; start.sh should
+detect it and mount it into OpenChamber automatically. The specialised
+agents shipped in openchamber/agents (including board, the Board of
+Advisors) install with the bundle. Report what you installed, every
+verification command and its output, and anything that did not match the
+documented behavior.
+```
 ## Documentation
 
+
+
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
+
 [`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md) ·
+
 [`docs/MEMORY-LOOP.md`](docs/MEMORY-LOOP.md) ·
+
 [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md) ·
+
 [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md) ·
+
 [`docs/memory-capture-promotion.md`](docs/memory-capture-promotion.md) ·
+
 [`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md) ·
+
 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
+
+
 
 ## License
 
+
+
 MIT — see [`LICENSE`](LICENSE). Upstream components keep their own licenses;
+
 see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

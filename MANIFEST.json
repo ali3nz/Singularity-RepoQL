@@ -1,7 +1,7 @@
 {
   "name": "Singularity-RepoQL",
   "version": "0.1.0-rc1",
-  "generated": "2026-10-19T04:33:13Z",
+  "generated": "2026-10-19T05:02:49Z",
   "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, and harness adapters.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {

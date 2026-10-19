@@ -1,9 +1,10 @@
 cf1ea22609627b09cd07e5c1df06d6fdec73af023745f9b4b28d1fd52c91dce7  ./.github/workflows/ci.yml
 ab81d67b4554db53e0c38478076a998d9b7d2f34d0d7838efaeceff0c8dc0284  ./.gitignore
 e39c875461ed939153c0ba1b610827e2182dd61271883a9062b48d3a0a7ce63c  ./AGENTS.md
+8e3b37b782b945f992b1256ace25556ed7a9dbbd733a3303d106406d66195694  ./INSTRUCTIONS.md
 5b7837017b32cc70e856046a4a5e9813306eea4d1c2babe1df5787cad64fe4cc  ./LICENSE
-b06109acdd5ef1f9c608e0dac9994cb0fcbf236f4ef638f3a3c313097a1ac28a  ./MANIFEST.json
-494076ed6ae26d1499fac43c61403059c11fbf95b57d58d6eef0e42f17154bad  ./README.md
+23281e6a93ab82d7b3db9a145d8568879b467bdecba55193bf5a1c938e326b1e  ./MANIFEST.json
+b1ecfaf9291ee7d293a6ca6e3c079860689a715010f27d24e4660a74b4857d09  ./README.md
 3809622e42869fea75b1e9a1898ed489872f038d2d39950baf73e0f914441c68  ./THIRD_PARTY_NOTICES.md
 e1cf5217c17db10c1082cfdd1b396a79f2610d76ea6106fd7b01143a8cc0af67  ./adapters/claude-code/README.md
 00bc2fb9470d36dd58374a2464e62efb3b9635eb82ac4f2439b13e94874f59ee  ./adapters/claude-code/office-hook.mjs
@@ -37,6 +38,7 @@ fba5daf00890cd333307a865a2804407ab2c490fbb0318535100b14e14f1d544  ./memory/upstr
 7c1eea33e817ce2e5d10cee7c0a2176a620e3a5a8db29aee713c8f926c6a9817  ./office/README.md
 f9eb28034d584fb66a274a58d843f22c887a5b62574cef5120f134b3402d3faf  ./office/office.compose.yml
 1a2f34dc7e8d19bb43f200e137c15e0868e0f34b41e98adf33ae465e0db6e224  ./openchamber/AGENTS.md
+70a4de0225fbf6773b7515a8a431cfe199051cc54beaf2bd12d75ae2921c58a8  ./openchamber/agents/board.md
 de54fd05ca0fbb687f1f2d0c1f99c85c2421781d25062a7539425040c0f8b21b  ./openchamber/agents/code-reviewer.md
 28b02e06d17e7d92c880cce1f080ad42ba3da9f683f48dfa74fa8c7d47404b0d  ./openchamber/agents/explore.md
 c031ec3c756977e3d423ff975b7eda631edce474b3fd24cdec294b863b17c87f  ./openchamber/agents/general.md
