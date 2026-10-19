@@ -1,0 +1,46 @@
+# Internal references that must never appear in this repository.
+#
+# Variant note: this repository integrates RepoQL as a product feature
+# (mcp.repoql in openchamber/opencode.jsonc, compose/repoql.override.yml,
+# docs/REPOQL-SETUP.md) — repoql and rql are intentionally NOT forbidden
+# here. Every other pattern applies unchanged.
+# Extended regex, one pattern per line, consumed by tests/scan-refs.sh (grep -E).
+# Keep patterns high-signal; when a hit is a false positive, fix the text or
+# narrow the pattern here — never delete a pattern without review.
+
+# Fleet host identities and private addresses
+\bdockerhost\b
+\bopenchamber-webserver\b
+\bopenchamber-webserver-test\b
+\bproxmox\b
+\bwebserver\b
+\bESO\b
+85\.155\.179\.126
+192\.168\.
+\bcatgpt\b
+\bcamofox\b
+
+# Internal project, run and issue names
+\brun69[0-9]\b
+\bissue[- ]?7[0-9][0-9]\b
+\bai-orchestra\b
+\bai-orchestration\b
+\bagentchat\b
+\bfreebuff\b
+\bsecond brain\b
+\bsb-mcp\b
+\bfleet-docs\b
+\bfleet\b
+
+# Internal paths
+/mnt/newdata
+/srv/openchamber
+/home/ali3nz/docker
+ali3nz/docker
+
+# Internal tooling and process vocabulary
+\bSol\b
+\bDUO\b
+\bkeychain\b
+\bBW_SESSION\b
+\bbitwarden\b

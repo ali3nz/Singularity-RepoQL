@@ -1,0 +1,18 @@
+# RepoQL integration — mount the rql binary into the OpenChamber container.
+#
+# The container is Linux; a Windows rql.exe cannot run inside it. Install rql
+# in WSL2 (see docs/REPOQL-SETUP.md), then start the stack with this override:
+#
+#   REPOQL_RQL_PATH="$HOME/.local/bin/rql" \
+#     docker compose -f compose/compose.yml -f compose/repoql.override.yml up -d
+#
+# scripts/start.sh detects the binary and adds this file automatically.
+# Data: ../data/repoql persists the container side of RepoQL (native bundles
+# and host identity), so recreating the container keeps it. Update rql in
+# WSL2, then recreate the container — the bind mount pins the inode of the
+# file it was given, never a future version.
+services:
+  openchamber:
+    volumes:
+      - ${REPOQL_RQL_PATH:?set REPOQL_RQL_PATH to the Linux rql binary (e.g. ~/.local/bin/rql)}:/usr/local/bin/rql:ro
+      - ../data/repoql:/home/openchamber/.repoql

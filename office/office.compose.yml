@@ -1,0 +1,40 @@
+# Claude Office — activity visualizer (optional).
+# Run from the repository root:
+#   docker compose -f office/office.compose.yml up -d
+#
+# Requires secrets/claude-office.env — create it with:
+#   python3 scripts/provision-secrets.py
+services:
+  office:
+    image: ${CLAUDE_OFFICE_IMAGE:-claude-office:local}
+    container_name: singularity-office
+    command: ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:3128:8000"
+    env_file:
+      - ${CLAUDE_OFFICE_ENV_FILE:-../secrets/claude-office.env}
+    environment:
+      SERVE_STATIC: "true"
+      DATABASE_URL: sqlite+aiosqlite:////app/data/visualizer.db
+      SUMMARY_ENABLED: "false"
+      SUMMARY_BACKEND: disabled
+      LOG_RICH_TRACEBACKS: "false"
+      CLAUDE_OFFICE_ALLOW_CIDR: "${CLAUDE_OFFICE_ALLOW_CIDR:-127.0.0.0/8,172.16.0.0/12}"
+    volumes:
+      - ../data/office:/app/data
+    networks:
+      product:
+        aliases: [product-office]
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  product:
+    external: true
+    name: ${SINGULARITY_NETWORK:-singularity-product-net}

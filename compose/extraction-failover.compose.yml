@@ -1,0 +1,48 @@
+# Extraction failover router (optional).
+#
+# Routes Memory Core extraction traffic across a provider ladder on transient
+# failures (408/409/425/429/5xx/timeouts). Provider key files live in
+# ./secrets — the ladder shrinks to whichever providers you configure:
+#   secrets/groq-api-key  ·  secrets/cohere-api-key
+# With a single provider account the router still works (shorter ladder).
+# Point the memory stack's extraction base URL at http://<host>:8430 to use it.
+#
+# Run from the repository root:
+#   docker compose -f compose/extraction-failover.compose.yml up -d
+services:
+  extraction-failover:
+    image: node:22-slim
+    container_name: singularity-extraction-failover
+    command: ["node", "/app/extraction-failover.mjs"]
+    working_dir: /app
+    volumes:
+      - ../scripts/extraction-failover.mjs:/app/extraction-failover.mjs:ro
+      - ../scripts/cohere-quota.mjs:/app/cohere-quota.mjs:ro
+      - ../secrets:/secrets:ro
+      - memory-core-data:/data
+    environment:
+      COHERE_QUOTA_FILE: /data/l1-cohere-quota.json
+      COHERE_MONTHLY_CAP: "${COHERE_MONTHLY_CAP:-800}"
+      COHERE_MONTHLY_RESERVE: "${COHERE_MONTHLY_RESERVE:-200}"
+      EXTRACTION_FAILOVER_TIMEOUT_MS: "${EXTRACTION_FAILOVER_TIMEOUT_MS:-60000}"
+      EXTRACTION_FAILOVER_PORT: "${EXTRACTION_FAILOVER_PORT:-8430}"
+    networks:
+      - memory-stack
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  memory-core-data:
+    name: ${MEMORY_CORE_VOLUME:-tdai-memory-core-data}
+    external: true
+
+networks:
+  memory-stack:
+    external: true
+    name: ${MEMORY_STACK_NETWORK:-tdai-memory-stack}

@@ -1,0 +1,52 @@
+{
+  "name": "Singularity-RepoQL",
+  "version": "0.1.0-rc1",
+  "generated": "2026-10-19T02:20:09Z",
+  "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, and harness adapters.",
+  "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
+  "components": {
+    "memory_stack": {
+      "path": "memory/upstream",
+      "source": "https://github.com/TencentCloud/TencentDB-Agent-Memory",
+      "revision": "v2.0.2 (commit 99a1a2c)",
+      "vendored": true,
+      "provenance": "memory/upstream/PROVENANCE.md"
+    },
+    "openchamber_integration": {
+      "path": "openchamber",
+      "source": "https://github.com/openchamber/openchamber",
+      "vendored": false,
+      "note": "config bundle (agents, rules, plugin, RepoQL MCP entry) for the upstream OpenChamber application; the application itself is installed separately"
+    },
+    "claude_office": {
+      "path": "office",
+      "source": "https://github.com/ali3nz/claude-office",
+      "upstream": "https://github.com/paulrobello/claude-office",
+      "vendored": false,
+      "note": "compose + docs for the optional activity visualizer; the fork carries the validated Focus/seating updates"
+    },
+    "opencode_runtime": {
+      "source": "https://opencode.ai",
+      "vendored": false,
+      "note": "agent runtime embedded by the OpenChamber image"
+    },
+    "opencode_dcp": {
+      "package": "@tarquinen/opencode-dcp@3.2.0",
+      "license": "AGPL-3.0-or-later",
+      "vendored": false,
+      "note": "installed separately at runtime by OpenCode"
+    },
+    "repoql_integration": {
+      "path": "compose/repoql.override.yml + openchamber/opencode.jsonc (mcp.repoql)",
+      "source": "https://github.com/RepoQL/RepoQL",
+      "vendored": false,
+      "note": "connects the OpenChamber bundle to the user's existing rql installation over MCP; RepoQL is installed and licensed separately (repoql.com)"
+    }
+  },
+  "validation": {
+    "static": "tests/validate-local.sh",
+    "repoql_live": "tests/validate-repoql.sh",
+    "memory_loop": "tests/validate-memory-loop.sh"
+  },
+  "file_hashes": "SHA256SUMS"
+}

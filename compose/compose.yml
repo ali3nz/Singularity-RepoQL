@@ -1,0 +1,31 @@
+# OpenChamber — workspace UI with the Singularity memory plugin (optional).
+#
+# Obtain the image first (see docs/OPENCHAMBER-SETUP.md), for example:
+#   git clone https://github.com/openchamber/openchamber
+#   docker build -t openchamber:local openchamber
+#
+# Run from the repository root:
+#   OPENCHAMBER_UI_PASSWORD='<choose-one>' docker compose -f compose/compose.yml up -d
+services:
+  openchamber:
+    image: ${OPENCHAMBER_IMAGE:-openchamber:local}
+    container_name: singularity-openchamber
+    init: true
+    ports:
+      - "127.0.0.1:3127:3000"
+    volumes:
+      - ../data/openchamber:/home/openchamber/.config/openchamber
+      - ../data/opencode/share:/home/openchamber/.local/share/opencode
+      - ../data/opencode/state:/home/openchamber/.local/state/opencode
+      - ../data/opencode/config:/home/openchamber/.config/opencode
+      - ../data/ssh:/home/openchamber/.ssh
+      - ../workspaces:/home/openchamber/workspaces
+    environment:
+      OPENCHAMBER_UI_PASSWORD: "${OPENCHAMBER_UI_PASSWORD:?Set a dedicated UI password before starting}"
+    restart: unless-stopped
+    networks:
+      - product
+
+networks:
+  product:
+    name: ${SINGULARITY_NETWORK:-singularity-product-net}

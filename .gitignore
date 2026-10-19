@@ -1,0 +1,50 @@
+# Runtime state and generated data — never commit
+data/
+state/
+workspaces/
+knowledge-store/
+evidence/
+backups/
+
+# Credentials and private configuration
+.env
+.env.local
+*.env
+!.env.example
+!**/.env.example
+product-secrets/
+.admin-key
+*.pem
+*.key
+
+# Databases and generated memory files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Backups and editor temporaries
+*.bak
+*.bak-*
+*.orig
+*.rej
+*~
+
+# Node
+node_modules/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# RepoQL workspace state (index cache is local; concepts may be committed
+# deliberately)
+.repoql/cache/
