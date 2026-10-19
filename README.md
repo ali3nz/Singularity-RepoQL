@@ -14,11 +14,12 @@ run, alongside the memory system. See
 
 Claude Code works out of the box through the proxy — no UI required.
 
-Status: **release candidate**. The memory stack and adapters are validated on
-Linux + Docker; the OpenChamber and Office integrations are validated against
-the reference deployment. Windows (WSL2 + Docker Desktop) is the target
-platform of this variant and stays **experimental** until the acceptance
-checklist passes on real hardware — see
+Status: **release candidate**. A partial Windows 11 + WSL2 acceptance run
+passed on one machine on 2026-10-19 using the WSL-native Docker Engine: the
+memory/proxy loop, Claude Code proxy smoke test, OpenChamber and Office HTTP
+endpoints, and RepoQL MCP handshake. Docker Desktop WSL integration, an actual
+UI RepoQL tool call, reboot resilience, and backup/restore remain unverified;
+Windows support therefore remains **experimental**. See
 [`docs/platforms/windows.md`](docs/platforms/windows.md).
 
 ## Components
@@ -37,11 +38,14 @@ checklist passes on real hardware — see
 
 ## Requirements
 
-- Docker Engine 24+ with Compose v2 (Linux or macOS; Windows via WSL2 is
-  experimental).
+- Docker Engine 24+ with Compose v2. On Windows, run one engine reachable
+  from WSL2: either Docker Desktop WSL integration or a Linux Engine inside
+  WSL2 (the latter was used for the partial acceptance run).
 - ~12 GB disk for the image set (memory stack ≈ 5 GB, OpenChamber ≈ 7 GB).
-- One LLM provider key with an OpenAI-compatible or Anthropic-compatible
-  endpoint, reachable from the host (used for extraction and summarization).
+- An OpenAI-compatible or Anthropic-compatible endpoint for memory extraction
+  and proxy traffic. A local model server is valid when reachable from both
+  WSL2 and the containers; successful connectivity checks do not establish
+  model quality.
 - RepoQL installed for this variant (`rql` — see
   [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md); the OpenChamber container
   needs a Linux rql, installed in WSL2 on Windows).
@@ -53,14 +57,19 @@ checklist passes on real hardware — see
 
 ```bash
 cd memory/upstream
-./verify.sh --skip-llm     # optional dry-run: environment + prereq checks
-./start-all.sh             # interactive: writes .env, starts core + hub + proxy
+./verify.sh --skip-llm     # environment/preflight only
+cd ../..
+scripts/start-memory-stack.sh
+(cd memory/upstream && ./verify.sh)
 ```
 
-`start-all.sh` asks for two LLM configurations (memory group and proxy group —
-they may be the same provider), checks that each endpoint actually answers, and
-prints the panel admin key. Defaults: Core `8420` · Panel `8125` ·
-Knowledge `8424` · Proxy `8096`.
+The safe wrapper runs the byte-exact Tencent startup, redacts its output, and
+requires `auth/verify` to return `data.valid=true` (the upstream verifier only
+checks HTTP 200, which also occurs for an invalid key). The admin key is stored
+in `memory/upstream/.admin-key` with mode 0600 and is not printed. Do not run
+`memory/upstream/start-all.sh` directly. The wrapper asks for the memory-group
+and proxy-group LLM configurations; one provider may serve both. Defaults:
+Core `8420` · Panel `8125` · Knowledge `8424` · Proxy `8096`.
 
 Then point Claude Code at the proxy (persist in `~/.claude/settings.json`):
 
@@ -71,9 +80,10 @@ Then point Claude Code at the proxy (persist in `~/.claude/settings.json`):
     "ANTHROPIC_MODEL": "<your upstream model>" } }
 ```
 
-Open the Panel at `http://<host>:8125`, log in with the admin key printed by
-`start-all.sh`, and create a Team and a business user. Drive the harness with
-that user's key rather than the admin key. To verify capture and recall, follow
+Open the Panel at `http://<host>:8125`, use the local admin key file when
+needed (never paste its value into a transcript), and create a Team and a
+business user. Drive the harness with that user's key rather than the admin
+key. To verify capture and recall, follow
 [`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md).
 
 Other harnesses follow the same proxy pattern — see the upstream project's
@@ -125,7 +135,7 @@ openchamber/   AGENTS.md, agents/, opencode.jsonc, dcp.jsonc, plugins/product-of
 memory/        README.md, upstream/ (vendored quickstart), .env.example
 office/        README.md, office.compose.yml
 compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
-scripts/       start.sh, provision-secrets.py, knowledge-promotion.py, extraction-failover.mjs, cohere-quota.mjs
+scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
 adapters/      claude-code/ (hook-based Office adapter)
 templates/     product.env.example
 docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, REPOQL-SETUP, OFFICE-SETUP, TROUBLESHOOTING

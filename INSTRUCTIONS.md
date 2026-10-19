@@ -6,24 +6,31 @@ install. Execute one variant end-to-end, then report as described at the end.
 
 ## 0. Prerequisites (verify before starting)
 
-- Windows 11 (22H2 or later) with **WSL2** enabled and an Ubuntu 24.04+ (or
-  Debian 13+) distro — older glibc (< 2.38) refuses to run `rql`.
-- **Docker Desktop** installed and running with the *WSL2-based engine*
-  (Settings → General → "Use the WSL 2 based engine").
-- Inside WSL2: `git` and `docker` both on PATH (`docker compose version`
-  must work), ~12 GB free disk, a stable internet connection.
-- **`rql` is already installed and runnable** (working copy; validated with 1.7.15).
-  The install commands that touch RepoQL assume it. If `rql --version`
-  fails, STOP and ask the user — the variant presumes RepoQL exists.
-- For **Variant B**, the rql that matters is the **WSL2 Linux** binary (a
-  Windows-only `rql.exe` will not be mounted into OpenChamber); wire it per
-  `docs/REPOQL-SETUP.md` first, and clone the repo into the WSL2 filesystem
-  (e.g. `~/projects`), not under `/mnt/c`.
-- **One LLM provider key** with an OpenAI-compatible or Anthropic-compatible
-  endpoint reachable from the machine (used by the memory stack for
-  extraction and summarization).
-- Do all work inside the WSL2 terminal (Windows Terminal). Every path below
-  is a WSL2 path.
+- Windows 11 (22H2 or later), WSL2, and Ubuntu 24.04+ (or Debian 13+).
+  If WSL is not installed, run `wsl --install -d Ubuntu-24.04` in an elevated
+  PowerShell window, launch the distro once to create its Linux user, then
+  verify `wsl -l -v` reports version 2.
+- One Docker Engine reachable **inside the distro**, with Compose v2
+  (`docker info` and `docker compose version` must succeed). This may be
+  Docker Desktop with its WSL2 engine and distro integration enabled, or a
+  Linux Docker Engine installed inside WSL2. The 2026-10-19 live acceptance
+  used the WSL-native Engine; the Docker Desktop path was not exercised.
+- `git`, `curl`, and Python 3 in WSL2; ~12 GB free disk and a stable internet
+  connection. Keep the checkout under the WSL2 Linux filesystem (for example
+  `~/projects`), not `/mnt/c`.
+- **RepoQL already installed**. For Variant B it must be the Linux WSL2
+  `rql` binary, not Windows-only `rql.exe`. If `rql --version` is missing in
+  the current shell, try `bash -lc 'rql --version'` or
+  `~/.local/bin/rql --version`; use `REPOQL_RQL_PATH="$HOME/.local/bin/rql"`
+  if the login shell has the binary but `scripts/start.sh` does not detect it.
+  See `docs/REPOQL-SETUP.md`.
+- An OpenAI-compatible or Anthropic-compatible provider endpoint for both
+  memory extraction and proxy traffic (the same configuration can serve
+  both). A local model server is also valid; its endpoint must be reachable
+  from WSL and from containers, and the model name must match its `/v1/models`
+  response. A successful connection check proves transport, not model quality.
+- Do all install and acceptance commands in a WSL2 terminal (Windows
+  Terminal); paths below are WSL2 paths.
 
 ## 1. Choose exactly ONE variant
 
@@ -46,32 +53,52 @@ cd Singularity-RepoQL
 
 ## 2. Variant A — memory stack + Claude Code (no Office, no OpenChamber)
 
-1. Bring up the memory stack from the vendored upstream quickstart:
+1. Bring up the memory stack:
 
    ```bash
    cd memory/upstream
-   ./verify.sh --skip-llm
-   ./start-all.sh
+   ./verify.sh --skip-llm     # environment/preflight only
+   cd ../..
+   scripts/start-memory-stack.sh
+   (cd memory/upstream && ./verify.sh)
    ```
 
-   The stack starts the Tencent memory core, hub and proxy on the
-   `tdai-memory-stack` Docker network and prints the Panel URLs plus an
-   admin key written to `upstream/.admin-key`. Ports (loopback only):
-   core 8420, panel 8125, knowledge 8424, proxy 8096.
+   The safe wrapper runs the byte-exact Tencent quickstart, redacts its
+   startup output, and independently requires `auth/verify` to return
+   `data.valid=true`. The admin key stays in `memory/upstream/.admin-key`
+   (mode 0600); it is never printed as a value. Do not invoke the vendored
+   `memory/upstream/start-all.sh` directly: upstream v2.0.2 prints the key and
+   its own verifier checks only HTTP 200. The memory stack publishes Core
+   8420, Panel 8125, Knowledge 8424 and Proxy 8096 on host interfaces; restrict
+   them with the host firewall to trusted clients. Only UI ports 3127/3128 bind
+   loopback.
 
-2. Verify:
+2. Verify and prepare the validator credentials:
 
    ```bash
-   ./verify.sh
    docker ps | grep tdai-
-   cd ../..
+   python3 scripts/provision-secrets.py
    bash tests/validate-memory-loop.sh
    ```
 
-   The validate script exercises capture (add → search) end-to-end
+   The provisioning command creates local plugin credentials needed by the
+   validator; it does not start OpenChamber or Claude Office. The validate
+   script exercises capture (add → search) end-to-end
    against the memory core and must print a passing result.
 
-3. Wire Claude Code through the proxy (add to, or merge into,
+3. If Claude Code is not installed in WSL2, use Anthropic's native WSL
+   installer and verify it before wiring the proxy:
+
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   claude --version
+   ```
+
+   Install and run the Linux `claude` command inside WSL2; a Windows-side
+   `claude.exe` that is not on WSL's PATH is not a substitute. Official guide:
+   <https://docs.anthropic.com/en/docs/claude-code/setup>.
+
+   Wire Claude Code through the proxy (add to, or merge into,
    `~/.claude/settings.json`):
 
    ```json
@@ -100,7 +127,9 @@ Variant A is done after step 3. Skip to "Report".
 
 2. **Install the OpenChamber configuration bundle**. With Docker Compose
    deployments the repo's `data/opencode/config/` directory is bind-mounted
-   as the runtime config, so the copy is repo-internal:
+   only into this OpenChamber container. Keep it isolated from the Windows
+   Electron app and any existing `~/.config/opencode` tree; do not overwrite
+   either. The copy is repo-internal:
 
    | From (repo)                       | To (runtime)             |
    | --------------------------------- | ------------------------ |
@@ -118,47 +147,49 @@ Variant A is done after step 3. Skip to "Report".
    OpenChamber install, copy the same files into `~/.config/opencode/`
    instead (same layout). Full details: `docs/OPENCHAMBER-SETUP.md`.
 
-3. **Provision the plugin secrets** (the memory plugin and the Office
-   channel): `scripts/provision-secrets.py` writes
-   `data/opencode/config/product-secrets/memory.json` and `office.json`
-   from the running stack (gateway key/service/user keys and the Office
-   token).
+3. **Confirm the plugin secrets exist.** Variant A step 2 already runs
+   `scripts/provision-secrets.py` before its loop validator. If continuing from
+   a stack where that step was skipped or the files were removed, run it now;
+   it writes `data/opencode/config/product-secrets/memory.json` and
+   `office.json` from the running stack (gateway/service/user keys and Office
+   token). Do not print the generated credential values.
 
-4. **Start the stack** (choose your own UI password):
+4. **Build both local images before starting the optional UI services.** Follow
+   `docs/OPENCHAMBER-SETUP.md` for `openchamber:local` and
+   `docs/OFFICE-SETUP.md` for `claude-office:local` (the latter uses the
+   validated `1fce512` revision). `scripts/start.sh` starts existing images; it
+   does not build them.
 
-   ```bash
-   OPENCHAMBER_UI_PASSWORD='<choose-one>' scripts/start.sh
-   ```
-
-   `start.sh` creates the product network, attaches the memory core, starts
-   OpenChamber (compose/compose.yml) and — when an Office env file exists —
-   Claude Office. **RepoQL: the script detects `rql` (it looks in
-   `~/.local/bin/rql`, which the installer symlinks) and automatically adds
-   `compose/repoql.override.yml`, which bind-mounts the rql binary into the
-   OpenChamber container at `/usr/local/bin/rql` and persists
-   `/home/openchamber/.repoql` state to `data/repoql/`. If `rql` is
-   missing or broken, the script says so and skips RepoQL — the stack still
-   starts.**
-
-5. **Claude Office image** (only if the Office env file was provisioned):
-   follow `docs/OFFICE-SETUP.md` exactly — build the visualizer once:
+5. **Preflight the ports, then start the stack.** Check for listeners on
+   `8420`, `8125`, `8424`, `8096`, `3127`, and `3128` in both WSL2 and Windows;
+   identify any owner before proceeding and do not terminate an unknown
+   process. In WSL2, inspect with `ss -ltnp`. Create a private UI-password
+   file once if needed:
 
    ```bash
-   git clone https://github.com/ali3nz/claude-office.git
-   cd claude-office && git checkout 1fce512
-   docker build -t claude-office:local .
+   umask 077
+   mkdir -p secrets
+   python3 -c 'import secrets; print("OPENCHAMBER_UI_PASSWORD=" + secrets.token_urlsafe(32))' > secrets/openchamber.env
+   chmod 600 secrets/openchamber.env
+   scripts/start.sh
    ```
 
-6. **Open the UI** and confirm health: `http://127.0.0.1:3127` (loopback).
-   Sign in with the UI password, open a workspace under
-   `workspaces/` and confirm the specialised agents and the Board of
-   Advisors are selectable.
+   `start.sh` pre-creates bind-mount directories as the WSL user, creates the
+   shared product network, attaches memory-core, starts OpenChamber and Office,
+   and automatically mounts the WSL Linux `rql` binary when detected. It
+   persists RepoQL state in `data/repoql/`. If `rql` is missing or broken, the
+   script says so and skips RepoQL while the rest of the stack can start.
+
+6. **Check both local services**: OpenChamber at `http://127.0.0.1:3127` and
+   Claude Office at `http://127.0.0.1:3128`; both should return HTTP 200.
+   Sign in with the UI password, then check agent selection and a RepoQL tool
+   call in a real OpenChamber session.
 
 7. **Verify everything**:
 
    ```bash
    bash tests/validate-memory-loop.sh    # capture/proxy loop
-   bash tests/validate-repoql.sh         # rql inside OpenChamber + MCP handshake
+   bash tests/validate-repoql.sh         # rql in container + host status + MCP handshake
    ```
 
    `validate-repoql.sh` must print `REPOQL VALIDATION OK`.

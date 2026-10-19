@@ -24,12 +24,16 @@ The two systems complement each other:
 
 ## Requirements
 
-- RepoQL installed and working (`rql --version`). Windows installer:
-  `irm https://downloads.repoql.ai/latest/install-rql.ps1 | iex` — or install
-  inside WSL2 with
-  `curl -fsSL https://downloads.repoql.ai/latest/install-rql.sh | bash`.
-- Docker Desktop with WSL2 integration (the stack runs the same Linux
-  containers as the base product — see `docs/platforms/windows.md`).
+- RepoQL installed and working. Variant B requires the Linux WSL2 binary,
+  not `rql.exe`; install it with the shell installer below. If the current
+  shell does not find `rql`, try `bash -lc 'rql --version'` or
+  `~/.local/bin/rql --version`; the installer may add that path only for login
+  shells. `scripts/start.sh` detects `~/.local/bin/rql` or accepts an explicit
+  `REPOQL_RQL_PATH`.
+- Docker Engine and Compose v2 accessible inside WSL2: either a Linux Engine
+  running in the distro or Docker Desktop's WSL2 engine with integration
+  enabled for that distro. This acceptance used the native WSL Engine; see
+  `docs/platforms/windows.md` for verified and untested platform details.
 - WSL2 distro with glibc >= 2.38 (Ubuntu 24.04+ or Debian 13+): the rql
   release binary requires it. An older Ubuntu in WSL2 (22.04, glibc
   2.35) will not run the rql binary — upgrade the distro or use the
@@ -45,7 +49,7 @@ so the container needs a Linux rql binary. Installing rql in WSL2 is the
 supported path; your Windows install keeps serving the agents you run on the
 Windows side.
 
-## Wire it up (WSL2 + Docker Desktop)
+## Wire it up (WSL2 + Docker Engine)
 
 ```bash
 # 1. Install rql in WSL2 (one command, no sudo) and verify
@@ -59,7 +63,7 @@ scripts/start.sh
 #      docker compose -f compose/compose.yml -f compose/repoql.override.yml up -d
 
 # 3. Verify
-tests/validate-repoql.sh
+bash tests/validate-repoql.sh
 ```
 
 In the UI (`http://localhost:3127`), open a project and ask the agent to use
@@ -101,12 +105,14 @@ there); do not also index the same project from a Windows-side host.
   `scripts/start.sh` and check the mounts:
   `docker inspect singularity-openchamber --format '{{json .Mounts}}'`.
 - **"This workspace is served by a host on another machine"** — a previous
-  container was stopped while its RepoQL host was still running, leaving a
-  stale claim in `<project>/.repoql/cache/host.lock`. From the project
-  directory, run the recovery the message names — once:
-  `rql serve --path .` (inside the container:
-  `docker exec -it singularity-openchamber sh -lc 'cd /home/openchamber/workspaces/<project> && rql serve --path . &'`).
-  Do not use `rql host reset` unless you want the index deleted.
+  container stopped while its RepoQL host was active and left a stale claim in
+  `<project>/.repoql/cache/host.lock`. From that workspace, run the named
+  recovery once: `rql serve --path .` (inside the container, run it from the
+  workspace directory). The recovery does not reset the index. Never use
+  `rql host reset` for this symptom; it deletes the index.
+- The live validator runs `rql host status` from its disposable git workspace;
+  running it from `/home/openchamber` is expected to be refused because the
+  container home is not an indexable project.
 - **"not a workspace"** — the directory has no `.git` and no `.repoql`.
   RepoQL serves git projects, or directories explicitly marked with a
   `.repoql` directory.

@@ -36,9 +36,11 @@ OpenCode configuration directory:
 | `openchamber/plugins/product-office/` | `plugins/product-office/` | the memory-capture plugin |
 | `openchamber/package.json` | `package.json` | declares the config dir as an ESM package |
 
-With the Docker compose path, the config dir is `data/opencode/config/` in
-this repository (it is bind-mounted into the container). For native installs
-it is `~/.config/opencode/`.
+With the Docker Compose path, the config dir is `data/opencode/config/` in
+this repository (it is bind-mounted into this container only). Keep this
+runtime bundle isolated from the Windows Electron app and any existing
+`~/.config/opencode/` configuration; do not overwrite those files. For native
+installs the config dir is `~/.config/opencode/`.
 
 The shipped agents (all subagents except `standalone`, which is the primary):
 
@@ -55,12 +57,15 @@ The shipped agents (all subagents except `standalone`, which is the primary):
 
 ## 3. Provision credentials and start
 
-From the repository root:
+Start the memory stack first with `scripts/start-memory-stack.sh`. Build
+`openchamber:local` and (when enabled) `claude-office:local` before starting
+the product compose services. From the repository root, provision plugin
+secrets and create `secrets/openchamber.env` with mode 0600; keep the UI
+password value out of the shell transcript. Then run:
 
 ```bash
-python3 scripts/provision-secrets.py     # writes plugin config + Office keys (0600)
-OPENCHAMBER_UI_PASSWORD='<choose-one>'   # or put it in secrets/openchamber.env
-scripts/start.sh                         # creates network, alias; starts OpenChamber (+ Office; mounts rql when RepoQL is detected)
+python3 scripts/provision-secrets.py
+scripts/start.sh    # creates bind dirs/network, attaches memory-core, starts UIs and mounts rql when detected
 ```
 
 Then open `http://127.0.0.1:3127` and log in with your UI password. The

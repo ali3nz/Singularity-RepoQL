@@ -8,47 +8,49 @@ memory system. Budget ~30 minutes plus image downloads.
 - Linux or macOS with Docker Engine 24+ and Compose v2 (Windows via WSL2 is
   experimental — see [`platforms/windows.md`](platforms/windows.md)).
 - ~12 GB free disk for images and volumes.
-- At least one LLM provider key with an OpenAI-compatible or
-  Anthropic-compatible endpoint. Two configurations are requested during
-  setup (memory group and proxy group); the same provider can serve both.
+- An OpenAI-compatible or Anthropic-compatible endpoint for memory
+  extraction and proxy traffic. A local model server is valid if WSL2 and the
+  containers can reach it; endpoint success proves transport, not output
+  quality. Two configurations are requested and may use the same provider.
 
 ## 1. Start the memory stack
 
 ```bash
 git clone https://github.com/ali3nz/Singularity-RepoQL
-cd Singularity/memory/upstream
-./verify.sh --skip-llm     # optional dry-run: docker, bash and prereq checks
-./start-all.sh
+cd Singularity-RepoQL
+(cd memory/upstream && ./verify.sh --skip-llm)
+scripts/start-memory-stack.sh
+(cd memory/upstream && ./verify.sh)
 ```
 
-`start-all.sh`:
+The wrapper invokes the vendored upstream setup interactively: it copies
+`.env.example` on first run, confirms the memory and proxy LLM groups, and
+starts memory-core → memory-hub → proxy on `tdai-memory-stack`. It filters
+startup output and validates the key with the API's `data.valid` field. The
+admin key is saved in `memory/upstream/.admin-key` with mode 0600 and is not
+printed. Do not invoke the byte-exact upstream `start-all.sh` directly; it
+prints the key and treats any HTTP 200 auth/verify response as success.
 
-1. copies `upstream/.env.example` → `upstream/.env` (first run only),
-2. walks you through the **memory group** (LLM used for extraction and
-   summarization) and the **proxy group** (the upstream LLM your agent's
-   requests are forwarded to), verifying each endpoint answers before saving,
-3. starts memory-core → memory-hub → proxy on the `tdai-memory-stack` network,
-4. prints the Panel URLs and generates the admin user key into
-   `upstream/.admin-key` (`sk-mem-…`).
-
-Non-interactive option: copy `../.env.example` to `upstream/.env`, fill it in,
-then run `./start-all.sh` — it still confirms each group; press Enter to keep.
+For non-interactive setup, fill `memory/upstream/.env` first, then run
+`scripts/start-memory-stack.sh`; the upstream setup still confirms each group
+and Enter keeps the saved values.
 
 Defaults: Core `8420` · Panel `8125` · Knowledge `8424` · Proxy `8096`.
 
 ## 2. Verify
 
 ```bash
-./verify.sh                  # re-runs environment + endpoint checks
-docker ps | grep tdai-       # three containers, healthy
+(cd memory/upstream && ./verify.sh)  # re-runs environment + endpoint checks
+docker ps | grep tdai-               # three containers, healthy
 docker logs tdai-memory-core --tail 50
 ```
 
 ## 3. First login and scoping
 
 Open the Panel at `http://127.0.0.1:8125` and log in with the admin
-credentials; the generated admin key is in `memory/upstream/.admin-key` (also
-printed by `start-all.sh` on first run).
+credentials. The generated admin key is in `memory/upstream/.admin-key`; the
+safe wrapper does not print it. Keep the file private and use a business-user
+key for routine agent traffic.
 
 1. Create a **Team**.
 2. Create a **business user** inside the team.
@@ -74,9 +76,8 @@ conversation, and injects relevant memory back on session start.
 ## 5. Prove the loop
 
 ```bash
-cd ../..                      # repository root
 python3 scripts/provision-secrets.py    # plugin credentials (used by validators + OpenChamber)
-tests/validate-memory-loop.sh
+bash tests/validate-memory-loop.sh
 ```
 
 `validate-memory-loop.sh` runs real API calls against your running stack:
@@ -98,16 +99,18 @@ docker run --rm -v tdai-memory-core-data:/data -v "$PWD/../../backups":/backup \
   alpine tar czf /backup/memory-core-$(date +%F).tgz -C /data .
 docker run --rm -v tdai-panel-data:/data -v "$PWD/../../backups":/backup \
   alpine tar czf /backup/memory-panel-$(date +%F).tgz -C /data .
-./start-all.sh
+cd ../..
+scripts/start-memory-stack.sh
 ```
 
 Restore is the same in reverse: stop the stack, extract the archives back into
-the volumes, start again. (Live-snapshotting SQLite while the stack runs is not
+the volumes, then run `scripts/start-memory-stack.sh`. (Live-snapshotting SQLite while the stack runs is not
 covered here; stop first for a guaranteed-consistent copy.)
 
 ## Upgrade, restart policy, uninstall
 
-- Upgrade images: `PULL=1 ./start-all.sh`; pin explicit tags in `.env` for
+- Upgrade images: from the repository root run
+  `PULL=1 scripts/start-memory-stack.sh`; pin explicit tags in `.env` for
   reproducibility.
 - The upstream scripts create containers without a restart policy. For reboot
   resilience: `docker update --restart unless-stopped tdai-memory-core tdai-memory-hub tdai-proxy`.

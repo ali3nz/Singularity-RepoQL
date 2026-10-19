@@ -5,6 +5,11 @@ repository root as the working directory unless stated otherwise.
 
 ## Memory stack
 
+Use `scripts/start-memory-stack.sh` rather than invoking the byte-exact
+`memory/upstream/start-all.sh` directly. The wrapper filters key-shaped output
+and verifies `auth/verify` `data.valid=true`; upstream HTTP 200 alone is not
+proof that a user key is valid.
+
 **A container exits or restarts immediately**
 
 ```bash
@@ -50,7 +55,30 @@ from the memory-hub container (default uses `host.docker.internal`).
 The compose file binds `127.0.0.1:3127` on purpose. Check
 `docker logs singularity-openchamber`. `OPENCHAMBER_UI_PASSWORD` must be set
 (add it to `secrets/openchamber.env` or export it) or compose refuses to
-start the service.
+start the service. OpenChamber and Office images run as UID:GID 1000:1000;
+`scripts/start.sh` pre-creates their bind-mount directories and verifies write
+and execute access for that container identity so the Docker daemon does not
+create root-owned directories on first start.
+
+If logs show `EACCES` creating `.config/openchamber/run` or SQLite reports
+`unable to open database file`, inspect only the product data directories:
+
+```bash
+stat -c '%u:%g %a %n' data/openchamber data/opencode/share data/opencode/state data/opencode/config data/ssh data/office workspaces
+```
+
+If a failed first Compose run created these paths as root, repair ownership
+only after confirming the target directories are the product mounts and the
+stack processes use UID:GID 1000:1000:
+
+```bash
+sudo chown -R 1000:1000 data/openchamber data/opencode/share data/opencode/state data/opencode/config data/ssh data/office workspaces
+scripts/start.sh
+```
+
+Do not use `chmod 777`; preserve the 0600 modes on files under
+`data/opencode/config/product-secrets/`. On Windows, keep these directories on
+the WSL2 Linux filesystem, not DrvFs.
 
 **Plugin channel says `not-configured` or `invalid-endpoint`**
 
@@ -94,10 +122,18 @@ from its config list on first start — it needs network access to npm.
 
 ## Composition and compose
 
+**Compose rejects `singularity-product-net` because of a network label**
+
+The product network is deliberately created by `scripts/start.sh` and shared
+with the separately-defined Office compose project. Both product compose files
+must declare it `external: true`. Use the repository's current compose files
+and rerun `scripts/start.sh`; do not delete a network that contains the
+memory-core attachment.
+
 **Compose can't find volume/network `tdai-…`**
 
 The optional compose files reference the memory stack's network and volume as
-external. Start the memory stack first (`memory/upstream/start-all.sh`).
+external. Start the memory stack first with `scripts/start-memory-stack.sh`.
 
 **Validate before/after edits**
 

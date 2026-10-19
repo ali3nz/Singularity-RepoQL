@@ -20,8 +20,12 @@ else
   bad "rql is not runnable in $CONTAINER — apply compose/repoql.override.yml with REPOQL_RQL_PATH set"
 fi
 
+# host status is workspace-scoped; create the same disposable git workspace
+# used by the MCP handshake instead of probing from the container home directory.
+docker exec "$CONTAINER" sh -lc 'rm -rf /tmp/repoql-validate-scratch; mkdir -p /tmp/repoql-validate-scratch; cd /tmp/repoql-validate-scratch; if command -v git >/dev/null 2>&1; then git init -q; git -c user.name=validate -c user.email=validate@example.invalid commit -q --allow-empty -m init; else rql init 2>/dev/null || true; fi' || true
+
 echo "== 2. host status verdict =="
-out="$(docker exec "$CONTAINER" rql host status 2>&1 || true)"
+out="$(docker exec "$CONTAINER" sh -lc 'cd /tmp/repoql-validate-scratch && rql host status' 2>&1 || true)"
 echo "$out" | head -4
 case "$out" in
   *"ready"*|*"loading"*|*"usable"*|*"no host"*) ok "host status reports a normal state" ;;

@@ -22,6 +22,7 @@ for f in scripts/*.mjs openchamber/plugins/product-office/*.js; do check node --
 
 step "unit tests"
 check node --test scripts/cohere-quota.test.mjs
+check python3 tests/test-memory-security.py
 for f in openchamber/plugins/product-office/*.test.mjs; do check node --test "$f"; done
 
 step "json parses"

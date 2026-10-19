@@ -4,8 +4,10 @@
 #   git clone https://github.com/openchamber/openchamber
 #   docker build -t openchamber:local openchamber
 #
-# Run from the repository root:
-#   OPENCHAMBER_UI_PASSWORD='<choose-one>' docker compose -f compose/compose.yml up -d
+# Normal startup is from the repository root:
+#   scripts/start.sh
+# It creates the external product network and attaches memory-core before
+# starting this Compose project. Run it after building the local image.
 services:
   openchamber:
     image: ${OPENCHAMBER_IMAGE:-openchamber:local}
@@ -28,4 +30,5 @@ services:
 
 networks:
   product:
+    external: true
     name: ${SINGULARITY_NETWORK:-singularity-product-net}

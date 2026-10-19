@@ -2,12 +2,13 @@
 # Start the Singularity product stack.
 #
 # Prerequisites:
-#   1. memory stack running:   cd memory/upstream && ./start-all.sh
+#   1. memory stack running:   scripts/start-memory-stack.sh
 #   2. plugin secrets:         python3 scripts/provision-secrets.py
 #
 # What this script does, in order (idempotent):
 #   1. sanity-check Docker and the memory stack
-#   2. create the product network when missing
+#   1b. pre-create writable bind-mount directories for the UID-1000 apps
+#   2. create the external product network when missing
 #   3. attach the memory core to it under the alias `memory-core`
 #   3b. mount the rql binary into OpenChamber when RepoQL is present
 #   4. start OpenChamber (compose/compose.yml) when a UI password is available
@@ -29,7 +30,38 @@ command -v docker >/dev/null 2>&1 || fail "docker not found on PATH"
 
 # ── 1. memory stack ──────────────────────────────────────────────────────────
 docker inspect "$MEMORY_CONTAINER" >/dev/null 2>&1 \
-  || fail "$MEMORY_CONTAINER not found — run memory/upstream/start-all.sh first"
+  || fail "$MEMORY_CONTAINER not found — run scripts/start-memory-stack.sh first"
+
+# ── 1b. bind-mount directories ────────────────────────────────────────────────
+# Create these as the invoking WSL/Linux user before Compose can create them as
+# root. Check access for the OpenChamber and Office UID:GID, not just the caller.
+container_uid_can_write() {
+  local path="$1" owner group mode relevant
+  owner="$(stat -c %u -- "$path")" || return 1
+  group="$(stat -c %g -- "$path")" || return 1
+  mode="$(stat -c %a -- "$path")" || return 1
+  mode="${mode: -3}"
+  if [[ "$owner" == 1000 ]]; then
+    relevant="${mode:0:1}"
+  elif [[ "$group" == 1000 ]]; then
+    relevant="${mode:1:1}"
+  else
+    relevant="${mode:2:1}"
+  fi
+  (( (8#$relevant & 3) == 3 ))
+}
+for dir in \
+  "$ROOT/data/openchamber" \
+  "$ROOT/data/opencode/share" \
+  "$ROOT/data/opencode/state" \
+  "$ROOT/data/opencode/config" \
+  "$ROOT/data/ssh" \
+  "$ROOT/data/office" \
+  "$ROOT/workspaces"; do
+  mkdir -p "$dir"
+  container_uid_can_write "$dir" \
+    || fail "bind-mount path is not writable by container UID:GID 1000:1000: $dir (fix the directory owner/mode or run as the matching WSL/Linux user)"
+done
 
 # ── 2. product network ───────────────────────────────────────────────────────
 if ! docker network inspect "$NET" >/dev/null 2>&1; then

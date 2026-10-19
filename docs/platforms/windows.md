@@ -1,91 +1,143 @@
-# Windows (WSL2 + Docker Desktop) — target platform of this variant
+# Windows 11 (WSL2 + Docker) — RepoQL variant
 
-This repository variant is built for Windows: RepoQL users who want the
-memory stack and OpenChamber alongside the RepoQL they already run. WSL2 is
-used for installing and running the Linux containers; no separate Linux
-machine is required.
+This variant targets RepoQL users who want the memory stack and OpenChamber
+alongside their existing Windows RepoQL installation. The Linux containers
+run inside WSL2; no native Windows container port is involved.
 
-Status: the stack and integrations are validated on Linux + Docker. The
-Windows path below is the acceptance checklist — Windows-specific claims stay
-experimental until every item passes on real hardware. Record the results.
+## Acceptance status (2026-10-19)
 
-## Architecture being proven
+A partial live acceptance run passed on one Windows 11 / Ubuntu 24.04 WSL2
+machine using the WSL-native Docker Engine 29.1.3 and RepoQL 1.7.15. Docker
+Desktop WSL integration is an alternative but was not exercised in this run.
+The platform remains **experimental**: machine OS build/kernel metadata and
+several UI, reboot, and backup/restore steps were not verified.
 
-Windows 11 x64 + WSL2 + Docker Desktop (Linux containers) running the same
-containers unchanged, plus rql installed in WSL2 and mounted into the
-OpenChamber container (see [`REPOQL-SETUP.md`](../REPOQL-SETUP.md)). No native
-Windows port, no separate packaging.
+Verified: Variant A memory stack health and `verify.sh`; memory capture/recall
+loop; Claude Code proxy smoke test (HTTP 200); Variant B images built from
+OpenChamber `bf977d2ed` and Claude Office `1fce512`; OpenChamber and Office
+HTTP endpoints returned 200, with Office healthy; rql 1.7.15 was mounted in
+OpenChamber and the `rql mcp` initialize handshake passed. The RepoQL host
+status check and recovery drill used disposable in-container git workspaces,
+not a user's project.
+
+Not verified: creating a Team/business user in the Panel; selecting agents or
+making a RepoQL tool call in a real OpenChamber UI session; plugin event
+appearance from an interactive session; Docker Desktop-specific behavior;
+full cross-container stale-claim failure wording; Windows reboot; backup and
+restore. Do not claim full acceptance until these are tested.
 
 ## Prerequisites
 
-- Windows 11 x64 with WSL2 enabled (`wsl --install`) and a current WSL kernel.
-- Docker Desktop with the WSL2 backend and **WSL integration enabled for your
-  distro** (Settings → Resources → WSL Integration).
-- 16 GB RAM recommended (the memory stack and OpenChamber together are the
-  heavy part).
-- RepoQL installed — the Windows install serves your Windows-side agents; the
-  container needs a Linux rql in WSL2 (one command, see REPOQL-SETUP.md).
-- Clone the repository **inside the WSL2 filesystem** (e.g.
-  `~/Singularity-RepoQL`), not under `/mnt/c/...`: bind-mount performance and
-  file permissions for SQLite volumes and the 0600 secrets files are both
-  wrong on DrvFs.
+- Windows 11 x64 with WSL2 and Ubuntu 24.04+ (or Debian 13+). If WSL is not
+  installed, run `wsl --install -d Ubuntu-24.04` from elevated PowerShell,
+  launch the distro once, and confirm `wsl -l -v` reports version 2.
+- One Docker Engine available inside WSL2: either Docker Desktop with its
+  WSL2 engine and integration enabled for this distro, or a Linux Docker
+  Engine running inside WSL2. Verify from the WSL terminal with `docker info`
+  and `docker compose version`. Avoid assuming both engines share images.
+- `git`, `curl`, Python 3, and the Linux RepoQL binary (`rql`) in WSL2. If
+  `rql --version` is missing, try `bash -lc 'rql --version'` or
+  `~/.local/bin/rql --version`. A Windows-only `rql.exe` cannot run inside
+  the OpenChamber Linux container.
+- Clone under the WSL2 Linux filesystem (for example
+  `~/Singularity-RepoQL`), not `/mnt/c`; this keeps bind mounts and 0600
+  secret files on Linux storage.
+- A provider endpoint for memory extraction and proxy traffic. A local model
+  server is fine if its WSL/container-reachable URL and model id are correct.
+  Endpoint reachability verifies transport only, not model quality. For
+  Windows-hosted model servers, use an address reachable from the containers;
+  do not assume `127.0.0.1` inside a container points to Windows.
+- Variant A uses Claude Code. If it is not installed in WSL2, install the
+  Linux build from Anthropic's official guide:
+  `curl -fsSL https://claude.ai/install.sh | bash`, then `claude --version`.
+  A Windows-side `claude.exe` absent from WSL's PATH is not available to the
+  WSL terminal.
 
-Run every command in a WSL2 shell (Ubuntu), not PowerShell. Compose files use
-relative paths only — no host-path edits are needed.
+## Before starting
+
+Check for conflicts on memory ports `8420`, `8125`, `8424`, `8096`, and UI
+ports `3127`, `3128` in both WSL2 and Windows. In WSL2:
+
+```bash
+ss -ltnp | grep -E ':(8420|8125|8424|8096|3127|3128)([[:space:]]|$)' || true
+```
+
+On Windows, inspect listeners with `Get-NetTCPConnection -State Listen`.
+Identify the owning process before changing anything; do not stop an unknown
+listener. The memory quickstart checks its four ports, but UI ports should
+also be checked before first start.
 
 ## Bring-up sequence
 
 ```bash
-# rql for the container (once)
-curl -fsSL https://downloads.repoql.ai/latest/install-rql.sh | bash
-
-cd ~/Singularity-RepoQL/memory/upstream
-./verify.sh --skip-llm
-./start-all.sh                 # interactive; Docker Desktop must be running
-
 cd ~/Singularity-RepoQL
+rql --version                         # WSL Linux binary, not rql.exe
+(cd memory/upstream && ./verify.sh --skip-llm)
+scripts/start-memory-stack.sh         # safe wrapper; redacts key output
+(cd memory/upstream && ./verify.sh)
 python3 scripts/provision-secrets.py
-scripts/start.sh               # detects rql and mounts it into OpenChamber
-tests/validate-repoql.sh       # RepoQL wiring: container, host status, MCP handshake
 ```
 
-Notes specific to Docker Desktop:
+For Variant B, copy the repository's `openchamber/` bundle into
+`data/opencode/config/` as documented in `INSTRUCTIONS.md`. This directory is
+specific to the container runtime: do not copy it over Windows Electron's
+configuration or a user's existing native OpenCode configuration. Build
+`openchamber:local` and `claude-office:local` before the product start; see
+[`OPENCHAMBER-SETUP.md`](../OPENCHAMBER-SETUP.md) and
+[`OFFICE-SETUP.md`](../OFFICE-SETUP.md).
 
-- `host.docker.internal` is provided natively on Docker Desktop, so the
-  default `KNOWLEDGE_PUBLIC_BASE_URL` works as shipped.
-- Ports published on `127.0.0.1` inside WSL2 are reachable from Windows
-  browsers via `localhost` (Docker Desktop forwards them).
-- Line endings: keep the checkout LF-only. If Git on the Windows side ever
-  touches the tree, re-clone inside WSL2 before running any script.
+Create the UI password file without echoing its value:
+
+```bash
+umask 077
+mkdir -p secrets
+python3 -c 'import secrets; print("OPENCHAMBER_UI_PASSWORD=" + secrets.token_urlsafe(32))' > secrets/openchamber.env
+chmod 600 secrets/openchamber.env
+scripts/start.sh
+```
+
+The startup script creates its bind-mount directories as the WSL user before
+Compose can create them as root, verifies they are writable by container
+UID:GID 1000:1000, creates the shared `singularity-product-net`,
+attaches memory-core as `memory-core`, and mounts `~/.local/bin/rql` into
+OpenChamber when detected. The UI containers run as UID 1000. If a previous
+failed first start already created root-owned mount paths, follow the
+permissions recovery in [`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md); do not
+use `chmod 777`.
+
+Verify endpoints and integration:
+
+```bash
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3127/
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3128/
+bash tests/validate-memory-loop.sh
+bash tests/validate-repoql.sh
+```
+
+OpenChamber and Claude Office bind to loopback. `tests/validate-repoql.sh`
+checks the mounted rql binary, workspace-scoped host status, and MCP initialize
+handshake; a real UI tool call still needs a human session check.
 
 ## Acceptance checklist
 
-1. Memory stack starts; `docker ps` shows `tdai-memory-core`,
-   `tdai-memory-hub`, `tdai-proxy`; `./verify.sh` passes both LLM groups.
-2. Panel reachable at `http://localhost:8125`; a team and business user can be
-   created.
-3. Panel credentials are mode 0600 in the WSL2 filesystem (`stat -c %a
-   memory/upstream/.admin-key` → `600`).
-4. `tests/validate-memory-loop.sh` passes (capture → search → knowledge
-   promotion round-trip).
-5. Claude Code (or another harness) through the proxy: session captured, then
-   recalled in a following session.
-6. `scripts/start.sh` brings OpenChamber up; UI at `http://localhost:3127`.
-7. Plugin channels are healthy: sessions appear in the Panel; with Office
-   installed, activity renders at `http://localhost:3128`.
-8. `tests/validate-repoql.sh` passes (rql in the container, host status, MCP
-   handshake).
-9. In a UI session, a RepoQL tool call answers for a project directory and
-   reports index readiness; `<project>/.repoql/` appears in the WSL2 checkout.
-10. Recreate the OpenChamber container (`docker compose ... up -d
-    --force-recreate`) and confirm sessions still reach RepoQL; if a session
-    reports a stale host claim, follow the `rql serve` recovery in
-    REPOQL-SETUP.md troubleshooting.
-11. Restart the machine; containers return per the restart policy you set, or
-    re-running `scripts/start.sh` restores the stack.
-12. Backup tarball created per MEMORY-SETUP § backup; restore into clean
-    volumes succeeds.
+- [x] Memory stack and `verify.sh`; memory capture/recall loop.
+- [x] Claude Code proxy smoke test returned HTTP 200.
+- [x] Variant B OpenChamber and Office containers started; ports 3127/3128
+      returned HTTP 200; Office health was healthy.
+- [x] RepoQL 1.7.15 in the container and MCP initialize handshake.
+- [ ] Create a Team and business user in the Panel.
+- [ ] Verify plugin session capture/Office activity from a real UI session.
+- [ ] Make a RepoQL tool call in the UI against a WSL project and observe
+      `<project>/.repoql/`.
+- [x] Run the one-time `rql serve --path .` recovery in a disposable scratch
+      workspace after abruptly stopping its RepoQL host; it returned to ready.
+      Cross-container stale-claim wording and a user's actual project remain
+      untested.
+- [ ] Recreate the OpenChamber container while preserving RepoQL state.
+- [ ] Reboot Windows and confirm containers return or can be restored by
+      `scripts/start.sh`.
+- [ ] Create a backup and restore it into clean volumes.
 
-Record the OS build, WSL kernel, Docker Desktop version and rql version with
-the results — support claims require those. Report results or blockers on the
-issue tracker.
+Record the Windows OS build, WSL kernel, Docker Engine/Desktop version, and
+rql version with any future acceptance report. The OS build and WSL kernel
+were not captured in the partial run documented here.

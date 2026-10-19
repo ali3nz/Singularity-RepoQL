@@ -20,20 +20,24 @@ external storage, no NFS, no private registry.
 
 ```bash
 cd memory/upstream
-./verify.sh --skip-llm    # optional dry-run: environment and prerequisites
-./start-all.sh            # interactive: fills .env, checks both LLM endpoints, starts all three
+./verify.sh --skip-llm          # optional dry-run: environment and prerequisites
+cd ../..
+scripts/start-memory-stack.sh  # interactive setup through the safe output wrapper
 ```
 
-`start-all.sh` copies `upstream/.env.example` to `upstream/.env` when none
+The upstream script copies `upstream/.env.example` to `upstream/.env` when none
 exists, asks for two LLM configurations (memory group + proxy group — the same
 provider can serve both), verifies each endpoint answers, and writes the
-values back to `upstream/.env`. When it finishes it prints the Panel URLs and
-the Claude Code environment block; the admin user key (`sk-mem-…`) is stored
-in `upstream/.admin-key`.
+values back to `upstream/.env`. The repository wrapper redacts key-shaped
+output, replaces the token example with a command that reads the protected key
+file, and independently requires `auth/verify` to return `data.valid=true`.
+The admin user key is stored in `upstream/.admin-key` with mode 0600; never
+invoke `upstream/start-all.sh` directly because upstream prints the key.
 
 Non-interactive install: copy this directory's `.env.example` to
-`memory/upstream/.env`, fill in the values, then run `./start-all.sh` (it still
-confirms each group — press Enter to keep).
+`memory/upstream/.env`, fill in the values, then run
+`scripts/start-memory-stack.sh` from the repository root (it still confirms
+each group — press Enter to keep).
 
 Verify again any time:
 
@@ -53,8 +57,8 @@ Full walkthrough including Panel setup and the self-learning loop:
 - `.env.example` — English template with the same variable names as the
   upstream template (`upstream/.env.example`, annotated in Chinese upstream).
   Copy to `upstream/.env` for a scripted install.
-- `upstream/.env` — your real configuration (created by `start-all.sh`;
-  gitignored).
+- `upstream/.env` — your real configuration (created by the safe startup
+  wrapper; gitignored).
 - `upstream/.admin-key` — generated admin `sk-mem-…` user key (gitignored).
   Clients use this key, or a dedicated user key you create in the Panel.
 
@@ -73,8 +77,8 @@ alias `memory-core`.
   `tdai-panel-data`. The SQLite databases inside can be snapshotted with
   `VACUUM INTO` from a container-side shell — see
   [`../docs/MEMORY-SETUP.md`](../docs/MEMORY-SETUP.md) § backup and restore.
-- Upgrade: `PULL=1 ./start-all.sh` pulls fresh `:latest` images; pin explicit
-  tags in `.env` for reproducibility.
+- Upgrade: from the repository root, `PULL=1 scripts/start-memory-stack.sh`
+  pulls fresh `:latest` images; pin explicit tags in `.env` for reproducibility.
 - Restart policy: the upstream scripts create containers without a restart
   policy; add `docker update --restart unless-stopped <container>` if you want
   automatic recovery after a host reboot.
