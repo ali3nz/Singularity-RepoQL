@@ -54,6 +54,25 @@ to the files it actually covers.
 If RepoQL is not connected, fall back to ordinary file inspection and
 say which tool answered.
 
+## Knowledge and memory boundaries
+
+This workspace runs two knowledge surfaces. Keep them in their lanes:
+
+- RepoQL is the primary source for engineering questions about the code:
+  concepts and the index are authoritative for structure and behavior. Prefer
+  a concept or a code excerpt over a recollection when the two disagree.
+- The memory stack records experience: what was asked, decided, tried and
+  learned across sessions. Use it to recover context, not to answer questions
+  the index or a concept can answer directly.
+- Do not record the same fact on both surfaces. Capturing a RepoQL concept
+  does not also need a memory record unless an operator context adds value.
+- Treat memory recall as advisory and bounded: consult the few relevant
+  distilled records, not whole sessions, and re-verify with the index, the
+  tests or the files before relying on a remembered success.
+- Capture stays automatic and single-owner: the memory plugin writes memory
+  records; RepoQL concepts go through `rql concept add`. Do not create a
+  second memory database or a private capture log of your own.
+
 ## Persistent memory
 
 Singularity may connect to Tencent MemoryCore through an OpenChamber

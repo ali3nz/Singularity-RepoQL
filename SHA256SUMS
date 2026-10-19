@@ -2,7 +2,7 @@ cf1ea22609627b09cd07e5c1df06d6fdec73af023745f9b4b28d1fd52c91dce7  ./.github/work
 ab81d67b4554db53e0c38478076a998d9b7d2f34d0d7838efaeceff0c8dc0284  ./.gitignore
 e39c875461ed939153c0ba1b610827e2182dd61271883a9062b48d3a0a7ce63c  ./AGENTS.md
 5b7837017b32cc70e856046a4a5e9813306eea4d1c2babe1df5787cad64fe4cc  ./LICENSE
-f56d75f0d7e03fa2c52105847d52ce094c1878a06fc177d15dfde9a5532a603c  ./MANIFEST.json
+404795be17f3aa3c6cbae195131c197cd3e4fe4bd5042fe06ff5b0b8ab9ee1de  ./MANIFEST.json
 1639ed92d5169a8208053c91e564faad84d67904aa6a333244a1efceae7d222f  ./README.md
 3809622e42869fea75b1e9a1898ed489872f038d2d39950baf73e0f914441c68  ./THIRD_PARTY_NOTICES.md
 e1cf5217c17db10c1082cfdd1b396a79f2610d76ea6106fd7b01143a8cc0af67  ./adapters/claude-code/README.md
@@ -35,8 +35,8 @@ a97f0784681e1f072367e77860b4999882f0141c88f6c5c54c5cc325c3d95bd4  ./memory/upstr
 fba5daf00890cd333307a865a2804407ab2c490fbb0318535100b14e14f1d544  ./memory/upstream/verify.sh
 7c1eea33e817ce2e5d10cee7c0a2176a620e3a5a8db29aee713c8f926c6a9817  ./office/README.md
 f9eb28034d584fb66a274a58d843f22c887a5b62574cef5120f134b3402d3faf  ./office/office.compose.yml
-d1adbb1b7a2f8c2e83e141677f2aae1be3703487ec6505b79e41c9c06680eae0  ./openchamber/AGENTS.md
-17a758b3bcb24dc5599bb40cd00fcfe70180b9c3c33c719a896b5808561e829b  ./openchamber/agents/code-reviewer.md
+330e8176bdca73d31cd6abba51743806d20363172aef4c982e28d9b49001d704  ./openchamber/AGENTS.md
+9b1ac1763199b3ad2466c694246c79eb706246fb479f2f26396358275a4c3b21  ./openchamber/agents/code-reviewer.md
 28b02e06d17e7d92c880cce1f080ad42ba3da9f683f48dfa74fa8c7d47404b0d  ./openchamber/agents/explore.md
 c031ec3c756977e3d423ff975b7eda631edce474b3fd24cdec294b863b17c87f  ./openchamber/agents/general.md
 799368fce6242f45350f314d6519723106ab1f99db56fa041236e3858fc57710  ./openchamber/agents/quality-fixer.md
