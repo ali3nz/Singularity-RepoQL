@@ -117,6 +117,45 @@ covered here; stop first for a guaranteed-consistent copy.)
 - Uninstall: `./stop-all.sh --purge` removes containers and volumes. Back up
   first — this deletes your memory.
 
+## Agent profiles (MemoryCore)
+
+Every shipped OpenChamber agent in `openchamber/agents/` gets its own
+persistent MemoryCore profile, the same way Ghost has one: a
+`team_id` / `user_id` / `agent_id` scope (`agent_id` = the agent name) plus one
+seeded charter record stating its role. `scripts/start.sh` runs this step
+automatically when `data/opencode/config/product-secrets/memory.json` exists;
+it is non-fatal and bounded (`timeout 120`), so a MemoryCore that is still
+warming up or stalled cannot block or indefinitely delay startup.
+
+```bash
+node scripts/setup-agent-profiles.mjs --dry-run   # plan only, no network
+node scripts/setup-agent-profiles.mjs             # seed missing profiles
+```
+
+- Idempotent: seeded profiles are recorded in `data/agent-profiles/ledger.json`
+  and skipped on re-run. Only failed agents are retried. The ledger is saved
+  after every success, so an interrupted run does not re-seed finished agents.
+- Re-seed after a MemoryCore reset or purge: the ledger is the source of truth
+  and survives `./stop-all.sh --purge`. Delete `data/agent-profiles/ledger.json`
+  and re-run the script. A corrupt ledger makes the script fail loudly rather
+  than re-seed everything silently.
+- Scope note: the runtime `product-office` plugin captures and recalls under its
+  own project scope (`project-<hash>`, agent `build`). These per-agent profiles
+  are separate identities for explicit recall (`POST /v3/conversation/search`
+  with the agent's scope); the plugin does not read them automatically.
+- Ghost is excluded: it keeps its own `ghost-companion` profile (see
+  [GHOST-SETUP.md](GHOST-SETUP.md)); a second `ghost` scope would conflict.
+- Defaults: team `openchamber-agents`, user from the memory config
+  (`pilot-operator` when unset). Override with `AGENT_PROFILE_TEAM` and
+  `AGENT_PROFILE_USER`.
+- Verify: the script prints `seeded` / `present` / `failed` per agent and
+  exits 1 if any failed. Recall one agent's profile with
+  `POST /v3/conversation/search` using its scope.
+- Troubleshoot: `no-service-key` means the memory config lacks a key; a
+  MemoryCore `code` other than 0 is shown in the `failed` line.
+- Tested: unit tests with a faked MemoryCore (`node --test scripts/setup-agent-profiles.test.mjs`).
+  NOT verified against a live MemoryCore in this change.
+
 ## Configuration reference
 
 Every variable is documented in [`../memory/.env.example`](../memory/.env.example)

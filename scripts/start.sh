@@ -10,6 +10,7 @@
 #   1b. pre-create writable bind-mount directories for the UID-1000 apps
 #   2. create the external product network when missing
 #   3. attach the memory core to it under the alias `memory-core`
+#   3a. seed per-agent MemoryCore profiles (non-fatal, bounded, idempotent)
 #   3b. mount the rql binary into OpenChamber when RepoQL is present
 #   4. start OpenChamber (compose/compose.yml) when a UI password is available
 #   5. start Claude Office (office/office.compose.yml) when its env file exists
@@ -84,6 +85,20 @@ fi
 
 if [[ ! -f "$ROOT/data/opencode/config/product-secrets/memory.json" ]]; then
   log "note: plugin secrets not provisioned yet — run python3 scripts/provision-secrets.py"
+fi
+
+# ── 3a. Agent MemoryCore profiles (non-fatal; idempotent) ────────────────────
+# Gives each shipped OpenChamber agent its own persistent MemoryCore profile,
+# the same way Ghost has one. Non-fatal: MemoryCore may still be warming up.
+if [[ -f "$ROOT/data/opencode/config/product-secrets/memory.json" ]]; then
+  if command -v node >/dev/null 2>&1; then
+    # Bounded: a stalled MemoryCore must not add minutes to every start.
+    if ! timeout 120 node "$ROOT/scripts/setup-agent-profiles.mjs"; then
+      log "WARNING: agent MemoryCore profiles incomplete — fix MemoryCore, then re-run: node scripts/setup-agent-profiles.mjs"
+    fi
+  else
+    log "WARNING: node not found — agent MemoryCore profiles not provisioned (node scripts/setup-agent-profiles.mjs)"
+  fi
 fi
 
 # ── 3b. RepoQL (optional) ────────────────────────────────────────────────────

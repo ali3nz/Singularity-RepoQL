@@ -23,6 +23,7 @@ for f in scripts/*.mjs ghost/*.mjs openchamber/plugins/product-office/*.js \
 
 step "unit tests"
 check node --test scripts/cohere-quota.test.mjs
+check node --test scripts/setup-agent-profiles.test.mjs
 check node --test ghost/dream.test.mjs
 check python3 tests/test-memory-security.py
 for f in openchamber/plugins/product-office/*.test.mjs \
