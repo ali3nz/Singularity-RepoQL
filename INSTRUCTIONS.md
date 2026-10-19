@@ -37,10 +37,10 @@ install. Execute one variant end-to-end, then report as described at the end.
 - **Variant A — memory stack + Claude Code.** No Claude Office. No
   OpenChamber. The memory stack captures what Claude Code does through its
   proxy; nothing else is installed.
-- **Variant B — memory stack + OpenChamber + Claude Office.** The full
-  stack: memory stack, the OpenChamber workspace (with the seven specialised
-  agents plus the Board of Advisors), and the Claude Office activity
-  visualizer. RepoQL is mounted into OpenChamber automatically when
+- **Variant B — memory stack + OpenChamber + Claude Office (+ optional Ghost companion agent).** The full
+  stack: memory stack, the OpenChamber workspace (with the nine agent
+  definitions — `standalone` primary, `ghost` persistent companion agent, six specialists, and the Board of
+  Advisors), the Claude Office activity visualizer, and optionally **Ghost** (persistent agent that dreams daily via `ghost/ghost.compose.yml`). RepoQL is mounted into OpenChamber automatically when
   `start.sh` detects `rql`.
 
 Clone the repository once, from the WSL2 home (or wherever the user keeps
@@ -138,12 +138,15 @@ Variant A is done after step 3. Skip to "Report".
    | `openchamber/opencode.jsonc`      | `opencode.jsonc`         |
    | `openchamber/dcp.jsonc`           | `dcp.jsonc`              |
    | `openchamber/plugins/product-office/` | `plugins/product-office/` |
+   | `openchamber/plugins/runbook-nudge/`  | `plugins/runbook-nudge/`  |
    | `openchamber/package.json`        | `package.json`           |
 
-   This ships the eight agent definitions — `standalone` (primary),
-   `thinker`, `general`, `explore`, `researcher-web`, `code-reviewer`,
-   `quality-fixer` and **`board` (Board of Advisors)** — the runtime agent
-   policy (`AGENTS.md`), and the Office/memory plugin. For a non-Docker
+   This ships the nine agent definitions — `standalone` (primary),
+   `ghost` (persistent companion agent that dreams), `thinker`, `general`,
+   `explore`, `researcher-web`, `code-reviewer`, `quality-fixer` and
+   **`board` (Board of Advisors)** — the runtime agent
+   policy (`AGENTS.md`), and the Office/memory plugins (`product-office`,
+   `runbook-nudge`). For a non-Docker
    OpenChamber install, copy the same files into `~/.config/opencode/`
    instead (same layout). Full details: `docs/OPENCHAMBER-SETUP.md`.
 
@@ -171,11 +174,14 @@ Variant A is done after step 3. Skip to "Report".
    mkdir -p secrets
    python3 -c 'import secrets; print("OPENCHAMBER_UI_PASSWORD=" + secrets.token_urlsafe(32))' > secrets/openchamber.env
    chmod 600 secrets/openchamber.env
+   # Optional add-on: enable Ghost (persistent companion agent that dreams)
+   # bash ghost/setup-ghost.sh
    scripts/start.sh
    ```
 
    `start.sh` pre-creates bind-mount directories as the WSL user, creates the
-   shared product network, attaches memory-core, starts OpenChamber and Office,
+   shared product network, attaches memory-core, starts OpenChamber and Office
+   (and Ghost when `secrets/ghost.env` is present — see `docs/GHOST-SETUP.md`),
    and automatically mounts the WSL Linux `rql` binary when detected. It
    persists RepoQL state in `data/repoql/`. If `rql` is missing or broken, the
    script says so and skips RepoQL while the rest of the stack can start.

@@ -1,0 +1,74 @@
+# Ghost — persistent companion agent that dreams (optional add-on).
+#
+# Runs:
+#   - ghost-gateway: lightweight OpenAI-compatible allowlist gateway (:18003 loopback)
+#   - ghost-dream:   daily checkpointed dream cycle (experiences -> related ->
+#                    patterns -> evolution -> consolidate -> summary) committing
+#                    provenance-stamped reflections into data/ghost/memory/
+#
+# Prerequisites:
+#   - secrets/ghost.env exists (create with `ghost/setup-ghost.sh` or copy from
+#     templates/product.env.example)
+#   - scripts/start.sh has created the `singularity-product-net` network and
+#     `data/ghost/` directory structure
+#
+# Run from the repository root:
+#   docker compose -f ghost/ghost.compose.yml up -d
+services:
+  ghost-gateway:
+    image: ${GHOST_NODE_IMAGE:-node:22-bookworm-slim}
+    container_name: singularity-ghost-gateway
+    working_dir: /app
+    command: ["node", "ghost/ghost-gateway.mjs"]
+    ports:
+      - "127.0.0.1:18003:18003"
+    env_file:
+      - ${GHOST_ENV_FILE:-../secrets/ghost.env}
+    environment:
+      GHOST_GATEWAY_HOST: "0.0.0.0"
+      GHOST_GATEWAY_PORT: "18003"
+      UPSTREAM_BASE: "${GHOST_UPSTREAM_BASE:-http://proxy:8096/openai/default/v1}"
+      GHOST_DATA_DIR: "/data/ghost"
+    volumes:
+      - ../ghost:/app/ghost:ro
+      - ../data/ghost:/data/ghost
+    networks:
+      product:
+        aliases: [ghost-gateway]
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+
+  ghost-dream:
+    image: ${GHOST_NODE_IMAGE:-node:22-bookworm-slim}
+    container_name: singularity-ghost-dream
+    working_dir: /app
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          node ghost/dream.mjs --agent ghost --agent-dir /data/ghost || true
+          sleep "${GHOST_DREAM_CHECK_INTERVAL_SEC:-3600}"
+        done
+    env_file:
+      - ${GHOST_ENV_FILE:-../secrets/ghost.env}
+    environment:
+      GATEWAY_URL: "${GHOST_DREAM_GATEWAY_URL:-http://ghost-gateway:18003/v1}"
+      GHOST_DATA_DIR: "/data/ghost"
+      GHOST_TIMEZONE: "${GHOST_TIMEZONE:-UTC}"
+    volumes:
+      - ../ghost:/app/ghost:ro
+      - ../data/ghost:/data/ghost
+    depends_on:
+      - ghost-gateway
+    networks:
+      - product
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+
+networks:
+  product:
+    external: true
+    name: ${SINGULARITY_NETWORK:-singularity-product-net}

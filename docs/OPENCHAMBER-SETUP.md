@@ -2,9 +2,9 @@
 
 [OpenChamber](https://github.com/openchamber/openchamber) is an MIT-licensed
 workspace UI for coding agents (web, desktop and VS Code builds). This
-repository ships the **configuration bundle** and the **memory plugin** that
-make it part of Singularity; the application itself is installed from its own
-project.
+repository ships the **configuration bundle** and the **memory and reminder
+plugins** that make it part of Singularity; the application itself is
+installed from its own project.
 
 ## 1. Install OpenChamber
 
@@ -30,10 +30,11 @@ OpenCode configuration directory:
 | Repo path | Goes to (`<config-dir>/…`) | What it is |
 |---|---|---|
 | `openchamber/AGENTS.md` | `AGENTS.md` | runtime agent policy (memory usage, evidence honesty, permissions) |
-| `openchamber/agents/` | `agents/` | eight agent definitions (below) |
+| `openchamber/agents/` | `agents/` | nine agent definitions (below) |
 | `openchamber/opencode.jsonc` | `opencode.jsonc` | OpenCode config: compaction + plugin list |
 | `openchamber/dcp.jsonc` | `dcp.jsonc` | config for the DCP compaction plugin |
 | `openchamber/plugins/product-office/` | `plugins/product-office/` | the memory-capture plugin |
+| `openchamber/plugins/runbook-nudge/`  | `plugins/runbook-nudge/`  | the runbook/concept reminder plugin |
 | `openchamber/package.json` | `package.json` | declares the config dir as an ESM package |
 
 With the Docker Compose path, the config dir is `data/opencode/config/` in
@@ -42,11 +43,12 @@ runtime bundle isolated from the Windows Electron app and any existing
 `~/.config/opencode/` configuration; do not overwrite those files. For native
 installs the config dir is `~/.config/opencode/`.
 
-The shipped agents (all subagents except `standalone`, which is the primary):
+The shipped agents (`standalone` and `ghost` are primary; the rest are subagents):
 
 | Agent | Role |
 |---|---|
 | `standalone` | unrestricted operator-driven primary agent — does the task directly |
+| `ghost` | persistent companion agent that dreams — maintains 3-tier memory (`ghost/ghost-memory.mjs`) and consolidates daily reflections (`ghost/dream.mjs`; see [`GHOST-SETUP.md`](GHOST-SETUP.md)) |
 | `thinker` | deep reasoning for difficult technical decisions and diagnosis |
 | `general` | general-purpose research and multi-step execution |
 | `explore` | fast codebase exploration (patterns, symbols, questions) |
@@ -91,6 +93,13 @@ Each channel reports its own state: `not-configured` (file missing),
 `invalid-endpoint` (URL fails the pinned host/port check), or ready/degraded
 tracked under plugin storage. A missing Office changes nothing about memory
 capture.
+
+`plugins/runbook-nudge/` works alongside it: a non-gating context hook that
+asks the primary agent to check tracking records, the covering runbook and
+existing RepoQL concepts before substantial work, and to create/update the
+runbook, refresh concepts and report validation honestly before its final
+answer. It is fail-open, it never edits anything, and
+`OPENCHAMBER_RUNBOOK_NUDGE=off` disables it; details in the plugin README.
 
 ## RepoQL integration
 

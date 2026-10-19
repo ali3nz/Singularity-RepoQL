@@ -11,22 +11,26 @@ step() { printf '\n== %s\n' "$*"; }
 check() { if "$@"; then :; else fail=1; echo "   ^^ FAILED: $*"; fi; }
 
 step "shell syntax"
-for f in memory/upstream/*.sh scripts/*.sh tests/*.sh; do check bash -n "$f"; done
+for f in memory/upstream/*.sh scripts/*.sh ghost/*.sh tests/*.sh; do check bash -n "$f"; done
 
 step "python syntax"
 for f in scripts/*.py; do check python3 -m py_compile "$f"; done
 rm -rf scripts/__pycache__ 2>/dev/null || true
 
 step "node syntax"
-for f in scripts/*.mjs openchamber/plugins/product-office/*.js; do check node --check "$f"; done
+for f in scripts/*.mjs ghost/*.mjs openchamber/plugins/product-office/*.js \
+         openchamber/plugins/runbook-nudge/*.js; do check node --check "$f"; done
 
 step "unit tests"
 check node --test scripts/cohere-quota.test.mjs
+check node --test ghost/dream.test.mjs
 check python3 tests/test-memory-security.py
-for f in openchamber/plugins/product-office/*.test.mjs; do check node --test "$f"; done
+for f in openchamber/plugins/product-office/*.test.mjs \
+         openchamber/plugins/runbook-nudge/*.test.mjs; do check node --test "$f"; done
 
 step "json parses"
 for f in openchamber/package.json openchamber/plugins/product-office/package.json \
+         openchamber/plugins/runbook-nudge/package.json \
          adapters/claude-code/settings-snippet.json; do
   check node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$f"
 done
@@ -50,6 +54,8 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   check env OPENCHAMBER_UI_PASSWORD=validation docker compose -f compose/compose.yml config -q
   check env CLAUDE_OFFICE_ENV_FILE=../templates/product.env.example \
     docker compose -f office/office.compose.yml config -q
+  check env GHOST_ENV_FILE=../templates/product.env.example \
+    docker compose -f ghost/ghost.compose.yml config -q
   check env OPENCHAMBER_UI_PASSWORD=validation REPOQL_RQL_PATH=/bin/true \
     docker compose -f compose/compose.yml -f compose/repoql.override.yml config -q
   check docker compose -f compose/extraction-failover.compose.yml config -q

@@ -6,6 +6,7 @@ Creates, with restrictive permissions and without printing any values:
   secrets/claude-office.env                          CLAUDE_OFFICE_API_KEY, CLAUDE_OFFICE_INGEST_KEY
   data/opencode/config/product-secrets/office.json   endpoint + ingestKey for the OpenChamber plugin
   data/opencode/config/product-secrets/memory.json   baseUrl + gateway/user identity for the plugin
+  secrets/ghost.env                                  optional Ghost add-on settings (when --with-ghost is passed)
 
 Existing values are preserved: re-running fills in what is missing and never
 overwrites a key that already has a value. Nothing is printed except file
@@ -70,6 +71,7 @@ def main() -> int:
     ap.add_argument("--memory-user-key", default=os.environ.get("MEMORY_USER_KEY", ""),
                     help="Memory Core user key (sk-mem-...); default: read memory/upstream/.admin-key")
     ap.add_argument("--office-base-url", default="http://product-office:8000")
+    ap.add_argument("--with-ghost", action="store_true", help="also provision secrets/ghost.env for the optional Ghost companion agent add-on")
     args = ap.parse_args()
 
     base = Path(args.base_dir).resolve()
@@ -126,10 +128,24 @@ def main() -> int:
         "ingestKey": office_values["CLAUDE_OFFICE_INGEST_KEY"],
     })
 
+    ghost_env = secrets_dir / "ghost.env"
+    if args.with_ghost:
+        ghost_values = read_env_file(ghost_env)
+        ghost_defaults = {
+            "GHOST_TIMEZONE": "UTC",
+            "GHOST_UPSTREAM_BASE": "http://proxy:8096/openai/default/v1",
+            "GHOST_DREAM_CHECK_INTERVAL_SEC": "3600",
+        }
+        for k, v in ghost_defaults.items():
+            if not ghost_values.get(k):
+                ghost_values[k] = v
+        write_env_file(ghost_env, ghost_values)
+
     print(json.dumps({
         "office_env": str(office_env),
         "memory_json": str(plugin_dir / "memory.json"),
         "office_json": str(plugin_dir / "office.json"),
+        "ghost_env": str(ghost_env) if ghost_env.exists() else None,
         "office_keys_generated": generated,
         "memory_user_key_present": bool(memory_json.get("userKey")),
         "note": "values intentionally not printed",

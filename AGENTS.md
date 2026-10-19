@@ -12,13 +12,14 @@ the RepoQL integration this variant adds: the OpenChamber bundle connects to
 the user's existing RepoQL installation (code intelligence through the
 `repoql` MCP server).
 
-- `openchamber/` — OpenChamber configuration bundle: runtime AGENTS.md, seven
-  agent definitions, OpenCode config, the `product-office` plugin
-  (memory capture + optional Office event forwarding), and the RepoQL MCP
+- `openchamber/` — OpenChamber configuration bundle: runtime AGENTS.md, nine
+  agent definitions (including `ghost`), OpenCode config, the `product-office` plugin
+  (memory capture + optional Office event forwarding), the `runbook-nudge`
+  plugin (context-time runbook/RepoQL-reminder nudges), and the RepoQL MCP
   wiring.
 - `memory/upstream/` — vendored upstream quickstart (byte-exact upstream).
-- `office/`, `compose/`, `scripts/`, `adapters/`, `templates/` — optional
-  components and helpers.
+- `office/`, `ghost/`, `compose/`, `scripts/`, `adapters/`, `templates/` — optional
+  components and helpers (Claude Office visualizer, Ghost persistent companion agent that dreams).
 - `docs/`, `tests/` — documentation and validation.
 
 ## Ground rules

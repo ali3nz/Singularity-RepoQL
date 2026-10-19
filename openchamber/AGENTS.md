@@ -24,7 +24,9 @@ merely because another installation provides them.
 ## Starting a task
 
 1. Identify the requested outcome and authorized scope.
-2. Inspect relevant project documentation and existing implementation.
+2. Inspect relevant project documentation and existing implementation,
+   including any runbook or guide covering the task, and check the
+   project's tracking records for related work already underway.
 3. Retrieve a small amount of relevant project memory when available.
 4. Distinguish verified facts from previous assumptions or suggestions.
 5. Prefer the smallest correct change that meets the requirement.
@@ -162,6 +164,59 @@ operation is authorized and that the target is correct.
 Do not expose credentials, tokens, personal data, or sensitive
 configuration in reports, logs, or commits.
 
+## Guardrails
+
+These standing constraints apply to every task in this workspace.
+
+**Secrets.** Never print, echo or paste credentials, keys, tokens or other
+secret values into chat, transcripts, logs, comments, issues, reports or
+commits — no exceptions. Report a value's shape (a variable name, file or
+service), not the value, and shape commands so they cannot dump it. If a
+secret is exposed anyway, say so plainly in your next reply and treat it as
+exposed until it is rotated. Check generated files and diffs before sharing
+them.
+
+**Credential-shape checks are advisory.** A heuristic "this looks like a
+secret" flag never justifies refusing an otherwise permitted task or
+corrupting harmless code or paths to dodge it. Keep values out of tool
+arguments and visible output with variables or in-process loaders instead.
+Report missing or stale guard state honestly; never dress a failure up as
+protection.
+
+**Review before risky changes.** Modifying agent definitions, the runtime
+rules file (AGENTS.md), plugin or gate code, the OpenCode runtime
+configuration, authentication or system hardening files, or deployment
+configuration is denied until one review pass by a review-capable agent whose
+prompt names the exact target paths. Apply the result of the review before
+shipping the change; a single fresh review is enough, and the user may
+explicitly waive it. Read-only inspection never needs a review. Do not route
+around this gate by editing through another tool or session.
+
+**Scoped searches.** Never run unscoped `find /`, broad recursive
+grep/rsync, or scans across entire drives or mounts. Search narrowly, bound
+long-running commands, and when examining disks identify devices by model
+and serial rather than device name alone. A missed hit in a scoped search is
+not proof that nothing exists elsewhere.
+
+**Runbooks.** Before substantial work, look for an existing runbook, guide
+or README section covering the task and follow it. Work reasonably likely to
+recur — or any material operational change — requires that runbook to be
+created or updated with verified operate, validate, troubleshoot and recover
+steps, untested recovery procedures marked as such, and a `Last updated`
+date kept fresh. If you lack write access, report the proposed update
+instead.
+
+**Continuity.** Search existing issue lists and tracking records before
+starting work; reuse a matching record instead of opening a duplicate, and
+claim shared state before changing it. Do not run parallel competing work,
+and never remove another session's locks or in-progress state.
+
+**Verification honesty.** A command exiting successfully is not a pass: do
+not skip tests, weaken assertions, swallow errors, or add suppressions to
+make checks succeed — fix the cause or report the failure. When declaring
+work complete, verify the real current state and identify what remains
+untested.
+
 ## Implementation
 
 1. Define the smallest sufficient change.
@@ -208,7 +263,8 @@ Before reporting completion:
 
 1. Compare results with the requested outcome.
 2. Verify the changed implementation using available evidence.
-3. Update affected documentation when necessary.
+3. Update affected documentation when necessary, including a runbook whose
+   steps changed.
 4. Record durable, verified lessons through the configured workflow,
    when an appropriate capture mechanism is available.
 5. Report completed work, validation, and outstanding limitations.

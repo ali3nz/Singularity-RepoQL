@@ -4,7 +4,8 @@ Self-hosted memory for coding agents. Your agent talks to an LLM proxy; every
 conversation is captured, an asynchronous pipeline extracts durable memory, and
 later sessions receive the relevant context back. Optional add-ons: the
 **OpenChamber** workspace UI with a native memory plugin, the **Claude Office**
-activity visualizer, and harness adapters.
+activity visualizer, **Ghost** (a persistent companion agent that dreams), and
+harness adapters.
 
 This is the **RepoQL variant**: it ships everything above and wires the
 OpenChamber bundle to your existing RepoQL installation, so your agents get
@@ -32,6 +33,7 @@ Windows support therefore remains **experimental**. See
 | Extraction failover router (:8430, optional) | Retries extraction across providers on transient failures, with a shared monthly budget ledger | optional |
 | OpenChamber (:3127, optional) | Workspace UI + `product-office` memory plugin | optional |
 | Claude Office (:3128, optional) | 2D activity visualizer fed by the plugin or by harness adapters | optional |
+| Ghost (`ghost/`, :18003 gateway, optional) | Persistent companion agent with 3-tier memory and a daily checkpointed 6-step dream cycle (`dream.mjs`) | optional |
 | Knowledge promotion (`scripts/knowledge-promotion.py`) | Explicit, reversible promotion of verified knowledge into a curated store, indexed into Memory Core | optional |
 | Harness adapters (`adapters/claude-code/`) | Hook-based metadata events for the visualizer | optional |
 | RepoQL (your installation) | Code intelligence — index, tools, concepts — connected over MCP by the OpenChamber bundle | yes for this variant (installed separately) |
@@ -119,6 +121,18 @@ used by the reference deployment) and start it with
 `office/office.compose.yml`. See [`office/README.md`](office/README.md) and
 [`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md).
 
+## Optional — Ghost (persistent companion agent that dreams)
+
+Ghost is a persistent AI companion agent that maintains a three-tier memory
+layout (Memory Stack `/v1/memories`, RepoQL `rql`, and local git-backed
+reflection markdown in `data/ghost/memory/`) and runs a daily checkpointed
+6-step dream cycle (`experiences -> related -> patterns -> evolution -> consolidate -> summary`).
+Enable it with `bash ghost/setup-ghost.sh` (or
+`python3 scripts/provision-secrets.py --with-ghost`) and start it via
+`scripts/start.sh` or `ghost/ghost.compose.yml`. Clean-slate seed templates
+only — zero personal memories are shipped. See [`ghost/README.md`](ghost/README.md)
+and [`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md).
+
 ## Optional — knowledge promotion and extraction failover
 
 - Promotion: `scripts/knowledge-promotion.py --propose TITLE BODY SOURCE` …
@@ -134,11 +148,12 @@ used by the reference deployment) and start it with
 openchamber/   AGENTS.md, agents/, opencode.jsonc, dcp.jsonc, plugins/product-office/
 memory/        README.md, upstream/ (vendored quickstart), .env.example
 office/        README.md, office.compose.yml
+ghost/         README.md, ghost.compose.yml, setup-ghost.sh, dream.mjs, ghost-memory.mjs, ghost-turn.mjs, ghost-gateway.mjs, seed/, systemd/
 compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
 scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
 adapters/      claude-code/ (hook-based Office adapter)
 templates/     product.env.example
-docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, REPOQL-SETUP, OFFICE-SETUP, TROUBLESHOOTING
+docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
 tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh
 ```
 
@@ -191,6 +206,8 @@ documented behavior.
 [`docs/memory-capture-promotion.md`](docs/memory-capture-promotion.md) ·
 
 [`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md) ·
+
+[`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md) ·
 
 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
 

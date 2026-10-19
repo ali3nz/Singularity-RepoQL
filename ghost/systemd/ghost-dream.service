@@ -1,0 +1,12 @@
+[Unit]
+Description=Ghost daily checkpointed dream cycle (experiences -> related -> patterns -> evolution -> consolidate -> summary)
+After=network-online.target ghost-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=2700
+WorkingDirectory=/opt/singularity-repoql
+Environment=GATEWAY_URL=http://127.0.0.1:18003/v1
+Environment=GHOST_DATA_DIR=/opt/singularity-repoql/data/ghost
+ExecStart=/usr/bin/env node /opt/singularity-repoql/ghost/dream.mjs --agent ghost --agent-dir /opt/singularity-repoql/data/ghost

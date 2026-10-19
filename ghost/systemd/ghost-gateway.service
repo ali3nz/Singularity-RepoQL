@@ -1,0 +1,17 @@
+[Unit]
+Description=Ghost OpenAI-compatible model gateway (loopback 127.0.0.1:18003)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/singularity-repoql
+Environment=GHOST_GATEWAY_HOST=127.0.0.1
+Environment=GHOST_GATEWAY_PORT=18003
+Environment=UPSTREAM_BASE=http://127.0.0.1:8125/v1
+ExecStart=/usr/bin/env node /opt/singularity-repoql/ghost/ghost-gateway.mjs
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

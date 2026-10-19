@@ -1,8 +1,8 @@
 {
   "name": "Singularity-RepoQL",
   "version": "0.1.0-rc1",
-  "generated": "2026-10-19T09:44:04Z",
-  "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, and harness adapters.",
+  "generated": "2026-10-19T12:06:20Z",
+  "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, optional Ghost persistent companion agent that dreams, and harness adapters.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {
     "memory_stack": {
@@ -16,7 +16,7 @@
       "path": "openchamber",
       "source": "https://github.com/openchamber/openchamber",
       "vendored": false,
-      "note": "config bundle (agents, rules, plugin, RepoQL MCP entry) for the upstream OpenChamber application; the application itself is installed separately"
+      "note": "config bundle (agents, rules, plugins: product-office memory capture + runbook-nudge reminders, RepoQL MCP entry) for the upstream OpenChamber application; the application itself is installed separately"
     },
     "claude_office": {
       "path": "office",
@@ -53,6 +53,12 @@
       "source": "authored for this repository",
       "vendored": false,
       "note": "runs the byte-exact Memory Core quickstart through streaming key-output redaction and verifies auth/verify data.valid=true without printing the admin key"
+    },
+    "ghost_companion": {
+      "path": "ghost + openchamber/agents/ghost.md + docs/GHOST-SETUP.md",
+      "source": "authored for this repository (redacted clean-slate projection)",
+      "vendored": false,
+      "note": "optional persistent companion agent with 3-tier memory helper (ghost-memory.mjs), checkpointed 6-step daily dream engine (dream.mjs), headless OpenChamber turn runner (ghost-turn.mjs), allowlist model gateway (ghost-gateway.mjs), and blank seed templates (zero personal memories)"
     }
   },
   "validation": {

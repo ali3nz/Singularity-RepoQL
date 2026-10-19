@@ -13,6 +13,7 @@
 #   3b. mount the rql binary into OpenChamber when RepoQL is present
 #   4. start OpenChamber (compose/compose.yml) when a UI password is available
 #   5. start Claude Office (office/office.compose.yml) when its env file exists
+#   5b. start Ghost (ghost/ghost.compose.yml) when secrets/ghost.env exists
 #   6. print the readiness table
 #
 # Run from the repository root:  scripts/start.sh
@@ -57,6 +58,7 @@ for dir in \
   "$ROOT/data/opencode/config" \
   "$ROOT/data/ssh" \
   "$ROOT/data/office" \
+  "$ROOT/data/ghost" \
   "$ROOT/workspaces"; do
   mkdir -p "$dir"
   container_uid_can_write "$dir" \
@@ -132,6 +134,14 @@ if [[ -f "$ROOT/secrets/claude-office.env" ]]; then
   docker compose -f "$ROOT/office/office.compose.yml" up -d
 else
   log "skipping Claude Office: secrets/claude-office.env missing (run scripts/provision-secrets.py)"
+fi
+
+# ── 5b. Ghost — persistent agent that dreams (optional) ──────────────────────
+if [[ -f "$ROOT/secrets/ghost.env" ]]; then
+  bash "$ROOT/ghost/setup-ghost.sh"
+  docker compose -f "$ROOT/ghost/ghost.compose.yml" up -d
+else
+  log "skipping Ghost: secrets/ghost.env missing (run bash ghost/setup-ghost.sh or python3 scripts/provision-secrets.py --with-ghost)"
 fi
 
 # ── 6. readiness ─────────────────────────────────────────────────────────────

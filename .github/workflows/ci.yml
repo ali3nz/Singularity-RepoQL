@@ -25,7 +25,9 @@ jobs:
       - name: Source tests
         run: |
           node --test openchamber/plugins/product-office/*.test.mjs
+          node --test openchamber/plugins/runbook-nudge/*.test.mjs
           node --test scripts/cohere-quota.test.mjs
+          node --test ghost/dream.test.mjs
 
       - name: Local validation (configs, syntax, references)
         run: bash tests/validate-local.sh
