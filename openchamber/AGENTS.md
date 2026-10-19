@@ -73,6 +73,23 @@ This workspace runs two knowledge surfaces. Keep them in their lanes:
   records; RepoQL concepts go through `rql concept add`. Do not create a
   second memory database or a private capture log of your own.
 
+## Self-learning capture (bounded)
+
+Memory operations must be selective, bounded and evidence based. Do not invoke
+memory capture for routine conversation, transient state, duplicated knowledge
+or unverified claims. Prefer existing RepoQL retrieval and journal records over
+additional model calls; promote durable concepts only through the established
+gated capture process. Respect configured input, token and promotion limits,
+and never replay entire conversation histories or memory collections into
+model context.
+
+Concretely: at a session close or review, when a single durable lesson
+qualified, run scripts/memory_turn_capture.py once (it enforces the input and
+per-24h caps and refuses otherwise); promote recurring memory records with
+scripts/memory_promote.py and the existing knowledge-promotion flow or
+`rql concept add`. The memory plugin remains the only automatic capture
+writer; details in docs/memory-capture-promotion.md.
+
 ## Persistent memory
 
 Singularity may connect to Tencent MemoryCore through an OpenChamber

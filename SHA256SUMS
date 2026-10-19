@@ -2,8 +2,8 @@ cf1ea22609627b09cd07e5c1df06d6fdec73af023745f9b4b28d1fd52c91dce7  ./.github/work
 ab81d67b4554db53e0c38478076a998d9b7d2f34d0d7838efaeceff0c8dc0284  ./.gitignore
 e39c875461ed939153c0ba1b610827e2182dd61271883a9062b48d3a0a7ce63c  ./AGENTS.md
 5b7837017b32cc70e856046a4a5e9813306eea4d1c2babe1df5787cad64fe4cc  ./LICENSE
-404795be17f3aa3c6cbae195131c197cd3e4fe4bd5042fe06ff5b0b8ab9ee1de  ./MANIFEST.json
-1639ed92d5169a8208053c91e564faad84d67904aa6a333244a1efceae7d222f  ./README.md
+b06109acdd5ef1f9c608e0dac9994cb0fcbf236f4ef638f3a3c313097a1ac28a  ./MANIFEST.json
+494076ed6ae26d1499fac43c61403059c11fbf95b57d58d6eef0e42f17154bad  ./README.md
 3809622e42869fea75b1e9a1898ed489872f038d2d39950baf73e0f914441c68  ./THIRD_PARTY_NOTICES.md
 e1cf5217c17db10c1082cfdd1b396a79f2610d76ea6106fd7b01143a8cc0af67  ./adapters/claude-code/README.md
 00bc2fb9470d36dd58374a2464e62efb3b9635eb82ac4f2439b13e94874f59ee  ./adapters/claude-code/office-hook.mjs
@@ -18,6 +18,7 @@ c5bb252730842df97ef77082ea7fab44d46851587c18702a83c7885f8108dcb5  ./docs/MEMORY-
 cede06e6ee4666d23cc5ab088fa43c1d7c206b4388853b522c9de08a002ae62f  ./docs/OPENCHAMBER-SETUP.md
 18e03212997b8db04ec3b3a10d685e754ad0f9a548a92c4dcdc663a0e368a86a  ./docs/REPOQL-SETUP.md
 694832b0274d0bd0579aed04a7c5dbb05e8fe8a3fbd96c758a3b1eef03e6f00f  ./docs/TROUBLESHOOTING.md
+8ed7284e9f3b6baea31730527b8101c929be893562a44055adeebb7053a9ec75  ./docs/memory-capture-promotion.md
 ee78aa07db197f2d662b3a6788d6ed35ce3c3ff17381675dc82949b0d3c855c5  ./docs/platforms/windows.md
 3747dd861200aac411a0e4ec14b91c6bfc9a2db8c63c7a9740ec5fa8c48458ef  ./memory/.env.example
 23913d22722a98b730b7d231a506b56dfa2b10a246e1e27cf9d95be008894381  ./memory/README.md
@@ -35,8 +36,8 @@ a97f0784681e1f072367e77860b4999882f0141c88f6c5c54c5cc325c3d95bd4  ./memory/upstr
 fba5daf00890cd333307a865a2804407ab2c490fbb0318535100b14e14f1d544  ./memory/upstream/verify.sh
 7c1eea33e817ce2e5d10cee7c0a2176a620e3a5a8db29aee713c8f926c6a9817  ./office/README.md
 f9eb28034d584fb66a274a58d843f22c887a5b62574cef5120f134b3402d3faf  ./office/office.compose.yml
-330e8176bdca73d31cd6abba51743806d20363172aef4c982e28d9b49001d704  ./openchamber/AGENTS.md
-9b1ac1763199b3ad2466c694246c79eb706246fb479f2f26396358275a4c3b21  ./openchamber/agents/code-reviewer.md
+1a2f34dc7e8d19bb43f200e137c15e0868e0f34b41e98adf33ae465e0db6e224  ./openchamber/AGENTS.md
+de54fd05ca0fbb687f1f2d0c1f99c85c2421781d25062a7539425040c0f8b21b  ./openchamber/agents/code-reviewer.md
 28b02e06d17e7d92c880cce1f080ad42ba3da9f683f48dfa74fa8c7d47404b0d  ./openchamber/agents/explore.md
 c031ec3c756977e3d423ff975b7eda631edce474b3fd24cdec294b863b17c87f  ./openchamber/agents/general.md
 799368fce6242f45350f314d6519723106ab1f99db56fa041236e3858fc57710  ./openchamber/agents/quality-fixer.md
@@ -64,6 +65,8 @@ b0c61422ba59d30a56017a2888a086ea3a7f717b47199ae0ed2f81a4ad8f91d0  ./openchamber/
 7008c54ac6316862fcc8d578a92ec512e9eed67a0005cf69ff8b7c9a0b512208  ./scripts/extraction-failover.mjs
 e383c116ce1f633ea6416a64e149af1e6a2ef0b6e572e390ef76df4410ec35e1  ./scripts/knowledge-promotion.py
 a0831766e72c20f29219175127962f12de72f9acbd3b25fb1a4f215493f83c01  ./scripts/memory-forwarder.mjs
+028c0ce7abd8dbd748ba8afcb87f377b5fd0ff8dc68c603a27e101b69cf8a741  ./scripts/memory_promote.py
+e2882b952fe21ea3d4964ab90bb01a9fdf7cb00201e9242f88ce12eab201edae  ./scripts/memory_turn_capture.py
 ad690b68eba12ccec6089bf8208cd7888e44ca9b36a1be786adb1a4447d37b53  ./scripts/provision-secrets.py
 fa0a21bca64e3b7d3efb947515631cc7035f280263ce50b41adb87fd6b297325  ./scripts/start.sh
 c36a3c757e80c1096f8a1042b618ab4c6bbe1ccb44bcc6aacdefa86beaaef78a  ./templates/product.env.example

@@ -1,7 +1,7 @@
 {
   "name": "Singularity-RepoQL",
   "version": "0.1.0-rc1",
-  "generated": "2026-10-19T03:29:53Z",
+  "generated": "2026-10-19T04:33:13Z",
   "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, and harness adapters.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {
@@ -35,6 +35,12 @@
       "license": "AGPL-3.0-or-later",
       "vendored": false,
       "note": "installed separately at runtime by OpenCode"
+    },
+    "self_learning": {
+      "path": "scripts",
+      "source": "authored for this repository",
+      "vendored": false,
+      "note": "bounded agent-run self-learning loop: scripts/memory_turn_capture.py and scripts/memory_promote.py; caps and contract in docs/memory-capture-promotion.md; no new hook framework, store or service"
     },
     "repoql_integration": {
       "path": "compose/repoql.override.yml + openchamber/opencode.jsonc (mcp.repoql)",

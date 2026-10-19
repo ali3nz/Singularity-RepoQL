@@ -43,8 +43,9 @@ change itself is defective.
    trivial edits (typos, formatting, generated output, one-off values). Capture
    at most three concepts per review. If nothing durable and reusable was
    learned, report NO_CONCEPT_CHANGE with the reason.
-2. Search first and never duplicate: run `rql explore "<topic>" --token-budget
-   900` for each changed path or decision, then `rql concept hints <path>` for
+2. Search first and never duplicate: run `rql explore "<topic>" --uri-glob
+   "**" --token-budget 900` for each changed path or decision, then
+   `rql concept hints <path>` for
    the files a fix touches. Pass paths the way the RepoQL host sees them
    (workspace paths). Read a candidate with
    `rql read "concept:///<category>/<Name>.md"`. Never hand-edit or delete

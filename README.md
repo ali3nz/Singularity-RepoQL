@@ -149,6 +149,7 @@ tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh
 [`docs/MEMORY-LOOP.md`](docs/MEMORY-LOOP.md) ·
 [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md) ·
 [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md) ·
+[`docs/memory-capture-promotion.md`](docs/memory-capture-promotion.md) ·
 [`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md) ·
 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
 
