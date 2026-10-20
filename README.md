@@ -79,7 +79,8 @@ result, and anything that deviated from the documented behavior.
 Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
 Have OpenChamber running already (any variant; it is reused as-is and never
 reinstalled). Start the memory stack: bash scripts/start-memory-stack.sh.
-Then run bash scripts/start.sh — it detects the existing OpenChamber
+Then run SINGULARITY_VARIANT=3 bash scripts/start.sh — the option number is
+the one explicit input, and it detects the existing OpenChamber
 (container or native ~/.config/opencode), attaches the plugin bundle with
 node scripts/attach-openchamber.mjs, provisions plugin credentials with
 python3 scripts/provision-secrets.py --variant 3 (Office/Ghost credentials
@@ -101,7 +102,8 @@ Have OpenChamber running already (it is reused as-is and never reinstalled).
 Start the memory stack: bash scripts/start-memory-stack.sh. Run
 bash ghost/setup-ghost.sh (the dream daemon uses the openchamber backend;
 docs/GHOST-SETUP.md) with secrets/ghost.env present, and build/start Claude
-Office per docs/OFFICE-SETUP.md. Then run bash scripts/start.sh — it attaches
+Office per docs/OFFICE-SETUP.md. Then run SINGULARITY_VARIANT=4 bash scripts/start.sh — the option number is
+the one explicit input — it attaches
 to the existing OpenChamber, provisions plugin credentials with
 python3 scripts/provision-secrets.py --variant 4 --with-ghost, and never
 creates a second OpenChamber. The option gate verifies Ghost (dream
@@ -194,9 +196,10 @@ backup and restore) is in
 ## Install — give this to your agent
 
 Use the copyable briefs in **START HERE** above: they are the four
-installation options, selected with `--variant 1|2|3|4` (options 3/4 attach
+installation options, selected with `--variant 1|2|3|4` (options 1 and 2) or
+`SINGULARITY_VARIANT=3|4 bash scripts/start.sh` (options 3 and 4, which attach
 to an existing OpenChamber; interactive installs offer the same numbered
-menu). There are no other installation options and no optional component
+menu). The option number is the ONE explicit input in both forms. There are no other installation options and no optional component
 selectors: Ghost and Claude Office are automatically included in options 2
 and 4 and absent from options 1 and 3; everything else (scope, team/user,
 provider replacement, probes, dry runs) is advanced configuration within the
