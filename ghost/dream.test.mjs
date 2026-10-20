@@ -11,6 +11,7 @@ import {
   assertOwnMemfs,
   cleanErr,
   runDream,
+  makeLadderCallImpl,
 } from "./dream.mjs";
 
 test("DREAM_STEPS has the 6-step reflection pipeline", () => {
@@ -58,6 +59,45 @@ test("cleanErr redacts bearer tokens and sk- keys", () => {
   assert.ok(!cleaned.includes("secret_token_1234567890"));
   assert.ok(!cleaned.includes("sk-abcdef1234567890"));
   assert.ok(cleaned.includes("<redacted>"));
+});
+
+test("model ladder advances on retryable failure and records hops (issue 741 semantics)", { skip: !makeLadderCallImpl || !runDream }, async () => {
+  const state = {};
+  let modelCalls = [];
+  const fakeFetch = async (url, opts = {}) => {
+    const body = JSON.parse(opts.body);
+    modelCalls.push(body.model);
+    if (body.model === "primary-broken") {
+      return { ok: false, status: 429, text: async () => "rate limited" };
+    }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ladder fallback reflection output, long enough for the length threshold." } }] }) };
+  };
+  const call = makeLadderCallImpl(["primary-broken", "fallback-ok"], {
+    gatewayUrl: "http://127.0.0.1:1/v1", key: "", state, deadlineMs: null, fetchImpl: fakeFetch,
+  });
+  const out = await call([{ role: "user", content: "dream step" }], 500);
+  assert.match(out, /Ladder fallback/);
+  assert.deepEqual(state.models_used, ["primary-broken", "fallback-ok"]);
+  assert.equal(state.fallback_attempts, 1, "one recorded hop");
+  await call([{ role: "user", content: "dream step 2" }], 500);
+  assert.deepEqual(modelCalls, ["primary-broken", "fallback-ok", "fallback-ok"], "sticky fallback: no re-sending to the broken primary within one call chain");
+
+  // Non-retryable failure (e.g. 401) goes straight through as an error.
+  const state2 = {};
+  const call2 = makeLadderCallImpl(["a", "b"], {
+    gatewayUrl: "http://127.0.0.1:1/v1", key: "", state: state2, deadlineMs: null,
+    fetchImpl: async () => ({ ok: false, status: 401, text: async () => "denied" }),
+  });
+  await assert.rejects(() => call2([{ role: "user", content: "x" }], 500), /401/);
+  assert.equal(state2.fallback_attempts, 0, "auth failures are not retried across providers");
+
+  // Deadline enforcement: below DREAM_MIN_CALL_MS the call is refused.
+  const state3 = {};
+  const call3 = makeLadderCallImpl(["a"], {
+    gatewayUrl: "http://127.0.0.1:1/v1", key: "", state: state3, deadlineMs: Date.now() + 100,
+    fetchImpl: async () => { throw new Error("should not be called"); },
+  });
+  await assert.rejects(() => call3([{ role: "user", content: "x" }], 500), /deadline/);
 });
 
 test("runDream executes all 6 steps with mock callImpl and commits consolidated memory", async () => {

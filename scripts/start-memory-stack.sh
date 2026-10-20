@@ -27,6 +27,12 @@ ALLOW_WIDE_MEMORY_PORTS=0
 if [[ "${SINGULARITY_ALLOW_WIDE_MEMORY_PORTS:-}" == "1" ]]; then ALLOW_WIDE_MEMORY_PORTS=1; fi
 BOUNDARY="$ROOT/scripts/memory-port-boundary.sh"
 baseline_file="$(mktemp /tmp/singularity-memory-baseline.XXXXXX)"
+if command -v docker >/dev/null 2>&1 && [[ ! -f "$BOUNDARY" ]]; then
+  echo 'FAILED: scripts/memory-port-boundary.sh is missing — refusing an unauditable startup while docker is present.' >&2
+  echo '        Re-install the Singularity memory wrapper collection (scripts/) or remove docker from PATH.' >&2
+  rm -f "$baseline_file"
+  exit 1
+fi
 if ! command -v docker >/dev/null 2>&1; then
   echo 'note: docker CLI not found — the loopback publishing preflight is deferred to the post-start check on hosts where docker exists.' >&2
 else

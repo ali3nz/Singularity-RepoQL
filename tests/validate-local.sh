@@ -36,6 +36,7 @@ check node --test tests/doc-policy.test.mjs
 check bash tests/memory-port-boundary.test.sh
 check node --test ghost/dream.test.mjs
 check node --test ghost/ghost-gateway.test.mjs
+check node --test ghost/gateway-backend.test.mjs
 check python3 tests/test-memory-security.py
 check python3 tests/test-memory-promote.py
 check python3 tests/test-memory-doc-ingest.py

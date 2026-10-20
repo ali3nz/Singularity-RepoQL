@@ -18,8 +18,7 @@
 //
 // Usage:
 //   node ghost/dream.mjs [--agent ghost] [--agent-dir data/ghost] [--fresh] [--force]
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync } from "node:fs";import { spawnSync } from "node:child_process";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -76,6 +75,36 @@ export async function pickModel({ gatewayUrl, key, fetchImpl = globalThis.fetch 
   const models = await listModels({ gatewayUrl, key, fetchImpl });
   if (!models.length) throw new Error("NO_ALLOWLISTED_MODELS");
   return models[0];
+}
+
+/**
+ * Provider-failure ladder (issue 741/§11): ordered model fallback for dream
+ * steps. A retryable failure (429/5xx/timeout) advances to the next model;
+ * every hop is recorded (models_used, fallback_attempts) in the run state and
+ * the deadline is honored between hops — no unbounded retry, no silent
+ * downgrade: the ladder path stays visible in the run result.
+ */
+export function makeLadderCallImpl(ladder, { gatewayUrl, key, state, deadlineMs, fetchImpl = globalThis.fetch } = {}) {
+  if (!Array.isArray(ladder) || !ladder.length) throw new Error("dream model ladder is empty");
+  let idx = 0;
+  state.models_used = state.models_used || [];
+  state.fallback_attempts = state.fallback_attempts || 0;
+  return async (messages, maxTokens) => {
+    for (;;) {
+      const model = ladder[idx];
+      if (state.models_used[state.models_used.length - 1] !== model) state.models_used.push(model);
+      const timeoutMs = deadlineMs ? dreamCallTimeoutMs(Date.now(), deadlineMs) : DREAM_CALL_DEFAULT_MS;
+      try {
+        return await callModel({ gatewayUrl, key, model, messages, maxTokens, retries: 0, timeoutMs, fetchImpl });
+      } catch (e) {
+        const retryable = !e.status || e.status === 429 || (e.status >= 500 && e.status <= 599)
+          || e.name === "TimeoutError" || e.name === "AbortError" || /timeout|timed out|abort/i.test(String(e?.message || ""));
+        if (!retryable || idx >= ladder.length - 1) throw e;
+        idx += 1;
+        state.fallback_attempts += 1;
+      }
+    }
+  };
 }
 
 export async function callModel({
@@ -400,7 +429,7 @@ function finish({ status, reason = null, state, results, agentDir, agentId, usag
     `- dream_minutes_delta: ${dreamMinutes === null ? "n/a" : dreamMinutes.toFixed(4)}`,
     `- used_total_delta: ${usedDelta === null ? "n/a" : usedDelta.toFixed(4)}`,
     `- steps: ${results.map((r) => `${r.step}=${r.status}`).join(", ")}`,
-    `- model: ${modelSrc}`,
+    `- model: ${modelSrc}${state.models_used ? ` (ladder: ${state.models_used.join(" ->")}, fallback_attempts: ${state.fallback_attempts ?? 0})` : ""}`,
     ...results.filter((r) => r.error).map((r) => `- error ${r.step} (${r.status}): ${r.error}`),
     `- proposed_entries: ${state.proposedEntries ?? "n/a"}; applied_entries: ${state.appliedEntries ?? "n/a"}`,
     `- audit_violation: ${state.auditViolation || "none"}`,
@@ -432,6 +461,7 @@ export async function runDream({
   maxStepRetries = 2,
   callImpl = null,
   model = null,
+  models = null, // optional ordered fallback ladder (issue 741); takes precedence over `model` discovery
   gatewayUrl = process.env.GATEWAY_URL || "http://127.0.0.1:18003/v1",
   gatewayKey = process.env.GATEWAY_API_KEY || "",
   now = () => new Date(),
@@ -459,6 +489,11 @@ export async function runDream({
     if (!runModel) runModel = await pickModel({ gatewayUrl, key: gatewayKey });
     return runModel;
   };
+  // Ordered provider-failure ladder (issue 741/§11 semantics): when a model
+  // list is configured, dream steps fail across models before giving up.
+  const ladderImpl = (Array.isArray(models) && models.length)
+    ? makeLadderCallImpl(models, { gatewayUrl, key: gatewayKey, state, deadlineMs })
+    : null;
 
   const siblingId = "explorer";
   const usageFile = join(agentDir, "ghost_usage.json");
@@ -511,7 +546,7 @@ export async function runDream({
       while (attempt <= maxStepRetries) {
         attempt++;
         try {
-          const call = callImpl || (async (messages, maxTokens) => {
+          const call = callImpl || ladderImpl || (async (messages, maxTokens) => {
             const timeoutMs = deadlineMs ? dreamCallTimeoutMs(Date.now(), deadlineMs) : DREAM_CALL_DEFAULT_MS;
             const m = await resolveModel();
             state.model = m;
@@ -613,6 +648,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2);
   const get = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
   const deadlineMs = Number(get("--deadline-ms")) || null;
+  const modelsJson = get("--models") || process.env.DREAM_MODELS || null;
+  let models = null;
+  if (modelsJson) {
+    try { models = JSON.parse(modelsJson); } catch { throw new Error("DREAM_MODELS must be a JSON array"); }
+    if (!Array.isArray(models) || !models.length || models.some((m) => typeof m !== "string" || !m)) {
+      throw new Error("DREAM_MODELS must be a non-empty JSON array of model ids");
+    }
+  }
   const agentId = get("--agent") || "ghost";
   const agentDir = resolve(get("--agent-dir") || process.env.GHOST_DATA_DIR || "data/ghost");
   const res = await runDream({
@@ -624,6 +667,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     totalCapMin: Number(get("--total-cap-min")) || undefined,
     deadlineMs,
     model: get("--model") || process.env.DREAM_MODEL || null,
+    models,
   });
   console.log(JSON.stringify(res, null, 2));
 }

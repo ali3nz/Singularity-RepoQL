@@ -24,7 +24,13 @@ import { fileURLToPath } from "node:url";
 
 const HOSTS = (process.env.GHOST_GATEWAY_HOSTS || "127.0.0.1").split(",").map((s) => s.trim()).filter(Boolean);
 const PORT = Number(process.env.GHOST_GATEWAY_PORT || 18003);
+// Backend selection: "openchamber" runs turns inside the OpenChamber container
+// (docker exec + opencode); "claude-code" runs turns through the claude CLI on
+// this host — REQUIRED for Variant 2 (Claude Code complete), which must work
+// WITHOUT an OpenChamber installation. Both honor AGENT/MODEL/TURN_TIMEOUT.
+const BACKEND = process.env.GHOST_BACKEND || "openchamber";
 const CTN = process.env.GHOST_CONTAINER || "singularity-openchamber";
+const CLAUDE_BIN = process.env.GHOST_CLAUDE_BIN || "claude";
 const BIN = process.env.GHOST_OPENCODE_BIN || "opencode";
 const AGENT = process.env.GHOST_AGENT || "ghost";
 const MODEL = process.env.GHOST_MODEL || "";
@@ -41,6 +47,23 @@ const stats = { requests: 0, completed: 0, failed: 0, rejected: 0, startedAt: ne
 // turn is rejected with a configuration error instead of crashing.
 let EXEC_MODE = { dockerBin: process.env.GHOST_DOCKER_BIN || "docker", error: null };
 function detectExecMode() {
+  if (BACKEND === "claude-code") {
+    // No docker dependency: probe the claude CLI once before serving turns.
+    const probe = spawn(CLAUDE_BIN, ["--version"], { stdio: "ignore" });
+    probe.on("error", (e) => {
+      EXEC_MODE = { ...EXEC_MODE, error: `claude CLI not available for this process: ${e?.message || e}. Install Claude Code (docs/CLAUDE-CODE-SETUP.md) or point GHOST_CLAUDE_BIN at the binary.` };
+      console.error("[ghost-gateway] " + EXEC_MODE.error);
+    });
+    probe.on("close", (code) => {
+      if (code !== 0) {
+        EXEC_MODE = { ...EXEC_MODE, error: `claude probe exited ${code} — turns will be rejected until the CLI works for this process.` };
+        console.error("[ghost-gateway] " + EXEC_MODE.error);
+      } else {
+        console.log("[ghost-gateway] claude CLI available; turn execution enabled (backend=claude-code)");
+      }
+    });
+    return;
+  }
   const probe = spawn(process.env.GHOST_DOCKER_BIN || "docker", ["version", "--format", "{{.Server.Version}}"], { stdio: "ignore" });
   probe.on("error", (e) => {
     EXEC_MODE = { ...EXEC_MODE, error: `docker CLI not available for this process: ${e?.message || e}. Run the gateway on the host (ghost/systemd) or in a docker-CLI-enabled container; see ghost/README.md.` };
@@ -64,15 +87,30 @@ function runTurn(label, prompt) {
       finish({ code: 127, content: "", usage: null, session: null, err: EXEC_MODE.error });
       return;
     }
-    const modelArgs = MODEL ? ["--model", MODEL] : [];
-    const args = ["exec", "-i", CTN, BIN, "run", "--agent", AGENT, ...modelArgs, "--format", "json", "--title", label, prompt];
+    // Backend dispatch: openchamber -> docker exec (opencode agent runtime);
+    // claude-code -> the claude CLI in non-interactive print mode on this host.
+    const isClaudeBackend = BACKEND === "claude-code";
+    const dockerCmd = process.env.GHOST_DOCKER_BIN || "docker";
+    let bin, args;
+    if (isClaudeBackend) {
+      bin = CLAUDE_BIN;
+      // `claude -p "<prompt>" --output-format json` prints one JSON object
+      // containing { result, usage }. Ghost reflection turns are tool-less by
+      // policy: tools are denied via --allowedTools "" (no permission grants).
+      args = ["-p", prompt, "--output-format", "json",
+        ...(MODEL ? ["--model", MODEL] : []), "--allowedTools", ""];
+    } else {
+      const modelArgs = MODEL ? ["--model", MODEL] : [];
+      bin = dockerCmd;
+      args = ["exec", "-i", CTN, BIN, "run", "--agent", AGENT, ...modelArgs, "--format", "json", "--title", label, prompt];
+    }
     let child;
     try {
-      // Read the docker binary per turn: tests (and podman-style migrations)
-      // may swap it between turns via GHOST_DOCKER_BIN.
-      child = spawn(process.env.GHOST_DOCKER_BIN || "docker", args, { stdio: ["ignore", "pipe", "pipe"] });
+      // Read the backend binary per turn: tests (and podman-style migrations)
+      // may swap it between turns via GHOST_DOCKER_BIN / GHOST_CLAUDE_BIN.
+      child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     } catch (error) {
-      finish({ code: 127, content: "", usage: null, session: null, err: `spawn docker failed: ${error?.message || error}` });
+      finish({ code: 127, content: "", usage: null, session: null, err: `spawn ${bin} failed: ${error?.message || error}` });
       return;
     }
     killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, TURN_TIMEOUT_MS);
@@ -83,7 +121,7 @@ function runTurn(label, prompt) {
     // crash the gateway process via an unhandled "error" event. The turn is
     // resolved with a failure; drain() records it exactly once.
     child.on("error", (spawnError) => {
-      EXEC_MODE.error = `docker exec unavailable: ${spawnError?.message || spawnError}`;
+      EXEC_MODE.error = `${bin} exec unavailable: ${spawnError?.message || spawnError}`;
       finish({ code: 127, content: "", usage: null, session: null, err: EXEC_MODE.error });
     });
     child.on("close", (code) => {
@@ -95,6 +133,17 @@ function runTurn(label, prompt) {
         let j = null;
         try { j = JSON.parse(t); } catch { continue; }
         if (j.sessionID) session = j.sessionID;
+        if (j.type === "result" && j.subtype === "success" && typeof j.result === "string") {
+          // claude-code backend: one result object with the turn text and usage.
+          texts.push(j.result);
+          if (j.usage && (j.usage.input_tokens != null || j.usage.output_tokens != null)) {
+            usage = usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+            usage.prompt_tokens += j.usage.input_tokens || 0;
+            usage.completion_tokens += j.usage.output_tokens || 0;
+            usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
+          }
+          continue;
+        }
         if (j.type === "text" && typeof j.part?.text === "string") texts.push(j.part.text);
         if (j.type === "step_finish" && j.part?.tokens) {
           const tk = j.part.tokens;
@@ -151,7 +200,7 @@ export const handler = async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, execAvailable: !EXEC_MODE.error, agent: AGENT, model: MODEL || "default", inflight, queued: queue.length, ...stats }));
+    res.end(JSON.stringify({ ok: true, backend: BACKEND, execAvailable: !EXEC_MODE.error, agent: AGENT, model: MODEL || "default", inflight, queued: queue.length, ...stats }));
     return;
   }
   if (url.pathname === "/v1/models" || url.pathname === "/models") {
