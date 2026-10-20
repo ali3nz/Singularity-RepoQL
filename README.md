@@ -128,8 +128,8 @@ The installer reports INCOMPLETE until every mandatory capability of the chosen 
 - RepoQL, already installed and reachable.
 - Two LLM API provider accounts of your own, with keys you hold. Sign up directly with each provider; pricing, quotas and model availability are set by the provider:
   - NVIDIA — https://build.nvidia.com/
-  - Groq — https://console.groq.com/
-  - Cerebras — https://cloud.cerebras.ai/
+  - Groq — https://console.groq.com/     - Go sign up and get an API key, its free. The rest can be ignored for now. 
+  - Cerebras — https://cloud.cerebras.ai/ - Go sign up and get an API key, its free. The rest can be ignored for now. 
   - OpenRouter — https://openrouter.ai/
   - Cohere — https://dashboard.cohere.com/
 - The shipped extraction failover router currently supports Groq and Cohere. Other provider accounts are useful only where the selected integration supports them; verify both extraction providers and a controlled live fallback before accepting failover.
