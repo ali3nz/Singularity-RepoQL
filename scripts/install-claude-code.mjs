@@ -24,6 +24,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { AGENT_MAP } from "../adapters/claude-code/agent-map.mjs";
 import {
   ensureMemoryIntegration,
@@ -31,6 +32,13 @@ import {
   settingsPathFor,
   ALL_HOOK_EVENTS,
 } from "../adapters/claude-code/settings-merge.mjs";
+import {
+  resolveMainProxyUrl,
+  ensureMainMemoryIntegration,
+  removeMainMemoryIntegration,
+  classifyMainMemoryState,
+  probeMainProxy,
+} from "../adapters/claude-code/main-memory.mjs";
 import { loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
 import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs";
 
@@ -96,7 +104,9 @@ export function detectRql(home, env = process.env) {
 
 // ── flags ────────────────────────────────────────────────────────────────────
 export function parseFlags(argv, home, cwd) {
-  const flags = { scope: "user", projectDir: resolve(cwd), team: "", user: "", skipProfiles: false, skipRepoqlMcp: false, dryRun: false };
+  const flags = { scope: "user", projectDir: resolve(cwd), team: "", user: "", skipProfiles: false, skipRepoqlMcp: false, dryRun: false,
+    mainMemory: null, // null = offer interactively (TTY), off when non-interactive
+    replaceProvider: false, probe: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--scope") {
@@ -109,6 +119,10 @@ export function parseFlags(argv, home, cwd) {
     else if (a === "--skip-profiles") flags.skipProfiles = true;
     else if (a === "--skip-repoql-mcp") flags.skipRepoqlMcp = true;
     else if (a === "--dry-run") flags.dryRun = true;
+    else if (a === "--enable-main-memory") flags.mainMemory = true;
+    else if (a === "--no-main-memory") flags.mainMemory = false;
+    else if (a === "--replace-provider") flags.replaceProvider = true;
+    else if (a === "--probe") flags.probe = true;
     else throw new UsageError(`unknown argument: ${a}`);
   }
   flags.settingsPath = settingsPathFor(flags.scope, home, flags.projectDir);
@@ -151,6 +165,60 @@ export function applySettings(settingsPath, scriptPath, env, { dryRun }) {
     writeSettingsFile(settingsPath, merged);
   }
   return { changed, backup, merged };
+}
+
+// ── step 2b: MAIN-AGENT persistent memory (proxy routing) ─────────────────────
+// The normal parent session gets persistent memory when Claude Code routes its
+// model requests through the Singularity proxy. Specialist agents keep their
+// own identities through the hook system regardless. Consent rules:
+//   - no existing provider config  -> enabled when requested (guided installs
+//     offer this by default; non-interactive installs state --enable-main-memory)
+//   - existing provider config     -> additionally requires --replace-provider
+//   - the previous values are recorded for uninstall restore; only the values
+//     this installer wrote are ever removed.
+export function applyMainMemory(settingsPath, { mainMemoryFlags, repoRoot, dryRun, log, warn }) {  if (mainMemoryFlags.enabled === false) {
+    log("  main:     disabled (--no-main-memory) — specialist agents keep their own memory hooks");
+    return { skipped: true };
+  }
+  const memCfgPath = join(repoRoot, "data/opencode/config/product-secrets/memory.json");
+  if (!existsSync(memCfgPath)) {
+    log("  main:     memory config missing — skipped (run python3 scripts/provision-secrets.py, then re-run with --enable-main-memory)");
+    return { skipped: true, reason: "no memory.json" };
+  }
+  const upstreamEnvPath = join(repoRoot, "memory/upstream/.env");
+  let upstreamContent = null;
+  try { upstreamContent = readFileSync(upstreamEnvPath, "utf8"); } catch { /* no explicit port: defaults apply */ }
+  const baseUrl = resolveMainProxyUrl({ env: process.env, upstreamEnvContent: upstreamContent });
+  const memCfg = readJson(memCfgPath) || {};
+  // The scoped business-user key routes proxy traffic — never printed, never
+  // logged; it is written ONLY into the 0600 settings file.
+  const token = typeof memCfg.userKey === "string" && memCfg.userKey ? memCfg.userKey : null;
+  if (!token) {
+    log("  main:     memory config has no scoped user key — skipped (provision a business-user key first)");
+    return { skipped: true, reason: "no scoped user key" };
+  }
+  const model = process.env.SINGULARITY_MAIN_AGENT_MODEL || (typeof memCfg.mainModel === "string" && memCfg.mainModel) || null;
+  const existing = readJson(settingsPath) || {};
+  const outcome = ensureMainMemoryIntegration(existing, {
+    baseUrl, token, model, replaceProvider: mainMemoryFlags.replaceProvider,
+  });
+  if (outcome.mode === "refused-conflict") {
+    for (const r of outcome.reasons) warn(`  main:     ${r}`);
+    warn("  main:     NOT configured — pass --replace-provider to change existing provider routing explicitly, or keep your current provider");
+    return { refused: true, conflicts: outcome.reasons, baseUrl };
+  }
+  let backup = null;
+  if (outcome.changed && !dryRun) {
+    backup = backupSettingsFile(settingsPath);
+    writeSettingsFile(settingsPath, outcome.settings);
+  }
+  log(outcome.mode === "verified-existing"
+    ? `  main:     Singularity proxy routing already present (${baseUrl})${outcome.changed ? ", completed" : ", no change"}`
+    : `  main:     normal-agent proxy routing ${dryRun ? "(dry run) " : ""}written (${baseUrl})${backup ? ` — backup: ${backup}` : ""} — close and reopen Claude Code once`);
+  if (outcome.mode === "merged-over-replace-consent") {
+    for (const r of outcome.reasons) log(`  main:     replaced per consent: ${r}`);
+  }
+  return { applied: true, mode: outcome.mode, changed: outcome.changed, baseUrl, backup };
 }
 
 // ── step 3: MemoryCore profiles (shared identities with OpenChamber) ─────────
@@ -238,8 +306,34 @@ function removeInstallRecord(settingsPath, stateFile = STATE_FILE) {
 const log = (m) => console.log(m);
 const warn = (m) => console.warn(m);
 
+// One guided question during interactive installs (a prompt never prints or
+// replays any secret value). Non-TTY callers never reach this.
+let _rl = null;
+async function readLine(prompt) {
+  _rl = _rl || createInterface({ input: process.stdin, output: process.stdout });
+  return _rl.question(prompt);
+}
+
 export async function runInstall(flags) {
   log(`installing the Singularity Claude Code integration (${flags.scope} scope)${flags.dryRun ? " — dry run" : ""}`);
+
+  // Main-agent memory decision: explicit flags win; otherwise offer interactively
+  // and default OFF for non-interactive runs (the guided experience still OFFERS,
+  // and automation opts in with --enable-main-memory).
+  let mainMemoryFlags;
+  if (flags.mainMemory === true || flags.mainMemory === false) {
+    mainMemoryFlags = { enabled: flags.mainMemory, replaceProvider: flags.replaceProvider };
+  } else if (process.stdout.isTTY) {
+    try {
+      const reply = (await readLine("Enable persistent memory for your NORMAL Claude Code sessions via the Singularity proxy? [Y/n] ")).trim().toLowerCase();
+      mainMemoryFlags = { enabled: reply !== "n" && reply !== "no", replaceProvider: flags.replaceProvider };
+    } catch {
+      mainMemoryFlags = { enabled: false, replaceProvider: flags.replaceProvider };
+    }
+  } else {
+    mainMemoryFlags = { enabled: false, replaceProvider: flags.replaceProvider };
+    log("  main:     non-interactive run — pass --enable-main-memory to enable normal-agent persistent memory (see docs/CLAUDE-CODE-SETUP.md)");
+  }
 
   const envOverrides = {
     ...(flags.team ? { AGENT_PROFILE_TEAM: flags.team } : {}),
@@ -257,6 +351,10 @@ export async function runInstall(flags) {
   log(settings.changed
     ? `  settings: memory + documentation hooks and env merged into ${flags.settingsPath}${settings.backup ? ` (backup: ${settings.backup})` : ""}`
     : `  settings: already up to date (${flags.settingsPath})`);
+
+  // 2b. main-agent persistent memory (proxy routing; consent rules above)
+  const preMainEnv = readJson(flags.settingsPath)?.env || {};
+  const main = applyMainMemory(flags.settingsPath, { mainMemoryFlags, repoRoot: ROOT, dryRun: flags.dryRun, log, warn });
 
   // 3. MemoryCore profiles — same identities as OpenChamber
   let profileOutcome = { results: [], failed: 0, skipped: true };
@@ -284,6 +382,11 @@ export async function runInstall(flags) {
 
   // 5. record for safe uninstall
   if (!flags.dryRun) {
+    // Previous ANTHROPIC_* values (captured before our merge) for restore-at-uninstall.
+    const prevAnthropic = main && !main.skipped && !main.refused
+      ? Object.fromEntries(["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"]
+          .map((k) => [k, preMainEnv[k] !== undefined ? preMainEnv[k] : undefined]))
+      : null;
     saveInstallRecord({
       installedAt: new Date().toISOString(),
       scope: flags.scope,
@@ -293,11 +396,21 @@ export async function runInstall(flags) {
       hooksScript: HOOK_SCRIPT,
       docHooksScript: DOC_HOOK_SCRIPT,
       envWritten: envForSettings,
+      mainMemory: main && !main.skipped && !main.refused ? {
+        enabled: true, baseUrl: main.baseUrl, mode: main.mode,
+        envWritten: main.changed
+          ? Object.fromEntries(["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"]
+              .map((k) => [k, (readJson(flags.settingsPath)?.env || {})[k]]))
+          : {},
+        previousEnv: prevAnthropic || {},
+      } : { enabled: false, refused: Boolean(main?.refused), baseUrl: main?.baseUrl || null, conflicts: main?.conflicts || [] },
       agentsChanged: agentChanges,
       mcp: mcp && !mcp.present ? { name: mcp.name, transport: mcp.transport, command: mcp.command, scope: mcp.scope } : null,
       profileLedger: join(ROOT, "data/agent-profiles/ledger.json"),
     });
   }
+
+  main && main.applied && log("next: proxy routing is active for new Claude Code sessions; verify with `status --probe` and docs/CLAUDE-CODE-SETUP.md");
 
   log("next: restart Claude Code, run /agents to confirm discovery, then follow the verification checks in docs/CLAUDE-CODE-SETUP.md");
   return 0;
@@ -338,6 +451,19 @@ export function runUninstall(flags) {
     log("  settings: nothing to change");
   }
 
+  // 2b. main-agent proxy routing (only the env values recorded as written by
+  // this install are restored/removed; MemoryCore memories are kept; a value
+  // edited by the user after install is never touched).
+  if (record.mainMemory?.enabled) {
+    const eu = removeMainMemoryIntegration(readJson(flags.settingsPath) || existing, record, record.mainMemory.previousEnv || {});
+    if (eu.changedKeys.length) {
+      log(`  main: removed/restored ${eu.changedKeys.join(", ")}`);
+      if (!flags.dryRun) writeSettingsFile(flags.settingsPath, eu.settings);
+    } else {
+      log("  main: no main-agent proxy values to remove (unchanged since install or user-modified)");
+    }
+  }
+
   // 3. RepoQL MCP (only when this install registered it)
   if (record.mcp?.name && !flags.dryRun && claudeBinary()) {
     const r = spawnSync("claude", ["mcp", "remove", record.mcp.name, "--scope", record.mcp.scope || "user"], { encoding: "utf8" });
@@ -353,8 +479,22 @@ export function runUninstall(flags) {
   return 0;
 }
 
-export function runStatus(flags) {
-  const record = readState().installs.find((r) => r.settingsPath === flags.settingsPath);
+export function readSettings(flags) {
+  return readJson(flags.settingsPath) || readJson(join(process.env.HOME || "", ".claude", "settings.json")) || {};
+}
+
+export function collectSpecialistStatus(record) {
+  const settings = readJson(record.settingsPath) || {};
+  const events = settings?.hooks ? Object.keys(settings.hooks) : [];
+  const present = ["SubagentStart", "SubagentStop"].filter((k) => events.includes(k));
+  const ledger = readJson(record.profileLedger || join(ROOT, "data/agent-profiles/ledger.json"));
+  const count = ledger?.profiles ? Object.keys(ledger.profiles).length : 0;
+  return { present, profilesSeeded: count };
+}
+
+export async function runStatus(flags) {
+  const installs = readState().installs;
+  const record = installs.find((r) => r.settingsPath === flags.settingsPath);
   if (!record) {
     log(`not installed for ${flags.settingsPath}`);
     return 0;
@@ -363,19 +503,40 @@ export function runStatus(flags) {
   log(`agents dir: ${record.agentsDir}`);
   log(`hooks: ${record.hooksScript}${record.docHooksScript ? ` + ${record.docHooksScript}` : ""}`);
   log(`env keys: ${Object.keys(record.envWritten || {}).join(", ") || "(none)"}`);
-  const settings = readJson(flags.settingsPath);
+  const settings = readJson(record.settingsPath);
   const events = settings?.hooks ? Object.keys(settings.hooks).filter((k) => ["SubagentStart", "SubagentStop", "SessionStart", "Stop"].includes(k)) : [];
   log(`settings hook events: ${events.join(", ") || "(none)"}`);
   log(`mcp: ${record.mcp ? `${record.mcp.name} (${record.mcp.scope})` : "(not registered by this install)"}`);
-  const ledger = readJson(record.profileLedger || join(ROOT, "data/agent-profiles/ledger.json"));
-  log(`profiles ledger entries: ${ledger?.profiles ? Object.keys(ledger.profiles).length : 0}`);
+
+  // MAIN AGENT MEMORY — the normal parent session. Not VERIFIED from the settings
+  // text alone: an authenticated probe against the proxy upgrades it.
+  const baseUrl = record.mainMemory?.enabled && record.mainMemory.baseUrl
+    ? record.mainMemory.baseUrl
+    : resolveMainProxyUrl({ env: process.env });
+  let probe = null;
+  if (flags.probe && record.mainMemory?.enabled) {
+    const token = readJson(record.envWritten?.SINGULARITY_MEMORY_CONFIG || join(ROOT, "data/opencode/config/product-secrets/memory.json"))?.userKey || null;
+    probe = await probeMainProxy(baseUrl, token);
+  }
+  const mainState = record.mainMemory?.enabled
+    ? classifyMainMemoryState(settings, baseUrl, probe)
+    : (record.mainMemory?.refused
+        ? { state: "CONFLICTED", detail: `installer refused: ${(record.mainMemory.conflicts || []).join("; ")}` }
+        : { state: "DISABLED", detail: "main-agent proxy routing not enabled for this install" });
+  log(`MAIN AGENT MEMORY: ${mainState.state}${mainState.detail ? ` — ${mainState.detail}` : ""}`);
+  log(`  endpoint: ${record.mainMemory?.enabled ? baseUrl : "(not routed)"}`);
+
+  // SPECIALISED AGENT MEMORY — hook presence + seeded identity ledger.
+  const spe = collectSpecialistStatus(record);
+  log(`SPECIALISED AGENT MEMORY: ${spe.present.length === 2 ? (spe.profilesSeeded ? "CONFIGURED" : "CONFIGURED (no seeded profiles: run setup-agent-profiles.mjs)") : "DISABLED"}`);
+  log(`  hooks: ${spe.present.join(", ") || "(none)"} | profiles seeded: ${spe.profilesSeeded}`);
   return 0;
 }
 
 export async function main(argv) {
   const [command, ...rest] = argv;
   if (!["install", "uninstall", "status"].includes(command)) {
-    log("usage: install-claude-code.mjs install|uninstall|status [--scope user|project] [--project-dir DIR] [--team T] [--user U] [--skip-profiles] [--skip-repoql-mcp] [--dry-run]");
+    log("usage: install-claude-code.mjs install|uninstall|status [--scope user|project] [--project-dir DIR] [--team T] [--user U] [--skip-profiles] [--skip-repoql-mcp] [--enable-main-memory] [--no-main-memory] [--replace-provider] [--probe] [--dry-run]");
     return 2;
   }
   let flags;

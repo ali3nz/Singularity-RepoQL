@@ -17,6 +17,8 @@ Claude Code works out of the box through the proxy — no UI required. In
 addition, the specialised agents (code reviewer, quality fixer, web
 researcher, thinker, explore, general, Board of Advisors) install as native
 Claude Code subagents with persistent MemoryCore identities, automatic memory
+for the NORMAL Claude Code session (when proxy routing is enabled at install —
+no agent selection needed),
 recall and lesson capture through the existing loop, and RepoQL over MCP
 (`node scripts/install-claude-code.mjs install`; see
 [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md)).

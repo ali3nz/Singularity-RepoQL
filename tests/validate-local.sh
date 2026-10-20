@@ -30,6 +30,7 @@ check node --test scripts/install-claude-code.profiles.test.mjs
 check node --test adapters/claude-code/integration.test.mjs
 check node --test adapters/claude-code/memory-hook.test.mjs
 check node --test adapters/claude-code/installer.test.mjs
+check node --test adapters/claude-code/main-memory.test.mjs
 check node --test adapters/claude-code/doc-hook.test.mjs
 check node --test tests/doc-policy.test.mjs
 check node --test ghost/dream.test.mjs

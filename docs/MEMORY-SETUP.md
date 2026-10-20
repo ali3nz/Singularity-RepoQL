@@ -68,7 +68,10 @@ key for routine agent traffic.
 
 ## 4. Point your harness at the proxy
 
-Claude Code (persist in `~/.claude/settings.json`):
+Claude Code — the installer can DO this step for you with explicit consent
+(`node scripts/install-claude-code.mjs install --enable-main-memory`, details
+and conflict rules in [`CLAUDE-CODE-SETUP.md`](CLAUDE-CODE-SETUP.md)); the
+manual equivalent is to persist in `~/.claude/settings.json`:
 
 ```json
 { "env": {

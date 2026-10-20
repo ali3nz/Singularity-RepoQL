@@ -21,6 +21,7 @@ import {
   readState,
   saveInstallRecord,
   uninstallFilesForRecord,
+  applyMainMemory,
   UsageError,
 } from "../../scripts/install-claude-code.mjs";
 
@@ -160,13 +161,79 @@ test("parseFlags: defaults, project scope paths, team/user overrides, unknown fl
   assert.equal(f1.scope, "user");
   assert.equal(f1.settingsPath, join(home, ".claude/settings.json"));
   assert.equal(f1.agentsTarget, join(home, ".claude/agents"));
+  assert.equal(f1.mainMemory, null, "main-agent memory is an explicit decision (no silent default in flags)");
   const f2 = parseFlags(["--scope", "project", "--project-dir", "/proj"], home, "/proj");
   assert.equal(f2.settingsPath, "/proj/.claude/settings.json");
   assert.equal(f2.agentsTarget, "/proj/.claude/agents");
   const f3 = parseFlags(["--team", "t1", "--user", "u1"], home, "/proj");
   assert.equal(f3.team, "t1");
   assert.equal(f3.user, "u1");
+  const f4 = parseFlags(["--enable-main-memory", "--replace-provider", "--probe"], home, "/proj");
+  assert.equal(f4.mainMemory, true);
+  assert.equal(f4.replaceProvider, true);
+  assert.equal(f4.probe, true);
+  const f5 = parseFlags(["--no-main-memory"], home, "/proj");
+  assert.equal(f5.mainMemory, false);
   assert.throws(() => parseFlags(["--bogus"], home, "/proj"), UsageError);
+});
+
+test("applyMainMemory: fresh settings get proxy routing when enabled; token never printed or logged", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main-"));
+  const settingsPath = join(dir, "settings.json");
+  const cfgDir = join(dir, "data", "opencode", "config", "product-secrets");
+  mkdirSync(cfgDir, { recursive: true });
+  const TOKEN = "sk-unit-test-token-value";
+  writeFileSync(join(cfgDir, "memory.json"), JSON.stringify({ baseUrl: "http://stub", authPrefix: "Bearer ", gatewayKey: "g", serviceId: "s", userKey: TOKEN }));
+  mkdirSync(join(dir, "memory", "upstream"), { recursive: true });
+  writeFileSync(join(dir, "memory", "upstream", ".env"), "PROXY_PORT=18496\n");
+
+  const logs = [];
+  const log = (m) => logs.push(String(m));
+  const warn = (m) => logs.push("WARN " + m);
+  const out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: false }, repoRoot: dir, dryRun: false, log, warn });
+  assert.equal(out.applied, true);
+  assert.equal(out.baseUrl, "http://127.0.0.1:18496/claude-code/default");
+  const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+  assert.equal(settings.env.ANTHROPIC_BASE_URL, "http://127.0.0.1:18496/claude-code/default");
+  assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, TOKEN);
+  for (const l of logs) assert.ok(!l.includes(TOKEN), "token must never appear in installer output: " + l);
+});
+
+test("applyMainMemory refuses on existing provider config without explicit replace consent", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main2-"));
+  const settingsPath = join(dir, "settings.json");
+  const cfgDir = join(dir, "data", "opencode", "config", "product-secrets");
+  mkdirSync(cfgDir, { recursive: true });
+  writeFileSync(join(cfgDir, "memory.json"), JSON.stringify({ userKey: "k" }));
+  writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://api.anthropic.com" } }));
+  const warns = [];
+  let out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: false }, repoRoot: dir, dryRun: false, log: () => {}, warn: (m) => warns.push(m) });
+  assert.equal(out.refused, true);
+  assert.ok(warns.some((m) => /--replace-provider/.test(m)));
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL, "https://api.anthropic.com", "settings untouched on refusal");
+  const changes = [];
+  out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: true }, repoRoot: dir, dryRun: false, log: (m) => changes.push(m), warn: () => {} });
+  assert.equal(out.applied, true);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL.startsWith("http://127.0.0.1:8096"), true);
+  assert.ok(changes.some((m) => /replaced per consent/.test(m)));
+});
+
+test("applyMainMemory: no memory config or no scoped key degrades with instructions", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main3-"));
+  const settingsPath = join(dir, "settings.json");
+  const logs = [];
+  const out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true }, repoRoot: dir, dryRun: false, log: (m) => logs.push(m), warn: () => {} });
+  assert.equal(out.skipped, true);
+  assert.ok(logs.some((m) => /provision-secrets|business-user key/.test(m)));
+});
+
+test("--no-main-memory keeps hooks but leaves proxy routing untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main4-"));
+  const settingsPath = join(dir, "settings.json");
+  writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://existing.example" } }));
+  const out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: false }, repoRoot: dir, dryRun: false, log: () => {}, warn: () => {} });
+  assert.equal(out.skipped, true);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL, "https://existing.example");
 });
 
 test("state record round-trip and uninstall file plan", () => {

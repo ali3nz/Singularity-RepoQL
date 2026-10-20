@@ -86,12 +86,13 @@ cd Singularity-RepoQL
    script exercises capture (add → search) end-to-end
    against the memory core and must print a passing result.
 
-3. Install the specialised Claude Code agents + memory hooks (new step —
-   gives Claude Code the same self-learning specialists that come with
-   OpenChamber, as native Claude Code subagents):
+3. Install the specialised Claude Code agents + memory hooks, and enable
+   persistent memory for the NORMAL Claude Code session (gives Claude Code the
+   same self-learning specialists that come with OpenChamber, as native Claude
+   Code subagents, plus ordinary-session memory through the proxy):
 
    ```bash
-   node scripts/install-claude-code.mjs install
+   node scripts/install-claude-code.mjs install --enable-main-memory
    ```
 
    This installs the seven `singularity-*` subagent definitions to
@@ -100,17 +101,22 @@ cd Singularity-RepoQL
    guidance + Stop closeout check) and env into `~/.claude/settings.json`
    (merging, never replacing; a timestamped backup is written), provisions/
    verifies the agents' persistent MemoryCore profiles (the same identities the
-   OpenChamber agents use), and registers the `singularity-repoql` MCP server
-   when a Linux `rql` is detected. The documentation hooks enforce the shared
-   documentation policy and automatically ingest updated runbooks into
-   MemoryCore with verified retrieval — see
-   [`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md). Re-running it is
-   idempotent. Full details,
-   flags (`--scope project`, `--team/--user`, `--dry-run`) and verification:
-   [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md). If a scoped user
-   key was not yet provisioned, the installer still completes and the hooks
-   continue without memory until `provision-secrets.py --memory-user-key` has
-   been run; re-run the installer afterwards.
+   OpenChamber agents use), routes the normal parent session through the
+   memory proxy (`ANTHROPIC_BASE_URL` → the installation's proxy; NEVER
+   silently replacing an existing provider — conflicts require explicit
+   `--replace-provider` consent, and exact rules live in
+   [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md)), and registers the
+   `singularity-repoql` MCP server when a Linux `rql` is detected. The
+   documentation hooks enforce the shared documentation policy and
+   automatically ingest updated runbooks into MemoryCore with verified
+   retrieval — see [`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md).
+   Re-running it is idempotent. Full flags (`--scope project`, `--team/--user`,
+   `--dry-run`, `--no-main-memory`, `--replace-provider`, `status --probe`)
+   and verification: [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md).
+   If a scoped user key was not yet provisioned, the installer still completes
+   and the hooks continue without memory until
+   `provision-secrets.py --memory-user-key` has been run; re-run the installer
+   afterwards (then re-run with `--enable-main-memory` for proxy routing).
 
 4. If Claude Code is not installed in WSL2, use Anthropic's native WSL
    installer and verify it before wiring the proxy:
@@ -125,18 +131,23 @@ cd Singularity-RepoQL
    <https://docs.anthropic.com/en/docs/claude-code/setup>.
 
    Wire Claude Code through the proxy (add to, or merge into,
-   `~/.claude/settings.json`):
+   `~/.claude/settings.json`) — or, simply, re-run the step-3 installer with
+   `--enable-main-memory`, which writes the same values with consent checks
+   and a recorded previous state for rollback:
 
    ```json
    {
      "env": {
-       "ANTHROPIC_BASE_URL": "http://127.0.0.1:8096/claude-code/default"
+       "ANTHROPIC_BASE_URL": "http://127.0.0.1:8096/claude-code/default",
+       "ANTHROPIC_AUTH_TOKEN": "<your scoped business-user key (sk-mem-…)>",
+       "ANTHROPIC_MODEL": "<your upstream model, if required>"
      }
    }
    ```
 
    From then on Claude Code sessions are captured by the memory stack
-   through the proxy automatically.
+   through the proxy automatically (normal parent sessions included — no
+   specialist agent selection required).
 
 5. Variant A does NOT install OpenChamber or Claude Office. Do not copy
    `openchamber/` anywhere. With step 3 done, Claude Code users still get the

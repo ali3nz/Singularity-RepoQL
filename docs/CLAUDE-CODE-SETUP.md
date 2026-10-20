@@ -140,6 +140,72 @@ The policy is shared with OpenChamber and re-checkable exactly the same way:
 (`DOC_INGEST_INDEXED`/…), revision/supersession behaviour, security
 boundaries and troubleshooting: [`docs/DOC-INGESTION.md`](DOC-INGESTION.md).
 
+## Main-agent persistent memory (proxy routing for the NORMAL session)
+
+The seven `singularity-*` subagents each own a persistent MemoryCore identity
+through the hooks above. The **normal parent session** gets persistent memory
+when Claude Code routes its model requests through the Singularity memory
+proxy — the proxy captures the parent conversation, injects relevant prior
+context in later sessions, and nothing about the ordinary Claude Code
+experience changes (no agent selection, no memory commands).
+
+Enable it during install:
+
+```bash
+node scripts/install-claude-code.mjs install --enable-main-memory
+# guided interactive installs also offer it as the default (answer Y)
+# automation may pass --no-main-memory to keep routing untouched
+```
+
+The installer writes into `~/.claude/settings.json` (`env`, merged, file mode
+0600, timestamped backup first, previous values recorded for restore):
+
+```json
+{ "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8096/claude-code/default",
+    "ANTHROPIC_AUTH_TOKEN": "<scoped business-user key from memory.json>",
+    "ANTHROPIC_MODEL": "<your upstream model, when required>" } }
+```
+
+Consent and conflict rules — an existing provider configuration is never
+silently replaced:
+
+- fresh configuration with no provider settings → routing enabled when you
+  accept (or `--enable-main-memory` for automation);
+- an existing Singularity proxy entry → verified and reused, nothing duplicated;
+- an existing Anthropic/Bedrock/Vertex/Foundry/third-party gateway, or another
+  `ANTHROPIC_BASE_URL` → the installer REFUSES and asks for explicit
+  `--replace-provider` consent on a second run; your current provider keeps
+  working in the meantime and the previous values are recorded for rollback;
+- environment-variable overrides in the invoking shell can shadow the settings
+  file (Claude Code's own precedence); if that happens set your actual endpoint
+  via `SINGULARITY_MAIN_AGENT_PROXY_URL` and consider removing the conflicting
+  process env;
+- the installed proxy URL resolves from `SINGULARITY_MAIN_AGENT_PROXY_URL` >
+  `memory/upstream/.env` `PROXY_PORT` > the default `8096` — the same rules apply
+  when Claude Code and the proxy run in different network environments.
+
+Authentication uses the scoped **business-user** key from
+`data/opencode/config/product-secrets/memory.json` (`userKey`) — never the
+MemoryCore admin key — and the token is written only into the 0600 settings
+file and never printed, logged or committed.
+
+Verify and operate:
+
+```bash
+node scripts/install-claude-code.mjs status --probe   # MAIN AGENT MEMORY: VERIFIED
+node scripts/install-claude-code.mjs status           # offline classification
+node scripts/install-claude-code.mjs uninstall        # removes only what the installer wrote
+```
+
+`status` separates **MAIN AGENT MEMORY** (`CONFIGURED → VERIFIED (with the
+authenticated probe) | DISABLED | DEGRADED | CONFLICTED`) from **SPECIALISED
+AGENT MEMORY** (hooks + seeded identities), and never reports VERIFIED from a
+matching URL alone. A session using the routed proxy is captured and
+recalled automatically — see `docs/MEMORY-LOOP.md` and the honest
+`docs/MEMORY-SETUP.md` note that a transport check proves transport, not
+recall quality.
+
 ## RepoQL for Claude Code
 
 When `claude mcp add` works and a runnable Linux `rql` is found (PATH,
@@ -162,6 +228,7 @@ the experience/decisions store — the two are never conflated.
 node --test adapters/claude-code/integration.test.mjs   # shipped definitions + identity map
 node --test adapters/claude-code/memory-hook.test.mjs   # hook behavior (faked core)
 node --test adapters/claude-code/installer.test.mjs
+node --test adapters/claude-code/main-memory.test.mjs
 node --test scripts/install-claude-code.profiles.test.mjs
 node scripts/install-claude-code.mjs status
 ```
