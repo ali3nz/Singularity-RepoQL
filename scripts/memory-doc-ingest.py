@@ -687,6 +687,7 @@ def main():
     q.add_argument("query")
     q.add_argument("--limit", type=int, default=SEARCH_LIMIT_DEFAULT)
     q.add_argument("--stale", action="store_true", help="include superseded/unledgered revisions")
+    q.add_argument("--root", help="workspace/root whose ledger filters what counts as current")
 
     args = ap.parse_args()
     if args.root and not os.environ.get("SINGULARITY_DOC_DATA"):
