@@ -143,16 +143,21 @@ export function classifyMainMemoryState(settings, baseUrl, probe = null) {
  */
 export async function probeMainProxy(baseUrl, token, fetchImpl = globalThis.fetch, timeoutMs = 5000) {
   let root;
-  try { root = (baseUrl.includes("/claude-code/") ? normalizeToRoot(baseUrl) : String(baseUrl).replace(/\/$/, "")); }
+  try { root = String(baseUrl).replace(/\/$/, ""); }
   catch { return { ok: false, detail: "unparseable proxy URL" }; }
+  // The vendored proxy requires the spaceId (serviceId, e.g. /claude-code/default)
+  // in the request path for auth — the POST must go to the FULL base URL,
+  // never a stripped root. Health reachability is still checked at the root.
+  const hasPath = root.replace(/^https?:\/\//, "").includes("/");
+  const messagesUrl = (hasPath ? root : root + "/claude-code/default") + "/v1/messages";
   try {
-    const health = await fetchImpl(new URL("/health", root), { signal: AbortSignal.timeout(timeoutMs) });
+    const health = await fetchImpl(normalizeToRoot(root) + "/health", { signal: AbortSignal.timeout(timeoutMs) });
     if (!health.ok) {
       const t = (await health.text().catch(() => "")).slice(0, 80);
       return { ok: false, authRejected: health.status === 401 || health.status === 403, detail: `proxy health HTTP ${health.status}: ${t}` };
     }
     if (!token) return { ok: false, authRejected: true, detail: "proxy reachable (health ok) but no scoped key available for the authenticated check" };
-    const res = await fetchImpl(new URL("/v1/messages", root), {
+    const res = await fetchImpl(messagesUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-api-key": token, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: "singularity-status-probe", max_tokens: 1, messages: [{ role: "user", content: "ping" }] }),
@@ -160,8 +165,14 @@ export async function probeMainProxy(baseUrl, token, fetchImpl = globalThis.fetc
     });
     const snippet = (await res.text().catch(() => "")).slice(0, 100);
     if (res.status === 401 || res.status === 403) return { ok: false, authRejected: true, detail: `auth rejected: HTTP ${res.status} ${snippet}` };
-    // 404 here means the auth check never happened on that path: treat as authUnknown
-    if (res.status === 404) return { ok: false, authRejected: false, detail: "proxy reachable; /v1/messages probe returned 404 (check upstream proxy contract)" };
+    // 404 with an "Invalid model identifier" body means auth PASSED and upstream
+    // reached model resolution — good enough proof of a working scoped key.
+    if (res.status === 404) {
+      const authOk = /invalid model identifier/i.test(snippet);
+      return authOk
+        ? { ok: true, authRejected: false, detail: "auth accepted (probe model unknown to upstream, 404)" }
+        : { ok: false, authRejected: false, detail: `proxy reachable; /v1/messages probe returned 404 (unexpected upstream contract): ${snippet}` };
+    }
     if (res.ok) return { ok: true, authRejected: false, detail: `authenticated POST ok (HTTP ${res.status})` };
     // 4xx/5xx after auth: the key was accepted far enough to reach upstream handling
     return { ok: true, authRejected: false, detail: `auth accepted; upstream answered HTTP ${res.status}` };
@@ -170,7 +181,7 @@ export async function probeMainProxy(baseUrl, token, fetchImpl = globalThis.fetc
   }
 }
 
-/** http://host:P/claude-code/default -> http://host:P  (probe needs the root). */
+/** http://host:P/claude-code/default -> http://host:P  (probe needs the root for /health). */
 function normalizeToRoot(baseUrl) {
   return String(baseUrl).replace(/\/claude-code\/[^/]*\/?$/, "");
 }

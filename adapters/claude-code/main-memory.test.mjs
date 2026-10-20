@@ -94,7 +94,10 @@ test("probeMainProxy is bounded, never leaks the token, and maps auth failures t
   const p = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok", fakeFetch, 500);
   assert.equal(p.ok, false);
   assert.match(p.detail, /boom/);
-  assert.ok(calls.some((c) => c.startsWith("http://127.0.0.1:8096/")), calls.join(";"));
+  assert.ok(calls.some((c) => c === "http://127.0.0.1:8096/claude-code/default/v1/messages"),
+    `POST must target the FULL base URL (spaceId in path): ${calls.join(";")}`);
+  assert.ok(calls.some((c) => c === "http://127.0.0.1:8096/health"),
+    `health must target the proxy root: ${calls.join(";")}`);
   const ok200 = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
     async (url) => String(url).endsWith("/health")
       ? { ok: true, status: 200, text: async () => "ok" }
@@ -116,4 +119,17 @@ test("probeMainProxy is bounded, never leaks the token, and maps auth failures t
     async () => { throw new Error("ECONNREFUSED"); }, 500);
   assert.equal(unreachable.authRejected, false);
   assert.match(unreachable.detail, /ECONNREFUSED/);
+});
+
+test("probeMainProxy: spaceId-less base gets /claude-code/default appended; 404-model-authenticated counts as VERIFIED", async () => {
+  const seen = {};
+  const res = await probeMainProxy("http://127.0.0.1:8096", "tok",
+    async (url) => {
+      const u = String(url);
+      if (u === "http://127.0.0.1:8096/health") return { ok: true, status: 200, text: async () => "ok" };
+      seen[u] = true;
+      return { ok: false, status: 404, text: async () => '{"error":{"message":"Invalid model identifier \\"probe\\". Please specify a valid downloaded model"}}' };
+    }, 500);
+  assert.ok(seen["http://127.0.0.1:8096/claude-code/default/v1/messages"], "default serviceId path appended for bare root");
+  assert.equal(res.ok, true, "404 with invalid-model body proves auth passed");
 });
