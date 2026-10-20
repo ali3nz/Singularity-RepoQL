@@ -134,23 +134,37 @@ export function classifyMainMemoryState(settings, baseUrl, probe = null) {
 }
 
 /**
- * Bounded authenticated probe: GET <baseUrl>/v1/models. Never prints or
- * returns the token. Used only for `status --probe`; install-time checks stay
- * offline so a fresh nightly install cannot hang on an unreachable host.
+ * Bounded authenticated probe of the Singularity memory proxy (vendored
+ * tdai-proxy): (1) GET <root>/health proves reachability; (2) a minimal
+ * authenticated POST <root>/v1/messages (max_tokens=1, Anthropic protocol per
+ * the vendored proxy contract) proves the scoped key authorises. Never prints
+ * or returns the token. Only for `status --probe`; install-time checks stay
+ * offline so a fresh non-interactive install cannot hang on an unreachable host.
  */
 export async function probeMainProxy(baseUrl, token, fetchImpl = globalThis.fetch, timeoutMs = 5000) {
-  let url;
-  try { url = new URL("/v1/models", baseUrl.endsWith("/claude-code/default") || baseUrl.includes("/claude-code/") ? normalizeToRoot(baseUrl) : baseUrl); }
+  let root;
+  try { root = (baseUrl.includes("/claude-code/") ? normalizeToRoot(baseUrl) : String(baseUrl).replace(/\/$/, "")); }
   catch { return { ok: false, detail: "unparseable proxy URL" }; }
   try {
-    const res = await fetchImpl(url, {
-      headers: token ? { "Authorization": `Bearer ${token}`, "x-api-key": token } : {},
-      signal: AbortSignal.timeout(timeoutMs),
+    const health = await fetchImpl(new URL("/health", root), { signal: AbortSignal.timeout(timeoutMs) });
+    if (!health.ok) {
+      const t = (await health.text().catch(() => "")).slice(0, 80);
+      return { ok: false, authRejected: health.status === 401 || health.status === 403, detail: `proxy health HTTP ${health.status}: ${t}` };
+    }
+    if (!token) return { ok: false, authRejected: true, detail: "proxy reachable (health ok) but no scoped key available for the authenticated check" };
+    const res = await fetchImpl(new URL("/v1/messages", root), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-api-key": token, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "singularity-status-probe", max_tokens: 1, messages: [{ role: "user", content: "ping" }] }),
+      signal: AbortSignal.timeout(timeoutMs * 3),
     });
-    const textSnippet = (await res.text().catch(() => "")).slice(0, 120);
-    if (res.ok) return { ok: true, authRejected: false, detail: `HTTP ${res.status}` };
-    if (res.status === 401 || res.status === 403) return { ok: false, authRejected: true, detail: `HTTP ${res.status}: ${textSnippet}` };
-    return { ok: false, authRejected: true, detail: `HTTP ${res.status}: ${textSnippet}` };
+    const snippet = (await res.text().catch(() => "")).slice(0, 100);
+    if (res.status === 401 || res.status === 403) return { ok: false, authRejected: true, detail: `auth rejected: HTTP ${res.status} ${snippet}` };
+    // 404 here means the auth check never happened on that path: treat as authUnknown
+    if (res.status === 404) return { ok: false, authRejected: false, detail: "proxy reachable; /v1/messages probe returned 404 (check upstream proxy contract)" };
+    if (res.ok) return { ok: true, authRejected: false, detail: `authenticated POST ok (HTTP ${res.status})` };
+    // 4xx/5xx after auth: the key was accepted far enough to reach upstream handling
+    return { ok: true, authRejected: false, detail: `auth accepted; upstream answered HTTP ${res.status}` };
   } catch (e) {
     return { ok: false, authRejected: false, detail: String(e?.message || e).slice(0, 140) };
   }

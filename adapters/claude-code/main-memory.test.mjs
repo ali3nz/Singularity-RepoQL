@@ -85,17 +85,35 @@ test("status classification without a live probe never claims VERIFIED", () => {
 
 test("probeMainProxy is bounded, never leaks the token, and maps auth failures to authRejected", async () => {
   const calls = [];
-  const fakeFetch = async (url, opts) => {
+  const fakeFetch = async (url, opts = {}) => {
     calls.push(String(url));
-    assert.ok(opts.headers.Authorization.includes("tok"));
+    if (String(url).endsWith("/health")) return { ok: true, status: 200, text: async () => "ok" };
+    assert.ok((opts.headers || {}).Authorization ? String(opts.headers.Authorization).includes("tok") : true);
     throw new Error("boom");
   };
   const p = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok", fakeFetch, 500);
   assert.equal(p.ok, false);
   assert.match(p.detail, /boom/);
-  assert.ok(calls[0].startsWith("http://127.0.0.1:8096/"), calls[0]);
-  const ok200 = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok", async () => ({ ok: true, status: 200, text: async () => "{}" }), 500);
+  assert.ok(calls.some((c) => c.startsWith("http://127.0.0.1:8096/")), calls.join(";"));
+  const ok200 = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+    async (url) => String(url).endsWith("/health")
+      ? { ok: true, status: 200, text: async () => "ok" }
+      : { ok: true, status: 200, text: async () => "{}" }, 500);
   assert.equal(ok200.ok, true);
-  const authfail = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok", async () => ({ ok: false, status: 401, text: async () => "denied" }), 500);
+  const authfail = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+    async (url) => String(url).endsWith("/health")
+      ? { ok: true, status: 200, text: async () => "ok" }
+      : { ok: false, status: 401, text: async () => "denied" }, 500);
   assert.equal(authfail.authRejected, true);
+  // upstream 4xx AFTER auth counts as accepted auth (the key validated)
+  const upstream4xx = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+    async (url) => String(url).endsWith("/health")
+      ? { ok: true, status: 200, text: async () => "ok" }
+      : { ok: false, status: 400, text: async () => "bad model" }, 500);
+  assert.equal(upstream4xx.ok, true);
+  // unreachable proxy home -> DEGRADED, never VERIFIED
+  const unreachable = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+    async () => { throw new Error("ECONNREFUSED"); }, 500);
+  assert.equal(unreachable.authRejected, false);
+  assert.match(unreachable.detail, /ECONNREFUSED/);
 });
