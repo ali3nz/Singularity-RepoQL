@@ -20,10 +20,11 @@
 //   5. records everything it changed in data/claude-code-integration.json so "uninstall"
 //      removes only this integration — existing agents, hooks, MCP servers and memories stay.
 // Credentials never leave memory.json; nothing secret is written to settings or argv.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { AGENT_MAP } from "../adapters/claude-code/agent-map.mjs";
 import {
@@ -56,9 +57,35 @@ export class UsageError extends Error {}
 const readJson = (p) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
 const newDir = (p) => mkdirSync(p, { recursive: true });
 
+// Reads the harness settings file with the missing-file and malformed-file
+// cases KEPT APART: a missing file legitimately means "start from an empty
+// configuration", but an existing unparseable file must NEVER be treated as
+// empty — the installer refuses the modification instead of overwriting it.
+export function readSettingsFileStrict(p) {
+  if (!existsSync(p)) return { exists: false, settings: {} };
+  try { return { exists: true, settings: JSON.parse(readFileSync(p, "utf8")) }; }
+  catch (e) { return { exists: true, malformed: e?.message || String(e) }; }
+}
+
+// Credential-bearing files (harness settings with routing tokens and the
+// integration state ledger) are 0600. Writing with mode 0600 does not fix a
+// PRE-EXISTING file's mode, so the restriction is (re)applied explicitly and
+// verified. POSIX only — Windows ACL semantics are out of scope here.
+function enforceSecretPermissions(path) {
+  if (process.platform === "win32") return { enforced: true, mode: "n/a (windows)" };
+  let enforced = false;
+  try { chmodSync(path, 0o600); enforced = true; } catch { /* fall through to verification */ }
+  try {
+    const ok = (statSync(path).mode & 0o777) === 0o600;
+    return { enforced: enforced && ok, mode: ok ? "0600" : "mismatch", verified: ok };
+  } catch { return { enforced, mode: "unverified", verified: false }; }
+}
+
 function writeSettingsFile(path, settings) {
   newDir(dirname(path));
   writeFileSync(path, JSON.stringify(settings, null, 2) + "\n", { mode: 0o600 });
+  const perm = enforceSecretPermissions(path);
+  if (perm.enforced === false) warn(`  settings: WARN could not enforce 0600 on ${path} (${perm.mode})`);
 }
 
 function backupSettingsFile(path) {
@@ -66,6 +93,7 @@ function backupSettingsFile(path) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const target = `${path}.bak-singularity-${stamp}`;
   copyFileSync(path, target);
+  enforceSecretPermissions(target); // a settings backup can contain routing tokens
   return target;
 }
 
@@ -133,32 +161,85 @@ export function parseFlags(argv, home, cwd) {
 }
 
 // ── step 1: agent definition files ───────────────────────────────────────────
+// ── agent files: inventory with proof-of-ownership, never filename-only ──────
+// Content is the ownership proof.: an existing SAME-NAME file whose content
+// differs from ours is user-owned until backed up and recorded; uninstall
+// restores it only while the installed content is still untouched.
+const shaFile = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
+
 export function planAgentFiles(targetDir, sourceDir = AGENTS_SRC) {
   const plan = [];
   for (const file of readdirSync(sourceDir).filter((f) => f.endsWith(".md")).sort()) {
     const source = join(sourceDir, file);
     const target = join(targetDir, file);
-    const content = readFileSync(source, "utf8");
-    const status = !existsSync(target) ? "create" : (readFileSync(target, "utf8") === content ? "present" : "update");
-    plan.push({ source, target, status, content });
+    let status, prevSha = null, prevMode = null;
+    if (!existsSync(target)) {
+      status = "create";
+    } else {
+      const ours = shaFile(source), cur = shaFile(target);
+      prevSha = cur; prevMode = statSync(target).mode & 0o777;
+      status = ours === cur ? "present" : "replace";
+    }
+    plan.push({ source, target, status, content: readFileSync(source, "utf8"), prevSha, prevMode });
   }
   return plan;
 }
 
+function backupRunDir() {
+  return process.env.SINGULARITY_AGENT_BACKUP_DIR
+    || join(dirname(process.env.SINGULARITY_CLAUDE_CODE_STATE || STATE_FILE), "agent-backups");
+}
+
+/** Copy the pre-existing file into the integration backup area; 0600. */
+function backupAgentFile(target) {
+  const dir = join(backupRunDir(), new Date().toISOString().replace(/[:.]/g, "-"));
+  newDir(dir);
+  const backup = join(dir, require_ok_basename(target));
+  copyFileSync(target, backup);
+  enforceSecretPermissions(backup);
+  return backup;
+}
+
+function require_ok_basename(p) {
+  return p.split(/[\\/]/).pop() || "agent.md";
+}
+
 export function applyAgentFiles(plan, { dryRun }) {
   const changed = [];
+  const ledger = [];
   for (const f of plan) {
-    if (f.status === "present") continue;
-    if (!dryRun) { newDir(dirname(f.target)); writeFileSync(f.target, f.content); }
+    if (f.status === "present") {
+      // Already the exact packaged content: record ownership so uninstall can
+      // prove it later (repeated installs stay idempotent: no new backups).
+      ledger.push({ target: f.target, action: "present", installedSha: shaFile(f.target) });
+      continue;
+    }
+    if (!dryRun) {
+      newDir(dirname(f.target));
+      let backupPath = null;
+      if (f.status === "replace") backupPath = backupAgentFile(f.target);
+      writeFileSync(f.target, f.content);
+      ledger.push({
+        target: f.target, action: f.status,
+        prevSha: f.prevSha, prevMode: f.prevMode, backupPath,
+        installedSha: shaFile(f.target),
+      });
+    }
     changed.push(f.target);
   }
-  return changed;
+  return { changed, ledger };
 }
 
 // ── step 2: settings hooks + env (merge, never replace; backup first) ────────
 export function applySettings(settingsPath, scriptPath, env, { dryRun }) {
-  const existing = readJson(settingsPath) || {};
-  const { settings: merged, changed } = ensureMemoryIntegration(existing, { scriptPath, env });
+  const rf = readSettingsFileStrict(settingsPath);
+  if (rf.malformed) {
+    // A malformed existing file is a real configuration — never silently reset.
+    warn(`  settings: REFUSED — ${settingsPath} exists but is not valid JSON: ${rf.malformed}`);
+    warn("  settings: the file is preserved unchanged; fix or remove it, then re-run install");
+    return { changed: false, backup: null, merged: null, refused: "malformed-settings", error: rf.malformed };
+  }
+  const { settings: merged, changed } = ensureMemoryIntegration(rf.settings, { scriptPath, env });
   let backup = null;
   if (changed && !dryRun) {
     backup = backupSettingsFile(settingsPath);
@@ -198,7 +279,13 @@ export function applyMainMemory(settingsPath, { mainMemoryFlags, repoRoot, dryRu
     return { skipped: true, reason: "no scoped user key" };
   }
   const model = process.env.SINGULARITY_MAIN_AGENT_MODEL || (typeof memCfg.mainModel === "string" && memCfg.mainModel) || null;
-  const existing = readJson(settingsPath) || {};
+  const strict = readSettingsFileStrict(settingsPath);
+  if (strict.malformed) {
+    warn(`  main:     REFUSED — ${settingsPath} exists but is not valid JSON: ${strict.malformed}`);
+    warn("  main:     not configured — the existing file is preserved; fix the JSON, then re-run");
+    return { refused: true, malformed: true, conflicts: [`settings exists but is not valid JSON: ${strict.malformed}`] };
+  }
+  const existing = strict.settings;
   const outcome = ensureMainMemoryIntegration(existing, {
     baseUrl, token, model, replaceProvider: mainMemoryFlags.replaceProvider,
   });
@@ -285,6 +372,7 @@ export function readState(stateFile = STATE_FILE) {
 function writeState(state, stateFile = STATE_FILE) {
   newDir(dirname(stateFile));
   writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
+  enforceSecretPermissions(stateFile);
 }
 
 export function saveInstallRecord(record, stateFile = STATE_FILE) {
@@ -343,8 +431,8 @@ export async function runInstall(flags) {
 
   // 1. agent definition files
   const agentPlan = planAgentFiles(flags.agentsTarget);
-  for (const f of agentPlan) log(`  agents:   ${f.status.padEnd(7)} ${f.target}`);
-  const agentChanges = applyAgentFiles(agentPlan, { dryRun: flags.dryRun });
+  for (const f of agentPlan) log(`  agents:   ${f.status.padEnd(7)} ${f.target}${f.prevSha ? " (backed up before replace)" : ""}`);
+  const { changed: agentChanges, ledger: agentLedger } = applyAgentFiles(agentPlan, { dryRun: flags.dryRun });
 
   // 2. settings hooks + env (memory + documentation hooks; merge, never replace)
   const settings = applySettings(flags.settingsPath, HOOK_SCRIPT, envForSettings, { dryRun: flags.dryRun });
@@ -355,6 +443,9 @@ export async function runInstall(flags) {
   // 2b. main-agent persistent memory (proxy routing; consent rules above)
   const preMainEnv = readJson(flags.settingsPath)?.env || {};
   const main = applyMainMemory(flags.settingsPath, { mainMemoryFlags, repoRoot: ROOT, dryRun: flags.dryRun, log, warn });
+  if (main?.malformed) {
+    log("next: fix the malformed settings file, then re-run the installer to complete configuration");
+  }
 
   // 3. MemoryCore profiles — same identities as OpenChamber
   let profileOutcome = { results: [], failed: 0, skipped: true };
@@ -405,6 +496,8 @@ export async function runInstall(flags) {
         previousEnv: prevAnthropic || {},
       } : { enabled: false, refused: Boolean(main?.refused), baseUrl: main?.baseUrl || null, conflicts: main?.conflicts || [] },
       agentsChanged: agentChanges,
+      agentLedger,
+      agentLedger,
       mcp: mcp && !mcp.present ? { name: mcp.name, transport: mcp.transport, command: mcp.command, scope: mcp.scope } : null,
       profileLedger: join(ROOT, "data/agent-profiles/ledger.json"),
     });
@@ -422,6 +515,61 @@ export function uninstallFilesForRecord(record) {
     .filter((p) => existsSync(p));
 }
 
+/**
+ * Safe per-file removal plan (proof of ownership, never the filename alone):
+ *   remove                 — ledger-proven ours, unmodified since install
+ *   restore                — ledger-proven ours; the pre-install file is backed
+ *                            up and verified, so the ORIGINAL content+mode
+ *                            returns in place of the installed version
+ *   user-modified-keep     — the file changed after install: refuse to destroy
+ *                            newer user work; keep and report
+ *   remove-unchanged-source— no ledger (legacy record) but the file content is
+ *                            exactly the packaged source: ours by content proof
+ *   keep-unowned           — no proof of ownership: never touched
+ */
+export function agentRemovalPlan(record, sourceDir = AGENTS_SRC) {
+  const ledger = Array.isArray(record.agentLedger) ? record.agentLedger : null;
+  return Object.keys(AGENT_MAP).map((n) => {
+    const p = join(record.agentsDir, `${n}.md`);
+    if (!existsSync(p)) return { target: p, action: "absent" };
+    const curSha = shaFile(p);
+    if (ledger) {
+      const e = ledger.find((x) => x.target === p);
+      if (!e) {
+        // Not in this record's ledger: treat by content proof against the package.
+        const src = join(sourceDir, `${n}.md`);
+        return (existsSync(src) && shaFile(src) === curSha)
+          ? { target: p, action: "remove-unchanged-source" }
+          : { target: p, action: "keep-unowned" };
+      }
+      if (curSha !== e.installedSha) return { target: p, action: "user-modified-keep" };
+      if (e.action === "replace" && e.backupPath && existsSync(e.backupPath)) {
+        const prevSha = shaFile(e.backupPath);
+        if (prevSha !== e.prevSha) {
+          return { target: p, action: "keep-backup-unverified", error: "backup content != recorded pre-install hash" };
+        }
+        return { target: p, action: "restore", backupPath: e.backupPath, prevMode: e.prevMode ?? null };
+      }
+      return { target: p, action: "remove" };
+    }
+    // Legacy record without a ledger: content proof against the current package only.
+    const src = join(sourceDir, `${n}.md`);
+    return (existsSync(src) && shaFile(src) === curSha)
+      ? { target: p, action: "remove-unchanged-source" }
+      : { target: p, action: "keep-unowned" };
+  });
+}
+
+const AGENT_ACTION_LOG = {
+  absent: (p) => p,
+  remove: (p) => `remove ${p}`,
+  restore: (p) => `restore original: ${p}`,
+  "user-modified-keep": (p) => `KEEP user-modified file (changed after install, will not overwrite): ${p}`,
+  "keep-unowned": (p) => `KEEP unowned file (no proof this path was installed by Singularity): ${p}`,
+  "remove-unchanged-source": (p) => `remove ${p} (content matches packaged source)`,
+  "keep-backup-unverified": (p) => `KEEP installed file — restoration refused: backup failed verification (${p})`,
+};
+
 export function runUninstall(flags) {
   const record = readState().installs.find((r) => r.settingsPath === flags.settingsPath);
   if (!record) {
@@ -430,16 +578,35 @@ export function runUninstall(flags) {
   }
   log(`uninstalling the Singularity Claude Code integration (${record.scope})${flags.dryRun ? " — dry run" : ""}`);
 
-  // 1. agent definitions (only ours)
-  for (const p of uninstallFilesForRecord(record)) {
-    log(`  agent removed: ${p}`);
-  }
+  // 1. agent definitions (proof-based: restore originals, never destroy unknown work)
+  const agentPlan2 = agentRemovalPlan(record);
+  for (const item of agentPlan2) log(`  agents:   ${AGENT_ACTION_LOG[item.action]?.(item.target) || item.target}`);
   if (!flags.dryRun) {
-    for (const p of uninstallFilesForRecord(record)) rmSync(p, { force: true });
+    for (const item of agentPlan2) {
+      if (item.action === "remove" || item.action === "remove-unchanged-source") rmSync(item.target, { force: true });
+      else if (item.action === "restore") {
+        copyFileSync(item.backupPath, item.target);
+        if (item.prevMode && process.platform !== "win32") {
+          try { chmodSync(item.target, item.prevMode); } catch { /* best effort, already restored */ }
+        }
+      }
+      // keep-* / user-modified-keep / keep-backup-unverified: leave untouched.
+    }
   }
 
   // 2. settings hooks + env (only values the installer wrote)
   const envRestore = { ...(record.envWritten || {}) };
+  const strict = readSettingsFileStrict(flags.settingsPath);
+  if (strict.malformed) {
+    warn(`  settings: REFUSED — ${flags.settingsPath} is not valid JSON: ${strict.malformed}`);
+    warn("  settings: hooks/env cleanup skipped; the file and the install record are preserved; fix the JSON and re-run uninstall");
+    if (!flags.dryRun) {
+      // Keep the record: a later uninstall must still know what to clean.
+      log("  settings: install record kept for a later cleanup pass");
+      return 3; // refusal exit code: settings not cleaned up
+    }
+    return 0;
+  }
   const existing = readJson(flags.settingsPath) || {};
   const { settings: cleaned, changed, removedEnvKeys } = removeMemoryIntegration(existing, { scriptPath: record.hooksScript, env: envRestore });
   if (changed && !flags.dryRun) {

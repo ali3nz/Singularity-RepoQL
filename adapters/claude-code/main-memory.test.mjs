@@ -103,6 +103,7 @@ test("probeMainProxy is bounded, never leaks the token, and maps auth failures t
       ? { ok: true, status: 200, text: async () => "ok" }
       : { ok: true, status: 200, text: async () => "{}" }, 500);
   assert.equal(ok200.ok, true);
+  assert.match(ok200.level, /full provider round-trip/, "a 2xx is a full provider round-trip");
   const authfail = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
     async (url) => String(url).endsWith("/health")
       ? { ok: true, status: 200, text: async () => "ok" }
@@ -119,6 +120,47 @@ test("probeMainProxy is bounded, never leaks the token, and maps auth failures t
     async () => { throw new Error("ECONNREFUSED"); }, 500);
   assert.equal(unreachable.authRejected, false);
   assert.match(unreachable.detail, /ECONNREFUSED/);
+});
+
+test("probeMainProxy: a generic HTTP 500 after auth is NOT a success contract (§4.5)", async () => {
+  for (const status of [500, 502, 503]) {
+    const p = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+      async (url) => String(url).endsWith("/health")
+        ? { ok: true, status: 200, text: async () => "ok" }
+        : { ok: false, status, text: async () => "upstream exploded" }, 500);
+    assert.equal(p.ok, false, `HTTP ${status} must not count as operation success`);
+    assert.equal(p.upstreamError, true, `HTTP ${status} is flagged upstream-error, not auth failure`);
+    const cls = classifyMainMemoryState({ env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8096/claude-code/default" } },
+      "http://127.0.0.1:8096/claude-code/default", p);
+    assert.equal(cls.state, "DEGRADED", `classify: HTTP ${status} must be DEGRADED, never VERIFIED`);
+    assert.match(cls.detail, /NOT VERIFIED/);
+  }
+
+  // A health-only check does not claim self-learning either (no POST result).
+  const cls2 = classifyMainMemoryState(
+    { env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8096/claude-code/default" } },
+    "http://127.0.0.1:8096/claude-code/default", null);
+  assert.equal(cls2.state, "CONFIGURED");
+  assert.match(cls2.detail, /run with --probe/);
+});
+
+test("probeMainProxy: auth+path-verified 404 yields VERIFIED with its tier; 4xx-validation yields VERIFIED too", async () => {
+  const p404 = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+    async (url) => String(url).endsWith("/health")
+      ? { ok: true, status: 200, text: async () => "ok" }
+      : { ok: false, status: 404, text: async () => 'Invalid model identifier "singularity-status-probe".' }, 500);
+  assert.equal(p404.ok, true);
+  const cls = classifyMainMemoryState({ env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8096/claude-code/default" } },
+    "http://127.0.0.1:8096/claude-code/default", p404);
+  assert.equal(cls.state, "VERIFIED");
+  assert.match(cls.detail, /auth\+path verified/);
+
+  const p400 = await probeMainProxy("http://127.0.0.1:8096/claude-code/default", "tok",
+    async (url) => String(url).endsWith("/health")
+      ? { ok: true, status: 200, text: async () => "ok" }
+      : { ok: false, status: 400, text: async () => "bad request shape" }, 500);
+  assert.equal(p400.ok, true);
+  assert.match(p400.level, /auth verified/);
 });
 
 test("probeMainProxy: spaceId-less base gets /claude-code/default appended; 404-model-authenticated counts as VERIFIED", async () => {

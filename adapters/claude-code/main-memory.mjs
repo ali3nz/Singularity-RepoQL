@@ -128,7 +128,14 @@ export function classifyMainMemoryState(settings, baseUrl, probe = null) {
     return { state: env.ANTHROPIC_BASE_URL ? "CONFLICTED" : "DISABLED", detail: conflicts.join("; ") };
   }
   if (probe === null) return { state: "CONFIGURED", detail: "settings point at the Singularity proxy; run with --probe for VERIFIED" };
-  if (probe.ok) return { state: "VERIFIED", detail: `authenticated proxy probe ok (${probe.detail})` };
+  // Tiered probe outcome: only probes that actually reached the model provider
+  // through the authenticated proxy produce VERIFIED. A health-only, auth-fail
+  // or generic upstream-error result is DEGRADED — never a false "verified".
+  if (probe.ok) {
+    const level = probe.level || "full";
+    return { state: "VERIFIED", detail: `${level}: authenticated proxy probe ok (${probe.detail})` };
+  }
+  if (probe.upstreamError) return { state: "DEGRADED", detail: `proxy reachable and auth accepted, but the provider round-trip failed — NOT VERIFIED (${probe.detail})` };
   if (probe.authRejected) return { state: "DEGRADED", detail: `proxy reachable but auth failed (${probe.detail})` };
   return { state: "DEGRADED", detail: `proxy not reachable (${probe.detail})` };
 }
@@ -166,16 +173,22 @@ export async function probeMainProxy(baseUrl, token, fetchImpl = globalThis.fetc
     const snippet = (await res.text().catch(() => "")).slice(0, 100);
     if (res.status === 401 || res.status === 403) return { ok: false, authRejected: true, detail: `auth rejected: HTTP ${res.status} ${snippet}` };
     // 404 with an "Invalid model identifier" body means auth PASSED and upstream
-    // reached model resolution — good enough proof of a working scoped key.
+    // reached model resolution — proof of a working scoped key and proxy path,
+    // though the provider did not answer a real completion.
     if (res.status === 404) {
       const authOk = /invalid model identifier/i.test(snippet);
       return authOk
-        ? { ok: true, authRejected: false, detail: "auth accepted (probe model unknown to upstream, 404)" }
-        : { ok: false, authRejected: false, detail: `proxy reachable; /v1/messages probe returned 404 (unexpected upstream contract): ${snippet}` };
+        ? { ok: true, level: "auth+path verified (probe model unknown to upstream, HTTP 404)" }
+        : { ok: false, detail: `proxy reachable; probe POST returned unexpected HTTP 404: ${snippet}` };
     }
-    if (res.ok) return { ok: true, authRejected: false, detail: `authenticated POST ok (HTTP ${res.status})` };
-    // 4xx/5xx after auth: the key was accepted far enough to reach upstream handling
-    return { ok: true, authRejected: false, detail: `auth accepted; upstream answered HTTP ${res.status}` };
+    if (res.ok) return { ok: true, level: "full provider round-trip", detail: `authenticated POST ok (HTTP ${res.status})` };
+    // 5xx after auth: transport worked but the provider round-trip failed —
+    // by contract this must NOT establish successful operation.
+    if (res.status >= 500) {
+      return { ok: false, upstreamError: true, detail: `upstream error after auth: HTTP ${res.status} ${snippet}` };
+    }
+    // Other 4xx after auth: the key was accepted far enough to reach upstream request validation
+    return { ok: true, level: "auth verified (upstream request rejected, HTTP " + res.status + ")", detail: `auth accepted; upstream answered HTTP ${res.status}` };
   } catch (e) {
     return { ok: false, authRejected: false, detail: String(e?.message || e).slice(0, 140) };
   }

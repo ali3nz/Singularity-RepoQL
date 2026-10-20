@@ -18,6 +18,44 @@ load_upstream_env
 ADMIN_KEY_FILE="${MEMORY_CORE_ADMIN_KEY_FILE:-$UPSTREAM/.admin-key}"
 if [[ "$ADMIN_KEY_FILE" != /* ]]; then ADMIN_KEY_FILE="$UPSTREAM/$ADMIN_KEY_FILE"; fi
 
+# ── pre-start security preflight: stop wildcard exposure BEFORE it exists ────
+# The upstream quickstart publishes the memory services on all host
+# interfaces. Incident prevention belongs at container-creation time, not only
+# after. Reuse policy check: SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 is the only
+# operator-controlled escape hatch (see the post-start enforcement below).
+ALLOW_WIDE_MEMORY_PORTS=0
+if [[ "${SINGULARITY_ALLOW_WIDE_MEMORY_PORTS:-}" == "1" ]]; then ALLOW_WIDE_MEMORY_PORTS=1; fi
+BOUNDARY="$ROOT/scripts/memory-port-boundary.sh"
+baseline_file="$(mktemp /tmp/singularity-memory-baseline.XXXXXX)"
+if ! command -v docker >/dev/null 2>&1; then
+  echo 'note: docker CLI not found — the loopback publishing preflight is deferred to the post-start check on hosts where docker exists.' >&2
+else
+  if ! "$BOUNDARY" --baseline "$baseline_file"; then
+    echo 'FAILED: deployment preflight could not snapshot the container inventory; refusing an unauditable startup.' >&2
+    rm -f "$baseline_file"
+    exit 1
+  fi
+  # Bindings of RUNNING containers are authoritative; STOPPED tdai-* containers
+  # holding wildcard PortBindings would re-expose their ports on start — refuse
+  # before upstream touches anything.
+  if [[ "$ALLOW_WIDE_MEMORY_PORTS" != 1 ]]; then
+    if ! "$BOUNDARY" --check; then
+      cat >&2 <<'EOS'
+FAILED: security preflight refused startup — an existing tdai-* container is
+bound to the wildcard interface (0.0.0.0/::). Memory services never start in
+this state: recreate the offending container(s) with loopback bindings
+e.g. "ports: ['127.0.0.1:8420:8420']" (compose) or "-p 127.0.0.1:8420:8420"
+(docker run), or set SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 ONLY if a host
+firewall guarantees the trusted-interface boundary. The agent-facing plugin
+speaks to the core over the internal docker network, so loopback is enough.
+EOS
+      rm -f "$baseline_file"
+      exit 1
+    fi
+    printf 'preflight: no tdai-* container binds wildcard ports\n'
+  fi
+fi
+
 set +e
 (
   cd "$UPSTREAM" && ./start-all.sh
@@ -35,6 +73,23 @@ if [[ "$upstream_status" != 0 ]]; then
   exit "$upstream_status"
 fi
 
+# ── post-start enforcement: newly created services must never stay exposed ──
+# If upstream containers unexpectedly publish wildcard ports at creation time,
+# stop ONLY the containers this run created (pre-existing containers are
+# untouched) and fail. Never mask a failed preflight with a running service.
+if command -v docker >/dev/null 2>&1; then
+  if [[ "$ALLOW_WIDE_MEMORY_PORTS" != 1 ]]; then
+    if ! "$BOUNDARY" --enforce "$baseline_file"; then
+      echo 'FAILED: newly created Memory Core services were stopped: wildcard exposure detected after start.' >&2
+      echo '        Recreate with loopback host bindings (see the preflight guidance above).' >&2
+      rm -f "$baseline_file"
+      exit 1
+    fi
+  fi
+fi
+rm -f "$baseline_file"
+
+# ── post-start loopback-only boundary check (kept; runs after enforcement) ───
 # The upstream helper checks only HTTP 200; auth/verify also uses HTTP 200 for
 # invalid keys. Source the saved endpoint configuration and require data.valid.
 load_upstream_env

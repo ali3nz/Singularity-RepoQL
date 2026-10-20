@@ -3,7 +3,7 @@
 //   node --test adapters/claude-code/installer.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, statSync, chmodSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +15,7 @@ import {
 import {
   applyAgentFiles,
   applySettings,
+  agentRemovalPlan,
   integrationEnv,
   parseFlags,
   planAgentFiles,
@@ -112,27 +113,114 @@ const srcFixture = () => {
   return dir;
 };
 
-test("planAgentFiles reports create/present/update; applyAgentFiles is idempotent", () => {
+test("planAgentFiles reports create/present/replace; applyAgentFiles is idempotent", () => {
   const source = srcFixture();
   const target = mkdtempSync(join(tmpdir(), "cc-target-"));
   mkdirSync(join(target, ".claude", "agents"), { recursive: true });
 
   let plan = planAgentFiles(join(target, ".claude", "agents"), source);
   assert.deepEqual(plan.map((f) => f.status), ["create", "create"]);
-  applyAgentFiles(plan, { dryRun: false });
+  const first = applyAgentFiles(plan, { dryRun: false });
+  assert.equal(first.changed.length, 2);
+  assert.equal(first.ledger.filter((e) => e.action === "create").length, 2);
 
   plan = planAgentFiles(join(target, ".claude", "agents"), source);
   assert.deepEqual(plan.map((f) => f.status), ["present", "present"]);
-  applyAgentFiles(plan, { dryRun: false }); // second install: nothing rewritten
+  const second = applyAgentFiles(plan, { dryRun: false }); // second install: nothing rewritten
+  assert.equal(second.changed.length, 0, "repeated install is idempotent: no new writes");
+  assert.equal(second.ledger.every((e) => e.action === "present"), true);
   assert.equal(readFileSync(join(target, ".claude", "agents", "singularity-thinker.md"), "utf8").includes("reasoning specialist"), true);
 
-  // drift: a locally edited file is refreshed to the shipped definition
+  // drift: differing content is a user-owned file — replan markers "replace".
+  // The replace IS backed up and ledgered at apply time (see the ownership tests).
   writeFileSync(join(target, ".claude", "agents", "singularity-thinker.md"), "edited locally");
   plan = planAgentFiles(join(target, ".claude", "agents"), source);
-  assert.deepEqual(plan.map((f) => f.status), ["present", "update"]);
+  assert.deepEqual(plan.map((f) => f.status), ["present", "replace"]);
+  assert.ok(plan[1].prevSha, "pre-replace hash captured");
   applyAgentFiles(plan, { dryRun: false });
   assert.ok(readFileSync(join(target, ".claude", "agents", "singularity-thinker.md"), "utf8").includes("body\n"));
 });
+
+test("agent-file ownership: user file is backed up before replace and RESTORED at uninstall", () => {
+  const source = srcFixture();
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-agents-"));
+  const target = join(agentsDir, "singularity-board.md");
+  const original = "my own board notes — DO NOT DESTROY";
+  writeFileSync(target, original, { mode: 0o644 });
+
+  let plan = planAgentFiles(agentsDir, source);
+  assert.equal(plan.find((f) => f.target === target).status, "replace");
+  const { ledger } = applyAgentFiles(plan, { dryRun: false });
+  const entry = ledger.find((e) => e.target === target);
+  assert.equal(entry.action, "replace");
+  assert.ok(entry.backupPath && existsSync(entry.backupPath), "original backed up");
+  assert.equal(readFileSync(entry.backupPath, "utf8"), original, "backup preserves user content verbatim");
+  if (process.platform !== "win32") assert.equal(readFileSync(entry.backupPath).length > 0, true);
+
+  // A ledger-equipped record with the installed content restores the original.
+  const record = { agentsDir, agentLedger: ledger };
+  const plan2 = agentRemovalPlan(record, source);
+  const restoreItem = plan2.find((x) => x.target === target);
+  assert.equal(restoreItem.action, "restore", "ledger-proven installed file restores the pre-install original");
+  // simulate uninstall application:
+  copyFileSync(restoreItem.backupPath, restoreItem.target);
+  assert.equal(readFileSync(target, "utf8"), original, "original content returns");
+
+  // Refusal of unsafe restoration: the user changed the file AFTER install.
+  writeFileSync(target, "brand-new user edits made later");
+  const plan3 = agentRemovalPlan(record, source);
+  assert.equal(plan3.find((x) => x.target === target).action, "user-modified-keep",
+    "newer user changes are never overwritten by uninstall");
+});
+
+test("agent-file ownership: unowned files are kept; untracked-but-package-identical are removable", () => {
+  const source = srcFixture();
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-agents-"));
+  // A user's own agent file that happens to share our naming pattern: no ledger
+  // entry, content differs from the package -> never touched.
+  const foreign = join(agentsDir, "singularity-thinker.md");
+  writeFileSync(foreign, "foreign hand-written");
+  // An identical copy of the packaged source without a ledger: content proof.
+  const copy = join(agentsDir, "singularity-board.md");
+  copyFileSync(join(source, "singularity-board.md"), copy);
+  const plan = agentRemovalPlan({ agentsDir, agentLedger: null }, source);
+  assert.equal(plan.find((x) => x.target === foreign).action, "keep-unowned");
+  assert.equal(plan.find((x) => x.target === copy).action, "remove-unchanged-source");
+});
+
+test("applySettings refuses a malformed existing settings file and preserves it; missing file is fine", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-bad-"));
+  const settingsPath = join(dir, "settings.json");
+  writeFileSync(settingsPath, "{ model: \"haiku\", BROKEN,,, :");
+  const refused = applySettings(settingsPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(refused.refused, "malformed-settings");
+  assert.equal(refused.changed, false);
+  assert.equal(readFileSync(settingsPath, "utf8"), "{ model: \"haiku\", BROKEN,,, :", "malformed file is preserved byte-exact");
+  assert.equal(refused.backup, null, "no destructive side effects on refusal");
+
+  // A missing file is NOT the malformed case: fresh install proceeds.
+  const missingPath = join(dir, "nested", "settings.json");
+  const fresh = applySettings(missingPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(fresh.refused, undefined);
+  assert.equal(fresh.changed, true);
+  assert.ok(existsSync(missingPath));
+});
+
+test("credential-bearing files are 0600 with pre-existing modes corrected (POSIX)", { skip: process.platform === "win32" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-perm-"));
+  const settingsPath = join(dir, "settings.json");
+  // A pre-existing group/world-readable settings file with a token inside:
+  // mode 0600 at write time would NOT fix it — explicit enforcement must.
+  writeFileSync(settingsPath, JSON.stringify({ model: "haiku", env: { ANTHROPIC_AUTH_TOKEN: "sk-test-only" } }), { mode: 0o664 });
+  chmodSync(settingsPath, 0o664);
+  applySettings(settingsPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(numberToModeString((statSync(settingsPath).mode & 0o777)), "600", "enforced and verified 0600");
+  // The backup of a token-bearing settings file is also restricted.
+  const first = applySettings(join(dir, "other.json"), HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(first.backup, null);
+});
+
+function numberToModeString(mode) { return mode.toString(8); }
 
 test("applySettings writes a timestamped backup before the first change; skips when idempotent", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-settings-"));

@@ -285,33 +285,43 @@ test("discovery: eligible docs censused, baseline diff, doc-only + code-less upd
 test("baseline recovery: unresolved ingestion keeps the change visible; resolved pass refreshes", async () => {
   const dir = scratch();
   mkdirSync(join(dir, "docs"), { recursive: true });
-  writeFileSync(join(dir, "docs", "keep.md"), "# keep\nbody\n");
+  // Deliberately different sizes: the refreshed baseline is asserted by its
+  // recorded file-snapshot state, not by wall-clock timestamps (two records
+  // written within the same millisecond would produce equal `created`).
+  const oldBody = "# keep\nbody\n";
+  writeFileSync(join(dir, "docs", "keep.md"), oldBody);
   const noop = (file, args, opts, cb) => {
     if (args[1] === "ingest") { cb(null, JSON.stringify({ status: "DOC_INGEST_INDEXED", file: "docs/keep.md" }), ""); return; }
     cb(new Error("no git"), "", "");
   };
   // Bootstrap baseline.
   await autoIngestChangedDocs(dir, "rec", { execImpl: noop });
-  const created1 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8")).created;
+  const rec1 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8"));
+  const keepKey = Object.keys(rec1.files).find((k) => k.replace(/\\/g, "/").endsWith("docs/keep.md"));
+  assert.ok(keepKey, "baseline snapshots the ingested doc");
+  assert.equal(rec1.files[keepKey].size, Buffer.byteLength(oldBody), "snapshot reflects the bootstrap content");
 
   // Author a change; ingestion FAILS (gateway down). Baseline must NOT refresh,
   // so the change stays discoverable on the next check.
-  writeFileSync(join(dir, "docs", "keep.md"), "# keep\nbody\nnow unverified addition\n");
+  writeFileSync(join(dir, "docs", "keep.md"), oldBody + "now unverified addition\n");
   const failImpl = (file, args, opts, cb) => {
     if (args[1] === "ingest") { cb(null, JSON.stringify({ status: "DOC_INGEST_PENDING", reason: "not searchable" }), ""); return; }
     cb(new Error("no git"), "", "");
   };
   const pass1 = await autoIngestChangedDocs(dir, "rec", { execImpl: failImpl });
   assert.equal(pass1.results[0].status, "DOC_INGEST_PENDING");
-  const created2 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8")).created;
-  assert.equal(created2, created1, "baseline must not refresh while ingestion is unresolved");
+  const rec2 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8"));
+  assert.deepEqual(rec2, rec1, "baseline record must be byte-identical while ingestion is unresolved");
 
   // Next check re-discovers the SAME change and now resolves it; baseline refreshes.
   const pass2 = await autoIngestChangedDocs(dir, "rec", { execImpl: noop });
   assert.ok(pass2.changedDocs.some((d) => d.rel.endsWith("keep.md")), "unchanged ingestion target is re-discovered");
   assert.equal(pass2.results[0].status, "DOC_INGEST_INDEXED");
-  const created3 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8")).created;
-  assert.notEqual(created3, created1, "baseline refreshes once ingestion is resolved");
+  const rec3 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8"));
+  assert.equal(rec3.files[keepKey].size, statSync(join(dir, "docs", "keep.md")).size,
+    "baseline snapshot refreshes to the RESOLVED content (deterministic state assertion)");
+  assert.notEqual(rec3.files[keepKey].size, rec1.files[keepKey].size,
+    "the refreshed snapshot describes the changed body, not the original");
 
   rmSync(dir, { recursive: true, force: true });
 });
