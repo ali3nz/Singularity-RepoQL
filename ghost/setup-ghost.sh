@@ -60,7 +60,7 @@ if [[ ! -f "$ROOT/secrets/ghost.env" ]]; then
 # Ghost optional add-on configuration (mode 0600).
 # Presence of secrets/ghost.env enables Ghost in scripts/start.sh.
 GHOST_TIMEZONE=UTC
-GHOST_UPSTREAM_BASE=http://127.0.0.1:8096/openai/default/v1
+GHOST_UPSTREAM_BASE=http://proxy:8096/openai/default/v1
 GHOST_DREAM_CHECK_INTERVAL_SEC=3600
 EOF
   chmod 600 "$ROOT/secrets/ghost.env"

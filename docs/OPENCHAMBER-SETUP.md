@@ -66,8 +66,8 @@ secrets and create `secrets/openchamber.env` with mode 0600; keep the UI
 password value out of the shell transcript. Then run:
 
 ```bash
-python3 scripts/provision-secrets.py
-scripts/start.sh    # creates bind dirs/network, attaches memory-core, starts UIs and mounts rql when detected
+python3 scripts/provision-secrets.py --variant 3   # option 4: --variant 4 --with-ghost
+scripts/start.sh    # creates bind dirs/network, attaches memory-core, then attaches the EXISTING OpenChamber (container or native) — never creates a second one; rql inside an attached container is verified with node scripts/attach-openchamber.mjs --container
 ```
 
 Then open `http://127.0.0.1:3127` and log in with your UI password. The

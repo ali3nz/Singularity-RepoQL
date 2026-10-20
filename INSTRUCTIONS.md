@@ -218,11 +218,16 @@ Option 1 is done after step 5. Skip to "Report".
    instead (same layout). Full details: `docs/OPENCHAMBER-SETUP.md`.
 
 3. **Confirm the plugin secrets exist.** Option 1 step 2 already runs
-   `scripts/provision-secrets.py` before its loop validator. If continuing from
-   a stack where that step was skipped or   the files were removed, run it now;
-   it writes `data/opencode/config/product-secrets/memory.json` and
-   `office.json` from the running stack (gateway/service/user keys and Office
-   token). Do not print the generated credential values.
+   `scripts/provision-secrets.py` before its loop validator (pass
+   `--variant 3` when running it directly here: Office/Ghost credentials are
+   refused for option 3, only OpenChamber plugin + memory secrets are
+   written; `--variant 4 --with-ghost` also provisions `secrets/ghost.env`).
+   If continuing from a stack where that step was skipped or the files were
+   removed, run it now with `--plugin-dir` pointing at the runtime config's
+   `product-secrets` directory. It writes
+   `product-secrets/memory.json` and (option 4) `office.json` from the
+   running stack (gateway/service/user keys and Office token). Do not print
+   the generated credential values.
 
 4. **Build the local images before starting the UI services.** Option 3 needs
    only `openchamber:local` (`docs/OPENCHAMBER-SETUP.md`); option 4
@@ -248,12 +253,20 @@ Option 1 is done after step 5. Skip to "Report".
    ```
 
    `start.sh` pre-creates bind-mount directories as the WSL user, creates the
-   shared product network, attaches memory-core, starts OpenChamber — plus
-   Claude Office, and Ghost when `secrets/ghost.env` is present, for option 4
-   only (see `docs/GHOST-SETUP.md`) — and automatically mounts the WSL Linux
-   `rql` binary when detected. It
-   persists RepoQL state in `data/repoql/`. If `rql` is missing or broken, the
-   script says so and skips RepoQL while the rest of the stack can start.
+   shared product network, attaches memory-core to it, then attaches the UI
+   services: it looks for the running OpenChamber first (compose-managed
+   `singularity-openchamber`, your own managed one, or another foreign
+   OpenChamber container / native `~/.config/opencode` install) and attaches
+   to it via `node scripts/attach-openchamber.mjs` — it never creates a
+   second OpenChamber, and only brings up its own `singularity-openchamber`
+   container when you explicitly choose managed mode. Claude Office
+   (option 4 only) starts when its image exists, and Ghost (option 4 only)
+   joins when `secrets/ghost.env` is present (see `docs/GHOST-SETUP.md`). The
+   WSL Linux `rql` binary is mounted into a managed container automatically;
+   in attach mode use `node scripts/attach-openchamber.mjs --container` to
+   verify `rql` inside the existing container. RepoQL state persists in
+   `data/repoql/`. If `rql` is missing or broken, the script says so and
+   skips RepoQL while the rest of the stack can start.
 
 6. **Check the local services**: OpenChamber at `http://127.0.0.1:3127`
    (option 4: also Claude Office at `http://127.0.0.1:3128`); each checked

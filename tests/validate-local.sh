@@ -10,6 +10,9 @@ fail=0
 step() { printf '\n== %s\n' "$*"; }
 check() { if "$@"; then :; else fail=1; echo "   ^^ FAILED: $*"; fi; }
 
+step "manifest drift gate"
+check bash tests/validate-manifest.sh
+
 step "shell syntax"
 for f in memory/upstream/*.sh scripts/*.sh ghost/*.sh tests/*.sh; do check bash -n "$f"; done
 

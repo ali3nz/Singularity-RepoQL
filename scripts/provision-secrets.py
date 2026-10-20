@@ -83,28 +83,43 @@ def main() -> int:
                     help="explicitly let the plugin fall back to the memory stack ADMIN key "
                          "(bring-up convenience only — prefer a scoped runtime key)"
                     )
+    ap.add_argument("--variant", choices=["1", "2", "3", "4"], default=None,
+                    help="installation option scope: Claude Office is part of options 2 and 4 ONLY — "
+                         "options 1 and 3 never receive Office/Ghost provisioning or credentials. "
+                         "Omit for the legacy unscoped behaviour.")
+    ap.add_argument("--plugin-dir", default=None,
+                    help="override the OpenChamber plugin config directory (default <base>/data/opencode/config/product-secrets); "
+                         "used by the attach flow to provision into an EXISTING OpenChamber's config")
     ap.add_argument("--office-base-url", default="http://product-office:8000")
     ap.add_argument("--with-ghost", action="store_true", help="also provision secrets/ghost.env for the optional Ghost companion agent add-on")
     args = ap.parse_args()
 
     base = Path(args.base_dir).resolve()
     secrets_dir = base / "secrets"
-    plugin_dir = base / "data" / "opencode" / "config" / "product-secrets"
+    plugin_dir = Path(args.plugin_dir).resolve() if args.plugin_dir else base / "data" / "opencode" / "config" / "product-secrets"
+    include_office = args.variant is None or args.variant in ("2", "4")
+    if args.with_ghost and args.variant in ("1", "3"):
+        print("REFUSED: Ghost is part of installation options 2 and 4 only — it cannot be provisioned for option " + args.variant, file=sys.stderr)
+        return 2
     secrets_dir.mkdir(parents=True, exist_ok=True)
     plugin_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(secrets_dir, 0o700)
     os.chmod(plugin_dir, 0o700)
 
-    # 1. Claude Office keys (0600 env file consumed by office/office.compose.yml).
+    # 1. Claude Office keys — ONLY for installation options 2/4 (or legacy
+    # unscoped runs): options 1/3 must never receive Office provisioning.
+    generated = []
     office_env = secrets_dir / "claude-office.env"
     office_values = read_env_file(office_env)
-    generated = []
-    for key in ("CLAUDE_OFFICE_API_KEY", "CLAUDE_OFFICE_INGEST_KEY"):
-        if not office_values.get(key):
-            office_values[key] = secrets.token_hex(32)
-            generated.append(key)
-    if generated or not office_env.exists():
-        write_env_file(office_env, office_values)
+    if include_office:
+        for key in ("CLAUDE_OFFICE_API_KEY", "CLAUDE_OFFICE_INGEST_KEY"):
+            if not office_values.get(key):
+                office_values[key] = secrets.token_hex(32)
+                generated.append(key)
+        if generated or not office_env.exists():
+            write_env_file(office_env, office_values)
+    else:
+        office_values = {}
 
     # 2. Memory Core identity for the plugin. Least-privileged by default: the
     # plugin's runtime traffic must use its own scoped key, NOT the admin key.
@@ -145,10 +160,11 @@ def main() -> int:
         "serviceId": args.memory_service_id,
         "userKey": user_key,
     })
-    merge_json(plugin_dir / "office.json", {
-        "endpoint": args.office_base_url.rstrip("/") + "/api/v1/events",
-        "ingestKey": office_values["CLAUDE_OFFICE_INGEST_KEY"],
-    })
+    if include_office:
+        merge_json(plugin_dir / "office.json", {
+            "endpoint": args.office_base_url.rstrip("/") + "/api/v1/events",
+            "ingestKey": office_values["CLAUDE_OFFICE_INGEST_KEY"],
+        })
 
     ghost_env = secrets_dir / "ghost.env"
     if args.with_ghost:
@@ -164,9 +180,11 @@ def main() -> int:
         write_env_file(ghost_env, ghost_values)
 
     print(json.dumps({
-        "office_env": str(office_env),
+        "variant": args.variant,
+        "office_provisioned": include_office,
+        "office_env": str(office_env) if include_office else None,
         "memory_json": str(plugin_dir / "memory.json"),
-        "office_json": str(plugin_dir / "office.json"),
+        "office_json": str(plugin_dir / "office.json") if include_office else None,
         "ghost_env": str(ghost_env) if ghost_env.exists() else None,
         "office_keys_generated": generated,
         "memory_user_key_present": bool(memory_json.get("userKey")),

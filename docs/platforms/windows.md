@@ -75,11 +75,13 @@ rql --version                         # WSL Linux binary, not rql.exe
 (cd memory/upstream && ./verify.sh --skip-llm)
 scripts/start-memory-stack.sh         # safe wrapper; redacts key output
 (cd memory/upstream && ./verify.sh)
-python3 scripts/provision-secrets.py
+python3 scripts/provision-secrets.py --variant 3   # --variant 4 --with-ghost for option 4
 ```
 
-For options 3/4, copy the repository's `openchamber/` bundle into
-`data/opencode/config/` as documented in `INSTRUCTIONS.md`. This directory is
+For options 3/4, copy the repository's `openchamber/` bundle into the
+detected instance's config directory — `node scripts/attach-openchamber.mjs`
+does this with per-file backups (see `INSTRUCTIONS.md`); for a compose-managed
+instance this is `data/opencode/config/`. This directory is
 specific to the container runtime: do not copy it over Windows Electron's
 configuration or a user's existing native OpenCode configuration. Build
 `openchamber:local` and `claude-office:local` before the product start; see
@@ -99,8 +101,11 @@ scripts/start.sh
 The startup script creates its bind-mount directories as the WSL user before
 Compose can create them as root, verifies they are writable by container
 UID:GID 1000:1000, creates the shared `singularity-product-net`,
-attaches memory-core as `memory-core`, and mounts `~/.local/bin/rql` into
-OpenChamber when detected. The UI containers run as UID 1000. If a previous
+attaches memory-core as `memory-core`, and attaches (or, only when you
+explicitly choose managed mode, starts) OpenChamber. In attach mode it reuses
+your running OpenChamber container or native install and never creates a
+second one; `rql` inside an attached container is checked with
+`node scripts/attach-openchamber.mjs --container`. The UI containers run as UID 1000. If a previous
 failed first start already created root-owned mount paths, follow the
 permissions recovery in [`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md); do not
 use `chmod 777`.

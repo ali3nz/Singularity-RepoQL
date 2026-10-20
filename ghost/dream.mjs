@@ -18,7 +18,8 @@
 //
 // Usage:
 //   node ghost/dream.mjs [--agent ghost] [--agent-dir data/ghost] [--fresh] [--force]
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync } from "node:fs";import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, openSync, closeSync } from "node:fs";import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -182,8 +183,105 @@ function saveState(agentDir, state) {
   renameSync(p + ".tmp", p);
 }
 
-export function isDue(agentDir, today = todayIso()) {
-  return !existsSync(join(dreamsDirFor(agentDir), `${today}.md`));
+/**
+ * Read today's dream journal outcome. finish() writes `- outcome: <status>`;
+ * ONLY status "complete" means the day's dream is done. This is the proven
+ * production behavior (the reference dream loop skips a day only when a
+ * `outcome: complete` journal exists): any other journal — checkpointed,
+ * capped, interrupted — stays resumable and must NOT block the next run.
+ */
+export function journalForToday(agentDir, today = todayIso(), agentId = "ghost") {
+  const dir = dreamsDirFor(agentDir);
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir)
+    .filter((f) => (f === `${today}.md` || f.startsWith(`${today}-`)) && f.endsWith(".md"))
+    .sort();
+  for (const f of files) {
+    try {
+      const t = readFileSync(join(dir, f), "utf8");
+      if (!t.startsWith(`# Dream ${today} (${agentId})`)) continue;
+      const st = /(^|\n)- outcome: ([A-Za-z_-]+)/.exec(t)?.[2] || null;
+      return { file: join(dir, f), outcome: st };
+    } catch { /* unreadable journal: skip */ }
+  }
+  return null;
+}
+
+export function isDue(agentDir, today = todayIso(), agentId = "ghost") {
+  try {
+    const j = journalForToday(agentDir, today, agentId);
+    return !(j && j.outcome === "complete");
+  } catch { return true; }
+}
+
+// ── exclusive dream lock ─────────────────────────────────────────────────────
+// One dream at a time per agent. Long dreams overlap the hourly daemon check,
+// which would otherwise start a second dream on the same day. Stale-lock
+// takeover follows the proven production discipline: rename the record we
+// judged stale, delete it ONLY when it is still the same record, and restore
+// it when a newer owner appeared in the gap (a newer owner is never displaced).
+export const DREAM_LOCK_STALE_MS = 45 * 60 * 1000; // cap is 25 min + retries margin
+
+function dreamLockPath(agentDir) {
+  return join(dreamsDirFor(agentDir), ".dream.lock");
+}
+
+function processAlive(pid, platform = process.platform) {
+  if (platform === "win32") return true; // no POSIX signal probe: rely on staleness
+  try { process.kill(pid, 0); return true; } catch (e) { return e?.code === "EPERM"; }
+}
+
+function safeReadJson(p) {
+  try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; }
+}
+
+export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowMs = Date.now() } = {}) {
+  const path = dreamLockPath(agentDir);
+  mkdirSync(dreamsDirFor(agentDir), { recursive: true });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const fd = openSync(path, "wx", 0o600);
+      writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), "utf8");
+      closeSync(fd);
+      return { path, acquired: true, released: () => releaseDreamLockAgent(agentDir, path) };
+    } catch (e) {
+      if (e?.code !== "EEXIST") throw e;
+      const rec = safeReadJson(path);
+      let mtimeMs = 0;
+      try { mtimeMs = statSync(path).mtimeMs; } catch { /* gone mid-read: retry */ }
+      const stale = !rec
+        || (rec.pid && !processAlive(rec.pid))
+        || (mtimeMs && nowMs - mtimeMs > staleMs);
+      if (!stale) return { path, acquired: false, busy: true };
+      // Serialised stale takeover: rename first, then delete only the record
+      // we actually judged stale; restore a newer owner that appeared meanwhile.
+      const taken = `${path}.take-${process.pid}-${randomUUID()}`;
+      try { renameSync(path, taken); } catch { return { path, acquired: false, busy: true }; }
+      const observed = safeReadJson(taken);
+      if (!rec || (observed && observed.pid === rec.pid)) {
+        try { unlinkSync(taken); } catch { /* best-effort */ }
+        continue; // retry the exclusive create
+      }
+      // A newer owner exists: restore instead of destroying it.
+      try { linkSync(taken, path); } catch { /* the newer owner is already back in place */ }
+      try { unlinkSync(taken); } catch { /* best-effort */ }
+      return { path, acquired: false, busy: true };
+    }
+  }
+  return { path, acquired: false, busy: true };
+}
+
+function releaseDreamLockAgent(agentDir, path) {
+  const cur = safeReadJson(path);
+  if (cur && process.pid && cur.pid !== process.pid) return false; // never remove another run's lock
+  try { unlinkSync(path); return true; } catch { return false; }
+}
+
+export function releaseDreamLock(lockHandle) {
+  if (!lockHandle?.acquired || !lockHandle?.path) return false;
+  const cur = safeReadJson(lockHandle.path);
+  if (cur && cur.pid !== process.pid) return false;
+  try { unlinkSync(lockHandle.path); return true; } catch { return false; }
 }
 
 export function assertOwnMemfs(memfsRoot, files, siblingId) {
@@ -472,11 +570,26 @@ export async function runDream({
   const dreamsDir = dreamsDirFor(agentDir);
   mkdirSync(dreamsDir, { recursive: true });
 
+  const lock = acquireDreamLock(agentDir);
+  if (lock.busy) return { status: "already-running", today, lock: lock.path };
+
   let state = fresh ? null : loadState(agentDir);
   if (state && state.date !== today) state = null;
+  const todayJournal = journalForToday(agentDir, today, agentId);
+  if (state) {
+    // Resume a checkpointed dream for today WITHOUT --force (proven production
+    // behavior). A complete journal means there is nothing left to resume.
+    if (todayJournal && todayJournal.outcome === "complete" && !force) {
+      releaseDreamLock(lock);
+      return { status: "not-due", today, alreadyComplete: true };
+    }
+    if (state.step >= STEP_DEFS.length) state = null;
+  }
   if (!state) {
-    if (!force && !isDue(agentDir, today)) return { status: "not-due", today };
-    if (!force && existsSync(join(dreamsDir, `${today}.md`))) return { status: "not-due", today };
+    if (!force && !isDue(agentDir, today, agentId)) {
+      releaseDreamLock(lock);
+      return { status: "not-due", today };
+    }
     state = { date: today, step: 0, startedAt: Date.now(), steps: {}, retries: {} };
     saveState(agentDir, state);
   }
@@ -637,7 +750,9 @@ export async function runDream({
         saveState(agentDir, state);
       }
     }
-    return finish({ modelSrc: callImpl ? "callImpl" : (runModel || state.model || "n/a"), status: "complete", state, results, agentDir, agentId, usageBefore, today, journalKind: "complete" });
+    const done = finish({ modelSrc: callImpl ? "callImpl" : (runModel || state.model || "n/a"), status: "complete", state, results, agentDir, agentId, usageBefore, today, journalKind: "complete" });
+    releaseDreamLock(lock);
+    return done;
   } finally {
     try { unlinkSync(windowFile); } catch { /* best-effort */ }
   }

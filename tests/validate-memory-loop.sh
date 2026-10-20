@@ -90,7 +90,7 @@ base = os.environ["MEMORY_BASE"]; cfg = json.load(open(os.environ["MEMORY_SECRET
 scope = {"team_id": "knowledge", "user_id": "operator", "agent_id": "knowledge-promotion"}
 def search():
     req = urllib.request.Request(base.rstrip("/") + "/v3/conversation/search",
-        data=json.dumps({**scope, "query": "kpromo-", "limit": 5}).encode(),
+        data=json.dumps({**scope, "query": marker or "kpromo-", "limit": 5}).encode(),
         headers={"Content-Type": "application/json",
                  "Authorization": cfg.get("authPrefix", "") + cfg.get("gatewayKey", ""),
                  "x-tdai-service-id": cfg.get("serviceId", ""),

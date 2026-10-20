@@ -25,9 +25,12 @@ From the repository root:
 
 ```bash
 bash ghost/setup-ghost.sh
-# or via the secret provisioner:
-python3 scripts/provision-secrets.py --with-ghost
+# or via the secret provisioner (option 4 scope):
+python3 scripts/provision-secrets.py --variant 4 --with-ghost
 ```
+
+(Ghost is exclusive to options 2 and 4; `--variant 1` and `--variant 3`
+refuse `--with-ghost`.)
 
 What this does (idempotent — existing user reflection files are never
 overwritten):

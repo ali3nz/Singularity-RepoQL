@@ -15,18 +15,20 @@ managed instance.
 
 ## START HERE: GIVE THIS TO YOUR AI AGENT
 
-Paste **one** of these briefs to your coding agent in the WSL2 terminal where
-your harness and `rql` already work — the agent performs the install and the
-verification. Exactly four installation options exist — no component selectors,
-no alternative package combinations; everything beyond the four choices below
-is advanced configuration inside the selected option:
+Paste **one** of these four briefs to your coding agent in the WSL2 terminal
+where your harness and `rql` already work — the agent performs the install and
+the verification. Exactly four installation options exist — no component
+selectors, no alternative package combinations; Ghost and Claude Office are
+automatically included in options 2 and 4 and absent from options 1 and 3;
+everything beyond the four choices below is advanced configuration inside the
+selected option:
 
 | Option | Harness | MemoryCore + specialist agents | Automatic docs + knowledge lifecycle | Ghost | Claude Office |
 |---|---|---|---|---|---|
 | **1 — Claude Code + MemoryCore** | existing Claude Code | required | required | — | — |
 | **2 — Claude Code Complete** | existing Claude Code | required | required | **required** | **required** |
-| **3 — Existing OpenChamber + MemoryCore** | existing OpenChamber | required | required | — | — |
-| **4 — OpenChamber Complete** | existing OpenChamber | required | required | **required** | **required** |
+| **3 — Existing OpenChamber + MemoryCore** | existing OpenChamber (reused/attached, never reinstalled) | required | required | — | — |
+| **4 — OpenChamber Complete** | existing OpenChamber (reused/attached, never reinstalled) | required | required | **required** | **required** |
 
 **Option 1 — Claude Code + MemoryCore:**
 
@@ -35,37 +37,83 @@ Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
 Start the memory stack: bash scripts/start-memory-stack.sh (loopback
 publishing by default; it verifies auth before proceeding). Then run
 node scripts/install-claude-code.mjs install --enable-main-memory --variant 1
-from the clone. This installs the seven specialised subagents, their persistent
-MemoryCore identities, ordinary-session proxy routing, the documentation hooks
-and RepoQL MCP against an existing installation. Verify with
+from the clone. This installs the seven specialised subagents with their
+persistent MemoryCore identities, ordinary-session proxy routing, the
+documentation hooks and RepoQL MCP against your existing Claude Code
+installation — no OpenChamber, no Ghost, no Claude Office (these are not
+part of option 1 and cannot be added by any selector). Verify with
 node scripts/install-claude-code.mjs status --probe (expect MAIN AGENT
-MEMORY: VERIFIED), then bash tests/validate-memory-loop.sh (expect LOOP OK).
+MEMORY: VERIFIED and INSTALL COMPLETE), then bash tests/validate-memory-loop.sh
+(expect LOOP OK). Never run memory/upstream/start-all.sh directly. Report
+every command, its result, and anything that deviated from the documented
+behavior.
+```
+
+**Option 2 — Claude Code Complete (Ghost + Claude Office included automatically and cannot be deselected):**
+
+```text
+Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
+Start the memory stack: bash scripts/start-memory-stack.sh (loopback
+publishing by default; it verifies auth before proceeding). Enable Ghost for
+the claude-code backend: bash ghost/setup-ghost.sh (see docs/GHOST-SETUP.md),
+then build and start Claude Office per docs/OFFICE-SETUP.md — both are
+mandatory parts of option 2. Then run
+node scripts/install-claude-code.mjs install --enable-main-memory --variant 2
+from the clone. It installs everything from option 1 plus the Ghost gateway
+check and Claude Office verification; the option gate requires BOTH to be
+present and functional before it reports INSTALL COMPLETE — a missing dream
+checkpoint or unreachable Office endpoint yields INSTALL INCOMPLETE (exit 5)
+and nothing is forced. Verify the memory loop with
+bash tests/validate-memory-loop.sh (expect LOOP OK). Follow
+ghost/README.md, office/README.md exactly for the two bundled components.
 Never run memory/upstream/start-all.sh directly. Report every command, its
 result, and anything that deviated from the documented behavior.
 ```
 
-**Option 3 — existing OpenChamber + MemoryCore:**
+**Option 3 — existing OpenChamber + MemoryCore (attach, never reinstall):**
 
 ```text
 Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
-Do NOT install OpenChamber — attach to the existing one. Start the memory
-stack: bash scripts/start-memory-stack.sh. Then run
-bash scripts/start.sh (it mounts the freshly provisioned RepoQL binary and
-attaches the plugins) and follow scripts/OPENCHAMBER-SETUP.md (renamed under
-docs/OPENCHAMBER-SETUP.md) to copy openchamber/ config, provision plugin
-credentials (python3 scripts/provision-secrets.py) and verify: real RepoQL
-tool calls, memory capture of a completed turn, later-session recall,
-documentation closeout gate (DOC_UPDATED / DOC_NOT_REQUIRED) and the
-memory-loop check (bash tests/validate-memory-loop.sh). Report every command,
-its result, and anything that deviated from the documented behavior.
+Have OpenChamber running already (any variant; it is reused as-is and never
+reinstalled). Start the memory stack: bash scripts/start-memory-stack.sh.
+Then run bash scripts/start.sh — it detects the existing OpenChamber
+(container or native ~/.config/opencode), attaches the plugin bundle with
+node scripts/attach-openchamber.mjs, provisions plugin credentials with
+python3 scripts/provision-secrets.py --variant 3 (Office/Ghost credentials
+are refused in this option), and connects the stack to the existing container
+without creating a second OpenChamber. Follow docs/OPENCHAMBER-SETUP.md and
+verify: real RepoQL tool calls inside OpenChamber, memory capture of a
+completed turn, later-session recall, the documentation closeout gate
+(DOC_UPDATED / DOC_NOT_REQUIRED) and bash tests/validate-memory-loop.sh
+(expect LOOP OK). No Ghost, no Claude Office — option 3 excludes both and
+offers no selector to add them. Report every command, its result, and
+anything that deviated from the documented behavior.
 ```
 
-For options 2 and 4, the same brief gains one line —
-"and complete the Ghost + Claude Office parts of ghost/README.md and
-office/README.md exactly" — and the installer's option gate then requires
-both components to be present and functional before it reports success.
-Never paste admin keys anywhere; when the installer needs the scoped business
-key it reads the protected files itself.
+**Option 4 — OpenChamber Complete (attach, Ghost + Claude Office included automatically and cannot be deselected):**
+
+```text
+Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
+Have OpenChamber running already (it is reused as-is and never reinstalled).
+Start the memory stack: bash scripts/start-memory-stack.sh. Run
+bash ghost/setup-ghost.sh (the dream daemon uses the openchamber backend;
+docs/GHOST-SETUP.md) with secrets/ghost.env present, and build/start Claude
+Office per docs/OFFICE-SETUP.md. Then run bash scripts/start.sh — it attaches
+to the existing OpenChamber, provisions plugin credentials with
+python3 scripts/provision-secrets.py --variant 4 --with-ghost, and never
+creates a second OpenChamber. The option gate verifies Ghost (dream
+checkpoint recovery) AND Claude Office (event flow) before reporting
+INSTALL COMPLETE; anything missing yields INSTALL INCOMPLETE (exit 5) with
+nothing forced. Verify per docs/OPENCHAMBER-SETUP.md plus
+bash tests/validate-memory-loop.sh (expect LOOP OK). Report every command,
+its result, and anything that deviated from the documented behavior.
+```
+The installer verifies every mandatory capability of the selected option
+(specialist MemoryCore profiles, memory + documentation hooks, RepoQL MCP,
+normal-session routing — plus Ghost and Claude Office for options 2/4) against
+live state before reporting success: a declined consent or missing component
+leaves the install `INSTALL INCOMPLETE` (exit 5); nothing was forced and no
+mandatory capability was ever waived.
 
 Status: **release candidate**. A partial Windows 11 + WSL2 acceptance run
 passed on one machine on 2026-10-19 using the WSL-native Docker Engine: the
@@ -175,12 +223,19 @@ Other harnesses follow the same proxy pattern — see the upstream project's
 OpenChamber is installed from its own upstream project; this repository ships
 the configuration bundle and the memory plugin:
 
-1. Install OpenChamber (see [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md)).
-2. Copy `openchamber/` into the instance's OpenCode config directory
-   (`data/opencode/config/`): AGENTS.md, `agents/`, `opencode.jsonc`,
-   `dcp.jsonc`, and `plugins/product-office/`.
-3. Provision plugin credentials (`scripts/provision-secrets.py`), start the
-   stack (`scripts/start.sh`), and open the UI.
+1. Have OpenChamber running (any upstream variant; see
+   [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md) for prerequisites).
+   Options 3/4 attach to the existing instance — native (`~/.config/opencode`),
+   compose-managed or any other container — and never create a second one.
+2. `bash scripts/start.sh` starts the memory stack wiring and then either
+   attaches to the detected instance (`node scripts/attach-openchamber.mjs`
+   copies the `openchamber/` bundle — AGENTS.md, `agents/`, `opencode.jsonc`,
+   `dcp.jsonc`, `plugins/` — with per-file backups, never deletions), or, only
+   when you explicitly choose managed mode, brings up its own
+   `singularity-openchamber` container.
+3. Provision plugin credentials scoped to the option
+   (`python3 scripts/provision-secrets.py --variant 3|4 [--with-ghost]`), and
+   open the UI.
 
 With the plugin active, every completed OpenChamber turn is captured into
 Memory Core, relevant memory is recalled into new sessions, and — when Claude

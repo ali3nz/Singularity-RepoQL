@@ -43,6 +43,9 @@ jobs:
           python3 tests/test-memory-promote.py
           python3 tests/test-memory-doc-ingest.py
 
+      - name: Manifest drift gate
+        run: bash tests/validate-manifest.sh
+
       - name: Local validation (configs, syntax, references)
         run: bash tests/validate-local.sh
 

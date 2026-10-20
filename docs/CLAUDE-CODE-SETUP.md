@@ -285,8 +285,12 @@ surface:
 - **Option 2 — Claude Code Complete:** the same flow; Ghost and Claude Office
   are automatically included — Ghost's `GHOST_BACKEND=claude-code` keeps the
   complete Claude Code option independent of OpenChamber.
-- **Options 3 and 4 — existing OpenChamber:** the attach flow is unchanged;
-  when Claude Code is also installed, the same installer adds the native
-  integration. Both clients then share the Singularity instance consistently
+- **Options 3 and 4 — existing OpenChamber:** `scripts/start.sh` attaches to
+  the running OpenChamber (compose-managed, your own managed container, or
+  native `~/.config/opencode`) via `scripts/attach-openchamber.mjs` with
+  plugin credentials provisioned through
+  `scripts/provision-secrets.py --variant 3|4`; it never creates a second
+  OpenChamber. When Claude Code is also installed, this installer adds the
+  native integration. Both clients then share the Singularity instance consistently
   — the same logical agent is the same MemoryCore identity under either
   runtime.

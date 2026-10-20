@@ -9,10 +9,16 @@
 #   1. sanity-check Docker and the memory stack
 #   1b. pre-create writable bind-mount directories for the UID-1000 apps
 #   2. create the external product network when missing
-#   3. attach the memory core to it under the alias `memory-core`
+#   3. attach the memory core (and the LLM proxy for the Ghost dream lane)
+#      to it under the aliases `memory-core` / `proxy`
+#   3c. find the EXISTING OpenChamber (installation options 3/4 attach and
+#       never duplicate): attach the Singularity bundle into a foreign or
+#       native instance via scripts/attach-openchamber.mjs, or reuse this
+#       package's own compose-managed stack. A fresh singularity-openchamber
+#       is NEVER created here and a whole config is never overwritten.
 #   3a. seed per-agent MemoryCore profiles (non-fatal, bounded, idempotent)
-#   3b. mount the rql binary into OpenChamber when RepoQL is present
-#   4. start OpenChamber (compose/compose.yml) when a UI password is available
+#   3b. mount the rql binary into the compose-managed OpenChamber when present
+#   4. compose-managed path only: start OpenChamber when a UI password exists
 #   5. start Claude Office (office/office.compose.yml) when its env file exists
 #   5b. start Ghost (ghost/ghost.compose.yml) when secrets/ghost.env exists
 #   6. print the readiness table
@@ -83,21 +89,78 @@ else
   log "attached $MEMORY_CONTAINER to $NET as memory-core"
 fi
 
-if [[ ! -f "$ROOT/data/opencode/config/product-secrets/memory.json" ]]; then
-  log "note: plugin secrets not provisioned yet — run python3 scripts/provision-secrets.py"
+ATTACH_VARIANT="${SINGULARITY_VARIANT:-3}"
+OC_MANAGED="singularity-openchamber"
+MANAGED_EXISTS=0; docker inspect "$OC_MANAGED" >/dev/null 2>&1 && MANAGED_EXISTS=1
+MANAGED_RUNNING="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -x "$OC_MANAGED" || true)"
+FOREIGN_OC="$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | grep -i openchamber | grep -v "singularity-openchamber" | awk '{print $1; exit}' || true)"
+NATIVE_CONFIG="$HOME/.config/opencode"
+MODE=""; ATTACH_CONFIG=""
+if [[ -n "$FOREIGN_OC" ]]; then
+  MODE="attach-container"; ATTACH_TARGET="$FOREIGN_OC"
+elif [[ -d "$NATIVE_CONFIG" ]]; then
+  MODE="attach-native"; ATTACH_TARGET="$NATIVE_CONFIG"
+elif [[ "$MANAGED_EXISTS" == 1 ]]; then
+  MODE="managed"; ATTACH_TARGET="$OC_MANAGED"
+else
+  fail "no existing OpenChamber found (running container or $NATIVE_CONFIG). Installation options 3/4 ATTACH to an existing OpenChamber and never install one — see docs/OPENCHAMBER-SETUP.md. Nothing was created."
+fi
+log "OpenChamber mode: $MODE (${ATTACH_TARGET:-${OC_MANAGED:-compose-managed default}})"
+
+# In ALL modes the bundle is attached through the attach script: per-file
+# backups, no deletions, unrelated files preserved. Provisioning runs with
+# --variant so Office/Ghost credentials match the selected installation option.
+# In managed mode the same script verifies the compose-managed instance's
+# bundle and its rql mount; the compose `up` below (step 4) is the only piece
+# that ever CREATES a container, and only then.
+ATTACH_CONFIG=""
+if [[ "$MODE" == attach-container ]]; then
+  ATTACH_ARGS=(--container "$ATTACH_TARGET")
+  docker network connect "$NET" "$ATTACH_TARGET" >/dev/null 2>&1 \
+    || log "note: $ATTACH_TARGET is already on $NET (or could not be attached)"
+elif [[ "$MODE" == attach-native ]]; then
+  ATTACH_ARGS=(--config-dir "$NATIVE_CONFIG")
+else
+  ATTACH_ARGS=()
+fi
+if ! node "$ROOT/scripts/attach-openchamber.mjs" --variant "$ATTACH_VARIANT" "${ATTACH_ARGS[@]}"; then
+  fail "attaching the Singularity bundle to the existing OpenChamber failed"
+fi
+# The attach script provisioned INTO the discovered config; point the
+# profile seeder at THAT memory.json for this run.
+if [[ "$MODE" == attach-container ]]; then
+  ATTACH_CONFIG="$(node "$ROOT/scripts/attach-openchamber.mjs" --print-config --container "$ATTACH_TARGET")"
+elif [[ "$MODE" == attach-native ]]; then
+  ATTACH_CONFIG="$ATTACH_TARGET"
 fi
 
 # ── 3a. Agent MemoryCore profiles (non-fatal; idempotent) ────────────────────
 # Gives each shipped OpenChamber agent its own persistent MemoryCore profile,
 # the same way Ghost has one. Non-fatal: MemoryCore may still be warming up.
-if [[ -f "$ROOT/data/opencode/config/product-secrets/memory.json" ]]; then
+SEEDER_CONFIG="${SINGULARITY_MEMORY_CONFIG:-$ROOT/data/opencode/config/product-secrets/memory.json}"
+if [[ -f "$SEEDER_CONFIG" ]]; then
   if command -v node >/dev/null 2>&1; then
     # Bounded: a stalled MemoryCore must not add minutes to every start.
-    if ! timeout 120 node "$ROOT/scripts/setup-agent-profiles.mjs"; then
+    if ! SINGULARITY_MEMORY_CONFIG="$SEEDER_CONFIG" timeout 120 node "$ROOT/scripts/setup-agent-profiles.mjs"; then
       log "WARNING: agent MemoryCore profiles incomplete — fix MemoryCore, then re-run: node scripts/setup-agent-profiles.mjs"
     fi
   else
     log "WARNING: node not found — agent MemoryCore profiles not provisioned (node scripts/setup-agent-profiles.mjs)"
+  fi
+fi
+
+# ── 3b'. the Ghost dream lane needs the LLM proxy resolvable by name ─────────
+# ghost-dream (compose) calls GATEWAY_URL=http://proxy:8096/…; the proxy lives
+# on the memory-stack network, so it is joined here under the alias `proxy`
+# (add-only and reversible with `docker network disconnect`). Loopback
+# publishing and every firewall boundary are unchanged by a network member.
+PROXY_CONTAINER="$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '/memory-proxy/{print $1; exit}')"
+if [[ -n "$PROXY_CONTAINER" ]]; then
+  net_members="$(docker network inspect "$NET" --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null)"
+  if [[ " $net_members " != *" $PROXY_CONTAINER "* ]]; then
+    docker network connect --alias proxy "$NET" "$PROXY_CONTAINER" >/dev/null 2>&1 \
+      && log "attached $PROXY_CONTAINER to $NET as proxy" \
+      || log "note: could not attach the proxy container to $NET — ghost-dream resolves it another way or fails visibly"
   fi
 fi
 
@@ -124,24 +187,30 @@ else
   APPLY=0
   log "RepoQL not detected — skipping the rql mount (see docs/REPOQL-SETUP.md)"
 fi
-if [[ "${APPLY:-0}" == 1 ]]; then
+if [[ "${APPLY:-0}" == 1 && "$MODE" == "managed" ]]; then
   mkdir -p "$ROOT/data/repoql"
   export REPOQL_RQL_PATH
   REPOQL_COMPOSE=(-f "$ROOT/compose/repoql.override.yml")
-  log "RepoQL enabled ($REPOQL_RQL_PATH) — the rql binary will be mounted into OpenChamber"
+  log "RepoQL enabled ($REPOQL_RQL_PATH) — the rql binary will be mounted into the compose-managed OpenChamber"
+elif [[ "${APPLY:-0}" == 1 ]]; then
+  log "RepoQL detected ($REPOQL_RQL_PATH) — in attach mode YOUR instance needs the rql mount (see the attach script output); the Claude Code integration can use it directly"
 fi
 
-# ── 4. OpenChamber ───────────────────────────────────────────────────────────
-if [[ -z "${OPENCHAMBER_UI_PASSWORD:-}" && -f "$ROOT/secrets/openchamber.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  . "$ROOT/secrets/openchamber.env"
-  set +a
-fi
-if [[ -n "${OPENCHAMBER_UI_PASSWORD:-}" ]]; then
-  docker compose -f "$ROOT/compose/compose.yml" ${REPOQL_COMPOSE[@]+"${REPOQL_COMPOSE[@]}"} up -d
+# ── 4. OpenChamber (compose-managed path only; attach starts nothing) ────────
+if [[ "$MODE" == "managed" ]]; then
+  if [[ -z "${OPENCHAMBER_UI_PASSWORD:-}" && -f "$ROOT/secrets/openchamber.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$ROOT/secrets/openchamber.env"
+    set +a
+  fi
+  if [[ -n "${OPENCHAMBER_UI_PASSWORD:-}" ]]; then
+    docker compose -f "$ROOT/compose/compose.yml" ${REPOQL_COMPOSE[@]+"${REPOQL_COMPOSE[@]}"} up -d
+  else
+    log "skipping OpenChamber start: set OPENCHAMBER_UI_PASSWORD or create secrets/openchamber.env"
+  fi
 else
-  log "skipping OpenChamber: set OPENCHAMBER_UI_PASSWORD or create secrets/openchamber.env"
+  log "attach mode: $ATTACH_TARGET is YOUR existing OpenChamber — restart it yourself to load the plugins; this script never restarts it"
 fi
 
 # ── 5. Claude Office (optional) ──────────────────────────────────────────────

@@ -4,6 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  acquireDreamLock,
+  releaseDreamLock,
   DREAM_STEPS,
   dreamStepPrompts,
   parseMemoryEntries,
@@ -139,6 +141,28 @@ test("runDream executes all 6 steps with mock callImpl and commits consolidated 
     assert.ok(existsSync(res.journal));
     const memContent = readFileSync(join(memDir, "MEMORY.md"), "utf8");
     assert.ok(memContent.includes("checkpointed dream cycles commit cleanly"));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("dream lock is exclusive and releases on the owning handle only", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-"));
+  const agentDir = join(tmp, "data", "ghost");
+  try {
+    const h1 = acquireDreamLock(agentDir);
+    assert.equal(h1.acquired, true);
+    const lockPath = h1.path;
+    assert.ok(existsSync(lockPath), "lock file must exist while held");
+    const h2 = acquireDreamLock(agentDir);
+    assert.equal(h2.acquired, false);
+    assert.equal(h2.busy, true);
+    assert.ok(existsSync(lockPath), "a busy contender must not remove the owner's lock");
+    releaseDreamLock(h1);
+    assert.ok(!existsSync(lockPath), "release removes the owner's lock");
+    const h3 = acquireDreamLock(agentDir);
+    assert.equal(h3.acquired, true, "lock is reacquirable after release");
+    releaseDreamLock(h3);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
