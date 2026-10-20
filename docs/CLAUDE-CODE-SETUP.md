@@ -58,7 +58,10 @@ Deliberately **not** part of this integration:
 cd ~/Singularity-RepoQL            # the Singularity checkout
 # first bring up the memory stack (docs/MEMORY-SETUP.md), then:
 python3 scripts/provision-secrets.py --memory-user-key <scoped user key>
-node scripts/install-claude-code.mjs install
+# every install selects one of the four installation options (inline, or via
+# the numbered menu on an interactive terminal):
+node scripts/install-claude-code.mjs install --variant 1
+# (option 2 uses --variant 2; options 3/4 attach OpenChamber — INSTRUCTIONS.md)
 ```
 
 The installer is idempotent. Re-running it will not duplicate agents, hooks,

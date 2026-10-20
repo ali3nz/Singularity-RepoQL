@@ -9,7 +9,7 @@ path — nothing is promoted silently.
 
 | Source | How |
 |---|---|
-| Claude Code / harnesses | every request through the proxy (`:8096`) is captured — for the NORMAL parent session this happens whenever Singularity proxy routing is enabled at install (`install --enable-main-memory`; see `docs/CLAUDE-CODE-SETUP.md`); no agent selection needed |
+| Claude Code / harnesses | every request through the proxy (`:8096`) is captured — for the NORMAL parent session this happens whenever Singularity proxy routing is enabled at install (`install --variant 1 --enable-main-memory`; see `docs/CLAUDE-CODE-SETUP.md`); no agent selection needed |
 | Claude Code specialised agents | with `scripts/install-claude-code.mjs`: each finished `singularity-*` subagent contributes ONE bounded, redacted lesson via the SubagentStop hook, persisted under the agent's own MemoryCore identity through the reconciled write path (query-before-write → add → verify; stable task id, so retries do not duplicate) |
 | OpenChamber | the `product-office` plugin captures completed turns (user/assistant pairs) for sessions under the capture roots |
 | Anything | `POST /v3/conversation/add` with a scope (`team_id`, `user_id`, `agent_id`, `session_id`, `task_id`, `messages`) |

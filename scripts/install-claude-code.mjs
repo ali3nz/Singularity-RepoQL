@@ -2,11 +2,12 @@
 // install-claude-code.mjs — idempotent installer for the Singularity Claude Code
 // native-agent integration (the "specialised agents on Claude Code" feature).
 //
-//   node scripts/install-claude-code.mjs install   [--scope user|project] [--project-dir DIR]
-//                                                  [--team T] [--user U] [--skip-profiles]
-//                                                  [--skip-repoql-mcp] [--dry-run]
+//   node scripts/install-claude-code.mjs install --variant 1|2|3|4
+//      [--scope user|project] [--project-dir DIR]
+//      [--team T] [--user U] [--skip-profiles] [--skip-repoql-mcp] [--dry-run]
+//      [--enable-main-memory | --no-main-memory] [--replace-provider]
 //   node scripts/install-claude-code.mjs uninstall [same scope flags] [--dry-run]
-//   node scripts/install-claude-code.mjs status
+//   node scripts/install-claude-code.mjs status [--probe]
 //
 // What "install" does (idempotent — re-running never duplicates anything):
 //   1. installs the native Claude Code subagent definitions (adapters/claude-code/agents/)

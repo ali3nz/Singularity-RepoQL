@@ -113,7 +113,7 @@ cd Singularity-RepoQL
    Code subagents, plus ordinary-session memory through the proxy):
 
    ```bash
-   node scripts/install-claude-code.mjs install --enable-main-memory
+   node scripts/install-claude-code.mjs install --variant 1 --enable-main-memory
    ```
 
    This installs the seven `singularity-*` subagent definitions to
