@@ -270,10 +270,10 @@ follow the memory-stack uninstall in [`MEMORY-SETUP.md`](MEMORY-SETUP.md)
 
 ## Relation to Variants A and B (INSTRUCTIONS.md)
 
-- **Variant A (memory stack + Claude Code):** after the stack is up, run this
+- **Variant 1 (memory stack + Claude Code):** after the stack is up, run this
   installer — Claude Code users get the specialised agents and the memory loop
   without OpenChamber or Claude Office.
-- **Variant B (full stack):** unchanged; and when Claude Code is also
+- **Variant 3 (full stack):** unchanged; and when Claude Code is also
   installed, the same installer adds the native integration. Both clients then
   share the Singularity instance consistently — the same logical agent is the
   same MemoryCore identity under either runtime.

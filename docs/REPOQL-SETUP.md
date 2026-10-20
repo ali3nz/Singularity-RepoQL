@@ -24,7 +24,7 @@ The two systems complement each other:
 
 ## Requirements
 
-- RepoQL installed and working. Variant B requires the Linux WSL2 binary,
+- RepoQL installed and working. Variant 3 requires the Linux WSL2 binary,
   not `rql.exe`; install it with the shell installer below. If the current
   shell does not find `rql`, try `bash -lc 'rql --version'` or
   `~/.local/bin/rql --version`; the installer may add that path only for login

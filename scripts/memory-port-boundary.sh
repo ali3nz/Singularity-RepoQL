@@ -22,27 +22,29 @@
 # wide bindings unconditionally so its caller decides policy.
 set -euo pipefail
 
-WIDE_HOST_RE='^(0\.0\.0\.0|::|\[::\])$'
 tdai_containers() {
   docker ps -a --format '{{.Names}}' 2>/dev/null | grep '^tdai-' || true
 }
 
 # Print "<container>:<binding>" for every wildcard-published port.
+# NOTE: the wildcard hosts are compared as PLAIN STRINGS — `awk -v re="$re"`
+# escape-processes variable values differently across awk variants (mawk
+# strips `\.` / `\[`), so a regex handed in via a variable is not portable.
 wide_bindings() {
   for name in $(tdai_containers); do
     # RUNNING containers: docker port shows the actual host bindings.
     if docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -q '^true$'; then
       docker port "$name" 2>/dev/null | awk -v n="$name" \
-        -v re="$WIDE_HOST_RE" \
-        '{ h = $NF; sub(/:[0-9]+$/, "", h); if (h ~ re) print n ":" $0 }'
+        '{ h = $NF; sub(/:[0-9]+$/, "", h);
+           if (h == "" || h == "0.0.0.0" || h == "::" || h == "[::]") print n ":" $0 }'
     else
       # STOPPED containers: inspect their intended publishing config so a
       # `start` of such a container cannot surprise-expose ports.
       docker inspect -f '{{json .HostConfig.PortBindings}}' "$name" 2>/dev/null \
-        | awk -v n="$name" -v re="$WIDE_HOST_RE" \
+        | awk -v n="$name" \
           '{ while (match($0, /"HostIp":"[^"]*"/)) {
                ip = substr($0, RSTART + 10, RLENGTH - 11);
-               if (ip == "" || ip ~ re) { print n ":stopped-binding(" ip ")"; }
+               if (ip == "" || ip == "0.0.0.0" || ip == "::" || ip == "[::]") { print n ":stopped-binding(" ip ")"; }
                $0 = substr($0, RSTART + RLENGTH);
              } }'
     fi
