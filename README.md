@@ -270,6 +270,7 @@ Office for the complete variants) is missing or unverified.
 
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
+[`docs/ARCHITECTURE-ALIGNMENT.md`](docs/ARCHITECTURE-ALIGNMENT.md) ·
 
 [`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md) ·
 
