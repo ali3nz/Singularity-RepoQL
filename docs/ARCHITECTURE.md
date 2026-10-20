@@ -46,8 +46,8 @@ Optional pieces (drop them and the system still works):
   ledger for the metered provider.
 - **Claude Office** — pixel-art activity visualizer; the memory path marks its
   channel `not-configured` and stays off when Office is absent.
-- **Ghost** (`ghost/`, `:18003` loopback gateway) — optional persistent
-  companion agent with three-tier memory and a daily checkpointed 6-step dream
+- **Ghost** (`ghost/`, `:18003` loopback gateway) — persistent
+  companion agent (part of installation options 2 and 4) with three-tier memory and a daily checkpointed 6-step dream
   cycle (`ghost/dream.mjs`) that commits provenance-stamped reflections into
   `data/ghost/memory/`. Stays off when `secrets/ghost.env` is absent. See
   `GHOST-SETUP.md`.

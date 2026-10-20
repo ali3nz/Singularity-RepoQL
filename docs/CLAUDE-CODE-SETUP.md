@@ -9,7 +9,7 @@ documents the Claude Code integration; the memory-stack bring-up itself is in
 
 Windows 11 note: everything below runs in WSL2 (the Linux `claude`, and — when
 RepoQL is connected — the Linux `rql` binary). Paths and commands are WSL2
-paths; there is no Windows-native variant.
+paths; there is no Windows-native build.
 
 ## What gets installed
 
@@ -45,7 +45,8 @@ Deliberately **not** part of this integration:
 
 - **Ghost** keeps its own `ghost-companion` profile and its own setup
   ([`GHOST-SETUP.md`](GHOST-SETUP.md)); no second Ghost identity is created and
-  nothing Ghost-related installs automatically.
+  Ghost is only enabled when the selected installation option includes it
+  (options 2 and 4).
 - **Standalone** is not a subagent. Its working rules belong to Claude Code's
   main agent (Claude Code already behaves as the primary operator agent
   without a delegation policy), so shipping it as a duplicate subagent would
@@ -149,11 +150,12 @@ proxy — the proxy captures the parent conversation, injects relevant prior
 context in later sessions, and nothing about the ordinary Claude Code
 experience changes (no agent selection, no memory commands).
 
-Enable it during install:
+Enable it during install — advanced configuration within the selected
+installation option:
 
 ```bash
-node scripts/install-claude-code.mjs install --enable-main-memory
-# guided interactive installs also offer it as the default (answer Y)
+node scripts/install-claude-code.mjs install --variant 1 --enable-main-memory
+# interactive installs offer this as configuration inside the selected option (answer Y)
 # automation may pass --no-main-memory to keep routing untouched
 ```
 
@@ -268,12 +270,20 @@ later resumes with the same identities and history. To also drop memory state,
 follow the memory-stack uninstall in [`MEMORY-SETUP.md`](MEMORY-SETUP.md)
 (that deletes your memories — say what you are doing first).
 
-## Relation to Variants A and B (INSTRUCTIONS.md)
+## Relation to the installation options (INSTRUCTIONS.md)
 
-- **Variant 1 (memory stack + Claude Code):** after the stack is up, run this
+Exactly four installation options exist (`--variant 1|2|3|4`; interactive
+installs offer the same numbered menu). This installer is the Claude Code
+surface:
+
+- **Option 1 — Claude Code + MemoryCore:** after the stack is up, run this
   installer — Claude Code users get the specialised agents and the memory loop
-  without OpenChamber or Claude Office.
-- **Variant 3 (full stack):** unchanged; and when Claude Code is also
-  installed, the same installer adds the native integration. Both clients then
-  share the Singularity instance consistently — the same logical agent is the
-  same MemoryCore identity under either runtime.
+  without OpenChamber, Ghost or Claude Office.
+- **Option 2 — Claude Code Complete:** the same flow; Ghost and Claude Office
+  are automatically included — Ghost's `GHOST_BACKEND=claude-code` keeps the
+  complete Claude Code option independent of OpenChamber.
+- **Options 3 and 4 — existing OpenChamber:** the attach flow is unchanged;
+  when Claude Code is also installed, the same installer adds the native
+  integration. Both clients then share the Singularity instance consistently
+  — the same logical agent is the same MemoryCore identity under either
+  runtime.

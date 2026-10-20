@@ -1,16 +1,17 @@
-# Ghost setup — persistent companion agent that dreams (optional)
+# Ghost setup — persistent companion agent that dreams (part of installation options 2 and 4)
 
-Ghost is an optional persistent AI companion agent for OpenChamber and the
-Singularity-RepoQL stack. Unlike stateless task workers, Ghost maintains a
+Ghost is a persistent AI companion agent bundled into installation options 2
+and 4 of the Singularity-RepoQL stack. Unlike stateless task workers, Ghost maintains a
 three-tier persistent memory layout, can be driven interactively in OpenChamber
 or headlessly for scheduled wakes, and runs a daily **checkpointed six-step
 dream cycle** (`experiences -> related -> patterns -> evolution -> consolidate -> summary`)
 that reflects on recent conversations and commits provenance-stamped conclusions
 into its own git-backed memory directory.
 
-It is optional — memory capture, RepoQL, OpenChamber, and Claude Office work
-without it, and `scripts/start.sh` skips Ghost when `secrets/ghost.env` is
-absent.
+It is not part of installation options 1 and 3, and it cannot be deselected in
+options 2 and 4. Memory capture, RepoQL, and OpenChamber work the same either
+way — `scripts/start.sh` skips Ghost when `secrets/ghost.env` is
+absent, which is the normal state for option 3.
 
 > **Privacy & Clean-Slate Guarantee:** This repository ships **only** the Ghost
 > runtime scripts, OpenChamber agent profile (`openchamber/agents/ghost.md`),
@@ -18,7 +19,7 @@ absent.
 > personal memories, conversation transcripts, or live system state are
 > included.
 
-## 1. Initialize clean-slate Ghost state and enable the add-on
+## 1. Initialize clean-slate Ghost state (option 4)
 
 From the repository root:
 

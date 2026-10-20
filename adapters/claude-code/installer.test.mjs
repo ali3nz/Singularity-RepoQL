@@ -20,11 +20,15 @@ import {
   VARIANTS,
   integrationEnv,
   parseFlags,
+  parseOptionChoice,
   planAgentFiles,
   readState,
   saveInstallRecord,
   uninstallFilesForRecord,
   applyMainMemory,
+  usageText,
+  installOptionLines,
+  runInstall,
   UsageError,
 } from "../../scripts/install-claude-code.mjs";
 
@@ -376,8 +380,54 @@ test("resolveVariant: variant 3/4 attach to an existing OpenChamber and refuse d
   assert.ok(present.notes.some((n) => n.includes("reusing the detected existing OpenChamber")));
 });
 
-test("resolveVariant: --skip-profiles conflicts with any variant because specialist agents are mandatory", () => {
+test("resolveVariant: --skip-profiles conflicts with any installation option because specialist agents are mandatory", () => {
   const res = resolveVariant({ variant: "1", skipProfiles: true, scope: "user" }, {});
   assert.equal(res.ok, false);
-  assert.match(res.problems[0], /mandatory in every variant/);
+  assert.match(res.problems[0], /mandatory in every installation option/);
+});
+
+// ── option surface: exactly four numbered installation options ───────────────
+test("usage text exposes EXACTLY four numbered installation options, then advanced configuration", () => {
+  const lines = installOptionLines();
+  assert.equal(lines.length, 4);
+  for (const [i, line] of lines.entries()) {
+    assert.match(line, new RegExp(`^  ${i + 1}  `), "each option line is numbered 1-4");
+  }
+  // options 2/4 carry Ghost + Office automatically; 1/3 exclude them
+  assert.match(lines[1], /automatically included/);
+  assert.match(lines[3], /automatically included/);
+  assert.match(lines[0], /not part of this option/);
+  assert.match(lines[2], /not part of this option/);
+
+  const text = usageText();
+  assert.match(text, /installation options[^\n]*exactly four/);
+  assert.match(text, /advanced configuration/);
+  // no fifth option and no alternative package combination in the surface
+  for (const id of ["0", "5", "6"]) assert.ok(!text.includes(`  ${id}  `), `option ${id} must not appear in the usage surface`);
+  assert.ok(!text.toLowerCase().includes("variant a") && !text.toLowerCase().includes("variant b"), "no legacy A/B variants");
+});
+
+test("parseOptionChoice accepts only option ids 1..4", () => {
+  assert.equal(parseOptionChoice("1"), "1");
+  assert.equal(parseOptionChoice(" 4 "), "4");
+  assert.equal(parseOptionChoice("5"), null);
+  assert.equal(parseOptionChoice("0"), null);
+  assert.equal(parseOptionChoice(""), null);
+  assert.equal(parseOptionChoice("y"), null);
+});
+
+test("install without an option selection stops unmodified (no unnumbered base install)", async () => {
+  const logs = [];
+  // capture output: runInstall logs module-side; instrument by monkeypatching
+  // console via stream? Simpler: run in a non-TTY CI-like environment and assert rc.
+  const rc = await runInstall({ scope: "user", projectDir: "/proj", team: "", user: "", skipProfiles: false,
+    skipRepoqlMcp: false, dryRun: false, mainMemory: null, replaceProvider: false, probe: false, variant: null,
+    settingsPath: "/nonexistent/singularity-test/settings.json", agentsTarget: "/nonexistent/singularity-test/agents" });
+  assert.equal(rc, 2, "no option selected -> refusal rc 2 before any on-disk change");
+});
+
+test("option refusal strings: mandated wording mentions installation option explicitly", () => {
+  const res = resolveVariant({ variant: "7", skipProfiles: false, scope: "user" }, {});
+  assert.equal(res.ok, false);
+  assert.match(res.problems[0], /one of 1\.\.4/);
 });

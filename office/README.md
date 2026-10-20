@@ -1,4 +1,4 @@
-# Claude Office — optional activity visualizer
+# Claude Office — activity visualizer (bundled into installation options 2 and 4)
 
 Claude Office renders agent activity as a pixel-art office: every session is a
 "boss", subagents are employees, and tool use, waits and completions animate
@@ -9,7 +9,7 @@ live. Singularity feeds it two ways:
 - [`../adapters/claude-code/`](../adapters/claude-code/) posts metadata-only
   events from Claude Code hooks (prompts and tool I/O are never forwarded).
 
-Office is optional. Memory capture and recall work without it.
+Office ships automatically with installation options 2 and 4; options 1 and 3 exclude it. Memory capture and recall work without it.
 
 ## Get the software
 

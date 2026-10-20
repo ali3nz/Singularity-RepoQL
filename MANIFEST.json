@@ -2,7 +2,7 @@
   "name": "Singularity-RepoQL",
   "version": "0.1.0-rc4",
   "generated": "2026-10-20T07:20:00Z",
-  "description": "Persistent memory and self-learning for existing Claude Code or OpenChamber + RepoQL setups: Tencent MemoryCore stack, seven specialist agents, automatic documentation lifecycle and knowledge promotion, extraction provider ladder, Ghost companion (claude-code or openchamber backend) and Claude Office. Exactly four installation variants (--variant 1-4).",
+  "description": "Persistent memory and self-learning for existing Claude Code or OpenChamber + RepoQL setups: Tencent MemoryCore stack, seven specialist agents, automatic documentation lifecycle and knowledge promotion, extraction provider ladder, Ghost companion (claude-code or openchamber backend) and Claude Office. Exactly four installation options (--variant 1-4); Ghost and Claude Office are bundled into options 2 and 4.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {
     "memory_stack": {
@@ -23,7 +23,7 @@
       "source": "https://github.com/ali3nz/claude-office",
       "upstream": "https://github.com/paulrobello/claude-office",
       "vendored": false,
-      "note": "compose + docs for the optional activity visualizer; the fork carries the validated Focus/seating updates"
+      "note": "compose + docs for the activity visualizer bundled into installation options 2 and 4; the fork carries the validated Focus/seating updates"
     },
     "opencode_runtime": {
       "source": "https://opencode.ai",
@@ -52,7 +52,7 @@
       "path": "adapters/claude-code (agents/, agent-map.mjs, memory-hook.mjs, settings-merge.mjs) + scripts/install-claude-code.mjs",
       "source": "authored for this repository",
       "vendored": false,
-      "note": "native Claude Code subagents (seven singularity-* roles incl. the Board of Advisors) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost stays a separate optional add-on and standalone remains main-agent guidance, not a subagent"
+      "note": "native Claude Code subagents (seven singularity-* roles incl. the Board of Advisors) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost ships only through installation options 2 and 4 (its backend is selected automatically) and is absent from options 1 and 3; standalone remains main-agent guidance, not a subagent"
     },
     "documentation_system": {
       "path": "scripts/doc-policy.mjs + scripts/memory-doc-ingest.py + scripts/memory_client.py + adapters/claude-code/doc-hook.mjs",
@@ -70,7 +70,7 @@
       "path": "ghost + openchamber/agents/ghost.md + docs/GHOST-SETUP.md",
       "source": "authored for this repository (redacted clean-slate projection)",
       "vendored": false,
-      "note": "optional persistent companion agent with 3-tier memory helper (ghost-memory.mjs), checkpointed 6-step daily dream engine (dream.mjs), headless OpenChamber turn runner (ghost-turn.mjs), allowlist model gateway (ghost-gateway.mjs), and blank seed templates (zero personal memories)"
+      "note": "persistent companion agent bundled into installation options 2 and 4 (absent from 1 and 3); 3-tier memory helper (ghost-memory.mjs), checkpointed 6-step daily dream engine (dream.mjs), headless OpenChamber turn runner (ghost-turn.mjs), allowlist model gateway (ghost-gateway.mjs), and blank seed templates (zero personal memories)"
     }
   },
   "validation": {

@@ -1,9 +1,11 @@
-# Office setup — activity visualizer (optional)
+# Office setup — activity visualizer (part of installation options 2 and 4)
 
 Claude Office turns agent activity into a live pixel-art office: sessions are
 bosses, subagents are employees, and tool calls, waits and completions animate
-as work happens. It is optional — memory works without it, and the plugin
-reports the Office channel as `not-configured` when it is absent.
+as work happens. It ships with installation options 2 and 4; memory works
+without it, and the plugin
+reports the Office channel as `not-configured` when it is absent (the normal
+state for options 1 and 3).
 
 ## 1. Build the image
 

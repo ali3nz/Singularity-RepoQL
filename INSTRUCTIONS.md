@@ -1,8 +1,11 @@
-# INSTRUCTIONS.md — agent install walkthrough (Windows + RepoQL variant)
+# INSTRUCTIONS.md — agent install walkthrough (Windows)
 
 You are an agent installing **Singularity-RepoQL** on a Windows machine for a
 user who already has **RepoQL (`rql`) installed**. This document is the full
-install. Execute one variant end-to-end, then report as described at the end.
+install. Execute exactly ONE of the four installation options end-to-end, then
+report as described at the end. There are no other installation options and no
+optional component selectors; Ghost and Claude Office are automatically
+included in options 2 and 4 and absent from options 1 and 3.
 
 ## 0. Prerequisites (verify before starting)
 
@@ -18,7 +21,7 @@ install. Execute one variant end-to-end, then report as described at the end.
 - `git`, `curl`, and Python 3 in WSL2; ~12 GB free disk and a stable internet
   connection. Keep the checkout under the WSL2 Linux filesystem (for example
   `~/projects`), not `/mnt/c`.
-- **RepoQL already installed**. For Variant 3 it must be the Linux WSL2
+- **RepoQL already installed**. For options 3 and 4 it must be the Linux WSL2
   `rql` binary, not Windows-only `rql.exe`. If `rql --version` is missing in
   the current shell, try `bash -lc 'rql --version'` or
   `~/.local/bin/rql --version`; use `REPOQL_RQL_PATH="$HOME/.local/bin/rql"`
@@ -32,32 +35,34 @@ install. Execute one variant end-to-end, then report as described at the end.
 - Do all install and acceptance commands in a WSL2 terminal (Windows
   Terminal); paths below are WSL2 paths.
 
-## 1. Choose exactly ONE variant (there are exactly four)
+## 1. Choose exactly ONE installation option (there are exactly four)
 
-| Variant | Harness | Ghost | Claude Office | This walkthrough |
+| Option | Harness | Ghost | Claude Office | This walkthrough |
 |---|---|---|---|---|
 | 1 — Claude Code + MemoryCore | existing Claude Code | — | — | §2 |
 | 2 — Claude Code Complete | existing Claude Code | required (`GHOST_BACKEND=claude-code`) | required | §2 + ghost/README.md, office/README.md |
 | 3 — Existing OpenChamber + MemoryCore | existing OpenChamber (never reinstalled) | — | — | §3 (attach-only) |
 | 4 — OpenChamber Complete | existing OpenChamber (never reinstalled) | required (`GHOST_BACKEND=openchamber`) | required | §3 + ghost/README.md, office/README.md |
 
-Mandatory capabilities of EVERY variant: the memory stack, the seven
-specialist agents with persistent MemoryCore identities, ordinary-session
+Mandatory capabilities of EVERY installation option: the memory stack, the
+seven specialist agents with persistent MemoryCore identities, ordinary-session
 memory routing, the documentation closeout gate with verified ingestion, and
 a working RepoQL connection. Pass `--variant 1|2|3|4` to
-`scripts/install-claude-code.mjs` so the variant gate can verify these — an
-install cannot report success when a mandatory component was skipped.
+`scripts/install-claude-code.mjs` (interactive installs offer the same four
+options as a numbered menu) so the option gate can verify these — an install
+cannot report success when a mandatory component was skipped.
 
-- **Variant 1 (was "Variant 1").** Memory stack + Claude Code only: the
-  memory stack captures what Claude Code does through its proxy; no Office,
-  no OpenChamber, no Ghost.
-- **Variant 3 (was "Variant 3", minus Office).** Attaches to your EXISTING
-  OpenChamber: memory stack, plugin capture/recall, the specialised agents
-  (including the Board of Advisors) and automatic RepoQL mounting via
-  `start.sh`.
-- **Variants 2/4 add Ghost + Claude Office as mandatory parts** and use the
-  gates above to prove them functional (Ghost dream checkpoint recovery and
-  Office's event flow), not merely present.
+- **Option 1 — Claude Code + MemoryCore.** Memory stack + Claude Code only:
+  the memory stack captures what Claude Code does through its proxy; no
+  Office, no OpenChamber, no Ghost.
+- **Option 3 — OpenChamber + MemoryCore.** Attaches to your EXISTING
+  OpenChamber (never reinstalled): memory stack, plugin capture/recall, the
+  specialised agents (including the Board of Advisors) and automatic RepoQL
+  mounting via `start.sh`. No Office, no Ghost.
+- **Options 2 and 4 automatically include Ghost + Claude Office as mandatory
+  parts** — they cannot be deselected — and use the gates above to prove them
+  functional (Ghost dream checkpoint recovery and Office's event flow), not
+  merely present.
 
 Clone the repository once, from the WSL2 home (or wherever the user keeps
 projects):
@@ -67,7 +72,7 @@ git clone https://github.com/ali3nz/Singularity-RepoQL.git
 cd Singularity-RepoQL
 ```
 
-## 2. Variant 1 — memory stack + Claude Code (no Office, no OpenChamber)
+## 2. Option 1 — memory stack + Claude Code (no Office, no OpenChamber, no Ghost)
 
 1. Bring up the memory stack:
 
@@ -126,7 +131,8 @@ cd Singularity-RepoQL
    documentation hooks enforce the shared documentation policy and
    automatically ingest updated runbooks into MemoryCore with verified
    retrieval — see [`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md).
-   Re-running it is idempotent. Full flags (`--scope project`, `--team/--user`,
+   Re-running it is idempotent. Everything else is advanced configuration
+   (`--scope project`, `--team/--user`,
    `--dry-run`, `--no-main-memory`, `--replace-provider`, `status --probe`)
    and verification: [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md).
    If a scoped user key was not yet provisioned, the installer still completes
@@ -165,7 +171,7 @@ cd Singularity-RepoQL
    through the proxy automatically (normal parent sessions included — no
    specialist agent selection required).
 
-5. Variant 1 does NOT install OpenChamber or Claude Office. Do not copy
+5. Option 1 does NOT install OpenChamber, Claude Office or Ghost. Do not copy
    `openchamber/` anywhere. With step 3 done, Claude Code users still get the
    specialised agents — as native Claude Code subagents under their own
    persistent MemoryCore identities — without any OpenChamber dependency. (The
@@ -173,17 +179,17 @@ cd Singularity-RepoQL
    config; the Claude Code integration reuses them only as the source of the
    shared MemoryCore identities.)
 
-Variant 1 is done after step 5. Skip to "Report".
+Option 1 is done after step 5. Skip to "Report".
 
-## 3. Variant 3 — memory stack + OpenChamber + Claude Office
+## 3. Option 3 — memory stack + OpenChamber (no Ghost, no Office)
 
-1. **Memory stack first** — execute Variant 1 steps 1–2 exactly as written
-   (the same stack powers both variants; skip the Claude Code wiring — step A3
-   subagent installer and the proxy settings in A4 — unless the user also
-   runs Claude Code on this machine). When Claude Code is also used, run the
-   step A3 installer as well: it binds the native Claude Code subagents to the
-   SAME MemoryCore identities these OpenChamber agents use, so one Singularity
-   instance serves both clients consistently.
+1. **Memory stack first** — execute Option 1 steps 1–2 exactly as written
+   (the same stack powers every option; skip the Claude Code wiring — the
+   step-3 subagent installer and the step-4 proxy settings — unless the user
+   also runs Claude Code on this machine). When Claude Code is also used, run
+   the step-3 installer as well: it binds the native Claude Code subagents to
+   the SAME MemoryCore identities these OpenChamber agents use, so one
+   Singularity instance serves both clients consistently.
 
 2. **Install the OpenChamber configuration bundle**. With Docker Compose
    deployments the repo's `data/opencode/config/` directory is bind-mounted
@@ -202,7 +208,8 @@ Variant 1 is done after step 5. Skip to "Report".
    | `openchamber/package.json`        | `package.json`           |
 
    This ships the nine agent definitions — `standalone` (primary),
-   `ghost` (persistent companion agent that dreams), `thinker`, `general`,
+   `ghost` (persistent companion agent that dreams; its runtime is enabled
+   only in option 4), `thinker`, `general`,
    `explore`, `researcher-web`, `code-reviewer`, `quality-fixer` and
    **`board` (Board of Advisors)** — the runtime agent
    policy (`AGENTS.md`), and the Office/memory plugins (`product-office`,
@@ -210,21 +217,22 @@ Variant 1 is done after step 5. Skip to "Report".
    OpenChamber install, copy the same files into `~/.config/opencode/`
    instead (same layout). Full details: `docs/OPENCHAMBER-SETUP.md`.
 
-3. **Confirm the plugin secrets exist.** Variant 1 step 2 already runs
+3. **Confirm the plugin secrets exist.** Option 1 step 2 already runs
    `scripts/provision-secrets.py` before its loop validator. If continuing from
-   a stack where that step was skipped or the files were removed, run it now;
+   a stack where that step was skipped or   the files were removed, run it now;
    it writes `data/opencode/config/product-secrets/memory.json` and
    `office.json` from the running stack (gateway/service/user keys and Office
    token). Do not print the generated credential values.
 
-4. **Build both local images before starting the optional UI services.** Follow
-   `docs/OPENCHAMBER-SETUP.md` for `openchamber:local` and
-   `docs/OFFICE-SETUP.md` for `claude-office:local` (the latter uses the
-   validated `1fce512` revision). `scripts/start.sh` starts existing images; it
-   does not build them.
+4. **Build the local images before starting the UI services.** Option 3 needs
+   only `openchamber:local` (`docs/OPENCHAMBER-SETUP.md`); option 4
+   additionally builds `claude-office:local` (`docs/OFFICE-SETUP.md`, the
+   validated `1fce512` revision). `scripts/start.sh` starts existing images;
+   it does not build them.
 
 5. **Preflight the ports, then start the stack.** Check for listeners on
-   `8420`, `8125`, `8424`, `8096`, `3127`, and `3128` in both WSL2 and Windows;
+   `8420`, `8125`, `8424`, `8096`, `3127` (option 3/4) — and `3128` for
+   option 4 — in both WSL2 and Windows;
    identify any owner before proceeding and do not terminate an unknown
    process. In WSL2, inspect with `ss -ltnp`. Create a private UI-password
    file once if needed:
@@ -234,22 +242,23 @@ Variant 1 is done after step 5. Skip to "Report".
    mkdir -p secrets
    python3 -c 'import secrets; print("OPENCHAMBER_UI_PASSWORD=" + secrets.token_urlsafe(32))' > secrets/openchamber.env
    chmod 600 secrets/openchamber.env
-   # Optional add-on: enable Ghost (persistent companion agent that dreams)
+   # Option 4 only: enable Ghost (bundled component; option 3 excludes it)
    # bash ghost/setup-ghost.sh
    scripts/start.sh
    ```
 
    `start.sh` pre-creates bind-mount directories as the WSL user, creates the
-   shared product network, attaches memory-core, starts OpenChamber and Office
-   (and Ghost when `secrets/ghost.env` is present — see `docs/GHOST-SETUP.md`),
-   and automatically mounts the WSL Linux `rql` binary when detected. It
+   shared product network, attaches memory-core, starts OpenChamber — plus
+   Claude Office, and Ghost when `secrets/ghost.env` is present, for option 4
+   only (see `docs/GHOST-SETUP.md`) — and automatically mounts the WSL Linux
+   `rql` binary when detected. It
    persists RepoQL state in `data/repoql/`. If `rql` is missing or broken, the
    script says so and skips RepoQL while the rest of the stack can start.
 
-6. **Check both local services**: OpenChamber at `http://127.0.0.1:3127` and
-   Claude Office at `http://127.0.0.1:3128`; both should return HTTP 200.
-   Sign in with the UI password, then check agent selection and a RepoQL tool
-   call in a real OpenChamber session.
+6. **Check the local services**: OpenChamber at `http://127.0.0.1:3127`
+   (option 4: also Claude Office at `http://127.0.0.1:3128`); each checked
+   endpoint should return HTTP 200. Sign in with the UI password, then check
+   agent selection and a RepoQL tool call in a real OpenChamber session.
 
 7. **Verify everything**:
 
@@ -259,6 +268,23 @@ Variant 1 is done after step 5. Skip to "Report".
    ```
 
    `validate-repoql.sh` must print `REPOQL VALIDATION OK`.
+
+### Option 4 — Ghost and Claude Office are added automatically
+
+Option 4 is option 3 plus the two bundled components. They cannot be
+deselected, and nothing may be added to option 3: selecting option 4 is the
+only way the walkthrough installs them.
+
+1. **Office**: build `claude-office:local` (`docs/OFFICE-SETUP.md`, validated
+   revision `1fce512`), include port `3128` in the preflight (step 5), and
+   include `http://127.0.0.1:3128` in the endpoint check (step 6).
+2. **Ghost**: run `bash ghost/setup-ghost.sh` (clean-slate seed templates;
+   `docs/GHOST-SETUP.md`) before `scripts/start.sh`, and confirm the dream
+   checkpoint recovery gate on Ghost's first dream.
+3. **Gate**: when Claude Code is also installed on this machine, run
+   `node scripts/install-claude-code.mjs install --variant 4` — the option
+   gate verifies Ghost and Claude Office before reporting success (option 3
+   passes `--variant 3`; options 1/2 are §2 with `--variant 1|2`).
 
 ## 4. Troubleshooting
 
@@ -276,11 +302,11 @@ Variant 1 is done after step 5. Skip to "Report".
 - The detailed acceptance checklist for Windows platform
   specifics lives in `docs/platforms/windows.md`.
 
-## 5. Report (both variants)
+## 5. Report (all options)
 
 Tell the user, in one place:
 
-- variant chosen and every step executed,
+- installation option chosen (1–4) and every step executed,
 - every verification command and its output (or the reason it was skipped),
 - the Panel/UI URLs and where the admin key and product secrets live
   (file paths only — never print secret values),

@@ -85,7 +85,7 @@ or tunnel — the UI password is the only gate).
   ingested. Requires
   `data/opencode/config/product-secrets/memory.json`
   (`{"baseUrl":"http://memory-core:8420","authPrefix":"Bearer ","gatewayKey":"","serviceId":"…","userKey":"sk-mem-…"}`).
-- **Office channel** (optional) — session/tool lifecycle events are queued
+- **Office channel** (used by installation option 4) — session/tool lifecycle events are queued
   and POSTed to Claude Office (same capture roots). Requires `office.json`
   (`{"endpoint":"http://product-office:8000/api/v1/events","ingestKey":"…"}`).
 

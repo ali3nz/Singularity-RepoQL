@@ -8,8 +8,8 @@ verified lessons flow through automatic knowledge promotion, and material
 changes are caught, documented and ingested without user commands.
 
 This is the **RepoQL package**: it wires Tencent MemoryCore, specialised
-agents, RepoQL code intelligence and (in the complete variants) Ghost and the
-Claude Office visualizer into your existing harness — Claude Code or
+agents, RepoQL code intelligence and — in installation options 2 and 4 — Ghost
+and the Claude Office visualizer into your existing harness — Claude Code or
 OpenChamber. It never installs a duplicate harness and never touches a
 managed instance.
 
@@ -17,16 +17,18 @@ managed instance.
 
 Paste **one** of these briefs to your coding agent in the WSL2 terminal where
 your harness and `rql` already work — the agent performs the install and the
-verification. Exactly four variants exist:
+verification. Exactly four installation options exist — no component selectors,
+no alternative package combinations; everything beyond the four choices below
+is advanced configuration inside the selected option:
 
-| Variant | Harness | MemoryCore + specialist agents | Automatic docs + knowledge lifecycle | Ghost | Claude Office |
+| Option | Harness | MemoryCore + specialist agents | Automatic docs + knowledge lifecycle | Ghost | Claude Office |
 |---|---|---|---|---|---|
 | **1 — Claude Code + MemoryCore** | existing Claude Code | required | required | — | — |
 | **2 — Claude Code Complete** | existing Claude Code | required | required | **required** | **required** |
 | **3 — Existing OpenChamber + MemoryCore** | existing OpenChamber | required | required | — | — |
 | **4 — OpenChamber Complete** | existing OpenChamber | required | required | **required** | **required** |
 
-**Variant 1 — Claude Code + MemoryCore:**
+**Option 1 — Claude Code + MemoryCore:**
 
 ```text
 Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
@@ -42,7 +44,7 @@ Never run memory/upstream/start-all.sh directly. Report every command, its
 result, and anything that deviated from the documented behavior.
 ```
 
-**Variant 3 — existing OpenChamber + MemoryCore:**
+**Option 3 — existing OpenChamber + MemoryCore:**
 
 ```text
 Clone https://github.com/ali3nz/Singularity-RepoQL into your home directory.
@@ -58,9 +60,9 @@ memory-loop check (bash tests/validate-memory-loop.sh). Report every command,
 its result, and anything that deviated from the documented behavior.
 ```
 
-For variants 2 and 4, the same brief gains one line —
+For options 2 and 4, the same brief gains one line —
 "and complete the Ghost + Claude Office parts of ghost/README.md and
-office/README.md exactly" — and the installer's variant gate then requires
+office/README.md exactly" — and the installer's option gate then requires
 both components to be present and functional before it reports success.
 Never paste admin keys anywhere; when the installer needs the scoped business
 key it reads the protected files itself.
@@ -88,7 +90,8 @@ Windows support therefore remains **experimental**. See
   failures with a shared monthly budget ledger.
 - **OpenChamber** (:3127) — workspace UI + `product-office` memory plugin
   (brought by you; never reinstalled by this package).
-- **Claude Office** (:3128) — activity visualizer (complete variants).
+- **Claude Office** (:3128) — activity visualizer (installation options
+  2 and 4).
 - **Ghost** (`ghost/`, gateway :18003) — persistent companion agent with a
   checkpointed 6-step dream cycle; `GHOST_BACKEND` selects the runtime
   (`openchamber` container or `claude-code` CLI, no docker needed).
@@ -98,7 +101,7 @@ Windows support therefore remains **experimental**. See
 - **Harness integration** (`adapters/claude-code/` + `openchamber/`) — seven
   specialised subagents with persistent MemoryCore identities, ordinary
   session routing, SubagentStart recall / SubagentStop capture, documentation
-  hooks, RepoQL over MCP, and the variant gates in
+  hooks, RepoQL over MCP, and the installation-option gates in
   `scripts/install-claude-code.mjs`.
 - **RepoQL (yours)** — code intelligence connected over MCP; installed
   separately ([`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md)).
@@ -112,10 +115,10 @@ Windows support therefore remains **experimental**. See
   (2026-10-20, WSL-native engine; existing RepoQL/OpenChamber excluded):
   memory stack images ≈ 4.6 GB (`memory-core` 1.34 GB + `memory-hub` 2.02 GB
   + `memory-proxy` 1.22 GB) with SQLite volumes currently ≈ 5 MB (plan several
-  GB for long-running capture + backups); Claude Code variant adds nothing
-  beyond the clone (≈ 200 MB worktree incl. data); OpenChamber image 4.9 GB
-  and Office image 0.6 GB count ONLY for variants 3/4 when you genuinely lack
-  them. Plan ≈ 6 GB headroom for variants 1–2 and ≈ 12 GB only if you also
+  GB for long-running capture + backups); the Claude Code options (1/2) add
+  nothing beyond the clone (≈ 200 MB worktree incl. data); OpenChamber image
+  4.9 GB and Office image 0.6 GB count ONLY for options 3/4 when you genuinely
+  lack them. Plan ≈ 6 GB headroom for options 1–2 and ≈ 12 GB only if you also
   pull OpenChamber and Office from scratch.
 - Two configured processing-provider credentials for extraction (a ladder;
   see §Providers in docs/ARCHITECTURE.md). NVIDIA build, GroqCloud, Cerebras
@@ -124,7 +127,7 @@ Windows support therefore remains **experimental**. See
   traffic. A local model server is valid when reachable from both WSL2 and
   the containers; successful connectivity checks do not establish model
   quality.
-- RepoQL installed for this variant (`rql` — see
+- RepoQL installed for this installation (`rql` — see
   [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md); the OpenChamber container
   needs a Linux rql, installed in WSL2 on Windows).
 - Ports: `8420` core · `8125` panel · `8424` knowledge · `8096` proxy (all
@@ -167,7 +170,7 @@ key. To verify capture and recall, follow
 Other harnesses follow the same proxy pattern — see the upstream project's
 `agents/` directory.
 
-## Optional — OpenChamber (workspace UI + memory plugin)
+## OpenChamber (required for installation options 3 and 4 — attach, never reinstall)
 
 OpenChamber is installed from its own upstream project; this repository ships
 the configuration bundle and the memory plugin:
@@ -183,21 +186,23 @@ With the plugin active, every completed OpenChamber turn is captured into
 Memory Core, relevant memory is recalled into new sessions, and — when Claude
 Office is installed — session activity appears in the visualizer.
 
-## RepoQL integration (this variant)
+## RepoQL integration
 
 The OpenChamber bundle declares the `repoql` MCP server and ships a compose
 override that mounts your `rql` binary into the container; `scripts/start.sh`
 detects the binary and applies it automatically. Walkthrough:
 [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md).
 
-## Optional — Claude Office (activity visualizer)
+## Claude Office (included in installation options 2 and 4)
 
-Build from the upstream project (a fork carrying the Focus/seating updates is
+Options 1 and 3 do not include Office and there is no selector to add it:
+Office is only part of the complete options. Build from the upstream project
+(a fork carrying the Focus/seating updates is
 used by the reference deployment) and start it with
 `office/office.compose.yml`. See [`office/README.md`](office/README.md) and
 [`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md).
 
-## Optional — Ghost (persistent companion agent that dreams)
+## Ghost (included in installation options 2 and 4)
 
 Ghost is a persistent AI companion agent that maintains a three-tier memory
 layout (Memory Stack `/v1/memories`, RepoQL `rql`, and local git-backed
@@ -209,7 +214,7 @@ Enable it with `bash ghost/setup-ghost.sh` (or
 only — zero personal memories are shipped. See [`ghost/README.md`](ghost/README.md)
 and [`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md).
 
-## Optional — knowledge promotion and extraction failover
+## Advanced configuration — knowledge promotion and extraction failover
 
 - Promotion: `scripts/knowledge-promotion.py --propose TITLE BODY SOURCE` …
   `--promote PROPOSAL --truth-name NAME` (explicit, reversible, provenance kept;
@@ -259,12 +264,17 @@ tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh
 ## Install — give this to your agent
 
 Use the copyable briefs in **START HERE** at the top of this README — they
-are the four installation variants (`--variant 1|2|3|4` for Claude Code, an
-attach-only flow for an existing OpenChamber). The full Windows-specific
+are the four installation options, selected with `--variant 1|2|3|4`
+(options 3/4 attach to an existing OpenChamber; interactive installs offer
+the same numbered menu). There are no other installation options and no
+optional component selectors: Ghost and Claude Office are automatically
+included in options 2 and 4 and absent from options 1 and 3; everything else
+(scope, team/user, provider replacement, probes, dry runs) is advanced
+configuration within the selected option. The full Windows-specific
 walkthrough remains in [`INSTRUCTIONS.md`](INSTRUCTIONS.md), which leads with
-the same variant matrix. A variant install refuses to report success while a
+the same option matrix. An install refuses to report success while a
 mandatory capability (profiles, routing, hooks, RepoQL MCP — or Ghost and
-Office for the complete variants) is missing or unverified.
+Office for options 2/4) is missing or unverified.
 ## Documentation
 
 

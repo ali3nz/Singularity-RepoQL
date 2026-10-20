@@ -7,14 +7,15 @@ definitions users load are `openchamber/agents/*.md`.
 ## What this repository is
 
 Singularity-RepoQL packages a self-hosted agent memory stack (TencentDB Agent
-Memory: memory-core + memory-hub + proxy) with optional integrations, plus
-the RepoQL integration this variant adds: the OpenChamber bundle connects to
+Memory: memory-core + memory-hub + proxy) plus the RepoQL integration, shipped
+through exactly four installation options (`--variant 1-4`): the OpenChamber
+bundle connects to
 the user's existing RepoQL installation (code intelligence through the
 `repoql` MCP server).
 
 - `openchamber/` — OpenChamber configuration bundle: runtime AGENTS.md, nine
   agent definitions (including `ghost`), OpenCode config, the `product-office` plugin
-  (memory capture + optional Office event forwarding), the `runbook-nudge`
+  (memory capture + Office event forwarding), the `runbook-nudge`
   plugin (context-time runbook/RepoQL-reminder nudges + documentation-closure
   instructions), and the RepoQL MCP
   wiring.
@@ -26,8 +27,9 @@ the user's existing RepoQL installation (code intelligence through the
   subagent definitions, memory hooks (recall/capture), documentation hooks
   (start guidance + Stop closeout check), settings-merge installer.
 - `memory/upstream/` — vendored upstream quickstart (byte-exact upstream).
-- `office/`, `ghost/`, `compose/`, `scripts/`, `adapters/`, `templates/` — optional
-  components and helpers (Claude Office visualizer, Ghost persistent companion agent that dreams).
+- `office/`, `ghost/`, `compose/`, `scripts/`, `adapters/`, `templates/` — helpers;
+  Office and Ghost are the bundled parts of installation options 2 and 4
+  (Claude Office visualizer, Ghost persistent companion agent that dreams).
 - `docs/`, `tests/` — documentation and validation.
 
 ## Ground rules
@@ -42,7 +44,7 @@ the user's existing RepoQL installation (code intelligence through the
   `memory/upstream/PROVENANCE.md` accurate.
 - `openchamber/opencode.jsonc` targets current OpenCode config semantics
   (singular `plugin` key). Validate config after edits.
-- The RepoQL integration is part of this variant's product surface
+- The RepoQL integration is part of this repository's product surface
   (`mcp.repoql` in `openchamber/opencode.jsonc`, `compose/repoql.override.yml`,
   `docs/REPOQL-SETUP.md`). Keep it working; `tests/validate-local.sh` checks
   the bundle statically. `repoql`/`rql` references are allowed in this

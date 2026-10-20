@@ -69,7 +69,7 @@ key for routine agent traffic.
 ## 4. Point your harness at the proxy
 
 Claude Code — the installer can DO this step for you with explicit consent
-(`node scripts/install-claude-code.mjs install --enable-main-memory`, details
+(`node scripts/install-claude-code.mjs install --variant 1 --enable-main-memory`, details
 and conflict rules in [`CLAUDE-CODE-SETUP.md`](CLAUDE-CODE-SETUP.md)); the
 manual equivalent is to persist in `~/.claude/settings.json`:
 
@@ -196,7 +196,7 @@ The ones worth knowing early:
 
 ### Binding to an existing MemoryCore (identity map)
 
-Set `AGENT_PROFILE_IDENTITY_MAP=<path>` to a JSON file shaped `{"agents": {"<agent>": {"team_id": "...", "user_id": "...", "agent_id": "..."}}}`. Each agent is then bound to its mapped identity. The seeder first searches that identity: if a stored message already exists, the profile is recorded as `verified` (ledger `source: existing`) and nothing is written. Only a missing charter is seeded. Agents absent from the map fail with `no identity in map`. `AGENT_PROFILE_TEAM` and `AGENT_PROFILE_USER` are ignored in this mode. Use this to point the variant at a MemoryCore that already holds these roles, so charters are not duplicated.
+Set `AGENT_PROFILE_IDENTITY_MAP=<path>` to a JSON file shaped `{"agents": {"<agent>": {"team_id": "...", "user_id": "...", "agent_id": "..."}}}`. Each agent is then bound to its mapped identity. The seeder first searches that identity: if a stored message already exists, the profile is recorded as `verified` (ledger `source: existing`) and nothing is written. Only a missing charter is seeded. Agents absent from the map fail with `no identity in map`. `AGENT_PROFILE_TEAM` and `AGENT_PROFILE_USER` are ignored in this mode. Use this to point the installation at a MemoryCore that already holds these roles, so charters are not duplicated.
 
 Verification rule: a search hit counts as a charter only when it is this agent's own (the seeder session `agent-profile-<name>`, or the roster wording `OpenChamber agent role '<name>'` / `OpenChamber agent "<name>"`). Other stored messages under the identity do not count. A stored record is reused only when team, user and agent id all match.
 

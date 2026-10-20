@@ -1,6 +1,6 @@
 # RepoQL setup — code intelligence for the workspace
 
-This repository is the RepoQL variant of Singularity: the same self-hosted
+This repository is the RepoQL edition of Singularity: the same self-hosted
 memory stack and OpenChamber bundle, with the RepoQL integration wired in. It
 is for people who already run RepoQL — typically on Windows — and want their
 OpenChamber agents to use it.
@@ -24,7 +24,7 @@ The two systems complement each other:
 
 ## Requirements
 
-- RepoQL installed and working. Variant 3 requires the Linux WSL2 binary,
+- RepoQL installed and working. Options 3 and 4 require the Linux WSL2 binary,
   not `rql.exe`; install it with the shell installer below. If the current
   shell does not find `rql`, try `bash -lc 'rql --version'` or
   `~/.local/bin/rql --version`; the installer may add that path only for login
@@ -136,5 +136,5 @@ docker run -d --name repoql-host \
 
 Then declare it as a remote MCP server in `openchamber/opencode.jsonc`
 (`{"type":"remote","url":"http://host:52700/mcp","headers":{"Authorization":"…"}}`).
-See `rql help hosting/container` for the full contract. This variant's shipped
+See `rql help hosting/container` for the full contract. This repository's shipped
 config uses the stdio form above.

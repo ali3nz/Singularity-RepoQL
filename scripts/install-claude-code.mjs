@@ -131,13 +131,16 @@ export function detectRql(home, env = process.env) {
 }
 
 // ── flags ────────────────────────────────────────────────────────────────────
-// ── installation variants (§5): exactly four ────────────────────────────────
-// Variant 1 Claude Code + MemoryCore; 2 Claude Code Complete (adds Ghost +
+// ── installation options (README §START HERE): exactly four ─────────────────
+// Option 1 Claude Code + MemoryCore; 2 Claude Code Complete (adds Ghost +
 // Office, Ghost via the claude backend); 3 Existing OpenChamber + MemoryCore;
 // 4 OpenChamber Complete (adds Ghost + Office on the openchamber backend).
-// Variant selection only VALIDATES and REPORTS mandatory capabilities — the
-// underlying install flow (profiles, hooks, routing, RepoQL MCP) stays single
-// and reused; no second installer is created.
+// These are the ONLY installation surfaces: Ghost and Claude Office are
+// automatically included in options 2/4 and absent from options 1/3 — there
+// are no component selectors or other package combinations. Option selection
+// only VALIDATES and REPORTS mandatory capabilities — the underlying install
+// flow (profiles, hooks, routing, RepoQL MCP) stays single and reused; no
+// second installer is created.
 export const VARIANTS = Object.freeze({
   1: { name: "Claude Code + MemoryCore", ghost: false, office: false },
   2: { name: "Claude Code Complete", ghost: true, office: true, ghostBackend: "claude-code" },
@@ -151,22 +154,63 @@ export const VARIANTS = Object.freeze({
  * not merely configured, so the installer reports what is still missing
  * rather than claiming success.
  */
+/** The user-facing option surface: exactly four numbered installation options. */
+export function installOptionLines() {
+  return ["1", "2", "3", "4"].map((n) => {
+    const v = VARIANTS[n];
+    const parts = [`  ${n}  ${v.name}`];
+    if (v.openchamber) parts.push("(attaches to an EXISTING OpenChamber)");
+    parts.push(v.ghost
+      ? `— Ghost and Claude Office are automatically included (GHOST_BACKEND=${v.ghostBackend}) and cannot be deselected`
+      : "— Ghost and Claude Office are not part of this option");
+    return parts.join(" ");
+  });
+}
+
+/** Map a wizard reply to an installation option id; anything else is refused. */
+export function parseOptionChoice(reply) {
+  const t = String(reply ?? "").trim();
+  return ["1", "2", "3", "4"].includes(t) ? t : null;
+}
+
+/** Usage surface: four numbered installation options + advanced configuration. */
+export function usageText() {
+  return [
+    "usage: install-claude-code.mjs install|uninstall|status [--variant 1|2|3|4]",
+    "",
+    "commands:",
+    "  install    run one of the four installation options (selected with --variant)",
+    "  uninstall  remove the Singularity integration (memories and profiles are kept)",
+    "  status     report what is installed (--probe verifies main-agent routing)",
+    "",
+    "installation options — exactly four, selected with --variant:",
+    ...installOptionLines(),
+    "",
+    "advanced configuration (within any selected installation option, not options themselves):",
+    "  --scope user|project  --project-dir DIR  --team T  --user U",
+    "  --enable-main-memory | --no-main-memory  --replace-provider",
+    "  --skip-profiles  --skip-repoql-mcp  --probe  --dry-run",
+  ].join("\n");
+}
+
 export function resolveVariant(flags, deps = {}) {
   const v = VARIANTS[flags.variant];
-  if (!v) return { ok: false, problems: [`variant ${flags.variant} is not one of 1..4`], notes: [] };
+  if (!v) return { ok: false, problems: [`option ${flags.variant} is not one of 1..4 (exactly four installation options exist)`], notes: [] };
   const problems = [];
   const notes = [];
-  if (flags.skipProfiles) problems.push("specialist-agent profile provisioning is mandatory in every variant — --skip-profiles cannot be combined with a variant");
-  if (flags.scope !== "user") notes.push(`variant runs written at user scope; project scope (${flags.scope}) still works for the integration itself`);
+  if (flags.skipProfiles) problems.push("specialist-agent profile provisioning is mandatory in every installation option — --skip-profiles cannot be combined with an installation option");
+  if (flags.scope !== "user") notes.push(`option runs written at user scope; project scope (${flags.scope}) still works for the integration itself`);
   if (v.ghost) {
+    // Ghost + Claude Office are automatically IN the complete options: no
+    // selector exists; the package must still carry the parts.
     // Deps may override existence probes (unit tests, relocated checkouts).
     const ghostOk = deps.ghostSetupExists ? deps.ghostSetupExists(join(ROOT, "ghost", "setup-ghost.sh")) : existsSync(join(ROOT, "ghost", "setup-ghost.sh"));
-    if (!ghostOk) problems.push("Ghost is mandatory for this variant but ghost/setup-ghost.sh is missing from the package");
-    else notes.push(`Ghost backend for this variant: ${v.ghostBackend} — set GHOST_BACKEND=${v.ghostBackend} when running ghost/ghost-gateway.mjs (see ghost/README.md)`);
+    if (!ghostOk) problems.push("Ghost is mandatory for this installation option but ghost/setup-ghost.sh is missing from the package");
+    else notes.push(`Ghost backend for this installation option: ${v.ghostBackend} — set GHOST_BACKEND=${v.ghostBackend} when running ghost/ghost-gateway.mjs (see ghost/README.md)`);
   }
   if (v.office) {
     const officeOk = deps.officeComposeExists ? deps.officeComposeExists(join(ROOT, "office", "office.compose.yml")) : existsSync(join(ROOT, "office", "office.compose.yml"));
-    if (!officeOk) problems.push("Claude Office is mandatory for this variant but office/office.compose.yml is missing from the package");
+    if (!officeOk) problems.push("Claude Office is mandatory for this installation option but office/office.compose.yml is missing from the package");
   }
   if (v.openchamber) {
     // Never install a duplicate OpenChamber: detect the EXISTING instance.
@@ -175,7 +219,7 @@ export function resolveVariant(flags, deps = {}) {
       ? deps.detectOpenchamber()
       : (existsSync(join(home, ".config", "opencode")) || existsSync(join(home, ".local", "share", "opencode")));
     if (!existing) {
-      problems.push("this variant attaches to an EXISTING OpenChamber installation but none was detected (~/.config/opencode or ~/.local/share/opencode) — install OpenChamber first (docs/OPENCHAMBER-SETUP.md)");
+      problems.push("this installation option attaches to an EXISTING OpenChamber installation but none was detected (~/.config/opencode or ~/.local/share/opencode) — install OpenChamber first (docs/OPENCHAMBER-SETUP.md)");
     } else {
       notes.push("reusing the detected existing OpenChamber installation; nothing gets reinstalled");
     }
@@ -461,20 +505,35 @@ async function readLine(prompt) {
 export async function runInstall(flags) {
   log(`installing the Singularity Claude Code integration (${flags.scope} scope)${flags.dryRun ? " — dry run" : ""}`);
 
-  // Variant validation (§5): mandatory capabilities are verified BEFORE any
-  // files change; a variant with unmet requirements refuses install.
-  let variantOutcome = null;
-  if (flags.variant) {
-    variantOutcome = resolveVariant(flags);
-    log(`  variant:  ${flags.variant} — ${variantOutcome.variant.name}`);
-    for (const n of variantOutcome.notes) log(`  variant note: ${n}`);
-    if (!variantOutcome.ok) {
-      for (const p of variantOutcome.problems) warn(`  variant REFUSED: ${p}`);
-      warn(`  variant:  installation stopped unmodified; resolve the mandatory capabilities above, then re-run`);
-      return 4; // variant requirement refusal: the on-disk state was not touched
+  // Option validation: mandatory capabilities are verified BEFORE any files
+  // change; an option with unmet requirements refuses install. Exactly four
+  // installation options exist — an install without one is stopped (on an
+  // interactive terminal the four options are offered as a numbered menu), so
+  // there is never an unnumbered "base" install.
+  if (!flags.variant) {
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      log("Select an installation option (exactly four exist — README §START HERE):");
+      for (const line of installOptionLines()) log(line);
+      let chosen = null;
+      try { chosen = parseOptionChoice(await readLine("installation option [1-4]: ")); } catch { chosen = null; }
+      if (!chosen) {
+        warn("no installation option selected — installation stopped unmodified");
+        return 2;
+      }
+      flags.variant = chosen;
+    } else {
+      warn("no installation option selected — installation stopped unmodified");
+      warn("exactly four installation options exist: select one with --variant 1|2|3|4 (README §START HERE)");
+      return 2;
     }
-  } else {
-    log("  variant:  none selected — install runs with the base integration only (README §START HERE lists variants 1-4)");
+  }
+  const variantOutcome = resolveVariant(flags);
+  log(`  option:   ${flags.variant} — ${variantOutcome.variant.name}`);
+  for (const n of variantOutcome.notes) log(`  option note: ${n}`);
+  if (!variantOutcome.ok) {
+    for (const p of variantOutcome.problems) warn(`  option REFUSED: ${p}`);
+    warn("  option:   installation stopped unmodified; resolve the mandatory capabilities above, then re-run");
+    return 4; // option requirement refusal: the on-disk state was not touched
   }
 
   // Main-agent memory decision: explicit flags win; otherwise offer interactively
@@ -485,14 +544,14 @@ export async function runInstall(flags) {
     mainMemoryFlags = { enabled: flags.mainMemory, replaceProvider: flags.replaceProvider };
   } else if (process.stdout.isTTY) {
     try {
-      const reply = (await readLine("Enable persistent memory for your NORMAL Claude Code sessions via the Singularity proxy? [Y/n] ")).trim().toLowerCase();
+      const reply = (await readLine(`configuration for installation option ${flags.variant}: enable persistent memory for your NORMAL Claude Code sessions via the Singularity proxy? [Y/n] `)).trim().toLowerCase();
       mainMemoryFlags = { enabled: reply !== "n" && reply !== "no", replaceProvider: flags.replaceProvider };
     } catch {
       mainMemoryFlags = { enabled: false, replaceProvider: flags.replaceProvider };
     }
   } else {
     mainMemoryFlags = { enabled: false, replaceProvider: flags.replaceProvider };
-    log("  main:     non-interactive run — pass --enable-main-memory to enable normal-agent persistent memory (see docs/CLAUDE-CODE-SETUP.md)");
+    log("  main:     non-interactive run — advanced configuration: pass --enable-main-memory to enable normal-agent persistent memory (see docs/CLAUDE-CODE-SETUP.md)");
   }
 
   const envOverrides = {
@@ -572,9 +631,7 @@ export async function runInstall(flags) {
       agentLedger,
       mcp: mcp && !mcp.present ? { name: mcp.name, transport: mcp.transport, command: mcp.command, scope: mcp.scope } : null,
       profileLedger: join(ROOT, "data/agent-profiles/ledger.json"),
-      variant: flags.variant
-        ? { id: flags.variant, name: VARIANTS[flags.variant].name, ghostBackend: VARIANTS[flags.variant].ghostBackend || null, verified: variantOutcome.ok }
-        : null,
+      variant: { id: flags.variant, name: VARIANTS[flags.variant].name, ghostBackend: VARIANTS[flags.variant].ghostBackend || null, verified: variantOutcome.ok },
     });
   }
 
@@ -744,7 +801,7 @@ export async function runStatus(flags) {
   log(`install: scope=${record.scope} settings=${record.settingsPath} installedAt=${record.installedAt}`);
   log(`agents dir: ${record.agentsDir}`);
   log(`hooks: ${record.hooksScript}${record.docHooksScript ? ` + ${record.docHooksScript}` : ""}`);
-  if (record.variant) log(`variant: ${record.variant.id} — ${record.variant.name}${record.variant.ghostBackend ? ` (ghost backend: ${record.variant.ghostBackend})` : ""}${record.variant.verified ? "" : " [unverified]"}`);
+  if (record.variant) log(`option: ${record.variant.id} — ${record.variant.name}${record.variant.ghostBackend ? ` (ghost backend: ${record.variant.ghostBackend})` : ""}${record.variant.verified ? "" : " [unverified]"}`);
   log(`env keys: ${Object.keys(record.envWritten || {}).join(", ") || "(none)"}`);
   const settings = readJson(record.settingsPath);
   const events = settings?.hooks ? Object.keys(settings.hooks).filter((k) => ["SubagentStart", "SubagentStop", "SessionStart", "Stop"].includes(k)) : [];
@@ -779,7 +836,7 @@ export async function runStatus(flags) {
 export async function main(argv) {
   const [command, ...rest] = argv;
   if (!["install", "uninstall", "status"].includes(command)) {
-    log("usage: install-claude-code.mjs install|uninstall|status [--scope user|project] [--project-dir DIR] [--team T] [--user U] [--skip-profiles] [--skip-repoql-mcp] [--enable-main-memory] [--no-main-memory] [--replace-provider] [--probe] [--dry-run]");
+    log(usageText());
     return 2;
   }
   let flags;
@@ -787,6 +844,7 @@ export async function main(argv) {
     flags = parseFlags(rest, process.env.HOME, process.cwd());
   } catch (e) {
     log(`usage error: ${e.message}`);
+    log(usageText());
     return 2;
   }
   if (command === "install") return runInstall(flags);

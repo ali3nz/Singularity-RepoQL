@@ -1,6 +1,6 @@
-# Windows 11 (WSL2 + Docker) — RepoQL variant
+# Windows 11 (WSL2 + Docker) — walkthrough
 
-This variant targets RepoQL users who want the memory stack and OpenChamber
+This walkthrough targets RepoQL users who want the memory stack and OpenChamber
 alongside their existing Windows RepoQL installation. The Linux containers
 run inside WSL2; no native Windows container port is involved.
 
@@ -12,8 +12,8 @@ Desktop WSL integration is an alternative but was not exercised in this run.
 The platform remains **experimental**: machine OS build/kernel metadata and
 several UI, reboot, and backup/restore steps were not verified.
 
-Verified: Variant A memory stack health and `verify.sh`; memory capture/recall
-loop; Claude Code proxy smoke test (HTTP 200); Variant B images built from
+Verified: memory stack health and `verify.sh`; memory capture/recall
+loop; Claude Code proxy smoke test (HTTP 200); the OpenChamber and Claude Office images built from
 OpenChamber `bf977d2ed` and Claude Office `1fce512`; OpenChamber and Office
 HTTP endpoints returned 200, with Office healthy; rql 1.7.15 was mounted in
 OpenChamber and the `rql mcp` initialize handshake passed. The RepoQL host
@@ -47,7 +47,7 @@ restore. Do not claim full acceptance until these are tested.
   Endpoint reachability verifies transport only, not model quality. For
   Windows-hosted model servers, use an address reachable from the containers;
   do not assume `127.0.0.1` inside a container points to Windows.
-- Variant A uses Claude Code. If it is not installed in WSL2, install the
+- Options 1–2 use Claude Code. If it is not installed in WSL2, install the
   Linux build from Anthropic's official guide:
   `curl -fsSL https://claude.ai/install.sh | bash`, then `claude --version`.
   A Windows-side `claude.exe` absent from WSL's PATH is not available to the
@@ -78,7 +78,7 @@ scripts/start-memory-stack.sh         # safe wrapper; redacts key output
 python3 scripts/provision-secrets.py
 ```
 
-For Variant B, copy the repository's `openchamber/` bundle into
+For options 3/4, copy the repository's `openchamber/` bundle into
 `data/opencode/config/` as documented in `INSTRUCTIONS.md`. This directory is
 specific to the container runtime: do not copy it over Windows Electron's
 configuration or a user's existing native OpenCode configuration. Build
@@ -122,7 +122,7 @@ handshake; a real UI tool call still needs a human session check.
 
 - [x] Memory stack and `verify.sh`; memory capture/recall loop.
 - [x] Claude Code proxy smoke test returned HTTP 200.
-- [x] Variant B OpenChamber and Office containers started; ports 3127/3128
+- [x] OpenChamber and Office containers started; ports 3127/3128
       returned HTTP 200; Office health was healthy.
 - [x] RepoQL 1.7.15 in the container and MCP initialize handshake.
 - [ ] Create a Team and business user in the Panel.
