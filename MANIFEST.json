@@ -1,7 +1,7 @@
 {
   "name": "Singularity-RepoQL",
-  "version": "0.1.0-rc2",
-  "generated": "2026-10-20T01:30:00Z",
+  "version": "0.1.0-rc3",
+  "generated": "2026-10-20T03:20:00Z",
   "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, optional Ghost persistent companion agent that dreams, and harness adapters.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {
@@ -53,6 +53,12 @@
       "source": "authored for this repository",
       "vendored": false,
       "note": "native Claude Code subagents (seven singularity-* roles incl. the Board of Advisors) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost stays a separate optional add-on and standalone remains main-agent guidance, not a subagent"
+    },
+    "documentation_system": {
+      "path": "scripts/doc-policy.mjs + scripts/memory-doc-ingest.py + scripts/memory_client.py + adapters/claude-code/doc-hook.mjs",
+      "source": "authored for this repository",
+      "vendored": false,
+      "note": "shared documentation policy for OpenChamber and Claude Code: DOC_UPDATED / DOC_NOT_REQUIRED / DOC_BLOCKED outcomes, deterministic closure check (doc-policy.mjs assess|check), automatic MemoryCore ingestion of current runbook content (eligibility allowlist, secret rejection, heading chunking, hash-dedup chunk idempotency, verified retrieval, revision supersession tombstones, atomic flock ledger under data/doc-index/), dedicated shared docs-keeper scope, and Claude Code SessionStart guidance + Stop closeout hooks; details in docs/DOC-INGESTION.md"
     },
     "memory_startup_safety": {
       "path": "scripts/start-memory-stack.sh + scripts/redact-memory-startup.py + scripts/verify-memory-user-key.py (and the loopback publishing boundary check)",

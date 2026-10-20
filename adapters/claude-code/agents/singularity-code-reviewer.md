@@ -38,6 +38,18 @@ is defective.
 
 If RepoQL is not connected, skip this section and say NO_CONCEPT_CHANGE (repoql unavailable).
 
+## Documentation outcome (shared policy — verified, not assumed)
+
+For material changes, the review verdict must state the documentation outcome
+the implementation reported: `DOC_UPDATED`, `DOC_NOT_REQUIRED` (valid only for
+non-material changes, with a reason) or `DOC_BLOCKED` (never approves the task).
+For `DOC_UPDATED`, verify the documentation actually exists on disk and was
+ingested with `DOC_INGEST_INDEXED` (check `python3 scripts/memory-doc-ingest.py
+status --file <doc> --all`); a `PENDING`/`FAILED` ingestion means the relevant
+work is incomplete — report it, and never approve around it. You do not edit
+implementation files or documentation yourself; return the gap as a finding so
+the implementer closes it.
+
 ## Persistent memory
 
 This agent has a durable MemoryCore profile (identity role `code-reviewer`) in

@@ -81,6 +81,20 @@ State lives in `data/knowledge-store/` (`current-truth/`, `history/`,
 installation layout (`data/knowledge-store`, the plugin's `memory.json`) and
 can be overridden with `KNOWLEDGE_STORE` and `MEMORY_SECRETS`.
 
+## 4a. Documentation ingestion (shared engine; docs stay authoritative)
+
+Runbooks and guides are ingested by the documentation engine
+(`scripts/memory-doc-ingest.py`, full guide: `docs/DOC-INGESTION.md`):
+eligibility → sensitive-content rejection → chunking by headings → idempotent
+chunk writes → bounded retrieval verification → revision supersession → atomic
+ledger update, under a dedicated shared scope (`agent: docs-keeper`, team
+`singularity-docs`/user `shared`). Only `DOC_INGEST_INDEXED` (persisted AND
+verified searchable) closes a documentation requirement; `PENDING`/`FAILED`
+keep the previous verified revision active and retry later. The completion
+gate (`scripts/doc-policy.mjs assess | check`) records and re-verifies the
+documentation outcome (`DOC_UPDATED` / `DOC_NOT_REQUIRED` + reason /
+`DOC_BLOCKED`) deterministically from both clients.
+
 ## 5. Validation
 
 `tests/validate-memory-loop.sh` exercises the machine-checkable chain against

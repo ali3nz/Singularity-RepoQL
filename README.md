@@ -148,6 +148,23 @@ and [`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md).
   optional router in front of the core's extraction endpoint. A single-provider
   installation does not need it.
 
+## Documentation enforcement and automatic MemoryCore ingestion
+
+Runbooks and guides are first-class outputs, not an afterthought. Both client
+surfaces (OpenChamber and Claude Code) follow the same shared policy:
+
+- material tasks report `DOC_UPDATED` / `DOC_NOT_REQUIRED` (with a reason) /
+  `DOC_BLOCKED`; only genuinely non-material work may skip documentation
+- updated runbooks are ingested (`scripts/memory-doc-ingest.py ingest`) and
+  verified as genuinely SEARCHABLE (`DOC_INGEST_INDEXED`), not merely noted
+- revisions supersede previous ones; retrieval offers the current procedure
+  and excludes stale versions
+- `node scripts/doc-policy.mjs check --session <id>` re-verifies any task's
+  documentation closure deterministically (usable from review and CI)
+
+Details, statuses, revision management and troubleshooting:
+[`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md).
+
 ## Repository layout
 
 ```text
@@ -157,9 +174,9 @@ office/        README.md, office.compose.yml
 ghost/         README.md, ghost.compose.yml, setup-ghost.sh, dream.mjs, ghost-memory.mjs, ghost-turn.mjs, ghost-gateway.mjs, seed/, systemd/
 compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
 scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
-adapters/      claude-code/ (Office adapter + Claude Code native-agent integration)
+adapters/      claude-code/ (Office adapter + Claude Code native-agent integration + doc hooks)
 templates/     product.env.example
-docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
+docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, CLAUDE-CODE-SETUP, DOC-INGESTION, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
 tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh
 ```
 
@@ -178,8 +195,12 @@ Clone https://github.com/ali3nz/Singularity-RepoQL , open INSTRUCTIONS.md,
 and execute the "Variant A" section exactly as written.
 Windows only: this machine is Windows 11 with WSL2 and Docker Desktop, and
 rql is already installed and on PATH. Do not install Claude Office or
-OpenChamber. Report what you installed, every verification command and its
-output, and anything that did not match the documented behavior.
+OpenChamber. The install includes the specialised Claude Code subagents,
+their persistent MemoryCore identities (recall + lesson capture), RepoQL MCP
+and the documentation hooks (start guidance + Stop closeout check + automatic
+MemoryCore runbook ingestion — see docs/DOC-INGESTION.md). Report what you
+installed, every verification command and its output, and anything that did
+not match the documented behavior.
 ```
 
 **Variant B — full stack with OpenChamber, the specialised agents
@@ -191,7 +212,10 @@ and execute the "Variant B" section exactly as written. Windows only: this machi
 Docker Desktop, and rql is already installed and on PATH; start.sh should
 detect it and mount it into OpenChamber automatically. The specialised
 agents shipped in openchamber/agents (including board, the Board of
-Advisors) install with the bundle. Report what you installed, every
+Advisors) install with the bundle, and documentation works the same way as in
+Claude Code: the runbook closeout requires a DOC_UPDATED / DOC_NOT_REQUIRED /
+DOC_BLOCKED outcome and ingests updated runbooks into MemoryCore with
+verified retrieval (docs/DOC-INGESTION.md). Report what you installed, every
 verification command and its output, and anything that did not match the
 documented behavior.
 ```
@@ -204,6 +228,8 @@ documented behavior.
 [`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md) ·
 
 [`docs/MEMORY-LOOP.md`](docs/MEMORY-LOOP.md) ·
+
+[`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md) ·
 
 [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md) ·
 

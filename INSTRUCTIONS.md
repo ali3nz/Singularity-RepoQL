@@ -95,12 +95,17 @@ cd Singularity-RepoQL
    ```
 
    This installs the seven `singularity-*` subagent definitions to
-   `~/.claude/agents/`, merges the SubagentStart (memory recall) and
-   SubagentStop (lesson capture) hooks and env into `~/.claude/settings.json`
+   `~/.claude/agents/`, merges the memory hooks (SubagentStart recall +
+   SubagentStop lesson capture) AND the documentation hooks (SessionStart
+   guidance + Stop closeout check) and env into `~/.claude/settings.json`
    (merging, never replacing; a timestamped backup is written), provisions/
    verifies the agents' persistent MemoryCore profiles (the same identities the
    OpenChamber agents use), and registers the `singularity-repoql` MCP server
-   when a Linux `rql` is detected. Re-running it is idempotent. Full details,
+   when a Linux `rql` is detected. The documentation hooks enforce the shared
+   documentation policy and automatically ingest updated runbooks into
+   MemoryCore with verified retrieval — see
+   [`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md). Re-running it is
+   idempotent. Full details,
    flags (`--scope project`, `--team/--user`, `--dry-run`) and verification:
    [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md). If a scoped user
    key was not yet provisioned, the installer still completes and the hooks

@@ -30,10 +30,13 @@ check node --test scripts/install-claude-code.profiles.test.mjs
 check node --test adapters/claude-code/integration.test.mjs
 check node --test adapters/claude-code/memory-hook.test.mjs
 check node --test adapters/claude-code/installer.test.mjs
+check node --test adapters/claude-code/doc-hook.test.mjs
+check node --test tests/doc-policy.test.mjs
 check node --test ghost/dream.test.mjs
 check node --test ghost/ghost-gateway.test.mjs
 check python3 tests/test-memory-security.py
 check python3 tests/test-memory-promote.py
+check python3 tests/test-memory-doc-ingest.py
 for f in openchamber/plugins/product-office/*.test.mjs \
          openchamber/plugins/runbook-nudge/*.test.mjs; do check node --test "$f"; done
 
@@ -58,6 +61,13 @@ check test -f docs/REPOQL-SETUP.md
 check test -f docs/CLAUDE-CODE-SETUP.md
 check test -f adapters/claude-code/agent-map.mjs
 check test -f adapters/claude-code/memory-hook.mjs
+check test -f adapters/claude-code/doc-hook.mjs
+check test -f scripts/doc-policy.mjs
+check test -f scripts/memory-doc-ingest.py
+check test -f scripts/memory_client.py
+grep -q "memory-doc-ingest.py" openchamber/AGENTS.md
+# The shared documentation policy surface must be importable from both clients
+check node -e 'const m=require("fs").existsSync; if(!m("scripts/doc-policy.mjs")||!m("adapters/claude-code/doc-hook.mjs")) throw new Error("shared documentation policy surface missing")'
 check test -f compose/repoql.override.yml
 check grep -qi "repoql" openchamber/AGENTS.md
 

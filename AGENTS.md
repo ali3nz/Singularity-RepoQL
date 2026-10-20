@@ -15,8 +15,16 @@ the user's existing RepoQL installation (code intelligence through the
 - `openchamber/` — OpenChamber configuration bundle: runtime AGENTS.md, nine
   agent definitions (including `ghost`), OpenCode config, the `product-office` plugin
   (memory capture + optional Office event forwarding), the `runbook-nudge`
-  plugin (context-time runbook/RepoQL-reminder nudges), and the RepoQL MCP
+  plugin (context-time runbook/RepoQL-reminder nudges + documentation-closure
+  instructions), and the RepoQL MCP
   wiring.
+- `scripts/doc-policy.mjs` + `scripts/memory-doc-ingest.py` — the SHARED
+  documentation policy and automatic MemoryCore runbook ingestion used by both
+  OpenChamber and the Claude Code integration
+  (`adapters/claude-code/doc-hook.mjs`).
+- `adapters/claude-code/` — Claude Code integration: native `singularity-*`
+  subagent definitions, memory hooks (recall/capture), documentation hooks
+  (start guidance + Stop closeout check), settings-merge installer.
 - `memory/upstream/` — vendored upstream quickstart (byte-exact upstream).
 - `office/`, `ghost/`, `compose/`, `scripts/`, `adapters/`, `templates/` — optional
   components and helpers (Claude Office visualizer, Ghost persistent companion agent that dreams).
@@ -47,3 +55,8 @@ the user's existing RepoQL installation (code intelligence through the
 - Follow existing conventions, prefer the smallest change, and do not expand
   scope. If a change affects documented behavior, update the matching
   document under `docs/` in the same change.
+- Material tasks report a documentation outcome (`DOC_UPDATED` /
+  `DOC_NOT_REQUIRED` with a reason / `DOC_BLOCKED`); updated runbooks are
+  ingested with `scripts/memory-doc-ingest.py` and verified searchable before
+  completion is claimed. `node scripts/doc-policy.mjs check` verifies any
+  task's closure deterministically (`docs/DOC-INGESTION.md`).

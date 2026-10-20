@@ -4,6 +4,14 @@ This repository wires agent memory (the memory stack) and workspace code
 intelligence (RepoQL) so that lessons actually stick, without burning tokens
 on routine turns and without a second memory database.
 
+Closure reporting (both clients): when a task ends, its knowledge step is
+reported as one of `CAPTURED` (a lesson was captured through the surfaces
+below), `NO_LESSON` (nothing durable — acceptable and normal) or `DEFERRED` (eligible
+but held by a documented cap — never silently dropped). These token values are
+part of the shared documentation closure assessment (`scripts/doc-policy.mjs
+assess`); documentation ingestion for material runbook updates is a separate,
+verified path (`scripts/memory-doc-ingest.py`, see `docs/DOC-INGESTION.md`).
+
 ## What runs automatically, what does not
 
 - The memory plugin is the ONLY automatic capture writer: it posts completed

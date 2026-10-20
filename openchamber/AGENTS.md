@@ -206,6 +206,22 @@ steps, untested recovery procedures marked as such, and a `Last updated`
 date kept fresh. If you lack write access, report the proposed update
 instead.
 
+**Documentation closure (shared with Claude Code).** For material tasks,
+report exactly one outcome: `DOC_UPDATED`, `DOC_NOT_REQUIRED` (with a
+concrete reason; valid only for genuinely non-material changes such as
+formatting, typos or throwaway work) or `DOC_BLOCKED` (never closes a task).
+When documentation was created or updated, ingest the current content into
+the installation's memory stack and verify it is searchable —
+`python3 scripts/memory-doc-ingest.py ingest --file <doc> --root <docs root>`
+with the outcome `DOC_INGEST_INDEXED` (or `DOC_INGEST_UNCHANGED`); treat
+`DOC_INGEST_PENDING`/`DOC_INGEST_FAILED` as incomplete and retry with
+`memory-doc-ingest.py retry --file <doc> --root <root>`. Record the closure
+assessment (`python3 scripts/doc-policy.mjs assess --session <id> --files
+<changed files> --doc-status <status> ...`) and report its SINGDOC token, so
+completion can be re-checked deterministically instead of trusted from prose.
+Filesystem documentation remains the source of truth; memory holds the
+searchable indexed copy, and retrieval may not silently overwrite the file.
+
 **Continuity.** Search existing issue lists and tracking records before
 starting work; reuse a matching record instead of opening a duplicate, and
 claim shared state before changing it. Do not run parallel competing work,

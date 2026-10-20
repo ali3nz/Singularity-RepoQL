@@ -7,8 +7,13 @@ Two independent pieces live here:
 2. **Native agent integration** ([`docs/CLAUDE-CODE-SETUP.md`](../../docs/CLAUDE-CODE-SETUP.md)):
    the seven `singularity-*` subagent definitions in `agents/`, the
    SubagentStart (recall) / SubagentStop (lesson capture) MemoryCore hooks in
-   `memory-hook.mjs`, and an idempotent installer (`scripts/install-claude-code.mjs`)
-   that wires them to persistent identities and registers RepoQL MCP.
+   `memory-hook.mjs`, the documentation hooks in `doc-hook.mjs` (SessionStart
+   guidance + Stop documentation-closure check with automatic MemoryCore
+   runbook ingestion — shared policy with OpenChamber via
+   `scripts/doc-policy.mjs` / `scripts/memory-doc-ingest.py`, see
+   [`docs/DOC-INGESTION.md`](../../docs/DOC-INGESTION.md)), and an idempotent
+   installer (`scripts/install-claude-code.mjs`) that wires them to persistent
+   identities and registers RepoQL MCP.
 
 ---
 

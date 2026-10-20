@@ -95,11 +95,21 @@ tracked under plugin storage. A missing Office changes nothing about memory
 capture.
 
 `plugins/runbook-nudge/` works alongside it: a non-gating context hook that
-asks the primary agent to check tracking records, the covering runbook and
-existing RepoQL concepts before substantial work, and to create/update the
-runbook, refresh concepts and report validation honestly before its final
-answer. It is fail-open, it never edits anything, and
-`OPENCHAMBER_RUNBOOK_NUDGE=off` disables it; details in the plugin README.
+asks the primary agent to check tracking records, the covering runbook,
+existing RepoQL concepts and the installation's indexed shared documentation
+(`python3 scripts/memory-doc-ingest.py search "<topic>"`) before substantial
+work, and to create/update the runbook, refresh concepts, report validation
+honestly AND a documented documentation outcome (`DOC_UPDATED` /
+`DOC_NOT_REQUIRED` with a reason / `DOC_BLOCKED`) before its final answer.
+When documentation was updated, the closeout nudge instructs the agent to
+ingest it into MemoryCore (`memory-doc-ingest.py ingest`, verified retrieval
+required) and record the closure assessment (`scripts/doc-policy.mjs assess`,
+SINGDOC token) — the SAME policy the Claude Code integration enforces. It is
+fail-open, it never edits anything, it stays a reminder (OpenCode exposes no
+documented stop-interception hook; closure is enforced through review, the
+deterministic `doc-policy.mjs check` and release validation, not a synthetic
+hard stop), and `OPENCHAMBER_RUNBOOK_NUDGE=off` disables it; details in
+[`docs/DOC-INGESTION.md`](DOC-INGESTION.md).
 
 ## RepoQL integration
 

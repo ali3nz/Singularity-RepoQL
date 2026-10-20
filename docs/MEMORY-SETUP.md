@@ -161,6 +161,12 @@ node scripts/setup-agent-profiles.mjs             # seed missing profiles
   Details and verification: [`CLAUDE-CODE-SETUP.md`](CLAUDE-CODE-SETUP.md).
 - Ghost is excluded: it keeps its own `ghost-companion` profile (see
   [GHOST-SETUP.md](GHOST-SETUP.md)); a second `ghost` scope would conflict.
+- Documentation knowledge is intentionally SEPARATE from agent profiles: it
+  lives under a dedicated shared scope (`agent: docs-keeper`, team
+  `singularity-docs`/user `shared` by default) maintained by
+  `scripts/memory-doc-ingest.py`, so runbooks can be retrieved by any agent
+  without exposing one agent's private experience to another. See
+  [`DOC-INGESTION.md`](DOC-INGESTION.md).
 - Defaults: team `openchamber-agents`, user from the memory config
   (`pilot-operator` when unset). Override with `AGENT_PROFILE_TEAM` and
   `AGENT_PROFILE_USER`.

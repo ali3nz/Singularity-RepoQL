@@ -13,12 +13,29 @@ import { join } from "node:path";
 export const HOOK_SCRIPT = "memory-hook.mjs";
 export const HOOK_KINDS = ["subagent-start", "subagent-stop"];
 export const HOOK_EVENTS = ["SubagentStart", "SubagentStop"];
+// The documentation hooks live in doc-hook.mjs and cover SessionStart (guidance)
+// and Stop (closeout check) — an extension of the SAME integration, never a
+// second installation.
+export const DOC_HOOK_SCRIPT = "doc-hook.mjs";
+export const DOC_HOOK_KINDS = ["session-start", "stop"];
+export const DOC_HOOK_EVENTS = ["SessionStart", "Stop"];
+export const HOOK_SCRIPTS = [HOOK_SCRIPT, DOC_HOOK_SCRIPT];
+export const ALL_HOOK_KINDS = [...HOOK_KINDS, ...DOC_HOOK_KINDS];
+export const ALL_HOOK_EVENTS = [...HOOK_EVENTS, ...DOC_HOOK_EVENTS];
 export const MEMORY_ENV_KEYS = ["SINGULARITY_REPO_ROOT", "SINGULARITY_MEMORY_CONFIG"];
+
+const KINDS_BY_SCRIPT = new Map([
+  [HOOK_SCRIPT, new Set(HOOK_KINDS)],
+  [DOC_HOOK_SCRIPT, new Set(DOC_HOOK_KINDS)],
+]);
 
 export function isSingularityHookCommand(command) {
   if (typeof command !== "string") return false;
   const parts = command.trim().split(/\s+/);
-  return parts.some((p) => p.endsWith(HOOK_SCRIPT)) && parts.some((p) => HOOK_KINDS.includes(p));
+  for (const [script, kinds] of KINDS_BY_SCRIPT) {
+    if (parts.some((p) => p.endsWith(script)) && parts.some((p) => kinds.has(p))) return true;
+  }
+  return false;
 }
 
 function handlerCommand(scriptPath, kind) {
@@ -26,13 +43,17 @@ function handlerCommand(scriptPath, kind) {
 }
 
 /**
- * Ensure exactly one SubagentStart and one SubagentStop handler for this
- * integration exist, and ensure the integration's env keys are set. Existing
- * non-empty values for env keys are preserved (a user override wins).
+ * Ensure exactly ONE handler per Singularity hook kind (memory subagent hooks
+ * and documentation hooks) exists on its event, and ensure the integration's
+ * env keys are set. Second handler script (doc hook) is placed on the SAME
+ * pre-existing group as the memory hook so owner grouping stays intact.
+ * Existing non-empty env values are preserved (a user override wins).
  * Returns { settings: <new Settings>, changed: boolean }.
  */
 export function ensureMemoryIntegration(input, opts) {
   const { scriptPath, env = {} } = opts;
+  // The doc hook lives beside the memory hook; both are this integration.
+  const docScriptPath = String(scriptPath).replace(/memory-hook\.mjs$/, DOC_HOOK_SCRIPT);
   const settings = structuredClone(input) || {};
   settings.hooks = (settings.hooks && typeof settings.hooks === "object") ? settings.hooks : {};
   let changed = false;
@@ -48,6 +69,33 @@ export function ensureMemoryIntegration(input, opts) {
     if (already) continue;
 
     // Attach to an existing matcher group (we do not use matchers; ANY group works).
+    let placed = false;
+    for (const g of groups) {
+      if (Array.isArray(g?.hooks) && !isSingularityHookPresent(g)) {
+        g.hooks.push({ type: "command", command: wanted });
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const next = groups.slice();
+      next.push({ hooks: [{ type: "command", command: wanted }] });
+      settings.hooks[event] = next;
+    }
+    changed = true;
+  }
+
+  // Doc hooks: SessionStart guidance + Stop closeout check.
+  for (let i = 0; i < DOC_HOOK_EVENTS.length; i++) {
+    const kind = DOC_HOOK_KINDS[i];
+    const event = DOC_HOOK_EVENTS[i];
+    const wanted = handlerCommand(docScriptPath, kind);
+    const groups = Array.isArray(settings.hooks[event]) ? settings.hooks[event] : [];
+
+    const already = groups.some(g =>
+      Array.isArray(g?.hooks) && g.hooks.some(h => h?.command === wanted));
+    if (already) continue;
+
     let placed = false;
     for (const g of groups) {
       if (Array.isArray(g?.hooks) && !isSingularityHookPresent(g)) {
@@ -93,7 +141,7 @@ export function removeMemoryIntegration(input, opts) {
   let hooksChanged = false;
 
   if (settings.hooks && typeof settings.hooks === "object") {
-    for (const event of HOOK_EVENTS) {
+    for (const event of ALL_HOOK_EVENTS) {
       const groups = settings.hooks[event];
       if (!Array.isArray(groups)) continue;
       const next = [];

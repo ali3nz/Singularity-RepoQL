@@ -29,6 +29,8 @@ jobs:
           node --test scripts/cohere-quota.test.mjs
           node --test scripts/extraction-failover.test.mjs
           node --test scripts/install-claude-code.profiles.test.mjs
+          node --test adapters/claude-code/doc-hook.test.mjs
+          node --test tests/doc-policy.test.mjs
           node --test adapters/claude-code/integration.test.mjs
           node --test adapters/claude-code/memory-hook.test.mjs
           node --test adapters/claude-code/installer.test.mjs
@@ -39,6 +41,7 @@ jobs:
         run: |
           python3 tests/test-memory-security.py
           python3 tests/test-memory-promote.py
+          python3 tests/test-memory-doc-ingest.py
 
       - name: Local validation (configs, syntax, references)
         run: bash tests/validate-local.sh

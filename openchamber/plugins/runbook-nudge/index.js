@@ -18,7 +18,10 @@ export const START_REMINDER =
   "this task in the narrowest relevant docs area. If one exists, read and follow it; note " +
   "missing or incorrect steps. Do not keep searching once the task is covered. Also search " +
   "existing RepoQL concepts for the files and decisions this task touches before editing " +
-  "(for example `rql explore`), so you build on them instead of duplicating or contradicting them.";
+  "(for example `rql explore`), so you build on them instead of duplicating or contradicting them. " +
+  "When current operational context helps, also search this installation's indexed shared " +
+  "documentation (`python3 scripts/memory-doc-ingest.py search \"<topic>\"`; bounded result). " +
+  "If an existing indexed runbook covers this task, prefer the current on-disk source; never act on an old memory copy.";
 
 export const CLOSE_REMINDER =
   "[runbook closeout nudge] Before your final answer: " +
@@ -36,7 +39,21 @@ export const CLOSE_REMINDER =
   "again only through the project's documented retirement process. Capture new durable " +
   "wisdom, rules, shapes or knowledge, and link related capsules through tags or SeeAlso. " +
   "(3) VALIDATION — report what you verified with observed output and what remains " +
-  "untested; a command exiting successfully is not proof of correctness.";
+  "untested; a command exiting successfully is not proof of correctness. " +
+  "(4) DOCS-CLOSURE (shared documentation policy — the same rules Claude Code runs) — a " +
+  "material task reports exactly one outcome: DOC_UPDATED, DOC_NOT_REQUIRED (with a " +
+  "concrete reason) or DOC_BLOCKED. DOC_NOT_REQUIRED is only valid for non-material " +
+  "changes (formatting, typos, throwaway work) and BLOCKED never closes a task. When " +
+  "documentation was created or updated, ingest the CURRENT content into the installation's " +
+  "memory stack (`python3 scripts/memory-doc-ingest.py ingest --file <doc> --root <docs " +
+  "root>`) and only claim success with DOC_INGEST_INDEXED (or DOC_INGEST_UNCHANGED); a " +
+  "PENDING/FAILED ingestion must be retried (`retry --file <doc> --root <root>`) or reported " +
+  "as incomplete, never claimed. Finally record the closure assessment for verification: " +
+  "`python3 scripts/doc-policy.mjs assess --session <session-id> --files <changed files> " +
+  "--doc-status <DOC_UPDATED|DOC_NOT_REQUIRED> [--docs <doc files>] [--ingest-status " +
+  "DOC_INGEST_INDEXED ...] --capture-status CAPTURED|NO_LESSON|DEFERRED` and report its " +
+  "SINGDOC token. Filesystem docs remain the source of truth; memory holds the searchable " +
+  "indexed copy.";
 
 const MARKER = "[runbook closeout nudge]";
 const runbookOn = () => String(process.env.OPENCHAMBER_RUNBOOK_NUDGE || "on").trim().toLowerCase() !== "off";

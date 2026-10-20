@@ -29,6 +29,7 @@ import {
   ensureMemoryIntegration,
   removeMemoryIntegration,
   settingsPathFor,
+  ALL_HOOK_EVENTS,
 } from "../adapters/claude-code/settings-merge.mjs";
 import { loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
 import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs";
@@ -36,6 +37,7 @@ import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs"
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AGENTS_SRC = join(ROOT, "adapters/claude-code/agents");
 const HOOK_SCRIPT = join(ROOT, "adapters/claude-code/memory-hook.mjs");
+const DOC_HOOK_SCRIPT = join(ROOT, "adapters/claude-code/doc-hook.mjs");
 const STATE_FILE = process.env.SINGULARITY_CLAUDE_CODE_STATE
   ? resolve(process.env.SINGULARITY_CLAUDE_CODE_STATE)
   : join(ROOT, "data/claude-code-integration.json");
@@ -250,10 +252,10 @@ export async function runInstall(flags) {
   for (const f of agentPlan) log(`  agents:   ${f.status.padEnd(7)} ${f.target}`);
   const agentChanges = applyAgentFiles(agentPlan, { dryRun: flags.dryRun });
 
-  // 2. settings hooks + env
+  // 2. settings hooks + env (memory + documentation hooks; merge, never replace)
   const settings = applySettings(flags.settingsPath, HOOK_SCRIPT, envForSettings, { dryRun: flags.dryRun });
   log(settings.changed
-    ? `  settings: hooks + env merged into ${flags.settingsPath}${settings.backup ? ` (backup: ${settings.backup})` : ""}`
+    ? `  settings: memory + documentation hooks and env merged into ${flags.settingsPath}${settings.backup ? ` (backup: ${settings.backup})` : ""}`
     : `  settings: already up to date (${flags.settingsPath})`);
 
   // 3. MemoryCore profiles — same identities as OpenChamber
@@ -289,6 +291,7 @@ export async function runInstall(flags) {
       settingsPath: flags.settingsPath,
       agentsDir: flags.agentsTarget,
       hooksScript: HOOK_SCRIPT,
+      docHooksScript: DOC_HOOK_SCRIPT,
       envWritten: envForSettings,
       agentsChanged: agentChanges,
       mcp: mcp && !mcp.present ? { name: mcp.name, transport: mcp.transport, command: mcp.command, scope: mcp.scope } : null,
@@ -358,10 +361,10 @@ export function runStatus(flags) {
   }
   log(`install: scope=${record.scope} settings=${record.settingsPath} installedAt=${record.installedAt}`);
   log(`agents dir: ${record.agentsDir}`);
-  log(`hooks: ${record.hooksScript}`);
+  log(`hooks: ${record.hooksScript}${record.docHooksScript ? ` + ${record.docHooksScript}` : ""}`);
   log(`env keys: ${Object.keys(record.envWritten || {}).join(", ") || "(none)"}`);
   const settings = readJson(flags.settingsPath);
-  const events = settings?.hooks ? Object.keys(settings.hooks).filter((k) => ["SubagentStart", "SubagentStop"].includes(k)) : [];
+  const events = settings?.hooks ? Object.keys(settings.hooks).filter((k) => ["SubagentStart", "SubagentStop", "SessionStart", "Stop"].includes(k)) : [];
   log(`settings hook events: ${events.join(", ") || "(none)"}`);
   log(`mcp: ${record.mcp ? `${record.mcp.name} (${record.mcp.scope})` : "(not registered by this install)"}`);
   const ledger = readJson(record.profileLedger || join(ROOT, "data/agent-profiles/ledger.json"));

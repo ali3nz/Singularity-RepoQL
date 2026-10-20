@@ -13,9 +13,10 @@ import os
 import re
 import sys
 import time
-import urllib.request
 import urllib.error
 from pathlib import Path
+
+from memory_client import memory_call as _client_call
 
 STORE = Path(os.environ.get("KNOWLEDGE_STORE", "./data/knowledge-store"))
 AREAS = {
@@ -53,20 +54,7 @@ def content_hash(title, body, source_ref):
 # ── MemoryCore indexing ─────────────────────────────────────────────────────
 
 def _memory_call(path, payload, timeout=10):
-    cfg = load_memory_config()
-    base = cfg.get("baseUrl", "")
-    req = urllib.request.Request(
-        INDEX_BASE.rstrip("/") + "/v3" + path,
-        data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": cfg["authPrefix"] + cfg["gatewayKey"],
-            "x-tdai-service-id": cfg["serviceId"],
-            "x-tdai-user-key": cfg["userKey"],
-        },
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+    return _client_call(INDEX_BASE, load_memory_config(), path, payload, timeout=timeout)
 
 
 def index_knowledge(title, body, truth_path, source_ref, supersedes_task_id=None):

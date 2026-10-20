@@ -107,6 +107,31 @@ identities, and already-seeded profiles are `verified`, not duplicated.
   hook capture are the only two capture paths; they use different scopes and
   do not duplicate each other.
 
+## Documentation hooks (shared policy + automatic MemoryCore ingestion)
+
+Besides the memory hooks, the installer merges two documentation hooks from
+`adapters/claude-code/doc-hook.mjs` (same settings-merge rules; upgrade path:
+re-run the installer):
+
+- **SessionStart** — injects the same bounded start-of-work guidance the
+  OpenChamber runbook-nudge uses: check tracking records, read the covering
+  runbook, search RepoQL concepts, search the installation's indexed shared
+  documentation (`python3 scripts/memory-doc-ingest.py search "<topic>"`).
+- **Stop** — the final-answer closeout: it (1) re-drives pending MemoryCore
+  documentation ingestion (`memory-doc-ingest.py retry --all`, event-driven;
+  a no-op when the ledger is clean) and (2) verifies the session's recorded
+  documentation assessment (`scripts/doc-policy.mjs assess` / `check`). A
+  material task that reports `DOC_UPDATED` without verified ingestion,
+  `DOC_BLOCKED`, or an unreported knowledge-capture status is BLOCKED with
+  concrete remediation — bounded to 3 blocks per session, honouring
+  `stop_hook_active`, and never applied to sessions that recorded no
+  assessment (ordinary chat, read-only work).
+
+The policy is shared with OpenChamber and re-checkable exactly the same way:
+`node scripts/doc-policy.mjs check --session <id>`. Full mechanics, statuses
+(`DOC_INGEST_INDEXED`/…), revision/supersession behaviour, security
+boundaries and troubleshooting: [`docs/DOC-INGESTION.md`](DOC-INGESTION.md).
+
 ## RepoQL for Claude Code
 
 When `claude mcp add` works and a runnable Linux `rql` is found (PATH,

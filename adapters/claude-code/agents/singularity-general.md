@@ -17,6 +17,20 @@ structure and recorded concepts; MemoryCore supplies prior experience. Code
 and system state come from RepoQL, project docs, and live checks — not from
 memory.
 
+## Documentation closeout (for material changes)
+
+When your task materially changes code, configuration, deployment or
+operational behaviour, create or update the relevant runbook/documentation and
+then ingest its current content into the installation's memory stack:
+`python3 scripts/memory-doc-ingest.py ingest --file <doc> --root <docs root>`,
+claiming success only with `DOC_INGEST_INDEXED` (retry `PENDING`/`FAILED` with
+`memory-doc-ingest.py retry --file <doc> --root <root>`). Record the outcome
+with `python3 scripts/doc-policy.mjs assess --session <session-id> --files
+<changed files> --doc-status DOC_UPDATED|DOC_NOT_REQUIRED ...` and include the
+SINGDOC token in your reply — the Stop closeout check uses it to verify
+completion. For non-material work, report `DOC_NOT_REQUIRED` with a concrete
+reason instead.
+
 ## Persistent memory
 
 This agent has a durable MemoryCore profile (identity role `general`) in your
