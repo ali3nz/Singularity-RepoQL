@@ -184,20 +184,55 @@ test("no credential-using probe runs with an ADMINISTRATIVE identity: the key is
 });
 
 test("a verified scoped identity is what lets the credential-using probes run (B7 positive control)", async () => {
+  // A native temp target with a NON-administrative test key: the option-1 path reads
+  // the live product memory.json, which may hold the administrative key, so it is not
+  // used for a positive control.
   const calls = [];
   const spy = (name, out) => async () => { calls.push(name); return out; };
-  const r = await verifyOptionTarget(VARIANTS[1], { variant: "1" }, {
+  const { configDir } = nativeTarget({ baseUrl: "http://127.0.0.1:1", userKey: "sk-test", authPrefix: "Bearer ", serviceId: "openchamber" });
+  const target = { kind: "native", configDir };
+  const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, {
+    target,
     probes: {
       memoryIdentity: async () => ({ ok: true, state: "OK", detail: "scoped" }),
       memoryLoop: spy("loop", { ok: true, state: "VERIFIED_API", detail: "injected" }),
       docIngestion: spy("docs", { ok: true, state: "VERIFIED", detail: "injected" }),
-      modelLane: spy("lane", { ok: true, state: "OK", detail: "injected" }),
       repoqlMcp: OK_PROBES.repoqlMcp,
       providerFailover: OK_PROBES.providerFailover,
     },
-  }, null);
-  assert.deepEqual(calls.sort(), ["docs", "lane", "loop"]);
+  }, target);
+  assert.deepEqual(calls.sort(), ["docs", "loop"]);
   assert.match(lineFor(r, "memory API loop"), /^ok:/);
+});
+
+test("main-agent routing never writes the ADMINISTRATIVE key into Claude Code settings (B7)", async () => {
+  const { applyMainMemory } = await import("./install-claude-code.mjs");
+  const root = mkdtempSync(join(tmpdir(), "mainmem-admin-"));
+  mkdirSync(join(root, "memory", "upstream"), { recursive: true });
+  mkdirSync(join(root, "data", "opencode", "config", "product-secrets"), { recursive: true });
+  const adminKey = "TESTADMIN-admin-value-0000";
+  writeFileSync(join(root, "memory", "upstream", ".admin-key"), `${adminKey}\n`);
+  writeFileSync(join(root, "data", "opencode", "config", "product-secrets", "memory.json"), JSON.stringify({ userKey: adminKey }));
+  const settingsPath = join(root, "claude-settings.json");
+  const quiet = () => {};
+  const r = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: false }, repoRoot: root, dryRun: false, log: quiet, warn: quiet });
+  assert.equal(r.refused, true, JSON.stringify(r));
+  assert.equal(existsSync(settingsPath), false, "a refused run writes no settings file");
+  assert.ok(!JSON.stringify(r).includes(adminKey), "the administrative value is never returned");
+});
+
+test("a SCOPED key goes through the same routing path (B7 positive control)", async () => {
+  const { applyMainMemory } = await import("./install-claude-code.mjs");
+  const root = mkdtempSync(join(tmpdir(), "mainmem-scoped-"));
+  mkdirSync(join(root, "memory", "upstream"), { recursive: true });
+  mkdirSync(join(root, "data", "opencode", "config", "product-secrets"), { recursive: true });
+  writeFileSync(join(root, "memory", "upstream", ".admin-key"), "TESTADMIN-admin-value-0000\n");
+  writeFileSync(join(root, "data", "opencode", "config", "product-secrets", "memory.json"), JSON.stringify({ userKey: "TESTSCOPED-scoped-value-1111" }));
+  const settingsPath = join(root, "claude-settings.json");
+  writeFileSync(settingsPath, "{}\n");
+  const quiet = () => {};
+  const r = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: false }, repoRoot: root, dryRun: true, log: quiet, warn: quiet });
+  assert.notEqual(r.refused, true, JSON.stringify(r));
 });
 
 test("an ADMINISTRATIVE key is refused: the gate never passes on an admin credential (B7)", async () => {

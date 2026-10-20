@@ -17,8 +17,28 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { timingSafeEqual } from "node:crypto";
 
 const ADMIN_USER_TYPES = new Set(["system_admin", "admin", "root", "superadmin", "super_admin", "owner"]);
+/** The memory stack's ADMINISTRATIVE key (memory/upstream/.admin-key), read in-process. Never printed. */
+export function readAdministrativeKey(root) {
+  try { return readFileSync(join(root, "memory", "upstream", ".admin-key"), "utf8").trim(); } catch { return ""; }
+}
+
+/**
+ * True when CANDIDATE equals the ADMINISTRATIVE key. Compared in-process in
+ * constant time; only the boolean leaves this function. An empty candidate or a
+ * missing administrative key is never a match.
+ */
+export function isAdministrativeKey(candidate, adminKey) {
+  const c = String(candidate || "").trim();
+  const a = String(adminKey || "").trim();
+  if (!c || !a) return false;
+  const cb = Buffer.from(c, "utf8");
+  const ab = Buffer.from(a, "utf8");
+  return cb.length === ab.length && timingSafeEqual(cb, ab);
+}
+
 const snippet = (s, n = 140) => String(s || "").replace(/\s+/g, " ").slice(0, n);
 
 /** Run a command and collect its output (async: an in-process service must be able to answer). */

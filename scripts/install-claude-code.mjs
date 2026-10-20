@@ -54,7 +54,7 @@ import { mapOfficeEvent } from "../openchamber/plugins/product-office/office-eve
 // FUNCTIONALLY VERIFIED proof layer: the gate separates CONFIGURED facts from
 // runtime proofs, and a proof that cannot run is a FAIL-CLOSED MISSING.
 import { resolveModelLane, probeModelLane, modelLaneAdvice, readUpstreamEnvContent } from "./model-lane.mjs";
-import { probeMemoryIdentity, probeMemoryLoop, probeRepoqlMcp, probeDocIngestion, probeProviderFailover } from "./runtime-proofs.mjs";
+import { probeMemoryIdentity, probeMemoryLoop, probeRepoqlMcp, probeDocIngestion, probeProviderFailover, isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AGENTS_SRC = join(ROOT, "adapters/claude-code/agents");
@@ -423,6 +423,14 @@ export function applyMainMemory(settingsPath, { mainMemoryFlags, repoRoot, dryRu
   if (!token) {
     log("  main:     memory config has no scoped user key — skipped (provision a business-user key first)");
     return { skipped: true, reason: "no scoped user key" };
+  }
+  // B7: an ADMINISTRATIVE key is never written into Claude Code settings: the
+  // routing token is sent with every parent-session request. Refused here, before
+  // anything is read for writing; this run changes nothing.
+  if (isAdministrativeKey(token, readAdministrativeKey(repoRoot))) {
+    warn("  main:     REFUSED — the memory config's key is the ADMINISTRATIVE key and is never written into Claude Code settings (no value printed)");
+    warn("  main:     provision a dedicated scoped business-user key (provision-secrets.py --memory-user-key), then re-run");
+    return { refused: true, conflicts: ["the memory config's key is administrative (refused; nothing written)"], baseUrl };
   }
   const model = process.env.SINGULARITY_MAIN_AGENT_MODEL || (typeof memCfg.mainModel === "string" && memCfg.mainModel) || null;
   const strict = readSettingsFileStrict(settingsPath);
@@ -841,7 +849,7 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
         officeConfigPath = join(cfgDir, "product-secrets", "office.json");
         const cfg = readJson(memCfgPath);
         const secretsOk = Boolean(cfg && typeof cfg.userKey === "string" && cfg.userKey);
-        note(secretsOk, "plugin memory credentials present (scoped user key — verified live below)",
+        note(secretsOk, "plugin memory credentials present (a key is configured; its scope is verified live below)",
           secretsOk ? memCfgPath : "memory.json missing or has no userKey in the target config");
       }
     }
@@ -852,9 +860,13 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
   // loop, documentation ingestion, model lane) depends on this single decision.
   const memCfgEarly = memoryConfigPath ? readJson(memoryConfigPath) : null;
   const memBaseEarly = memCfgEarly ? hostMemoryBaseUrl(memCfgEarly) : "";
-  const identity = probes.memoryIdentity
-    ? await probes.memoryIdentity({ config: memCfgEarly, baseUrl: memBaseEarly })
-    : await probeMemoryIdentity({ config: memCfgEarly, baseUrl: memBaseEarly });
+  // An ADMINISTRATIVE key is recognised LOCALLY (this installation's own admin key,
+  // compared in-process) and is never presented to the memory service.
+  const identity = isAdministrativeKey(memCfgEarly && memCfgEarly.userKey, readAdministrativeKey(ROOT))
+    ? { ok: false, state: "ADMIN", detail: "the configured memory key is this installation's ADMINISTRATIVE key (matched locally; no request was sent)" }
+    : probes.memoryIdentity
+      ? await probes.memoryIdentity({ config: memCfgEarly, baseUrl: memBaseEarly })
+      : await probeMemoryIdentity({ config: memCfgEarly, baseUrl: memBaseEarly });
   const scoped = identity.ok === true;
 
   // 7. options 2/4: Ghost functional (config, memory identity, dream cycle, backend)
@@ -1457,13 +1469,21 @@ export async function runStatus(flags) {
   const baseUrl = record.mainMemory?.enabled && record.mainMemory.baseUrl
     ? record.mainMemory.baseUrl
     : resolveMainProxyUrl({ env: process.env });
+  // B7: an ADMINISTRATIVE key is reported, never probed: the probe would present it.
+  const adminLocalKey = readAdministrativeKey(ROOT);
+  const settingsTokenIsAdmin = isAdministrativeKey(settings?.env?.ANTHROPIC_AUTH_TOKEN || "", adminLocalKey);
+  const memoryTokenIsAdmin = isAdministrativeKey(readJson(record.envWritten?.SINGULARITY_MEMORY_CONFIG || join(ROOT, "data/opencode/config/product-secrets/memory.json"))?.userKey || "", adminLocalKey);
   let probe = null;
-  if (flags.probe && record.mainMemory?.enabled) {
+  if (flags.probe && record.mainMemory?.enabled && !memoryTokenIsAdmin) {
     const token = readJson(record.envWritten?.SINGULARITY_MEMORY_CONFIG || join(ROOT, "data/opencode/config/product-secrets/memory.json"))?.userKey || null;
     probe = await probeMainProxy(baseUrl, token);
   }
-  const mainState = record.mainMemory?.enabled
-    ? classifyMainMemoryState(settings, baseUrl, probe)
+  const mainState = settingsTokenIsAdmin
+    ? { state: "ADMINISTRATIVE-TOKEN", detail: "the routing token in Claude Code settings equals the memory stack ADMINISTRATIVE key (value not printed): rotate it to a scoped key; the installer refuses to write it again" }
+    : memoryTokenIsAdmin
+      ? { state: "REFUSED", detail: "the memory config's key is the ADMINISTRATIVE key: not routed and not probed" }
+      : record.mainMemory?.enabled
+        ? classifyMainMemoryState(settings, baseUrl, probe)
     : (record.mainMemory?.refused
         ? { state: "CONFLICTED", detail: `installer refused: ${(record.mainMemory.conflicts || []).join("; ")}` }
         : { state: "DISABLED", detail: "main-agent proxy routing not enabled for this install" });

@@ -20,6 +20,8 @@ import {
   probeMemoryIdentity,
   probeRepoqlMcp,
   probeProviderFailover,
+  isAdministrativeKey,
+  readAdministrativeKey,
 } from "./runtime-proofs.mjs";
 
 /** A stub memory service with a programmable auth/verify + count answer. */
@@ -224,6 +226,19 @@ test("a missing RepoQL binary is MISSING and nothing is spawned", async () => {
 });
 
 // ── Provider failover: credentials + a live two-provider ladder + a completion ─
+
+test("the ADMINISTRATIVE key is recognised in-process; only a boolean leaves the comparison (B7)", () => {
+  const root = mkdtempSync(join(tmpdir(), "admin-key-"));
+  mkdirSync(join(root, "memory", "upstream"), { recursive: true });
+  writeFileSync(join(root, "memory", "upstream", ".admin-key"), "TESTADMIN-admin-value-0000\n");
+  const adminKey = readAdministrativeKey(root);
+  assert.equal(isAdministrativeKey("TESTADMIN-admin-value-0000", adminKey), true);
+  assert.equal(isAdministrativeKey("TESTSCOPED-scoped-value-1111", adminKey), false);
+  assert.equal(isAdministrativeKey("TESTADMIN-admin-value-000", adminKey), false, "a prefix is not a match");
+  assert.equal(isAdministrativeKey("", adminKey), false, "an empty candidate is never a match");
+  assert.equal(isAdministrativeKey("TESTADMIN-admin-value-0000", ""), false, "no administrative key means no match");
+  assert.equal(readAdministrativeKey(mkdtempSync(join(tmpdir(), "no-admin-key-"))), "", "a missing key file reads as empty");
+});
 
 /** A stub router: programmable /health ladder and /chat/completions answer. */
 const stubRouter = ({ ladder, completion }) => new Promise((res) => {
