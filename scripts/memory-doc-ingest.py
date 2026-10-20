@@ -53,7 +53,7 @@ import sys
 import time
 from pathlib import Path
 
-from memory_client import memory_call
+from memory_client import memory_call, ensure_success
 
 # All configuration is read at call time (not import time) so wrappers, tests
 # and installers can retarget the stack without re-importing the module.
@@ -229,7 +229,9 @@ def chunk_markdown(text):
 # ── memory writes (single path, idempotent by deterministic task ids) ────────
 
 def search_once(cfg, query, limit=5):
-    found = memory_call(_base(), cfg, "/conversation/search", {**_scope(), "query": query, "limit": limit})
+    found = ensure_success(
+        memory_call(_base(), cfg, "/conversation/search", {**_scope(), "query": query, "limit": limit}),
+        "documentation search")
     return (found.get("data") or {}).get("messages") or []
 
 
@@ -250,13 +252,13 @@ def write_chunk(cfg, chunk_task, chunk_text, recorded_at):
     try:
         if any(chunk_task["marker"] in (m.get("content") or "") for m in search_once(cfg, chunk_task["marker"], 10)):
             return "present"
-        memory_call(_base(), cfg, "/conversation/add", {
+        ensure_success(memory_call(_base(), cfg, "/conversation/add", {
             **_scope(), "session_id": DOCS_SESSION, "task_id": chunk_task["task_id"],
             "messages": [
                 {"role": "user", "content": chunk_text, "recorded_at": recorded_at},
                 {"role": "assistant", "content": f"Documentation record {chunk_task['marker']} acknowledged.",
                  "recorded_at": recorded_at},
-            ]})
+            ]}), f"chunk add {chunk_task['task_id']}")
         return "written"
     except Exception as e:
         raise RuntimeError(f"chunk write failed ({chunk_task['task_id']}): {e}")
@@ -268,14 +270,14 @@ def write_supersession(cfg, doc_id8, old_rev, new_rev):
     try:
         if any(marker in (m.get("content") or "") for m in search_once(cfg, marker, 5)):
             return "present"
-        memory_call(_base(), cfg, "/conversation/add", {
+        ensure_success(memory_call(_base(), cfg, "/conversation/add", {
             **_scope(), "session_id": DOCS_SESSION, "task_id": marker.strip("[]"),
             "messages": [
                 {"role": "user", "content": (
                     f"{marker} Documentation revision {old_rev} of document {doc_id8} is SUPERSEDED "
                     f"by revision {new_rev}. Never present revision {old_rev} as current guidance."),
                  "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
-            ]})
+            ]}), "supersession tombstone")
         return "written"
     except Exception as e:
         return f"failed: {e}"
@@ -288,19 +290,29 @@ def ingest_file(path, root_arg=None, session=None, now=None):
     (eligibility/security/size) are returned as DOC_INGEST_BLOCKED, never raised."""
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", now or time.gmtime())
     try:
-        rel, title, _root = classify_source(path, doc_roots(root_arg))
+        rel, title, root_dir = classify_source(path, doc_roots(root_arg))
         text = path.read_text(errors="replace")
         reject_sensitive(text, rel)
     except Blocked as e:
         return {"status": "DOC_INGEST_BLOCKED", "file": str(path), "reason": str(e)}
+    # Root-scoped identity: digest(root)::rel means two DIFFERENT workspaces with
+    # the same relative path never collapse into one document identity, and the
+    # stored root lets retry/status reconstruct the path without the caller's cwd.
+    root_id = sha(Path(root_dir).resolve().as_posix())[:8]
+    key = f"{root_id}::{rel}"
     rev = sha(text)[:8]
-    doc_id8 = sha(rel)[:8]
+    doc_id8 = sha(key)[:8]
 
     def proceed(ledger):
-        entry = ledger["docs"].setdefault(rel, {"doc_id": doc_id8, "title": title, "active_rev": None, "revs": {}})
-        entry["doc_id"] = doc_id8  # stable across restarts: same rel -> same id
+        entry = ledger["docs"].setdefault(key, {"rel": rel, "root": Path(root_dir).resolve().as_posix(),
+                                                "root_id": root_id, "doc_id": doc_id8,
+                                                "title": title, "active_rev": None, "revs": {}})
+        entry["root"] = Path(root_dir).resolve().as_posix()  # full path: cwd-independent retry reconstruction
+        entry["root_id"] = root_id
+        entry["rel"] = rel
+        entry["doc_id"] = doc_id8  # stable across restarts; root-scoped (sha(root)::rel)
         entry["title"] = title
-        report = {"file": rel, "doc_id": doc_id8, "rev": rev, "title": title, "session": session}
+        report = {"file": rel, "root": root_id, "identity": key, "doc_id": doc_id8, "rev": rev, "title": title, "session": session}
 
         if entry["active_rev"] == rev and entry["revs"].get(rev, {}).get("status") == "DOC_INGEST_INDEXED":
             report.update(status="DOC_INGEST_UNCHANGED", reason="verified active revision matches source hash")
@@ -321,7 +333,7 @@ def ingest_file(path, root_arg=None, session=None, now=None):
             task_id = f"docs-{doc_id8}-r{rev}-c{i:02d}"
             marker = f"[doc-ref:{rel}#{rev} chunk {i}/{len(chunks)} hash {chash}]"
             header = (f"{marker}\ntitle: {title}\nsource: {rel} (canonical file on disk — this memory record "
-                      f"is its indexed copy)\nrevision: {rev}\nchunk: {i}/{len(chunks)}\n"
+                      f"is its indexed copy)\nrevision: {rev}\nroot-id: {root_id}\nchunk: {i}/{len(chunks)}\n"
                       f"content-hash: {chash}\nscope: {os.environ.get('DOC_INDEX_TEAM', 'singularity-docs')}/"
                       f"{os.environ.get('DOC_INDEX_USER', 'shared')}\ningested: {ts}\n\n")
             chunk_tasks.append({"task_id": task_id, "marker": marker, "text": header + body, "hash": chash})
@@ -376,65 +388,272 @@ def ingest_file(path, root_arg=None, session=None, now=None):
 
     return with_ledger(proceed)
 
+# ── retry / status / verify / search (root-persisted path resolution) ────────
+
+def _load_ledger():
+    return json.loads(_ledger().read_text()) if _ledger().exists() else {"version": 1, "docs": {}}
+
+
+def _root_id_of(root_arg):
+    return sha(Path(os.path.abspath(root_arg)).as_posix())[:8]
+
+
+def locate_entry_key(ledger, path, root_arg=None):
+    """Match a --file argument against ledger entries.
+
+    Matching uses what is RECORDED, never the caller's cwd: exact rel equality,
+    a rel-suffix match, or the given absolute path equal to a stored entry's
+    full document path. When several workspaces recorded the same rel, only an
+    explicit matching --root disambiguates; otherwise the match is refused
+    (never guessed).
+    """
+    given = Path(path).as_posix()
+    root_pin = _root_id_of(root_arg) if root_arg is not None else None
+    matches = []
+    for key, entry in ledger.get("docs", {}).items():
+        rel = entry.get("rel") or key.split("::", 1)[-1]
+        root_abs = entry.get("root")
+        if given == rel:
+            matches.append(key)
+        elif given.endswith("/" + rel):
+            matches.append(key)
+        elif os.path.isabs(given) and root_abs and Path(given).as_posix() == (Path(root_abs) / rel).as_posix():
+            matches.append(key)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        if root_pin is None or matches[0].split("::", 1)[0] == root_pin:
+            return matches[0]
+        return None
+    if root_pin is not None:
+        for key in matches:
+            if key.split("::", 1)[0] == root_pin:
+                return key
+    return None  # ambiguous: caller must pass a matching --root
+
+
+def resolve_entry_target(entry):
+    """Reconstruct root/rel for a ledger entry; refuse paths escaping the root."""
+    root_abs, rel = entry.get("root"), entry.get("rel")
+    if not root_abs or not rel or not Path(root_abs).is_absolute():
+        return None  # legacy entry without persisted root: cannot be resolved safely
+    root = Path(root_abs)
+    target = root / rel
+    try:
+        Path(os.path.realpath(target)).relative_to(Path(os.path.realpath(root)))
+    except ValueError:
+        raise Blocked(f"stored document path escaped its authorised root ({root}); retry refused")
+    return target
+
+
+def root_is_currently_authorised(entry_root, roots):
+    """True when the recorded root still belongs to this invocation's allowlist.
+
+    Realpath containment proves the path stays INSIDE its own stored root, but
+    a ledger can outlive its workspace: a moved/demoted test workspace or an
+    abandoned install would otherwise keep retrying without anyone intending
+    it. When roots are configured for the invocation (one passed --root or
+    SINGULARITY_DOC_ROOTS), the recorded root must equal one of them or resolve
+    inside one. No roots configured -> legacy permissive behaviour.
+    """
+    if not entry_root:
+        return False
+    if not roots:
+        return True
+    ap = Path(os.path.abspath(entry_root))
+    for r in roots:
+        if ap == r or ap.is_relative_to(r):
+            return True
+    return False
+
 
 def retry(path=None, all_docs=False, root_arg=None):
-    """Re-attempt PENDING/FAILED ingests (idempotent; never duplicates records)."""
-    want = None
-    if not all_docs and path:
-        want = classify_source(Path(path), doc_roots(root_arg))[0]
+    """Re-attempt PENDING/FAILED ingests (idempotent; never duplicates records).
+
+    Path resolution uses the ROOT PERSISTED IN THE LEDGER, never the caller's
+    cwd: a retry launched from any working directory reconstructs the original
+    authorised path (entry.root / entry.rel), revalidates that it still
+    resolves inside that same authorised root, and only then ingests. Legacy
+    entries without a stored root are skipped (they cannot be resolved safely).
+    """
     results = []
-    ledger = json.loads(_ledger().read_text()) if _ledger().exists() else {"docs": {}}
-    for rel in sorted(ledger.get("docs", {})):
-        if want and rel != want:
+    roots = doc_roots(root_arg)
+    ledger = _load_ledger()
+    wanted_key = None
+    if not all_docs and path:
+        wanted_key = locate_entry_key(ledger, path, root_arg)
+        if wanted_key is None:
+            return [{"status": "DOC_INGEST_BLOCKED", "file": str(path),
+                     "reason": "no ledger record matches --file (nothing recorded for this document)"}]
+    for key, entry in sorted(ledger.get("docs", {}).items()):
+        if not all_docs and key != wanted_key:
             continue
-        results.append(ingest_file(Path(rel), root_arg=root_arg))
+        if not root_is_currently_authorised(entry.get("root"), roots):
+            results.append({"status": "DOC_INGEST_BLOCKED", "file": entry.get("rel") or key,
+                            "reason": "recorded root is not inside the currently authorised documentation "
+                                      "roots — pass the matching --root or update SINGULARITY_DOC_ROOTS"})
+            continue
+        try:
+            target = resolve_entry_target(entry)
+        except Blocked as e:
+            results.append({"status": "DOC_INGEST_BLOCKED", "file": entry.get("rel") or key,
+                            "reason": str(e)})
+            continue
+        if target is None:
+            continue
+        results.append(ingest_file(Path(target), root_arg=entry.get("root")))
     return results
 
 
+def _status_row(entry, rel):
+    active = entry.get("active_rev")
+    rec = entry["revs"].get(active, {}) if active else {}
+    stale = None
+    root_abs = entry.get("root")
+    rel = entry.get("rel") or rel
+    if root_abs and rel:
+        p = Path(root_abs) / rel
+        if p.is_file():
+            stale = sha(p.read_text(errors="replace"))[:8] != active
+    return {"file": rel, "root": entry.get("root_id"), "doc_id": entry.get("doc_id"),
+            "active_rev": active, "status": rec.get("status", "DOC_INGEST_PENDING"),
+            "chunks": rec.get("chunks"), "verified_at": rec.get("verified_at"),
+            "stale_source": stale, "title": entry.get("title")}
+
+
 def status_report(rel=None, all_docs=False, root_arg=None):
-    from_file = json.loads(_ledger().read_text()) if _ledger().exists() else {"docs": {}}
-    roots = doc_roots(root_arg)
+    """Ledger status vs current sources; resolution never touches the caller cwd."""
+    ledger = _load_ledger()
+    root_pin = _root_id_of(root_arg) if root_arg is not None else None
     out = []
-    for r, e in sorted(from_file["docs"].items()):
-        if rel and r != rel:
-            continue
-        active = e.get("active_rev")
-        rec = e["revs"].get(active, {}) if active else {}
-        stale = None
-        for root in roots:
-            p = root / r
-            if p.is_file():
-                stale = sha(p.read_text(errors="replace"))[:8] != active
-                break
-        out.append({"file": r, "doc_id": e.get("doc_id"), "active_rev": active,
-                    "status": rec.get("status", "DOC_INGEST_PENDING"), "chunks": rec.get("chunks"),
-                    "verified_at": rec.get("verified_at"), "stale_source": stale, "title": e.get("title")})
+    if rel and not all_docs:
+        wanted = locate_entry_key(ledger, rel, root_arg)
+        if wanted is not None:
+            out.append(_status_row(ledger["docs"][wanted], rel))
+        return out
+    for key, entry in sorted(ledger.get("docs", {}).items()):
+        if root_pin is not None and entry.get("root_id") != root_pin:
+            continue  # scope the report to the requested workspace
+        out.append(_status_row(entry, entry.get("rel") or key.split("::", 1)[-1]))
     return out
 
 
+def verify_file(rel, root_arg=None):
+    """Independent completion evidence for one document — the LEDGER decides.
+
+    A caller-claimed ingestion status (e.g. a pasted DOC_INGEST_INDEXED) is
+    never trusted: verification re-derives every fact from recorded ledger
+    evidence plus the current source hash. Returns
+
+        DOC_INGEST_VERIFIED      all evidence checks below hold
+        DOC_INGEST_NOT_VERIFIED  otherwise, with a precise reason
+
+    Checks (all required):
+        1. a ledger record exists for this workspace/scope
+        2. the source file exists inside its authorised root
+        3. the current source hash equals the active recorded revision
+        4. the active revision is DOC_INGEST_INDEXED *and* has verified_at
+        5. chunk records are complete (task ids and hashes accounted for)
+        6. no newer unresolved pending/failed revision exists
+    """
+    ledger = _load_ledger()
+    roots = doc_roots(root_arg)
+    candidates = []
+    for key, entry in sorted(ledger.get("docs", {}).items()):
+        rel_e = entry.get("rel") or key.split("::", 1)[-1]
+        if rel_e != rel:
+            continue
+        if not root_is_currently_authorised(entry.get("root"), roots):
+            continue  # recorded root is outside this invocation's allowlist
+        if root_arg is not None:
+            expected = Path(os.path.abspath(root_arg)).as_posix()
+            if entry.get("root") and entry["root"] != expected:
+                return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e, "reason":
+                        "recorded under a different workspace root; wrong workspace/scope"}
+            if entry.get("root_id") and entry["root_id"] != _root_id_of(root_arg):
+                continue
+        candidates.append((key, entry))
+    if not candidates:
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel,
+                "reason": "no ledger record for this document in this workspace/scope"}
+    if len(candidates) > 1:
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel,
+                "reason": "ambiguous: the same relative path is recorded under several roots; pass --root"}
+    key, entry = candidates[0]
+    rel_e = entry.get("rel") or key.split("::", 1)[-1]
+    try:
+        target = resolve_entry_target(entry)
+    except Blocked as e:
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e, "reason": str(e)}
+    if target is None:
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
+                "reason": "ledger record has no stored authorised root (legacy entry); re-ingest with --root"}
+    if not target.is_file():
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
+                "reason": "documented source file missing on disk"}
+    active = entry.get("active_rev")
+    rec = entry["revs"].get(active, {}) if active else {}
+    current = sha(target.read_text(errors="replace"))[:8]
+    if active and current != active:
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
+                "reason": "changed source was never indexed successfully (stale hash)"}
+    if rec.get("status") != "DOC_INGEST_INDEXED" or not rec.get("verified_at"):
+        claimed = rec.get("status") if active else "missing active revision"
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
+                "reason": f"active revision verification record is {claimed!r}, not a verified index"}
+    chunks = rec.get("chunks") or 0
+    task_ids = rec.get("task_ids") or []
+    hash_list = rec.get("hashes") or []
+    if not chunks or len(task_ids) != chunks or len(hash_list) != chunks or any(not h for h in hash_list):
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
+                "reason": "incomplete chunk records (task ids/hashes not accounted for)"}
+    newer_unresolved = [r for r, v in sorted(entry["revs"].items())
+                        if r != active
+                        and v.get("status") in ("DOC_INGEST_PENDING", "DOC_INGEST_FAILED")
+                        and str(v.get("ingested_at", "")) > str(rec.get("verified_at", ""))]
+    if newer_unresolved:
+        return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
+                "reason": f"newer unresolved revision(s) {newer_unresolved}; retry ingestion before claiming completion"}
+    return {"status": "DOC_INGEST_VERIFIED", "file": rel_e, "root": entry.get("root_id"),
+            "revision": active, "chunks": chunks, "verified_at": rec.get("verified_at")}
+
+
 def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False):
-    """Bounded search of the shared documentation knowledge for agents."""
+    """Bounded search of the shared documentation knowledge for agents.
+
+    Only records whose document identity AND revision match a verified active
+    ledger revision in the same scope are returned as current guidance;
+    records absent from the ledger (or superseded ones) require --stale.
+    """
     cfg = load_cfg()
     msgs = search_once(cfg, query, limit * 2 if not include_stale else limit * 4)
-    ledger = json.loads(_ledger().read_text()) if _ledger().exists() else {"docs": {}}
-    active_by_doc = {d.get("doc_id"): d.get("active_rev") for d in ledger.get("docs", {}).values() if d.get("active_rev")}
+    ledger = _load_ledger()
+    entries = {}
+    for key, e in ledger.get("docs", {}).items():
+        entries[(e.get("root_id"), e.get("rel") or key.split("::", 1)[-1])] = e
     items, seen = [], set()
     for m in msgs:
         content = m.get("content") or ""
         if "docs-superseded:" in content:
             continue  # supersession tombstones are never presented as guidance
         m_ref = re.search(r"\[doc-ref:([^#\]]+)#([0-9a-f]{8})", content)
-        if m_ref:
-            d_rel, d_rev = m_ref.group(1), m_ref.group(2)
-            if not include_stale and active_by_doc.get(sha(d_rel)[:8]) not in (None, d_rev):
+        if not m_ref:
+            continue  # records that cannot be attributed to a ledger revision are not current
+        d_rel, d_rev = m_ref.group(1), m_ref.group(2)
+        m_root = re.search(r"^root-id: ([0-9a-f]{8})$", content, re.M)
+        root_hit = m_root.group(1) if m_root else None
+        matching_entry = entries.get((root_hit, d_rel))
+        active_rev = matching_entry.get("active_rev") if matching_entry else None
+        if not include_stale:
+            if active_rev is None:
+                continue  # record not present in the active revision ledger: not current
+            if active_rev != d_rev:
                 continue  # old revision: excluded from current retrieval
-            key = (d_rel, d_rev)
-            if key in seen:
-                continue
-            seen.add(key)
-            items.append({"source": d_rel, "revision": d_rev, "content": content[:1200]})
-        else:
-            items.append({"source": "(unattributed)", "revision": None, "content": content[:600]})
+        dkey = (root_hit or "", d_rel, d_rev)
+        if dkey in seen:
+            continue
+        seen.add(dkey)
+        items.append({"source": d_rel, "root": root_hit, "revision": d_rev, "content": content[:1200]})
         if len(items) >= limit:
             break
     return items
@@ -442,7 +661,7 @@ def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--root", help="documentation allowlist root (paths are stored relative to it)")
+    ap.add_argument("--root", help="documentation allowlist root; ledger state defaults to <root>/data")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("ingest", help="ingest one document (idempotent; status JSON)")
@@ -460,12 +679,18 @@ def main():
     s.add_argument("--all", action="store_true")
     s.add_argument("--root")
 
+    v = sub.add_parser("verify", help="independent ledger-evidence verification for one document")
+    v.add_argument("--file", required=True)
+    v.add_argument("--root")
+
     q = sub.add_parser("search", help="bounded search of shared documentation knowledge")
     q.add_argument("query")
     q.add_argument("--limit", type=int, default=SEARCH_LIMIT_DEFAULT)
-    q.add_argument("--stale", action="store_true", help="include superseded revisions")
+    q.add_argument("--stale", action="store_true", help="include superseded/unledgered revisions")
 
     args = ap.parse_args()
+    if args.root and not os.environ.get("SINGULARITY_DOC_DATA"):
+        os.environ.setdefault("SINGULARITY_DOC_DATA", str(Path(os.path.abspath(args.root)) / "data"))
     try:
         if args.cmd == "ingest":
             print(json.dumps(ingest_file(Path(args.file), root_arg=args.root, session=args.session)))
@@ -473,6 +698,8 @@ def main():
             print(json.dumps({"results": retry(args.file, args.all, root_arg=args.root)}))
         elif args.cmd == "status":
             print(json.dumps(status_report(args.file, args.all, root_arg=args.root)))
+        elif args.cmd == "verify":
+            print(json.dumps(verify_file(args.file, root_arg=args.root)))
         else:
             print(json.dumps({"items": search_docs(args.query, args.limit, args.stale)}))
     except Blocked as e:

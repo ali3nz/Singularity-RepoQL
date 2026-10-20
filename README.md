@@ -157,10 +157,16 @@ surfaces (OpenChamber and Claude Code) follow the same shared policy:
   `DOC_BLOCKED`; only genuinely non-material work may skip documentation
 - updated runbooks are ingested (`scripts/memory-doc-ingest.py ingest`) and
   verified as genuinely SEARCHABLE (`DOC_INGEST_INDEXED`), not merely noted
+- detection is automatic: each client keeps a per-session documentation
+  baseline and ingests every new or changed eligible runbook at task close —
+  including newly created, untracked, docs-only files — with no operator
+  command
 - revisions supersede previous ones; retrieval offers the current procedure
   and excludes stale versions
 - `node scripts/doc-policy.mjs check --session <id>` re-verifies any task's
-  documentation closure deterministically (usable from review and CI)
+  documentation closure deterministically (usable from review and CI); the
+  gate re-derives ingestion evidence from the ledger itself, so a claimed
+  status is never proof
 
 Details, statuses, revision management and troubleshooting:
 [`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md).

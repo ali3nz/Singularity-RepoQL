@@ -93,7 +93,10 @@ verified searchable) closes a documentation requirement; `PENDING`/`FAILED`
 keep the previous verified revision active and retry later. The completion
 gate (`scripts/doc-policy.mjs assess | check`) records and re-verifies the
 documentation outcome (`DOC_UPDATED` / `DOC_NOT_REQUIRED` + reason /
-`DOC_BLOCKED`) deterministically from both clients.
+`DOC_BLOCKED`) deterministically from both clients. Detection is automatic:
+both clients keep a per-session documentation baseline and ingest every new or
+changed eligible runbook at task close through this same engine — see
+“Automatic document discovery” in `docs/DOC-INGESTION.md`.
 
 ## 5. Validation
 

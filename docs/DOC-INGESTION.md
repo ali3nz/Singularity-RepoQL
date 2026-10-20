@@ -63,6 +63,10 @@ python3 scripts/memory-doc-ingest.py retry --all --root <project-root>/docs
 # inspect the ledger against current sources (stale_source = disk ahead of memory)
 python3 scripts/memory-doc-ingest.py status --all --root <project-root>/docs
 
+# independent completion evidence for ONE document: the ledger decides, a
+# claimed status never counts (this is what the closure gate consumes)
+python3 scripts/memory-doc-ingest.py verify --file docs/runbooks/example.md --root <project-root>/docs
+
 # bounded search of shared documentation knowledge (agents use this)
 python3 scripts/memory-doc-ingest.py search "restart pump procedure"
 
@@ -76,16 +80,54 @@ knowledge-promotion), `SINGULARITY_DOC_DATA` (state dir, default `./data`),
 roots).
 
 State lives in `data/doc-index/ledger.json` — product-local runtime data
-(git-ignored): one active revision per document (`doc_id`, content hash, task
-ids, chunk count, verification timestamp), protected by flock and written with
-atomic replace. Concurrent ingests cannot corrupt each other, and a crash
-never leaves a torn ledger.
+(git-ignored): one active revision per document identity, protected by flock
+and written with atomic replace. Concurrent ingests cannot corrupt each other,
+and a crash never leaves a torn ledger.
+
+## Document identity across workspaces
+
+An identity is **root-scoped**: the ledger key is `<root-id>::<relative-path>`
+where `root-id = sha256(canonical allowlist root)[:8]`. Two different projects
+with the same relative path therefore never share one document or one
+revision. The full root path, root id and relative path are recorded in every
+ledger entry, so `retry`/`status`/`verify` reconstruct the authorised document
+path from the ledger itself — they behave correctly no matter the caller's
+working directory. Entries must still resolve (realpath) inside their stored
+root; anything escaping it is refused. When the same relative path is
+recorded under several roots, `retry --file`/`status --file`/`verify --file`
+fail closed unless a matching `--root` is given — the tool never guesses.
+
+## Automatic document discovery
+
+Ingestion happens without the operator typing anything, in BOTH clients:
+
+- At session start each client records a per-session **baseline census** of
+  eligible documentation (size + mtime per file) plus the current git dirty
+  set. Pre-existing dirty files therefore can never be attributed to the
+  current task.
+- At check time the present census is diffed against that baseline; every
+  new/changed eligible Markdown file — **including newly created untracked
+  files** — is ingested through the shared pipeline automatically
+  (content-hash dedup makes re-runs a no-op: `DOC_INGEST_UNCHANGED`).
+- Documentation-only work qualifies too: nothing demands a code change
+  before an `.md` edit is indexed.
+- After the diff, the baseline is refreshed (stale baseline at worst means a
+  cheap re-diff next time). No background polling service exists; discovery
+  is event-driven and bounded (`SINGULARITY_DOC_ROOTS` allowlist roots, size
+  caps, depth cap, max 8 ingests per check).
+- Claude Code: `doc-hook.mjs` `SessionStart` baselines, `Stop` diffs/ingests.
+  OpenChamber: the runbook-nudge context hook baselines per session and runs
+  `doc-policy.mjs discover` at closeout. `SINGULARITY_DOC_ROOTS` (colon
+  separated) overrides the default single workspace root for both.
+- Logs, lockfiles, images and other generated artifacts are never treated as
+  documentation and never as material changes.
 
 ## Revision management and supersession
 
 - A document's logical ID and its revision come from stable hashes
-  (`doc_id` = sha256 of the relative path, `rev` = sha256 of the content), so
-  retries are idempotent and unchanged documents cost one cheap search.
+  (`doc_id` = sha256 of the root-scoped identity `root-id::rel`, `rev` =
+  sha256 of the content), so retries are idempotent and unchanged documents
+  cost one cheap search.
 - Updating a runbook ingests the NEW revision first, verifies every chunk, and
   only then records an idempotent tombstone
   (`[docs-superseded:<docid>:<old>-><new>]`) and flips the ledger's active
@@ -93,6 +135,10 @@ never leaves a torn ledger.
   `--stale` for audits.
 - If the memory stack cannot verify the new revision, the old revision stays
   active and the ledger records `PENDING`/`FAILED` — nothing false is claimed.
+- Normal `search` returns only records whose document identity AND revision
+  match a verified active ledger revision in the scanned scope; records that
+  cannot be attributed to an active revision are treated as historical and
+  need `--stale`.
 
 ## The documentation closure gate (shared policy)
 
@@ -102,6 +148,11 @@ exactly one outcome and records it for deterministic verification:
 - `DOC_UPDATED` — docs were created/updated (list the files) AND each was
   ingested with `DOC_INGEST_INDEXED`/verified `DOC_INGEST_UNCHANGED`, AND the
   knowledge-capture step was reported (`CAPTURED` | `NO_LESSON` | `DEFERRED`).
+  The gate never takes the caller's word for the ingestion status: on record
+  and again at every re-check it independently re-derives the evidence with
+  `memory-doc-ingest.py verify` against the ledger and the current source
+  hashes. A fabricated status, a hash mismatch, a pending/failed newer
+  revision or a wrong workspace is refused with a precise finding.
 - `DOC_NOT_REQUIRED` — only for genuinely non-material changes (formatting,
   typos, throwaway work) with a concrete reason. The validator refuses it
   when material files changed without a skip justification.
@@ -142,11 +193,17 @@ prose claims.
   - `SessionStart` → the same start-of-work guidance as OpenChamber's start
     reminder (bounded, advisory).
   - `Stop` → event-driven `memory-doc-ingest.py retry` for pending work, then
-    the deterministic closeout check: a session that recorded an incomplete
+    automatic discovery: the baseline census diff runs and every new/changed
+    eligible doc (tracked or untracked) is ingested through the shared
+    pipeline before the closeout check. A session that recorded an incomplete
     assessment (missing ingestion, `DOC_BLOCKED`, unreported capture status)
     is blocked with concrete remediation, bounded to 3 blocks per session
-    (never an infinite loop), honouring `stop_hook_active`. Sessions that
-    recorded no assessment (ordinary chat, read-only work) are never blocked.
+    (never an infinite loop), honouring `stop_hook_active`. A material change
+    observed with no recorded assessment at all is also blocked (bounded the
+    same way) with the exact `assess` command to run — while sessions that
+    made no changes (ordinary chat, read-only work) are never blocked. A
+    malformed hook payload is a strict no-op, never an action against an
+    ambiguous workspace.
 - Specialist agents (implementation/general roles) carry the same closeout
   text in their definitions; the Code Reviewer verifies the stated
   documentation outcome instead of trusting it.

@@ -117,15 +117,23 @@ re-run the installer):
   OpenChamber runbook-nudge uses: check tracking records, read the covering
   runbook, search RepoQL concepts, search the installation's indexed shared
   documentation (`python3 scripts/memory-doc-ingest.py search "<topic>"`).
+- **SessionStart baseline** — the hook also records a per-session census of
+  eligible documentation plus the git dirty set, so pre-existing dirty files
+  are never attributed to your session.
 - **Stop** — the final-answer closeout: it (1) re-drives pending MemoryCore
   documentation ingestion (`memory-doc-ingest.py retry --all`, event-driven;
-  a no-op when the ledger is clean) and (2) verifies the session's recorded
-  documentation assessment (`scripts/doc-policy.mjs assess` / `check`). A
-  material task that reports `DOC_UPDATED` without verified ingestion,
-  `DOC_BLOCKED`, or an unreported knowledge-capture status is BLOCKED with
-  concrete remediation — bounded to 3 blocks per session, honouring
-  `stop_hook_active`, and never applied to sessions that recorded no
-  assessment (ordinary chat, read-only work).
+  a no-op when the ledger is clean), (2) diff-checks the baseline and
+  AUTO-INGESTS every new or changed eligible doc — tracked or newly created
+  untracked, docs-only work included (content-hash dedup makes repeats a
+  no-op), and (3) verifies the session's recorded documentation assessment
+  (`scripts/doc-policy.mjs assess` / `check`), re-deriving the ingestion
+  evidence from the ledger itself — a claimed status never counts. A material
+  task that reports `DOC_UPDATED` without verified ingestion, `DOC_BLOCKED`,
+  an unreported knowledge-capture status, or that made a material change with
+  no recorded assessment at all is BLOCKED with concrete remediation —
+  bounded to 3 blocks per session, honouring `stop_hook_active`, and never
+  applied to sessions that made no changes (ordinary chat, read-only work).
+  A malformed hook payload is a strict no-op.
 
 The policy is shared with OpenChamber and re-checkable exactly the same way:
 `node scripts/doc-policy.mjs check --session <id>`. Full mechanics, statuses

@@ -12,6 +12,32 @@ import urllib.error
 import urllib.request
 
 
+def ensure_success(resp, context="memory request"):
+    """Application-level success check for MemoryCore responses.
+
+    Transport success (HTTP 200) is NOT proof of a successful write: the
+    gateway contract returns ``{"code": N, ...}`` where non-zero N means the
+    application rejected the request. Malformed payloads are also refused —
+    never treated as success. Error messages carry only the generic context,
+    never authentication headers or secret values.
+    """
+    if resp is None:
+        raise RuntimeError(f"{context}: empty memory response — not treated as success")
+    if isinstance(resp, (str, bytes)) or not hasattr(resp, "get"):
+        raise RuntimeError(f"{context}: malformed memory response (expected object) — not treated as success")
+    code = resp.get("code")
+    if code is not None:
+        try:
+            ok = int(code) == 0
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            raise RuntimeError(f"{context}: memory API reported application code {code} — not treated as success")
+    if resp.get("error"):
+        raise RuntimeError(f"{context}: memory API reported an application error — not treated as success")
+    return resp
+
+
 def memory_call(base, cfg, path, payload, timeout=10):
     """POST one MemoryCore request and decode the JSON response.
 

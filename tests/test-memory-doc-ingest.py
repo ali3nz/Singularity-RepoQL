@@ -130,8 +130,12 @@ class Fixtures(unittest.TestCase):
         return p
 
     def ledger_entry(self, rel):
+        # Ledger keys are root-scoped ("<root-id>::<rel>"); resolve by the
+        # entry's recorded relative path and require a unambiguous match.
         led = json.loads((self.root / "data" / "doc-index" / "ledger.json").read_text())
-        return led["docs"][rel]
+        matches = [e for e in led["docs"].values() if e.get("rel") == rel]
+        self.assertEqual(len(matches), 1, f"ledger lookup for {rel}: {len(matches)} entries")
+        return matches[0]
 
     # ── F: a synthetic new runbook is ingested and verified searchable ───────
     def test_f_new_runbook_ingested_and_verified(self):
@@ -243,6 +247,77 @@ class Fixtures(unittest.TestCase):
         out = mdi.status_report(rel, all_docs=False, root_arg=str(self.root / "docs"))
         return out[0]
 
+    def root_status(self, rel, root_arg="__default__"):
+        """Retry a specific doc and return the single resulting status."""
+        kwargs = {} if root_arg == "__default__" else {"root_arg": root_arg}
+        out = mdi.retry(rel, all_docs=False, **kwargs)
+        self.assertEqual(len(out), 1, out)
+        return out[0]
+
+    def test_r_unauthorised_root_retry_is_refused_then_reauthorised_with_root(self):
+        p = self.make_runbook("runbook-roots.md", "Root allowlist probe.")
+        stub, report = self.run_ingest("docs/runbook-roots.md", searchable_after=0.2)
+        self.assertEqual(report["status"], "DOC_INGEST_INDEXED", report)
+        # Simulate a root the invocation no longer trusts: point the allowlist
+        # somewhere unrelated. The recorded root must then be refused even
+        # though the path would trivially resolve inside it.
+        other = self.root.parent / "unrelated-audit-root"
+        other.mkdir(exist_ok=True)
+        os.environ["SINGULARITY_DOC_ROOTS"] = str(other)
+        try:
+            # No explicit --root: the recorded root is not in the invocation's
+            # allowlist, so the retry refuses instead of silently re-ingesting.
+            blocked = self.root_status("runbook-roots.md", root_arg=None)
+            self.assertEqual(blocked["status"], "DOC_INGEST_BLOCKED", blocked)
+            self.assertIn("currently authorised", blocked["reason"])
+        finally:
+            os.environ["SINGULARITY_DOC_ROOTS"] = ""
+        # Authorising the recorded root again restores the normal path.
+        stub2, r2 = self.run_ingest("docs/runbook-roots.md", searchable_after=0.2)
+        self.assertIn(r2["status"], ("DOC_INGEST_UNCHANGED", "DOC_INGEST_INDEXED"), r2)
+
+    def test_s_concurrent_revisions_end_in_one_active_verified_state(self):
+        p = self.make_runbook("runbook-conc.md", "Concurrent revision ordering probe: start.")
+        stub = StubMemory(searchable_after=0)
+        stub.start(); stub.started.wait(2)
+        self.set_gateway(stub)
+        results = []
+        lock = threading.Lock()
+        bodies = ["Concurrent revision ordering probe: variant A.\n", "Concurrent revision ordering probe: variant B.\n"]
+        def worker(i, delay):
+            time.sleep(delay)
+            p.write_text(bodies[i])
+            r = mdi.ingest_file(p, root_arg=str(self.root / "docs"), session="conc")
+            with lock:
+                results.append(r)
+        threads = [threading.Thread(target=worker, args=(i, d)) for i, d in enumerate((0.05, 0.35))]
+        for t in threads: t.start()
+        for t in threads: t.join(40)
+        # The flock keeps each transaction atomic; validate the outcome, not the interleaving order.
+        entry = self.ledger_entry("runbook-conc.md")
+        active = entry["active_rev"]
+        self.assertIn(active, entry["revs"], "torn ledger state")
+        self.assertIn(entry["revs"][active]["status"], ("DOC_INGEST_INDEXED", "DOC_INGEST_UNCHANGED"))
+        for r in results:
+            self.assertIn(r["status"], ("DOC_INGEST_INDEXED", "DOC_INGEST_UNCHANGED", "DOC_INGEST_PENDING"), r)
+        v = mdi.verify_file("runbook-conc.md", root_arg=str(self.root / "docs"))
+        self.assertEqual(v["status"], "DOC_INGEST_VERIFIED", v)
+
+    def test_t_pending_revision_does_not_block_a_newer_verified_one(self):
+        self.make_runbook("runbook-mix.md", "Mixed outcome probe: first revision.")
+        stub, r1 = self.run_ingest("docs/runbook-mix.md", searchable_after=0.2)
+        self.assertEqual(r1["status"], "DOC_INGEST_INDEXED", r1)
+        self.make_runbook("runbook-mix.md", "Mixed outcome probe: second revision fails to verify.")
+        stub2, r2 = self.run_ingest("docs/runbook-mix.md", searchable_after=999)
+        self.assertEqual(r2["status"], "DOC_INGEST_PENDING", r2)
+        self.assertEqual(self.ledger_entry("runbook-mix.md")["active_rev"], r1["rev"],
+                         "unverified newer revision must not become active")
+        v = mdi.verify_file("runbook-mix.md", root_arg=str(self.root / "docs"))
+        self.assertNotEqual(v["status"], "DOC_INGEST_VERIFIED", v)
+        # The source changed and was never successfully indexed: the refusal is
+        # EITHER the stale-hash diagnosis or the newer-unresolved-revision
+        # diagnosis depending on which check trips first — both refuse.
+        self.assertRegex(v["reason"], r"never indexed successfully|newer unresolved")
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

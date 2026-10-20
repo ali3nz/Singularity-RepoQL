@@ -3,6 +3,14 @@
 // inference. The context hook also runs before tool continuations, so the agent
 // sees the closing reminder before it can choose its final answer. No stop
 // interception, synthetic follow-up turns, or forced documentation writes.
+//
+// Documentation change discovery: beyond the reminders, this plugin also runs
+// the SHARED discovery/ingestion pass (scripts/doc-policy.mjs autoIngest*) on
+// the verified OpenCode runtime event `session.execution.succeeded` (and the
+// failed/interrupted variants, so a crashed session's documentation work is
+// still ingested). It is event-driven (no polling service), bounded, uses the
+// session baseline so pre-existing dirty files are never attributed to this
+// session, and stays fail-open: a discovery failure never blocks anything.
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -119,13 +127,83 @@ export const RunbookNudge = {
           }
           audit({ sessionID: sid, tool: "runbook-nudge", decision: "NUDGE-RB-CONTEXT", reason: "before-final runbook/concepts/validation reminder inserted into primary model context" });
         } catch { /* malformed/frozen draft cannot break a model request */ }
-      });
-      audit({ tool: "runbook-nudge", decision: "CONTEXT_HOOK", reason: "pre-request runbook reminders registered" });
-      return () => registration?.dispose?.();
+      });      audit({ tool: "runbook-nudge", decision: "CONTEXT_HOOK", reason: "pre-request runbook reminders registered" });
+      const disposeDiscovery = await registerDiscovery(ctx);
+      return () => { registration?.dispose?.(); disposeDiscovery?.(); };
     } catch {
       audit({ tool: "runbook-nudge", decision: "CONTEXT_HOOK_ERROR", reason: "context hook registration failed; the AGENTS.md runbook rules remain" });
-    }
-  },
+    }},
 };
+
+// ── event-driven automatic documentation discovery (shared implementation) ──
+// Runs the SAME discovery pass Claude Code uses (doc-policy.mjs) on the
+// verified OpenCode runtime events. No second ingestion engine; no polling.
+const UNDOC_END_EVENTS = new Set([
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+]);
+const UNDOC_BASELINE_EVENTS = new Set(["session.created"]); // per-session baseline start
+const DISCOVERY_MIN_INTERVAL_MS = 60_000;
+
+async function loadSharedPolicy(audit) {
+  try {
+    return await import(new URL("../../../scripts/doc-policy.mjs", import.meta.url));
+  } catch (e) {
+    audit({ tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY-UNAVAILABLE",
+            reason: `shared doc-policy module not importable (${String(e?.message || e).slice(0, 80)}); reminders remain, automatic discovery disabled` });
+    return null;
+  }
+}
+
+async function registerDiscovery(ctx, auditFn = audit) {
+  if (String(process.env.OPENCHAMBER_DOC_INGEST || "on").trim().toLowerCase() === "off") return null;
+  const policy = await loadSharedPolicy(auditFn);
+  if (!policy || typeof ctx?.event?.subscribe !== "function") return null;
+  const controller = new AbortController();
+  const lastRunAt = new Map(); // sessionID -> timestamp guard (bounded repeats)
+  const state = new Map();     // sessionID -> "running" flag
+  (async () => {
+    try {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        // Session baseline at creation: files dirty before the session exist in
+        // the baseline and are never attributed to this session's work.
+        if (UNDOC_BASELINE_EVENTS.has(event.type)) {
+          const sid = event?.data?.sessionID;
+          if (typeof sid === "string" && sid) {
+            try {
+              await policy.saveSessionBaseline(sid, process.env.OPENCHAMBER_DOC_WORKSPACE || process.cwd());
+              auditFn({ sessionID: sid, tool: "runbook-nudge", decision: "NUDGE-RB-BASELINE", reason: "session documentation baseline recorded" });
+            } catch { /* baseline failure is non-fatal: next discovery pass records one */ }
+          }
+          continue;
+        }
+        if (!UNDOC_END_EVENTS.has(event.type)) continue;
+        const sid = event?.data?.sessionID;
+        if (typeof sid !== "string" || !sid) continue;
+        const now = Date.now();
+        if (now - (lastRunAt.get(sid) || 0) < DISCOVERY_MIN_INTERVAL_MS) continue;
+        if (state.get(sid)) continue;
+        lastRunAt.set(sid, now);
+        if (lastRunAt.size > 500) lastRunAt.delete(lastRunAt.keys().next().value);
+        state.set(sid, true);
+        (async () => {
+          try {
+            const dir = process.env.OPENCHAMBER_DOC_WORKSPACE || process.cwd();
+            const res = await policy.autoIngestChangedDocs(dir, sid);
+            auditFn({ sessionID: sid, tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY",
+                      reason: `auto-ingestion pass: ${res.ingested} changed doc(s); ${JSON.stringify(res.results.map(r => ({ f: r.file, s: r.status })))}` });
+          } catch (e) {
+            auditFn({ sessionID: sid, tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY-DEGRADED",
+                      reason: `discovery pass failed (${String(e?.message || e).slice(0, 90)}); nothing blocked` });
+          } finally {
+            state.set(sid, false);
+          }
+        })();
+      }
+    } catch { /* subscription ended; discovery remains best-effort */ }
+  })();
+  return () => controller.abort();
+}
 
 export default RunbookNudge;

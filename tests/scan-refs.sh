@@ -8,6 +8,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATTERNS="$ROOT/tests/forbidden-refs.txt"
 
 cd "$ROOT"
+# The scan targets what would SHIP. Runtime/generated directories are covered
+# by .gitignore (never committed) and are excluded from the release tree, so
+# grep must exclude them here too — otherwise a working checkout with local
+# runtime state always fails in CI-fresh terms.
 CLEAN="$(mktemp)"
 trap 'rm -f "$CLEAN"' EXIT
 grep -vE '^[[:space:]]*(#|$)' "$PATTERNS" > "$CLEAN"
@@ -16,6 +20,12 @@ hits="$(grep -RnE -f "$CLEAN" \
   --exclude-dir=upstream \
   --exclude-dir=node_modules \
   --exclude-dir=.repoql \
+  --exclude-dir=data \
+  --exclude-dir=state \
+  --exclude-dir=workspaces \
+  --exclude-dir=knowledge-store \
+  --exclude-dir=evidence \
+  --exclude-dir=backups \
   --exclude=forbidden-refs.txt \
   . || true)"
 

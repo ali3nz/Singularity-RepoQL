@@ -1,21 +1,68 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   classifyFiles,
   evaluateAssessment,
   loadAssessment,
   writeAssessmentAtomic,
-  stateDir,
-  assessmentPath,
+  baselinePath,
   sanitizeSession,
+  scanDocCensus,
+  observeWorkspace,
+  autoIngestChangedDocs,
+  collectEvidence,
   main as cliMain,
 } from "../scripts/doc-policy.mjs";
 
+const sha8 = (s) => createHash("sha256").update(String(s)).digest("hex").slice(0, 8);
+
 function scratch() {
   return mkdtempSync(join(tmpdir(), "doc-policy-test-"));
+}
+
+// Fabricate ledger evidence the verify CLI would derive from a real ingestion:
+// root, rel, root-scoped identity, verified active revision, chunk accounting.
+function plantLedgerEvidence(rootDir, rel, { withVerified = true, staleSource = false, extraStaleRev = false } = {}) {
+  const absRoot = resolve(rootDir); // ledger root = the project root (discovery/ingest scope)
+  const file = join(absRoot, rel);
+  const text = (staleSource ? readFileSync(file, "utf8") + "\nchanged-but-unindexed\n" : readFileSync(file, "utf8"));
+  const rootId = sha8(absRoot);
+  const key = `${rootId}::${rel}`;
+  const rev = activeRev(rootDir, rel, text);
+  const rootIdShield = "root";
+  const ledger = {
+    version: 1,
+    docs: {
+      [key]: {
+        root: absRoot, root_id: rootId, rel,
+        doc_id: sha8(key), title: rel.split("/").pop(),
+        active_rev: rev,
+        revs: {
+          [rev]: withVerified ? {
+            status: "DOC_INGEST_INDEXED", verified_at: "2026-10-20T00:00:00Z",
+            chunks: 1, task_ids: ["c1"], hashes: ["ch1"], ingested_at: "2026-10-20T00:00:00Z",
+          } : { status: "DOC_INGEST_INDEXED", chunks: 1, task_ids: ["c1"], hashes: ["ch1"] },
+          ...(extraStaleRev ? { aaaa2222: { status: "DOC_INGEST_FAILED", ingested_at: "2026-10-20T00:00:01Z", chunks: 1, task_ids: ["c2"], hashes: ["ch2"] } } : {}),
+        },
+      },
+    },
+  };
+  mkdirSync(join(rootDir, "data", "doc-index"), { recursive: true });
+  let existing = {};
+  try { existing = JSON.parse(readFileSync(join(rootDir, "data", "doc-index", "ledger.json"), "utf8")); } catch { /* fresh */ }
+  existing.docs = { ...(existing.docs || {}), ...ledger.docs };
+  writeFileSync(join(rootDir, "data", "doc-index", "ledger.json"), JSON.stringify(existing, null, 2));
+  return { key, rootId, rev };
+}
+
+function activeRev(rootDir, rel, text) {
+  const absRoot = resolve(join(rootDir, "docs"));
+  const rootId = sha8(absRoot);
+  return sha8(text).slice(0, 8);
 }
 
 test("classification: code/config is material, docs/locks/generated are skipped", () => {
@@ -28,90 +75,113 @@ test("classification: code/config is material, docs/locks/generated are skipped"
   assert.equal(skipped.length, 8);
 });
 
-test("assessment outcomes: each policy path yields the required findings", () => {
-  // No assessment at all
+test("no assessment recorded / DOC_BLOCKED behaves as before", () => {
   assert.match(evaluateAssessment({ files: ["a.py"] })[0], /no documentation assessment recorded/);
-
-  // DOC_BLOCKED never closes
   const blocked = evaluateAssessment({ files: ["a.py"], docStatus: "DOC_BLOCKED", docReason: "docs system offline", captureStatus: "NO_LESSON" });
   assert.ok(blocked.some((f) => /BLOCKED/.test(f)));
+});
 
-  // DOC_UPDATED missing docs + ingestion + capture
-  const updated = evaluateAssessment({ files: ["a.py"], docStatus: "DOC_UPDATED", captureStatus: null });
-  assert.ok(updated.some((f) => /requires at least one created\/updated documentation file/.test(f)));
-  assert.ok(updated.some((f) => /verified MemoryCore ingestion/.test(f)));
-  assert.ok(updated.some((f) => /knowledge-capture status unreported/.test(f)));
-
-  // DOC_UPDATED with pending ingestion does not close
-  const pending = evaluateAssessment({
-    files: ["a.py"], docStatus: "DOC_UPDATED", docs: ["docs/r.md"],
-    ingestion: ["DOC_INGEST_PENDING"], captureStatus: "CAPTURED",
-    // files need not exist under evaluateAssessment (existence checked via existsSync on missing path)
-  });
-  assert.ok(pending.some((f) => /does not close the task; retry/.test(f)));
-
-  // DOC_UPDATED fully closed leaves no findings (docs exist in tmp root)
+test("DOC_UPDATED without ledger evidence cannot pass (evidence is mandatory)", () => {
+  const out = evaluateAssessment({ files: ["a.py"], docStatus: "DOC_UPDATED", docs: [], captureStatus: "CAPTURED" });
+  assert.ok(out.some((f) => /requires at least one created\/updated documentation file/.test(f)));
   const dir = scratch();
-  try { writeFileSync(join(dir, "r.md"), "# Runbook\n"); const opts = { allowMissing: false };
-    const clean = evaluateAssessment({
-      files: ["a.py"], docStatus: "DOC_UPDATED", docs: [join(dir, "r.md")],
-      ingestion: ["DOC_INGEST_INDEXED"], captureStatus: "NO_LESSON",
-    });
-    assert.deepEqual(clean, []);
+  try {
+    writeFileSync(join(dir, "r.md"), "# Runbook\n");
+    const noEvidence = evaluateAssessment({
+      files: ["a.py"], docStatus: "DOC_UPDATED", docs: [join(dir, "r.md")], ingestion: ["DOC_INGEST_INDEXED"], captureStatus: "CAPTURED",
+    }, {});
+    assert.ok(noEvidence.some((f) => /ingestion evidence was not checked/.test(f)));
+    const pendingEvidence = evaluateAssessment({
+      files: ["a.py"], docStatus: "DOC_UPDATED", docs: [join(dir, "r.md")], ingestion: ["DOC_INGEST_INDEXED"], captureStatus: "CAPTURED",
+    }, { evidence: { [join(dir, "r.md")]: { status: "DOC_INGEST_NOT_VERIFIED", reason: "no ledger record" } } });
+    assert.ok(pendingEvidence.some((f) => /NOT verified for.*no ledger record/.test(f.replace(/\s+/g, " ")) || /NOT verified/.test(f)));
+    const fabricated = evaluateAssessment({
+      files: ["a.py"], docStatus: "DOC_UPDATED", docs: [join(dir, "r.md")], ingestion: ["DOC_INGEST_INDEXED"], captureStatus: "CAPTURED",
+    }, { evidence: { [join(dir, "r.md")]: { status: "DOC_INGEST_VERIFIED" } } });
+    assert.deepEqual(fabricated, []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
-  // DOC_NOT_REQUIRED for a non-material set + reason closes
+test("fabricated DOC_INGEST_INDEXED claim is refused; contradiction is surfaced", () => {
+  const dir = scratch();
+  try {
+    writeFileSync(join(dir, "r.md"), "# Runbook\n");
+    const ev = { [join(dir, "r.md")]: { status: "DOC_INGEST_NOT_VERIFIED", reason: "incomplete chunk records" } };
+    const claimedIndexed = evaluateAssessment({
+      files: ["a.py"], docStatus: "DOC_UPDATED", docs: [join(dir, "r.md")], ingestion: ["DOC_INGEST_INDEXED"], captureStatus: "CAPTURED",
+    }, { evidence: ev });
+    assert.ok(claimedIndexed.some((f) => /NOT verified for .*incomplete chunk records/.test(f.replace(/\s+/g, " "))));
+    const contradiction = evaluateAssessment({
+      files: ["a.py"], docStatus: "DOC_UPDATED", docs: [join(dir, "r.md")], ingestion: ["DOC_INGEST_PENDING"], captureStatus: "CAPTURED",
+    }, { evidence: { [join(dir, "r.md")]: { status: "DOC_INGEST_VERIFIED" } } });
+    assert.ok(contradiction.some((f) => /contradicts the verified ledger evidence/.test(f)));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("DOC_NOT_REQUIRED: valid for trivia, refused for material changes, vague reason refused", () => {
   assert.deepEqual(evaluateAssessment({
     files: ["README.md"], docStatus: "DOC_NOT_REQUIRED", docReason: "typo fix only", captureStatus: "NO_LESSON",
   }), []);
-
-  // DOC_NOT_REQUIRED refused for material files without a skip justification
   assert.ok(evaluateAssessment({
     files: ["a.py"], docStatus: "DOC_NOT_REQUIRED", docReason: "small change", captureStatus: "NO_LESSON",
   }).some((f) => /DOC_NOT_REQUIRED refused/.test(f)));
-
-  // DOC_NOT_REQUIRED with vague reason
   assert.ok(evaluateAssessment({
     files: ["README.md"], docStatus: "DOC_NOT_REQUIRED", docReason: "", captureStatus: "NO_LESSON",
   }).some((f) => /needs a concise, specific reason/.test(f)));
 });
 
-test("CLI end-to-end: assess -> check closes; refuses material DOC_NOT_REQUIRED", () => {
-  const dir = scratch();
+function execCliCapture() {
   const calls = [];
+  return { calls };
+}
+
+test("CLI end-to-end: evidence-backed DOC_UPDATED closes; stale/fabricated/pending refuse via real verify", async () => {
+  const dir = scratch();
+  const capture = { lines: [] };
   const origLog = console.log;
   const origCwd = process.cwd();
   try {
-    console.log = (...a) => { calls.push(a.join(" ")); };
+    console.log = (...a) => { capture.lines.push(a.join(" ")); };
     process.chdir(dir);
-    mkdirSync("data", { recursive: true });
+    mkdirSync("sources", { recursive: true });
     mkdirSync("docs", { recursive: true });
-    writeFileSync("docs/new-runbook.md", "# New runbook\nsteps\n");
+    writeFileSync("main.py", "print('synthetic')\n");
+    writeFileSync("docs/runbook.md", "# Synthetic runbook\nsteps: one.\n");
 
-    // 1. incomplete assessment recorded -> findings, rc 1
-    let rc = cliMain(["assess", "--session", "s1", "--files", "src/a.py",
-      "--doc-status", "DOC_UPDATED", "--docs", "docs/new-runbook.md", "--capture-status", "CAPTURED"]);
-    assert.equal(rc, 1);
-    let last = JSON.parse(calls[calls.length - 1]);
-    assert.equal(last.complete, false);
-    assert.match(last.token, /^SINGDOC-[0-9a-f]{8}$/);
-    assert.ok(last.findings.some((f) => /verified MemoryCore ingestion/.test(f)));
-    assert.ok(existsSync(assessmentPath("s1", dir)));
-    assert.deepEqual(loadAssessment("s1", dir).files, ["src/a.py"]);
-
-    // 2. complete assessment -> rc 0 and check passes
-    rc = cliMain(["assess", "--session", "s1", "--files", "src/a.py",
-      "--doc-status", "DOC_UPDATED", "--docs", "docs/new-runbook.md",
+    // 1) uningested claim fabricating DOC_INGEST_INDEXED -> refusal via verify
+    let rc = await cliMain(["assess", "--session", "f1", "--files", "main.py",
+      "--doc-status", "DOC_UPDATED", "--docs", "docs/runbook.md",
       "--ingest-status", "DOC_INGEST_INDEXED", "--capture-status", "CAPTURED"]);
-    assert.equal(rc, 0);
-    rc = cliMain(["check", "--session", "s1"]);
-    assert.equal(rc, 0);
-    assert.match(calls[calls.length - 1].replace(/\s+/g, ""), /"complete":true/);
-
-    // 3. second session not checked -> rc 1 with the missing-record finding
-    rc = cliMain(["check", "--session", "s2"]);
     assert.equal(rc, 1);
-    assert.match(JSON.parse(calls[calls.length - 1]).findings[0], /no assessment for this session/);
+    const first = JSON.parse(capture.lines[capture.lines.length - 1]);
+    assert.equal(first.complete, false);
+    assert.ok(first.findings.some((f) => /NOT verified for .*no ledger record/.test(f.replace(/\s+/g, " "))), first.findings);
+
+    // 2) plant verified ledger evidence with the REAL current hash -> closes
+    plantLedgerEvidence(dir, "docs/runbook.md");
+    rc = await cliMain(["assess", "--session", "f1", "--files", "main.py",
+      "--doc-status", "DOC_UPDATED", "--docs", "docs/runbook.md",
+      "--ingest-status", "DOC_INGEST_INDEXED", "--capture-status", "CAPTURED"]);
+    assert.equal(rc, 0, capture.lines[capture.lines.length - 1]);
+    rc = await cliMain(["check", "--session", "f1"]);
+    assert.equal(rc, 0);
+
+    // 3) source changed afterwards -> evidence goes stale -> refusal
+    writeFileSync("docs/runbook.md", "# Synthetic runbook\nsteps: one two.\n");
+    rc = await cliMain(["check", "--session", "f1"]);
+    assert.equal(rc, 1);
+    const stale = JSON.parse(capture.lines[capture.lines.length - 1]);
+    assert.ok(stale.findings.some((f) => /NOT verified for .*never indexed successfully|stale/.test(f.replace(/\s+/g, " "))), stale.findings);
+
+    // fourth session: fabricated HASH-style claim with ledger missing verified_at
+    // (record present but unverified) is still refused.
+    plantLedgerEvidence(dir, "docs/runbook.md", { withVerified: false, staleSource: false });
+    rc = await cliMain(["assess", "--session", "f2", "--files", "main.py",
+      "--doc-status", "DOC_UPDATED", "--docs", "docs/runbook.md",
+      "--ingest-status", "DOC_INGEST_INDEXED", "--capture-status", "CAPTURED"]);
+    assert.equal(rc, 1);
+    const unverified = JSON.parse(capture.lines[capture.lines.length - 1]);
+    assert.ok(unverified.findings.some((f) => /NOT verified/.test(f)), unverified.findings);
   } finally {
     console.log = origLog;
     process.chdir(origCwd);
@@ -119,24 +189,162 @@ test("CLI end-to-end: assess -> check closes; refuses material DOC_NOT_REQUIRED"
   }
 });
 
-test("assessment records are atomic and isolated per sanitized session", () => {
+test("project-root scope mismatch refuses closure evidence", async () => {
+  const wA = scratch();
+  const wB = scratch();
+  const capture = { lines: [] };
+  const origLog = console.log;
+  const origCwd = process.cwd();
+  try {
+    console.log = (...a) => { capture.lines.push(a.join(" ")); };
+    process.chdir(wB);
+    mkdirSync("docs", { recursive: true });
+    writeFileSync("main.py", "x=1\n");
+    // the doc identity belongs to workspace A (ledger planted there)
+    mkdirSync(join(wA, "docs"), { recursive: true });
+    writeFileSync(join(wA, "main.py"), "x=1\n");
+    writeFileSync(join(wA, "docs", "runbook.md"), "# runbook ONLY ingested in workspace A\n");
+    plantLedgerEvidence(wA, "docs/runbook.md");
+    // evidence check with --project-root wB: recorded root is wA -> wrong workspace refusal
+    const rc = await cliMain(["assess", "--session", "s-root", "--files", "main.py",
+      "--doc-status", "DOC_UPDATED", "--docs", "docs/runbook.md",
+      "--ingest-status", "DOC_INGEST_INDEXED", "--capture-status", "CAPTURED", "--project-root", wB]);
+    assert.equal(rc, 1);
+    const last = JSON.parse(capture.lines[capture.lines.length - 1]);
+    assert.ok(last.findings.some((f) => /NOT verified|no ledger record|different workspace/.test(f.replace(/\s+/g, " "))), last.findings);
+  } finally {
+    console.log = origLog;
+    process.chdir(origCwd);
+    rmSync(wA, { recursive: true, force: true });
+    rmSync(wB, { recursive: true, force: true });
+  }
+});
+
+test("assessment records remain atomic and isolated per sanitized session", () => {
   const dir = scratch();
   try {
     const rec = { files: ["x.py"], docStatus: "DOC_BLOCKED", captureStatus: "NO_LESSON" };
     const p1 = writeAssessmentAtomic("we/ird:session", dir, rec);
     const p2 = writeAssessmentAtomic("ok-session", dir, rec);
-    assert.equal(p1.includes("we_ird_session.json"), true);
-    assert.equal(p2.includes("ok-session.json"), true);
+    assert.ok(p1.includes("we_ird_session.json"));
+    assert.ok(p2.includes("ok-session.json"));
     assert.equal(sanitizeSession("../../x"), "______x");
     assert.match(readFileSync(p1, "utf8"), /files/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("state dir lives under project data/ (product-local, not runtime data in git)", () => {
+test("discovery: eligible docs censused, baseline diff, doc-only + code-less updates still ingested", async () => {
   const dir = scratch();
-  mkdirSync(join(dir, ".git"), { recursive: true });
-  mkdirSync(join(dir, "data"), { recursive: true });
-  assert.equal(stateDir(dir).startsWith(dir), true);
-  assert.equal(stateDir(dir).includes(join("data", "doc-policy")), true);
+  const ingested = [];
+  const execFake = (file, args, opts, cb) => {
+    if (args[1] === "ingest") {
+      ingested.push(args.slice(0, 5).join(" "));
+      cb(null, JSON.stringify({ status: "DOC_INGEST_INDEXED", file: "docs/new-note.md", chunks: 1 }), "");
+      return;
+    }
+    if (args[1] === "verify") { cb(null, JSON.stringify({ status: "DOC_INGEST_NOT_VERIFIED", reason: "stub" }), ""); return; }
+    cb(new Error("not a git repo"), "", ""); // git status fallback: unobservable
+  };
+  const doc = join(dir, "docs", "nested", "some note.md");
+  mkdirSync(join(dir, "docs", "nested"), { recursive: true });
+  writeFileSync(doc, "# space in name\n");
+  writeFileSync(doc.replace(".md", ".env.hidden"), "secretly not valid md\n");
+  const c = scanDocCensus(dir);
+  assert.ok(c.has(resolve(doc)), "eligible md is censused");
+  assert.ok(![...c.keys()].some((k) => k.endsWith(".env.hidden")), "secret-named files are never censused");
+
+  // Baseline-less first pass records the census it will diff against (it must
+  // not swallow the whole pre-existing docs tree into memory on install),
+  // so the FIRST pass ingests nothing and says so honestly.
+  const bootstrap = await autoIngestChangedDocs(dir, "sc1", { execImpl: execFake });
+  assert.equal(bootstrap.ingested, 0, "baseline-less pass establishes the baseline, no mass ingestion");
+  assert.ok(existsSync(baselinePath("sc1", dir)), "baseline recorded on disk");
+
+  // A doc changed AFTER the baseline (the normal authoring flow) is discovered.
+  const res = await autoIngestChangedDocs(dir, "sc1", { execImpl: execFake });
+  // (nothing changed since the bootstrap pass)
+  assert.equal(res.ingested, 0);
+  writeFileSync(doc, "# space in name\n freshly authored body\n");
+  const res3 = await autoIngestChangedDocs(dir, "sc1", { execImpl: execFake });
+  assert.ok(res3.changedDocs.some((d) => d.rel.endsWith("some note.md")), "post-baseline new/changed doc discovered");
+  assert.ok(res3.results.some((r) => r.status === "DOC_INGEST_INDEXED"));
+  // one discovery pass runs exactly one ingest for this doc
+  assert.ok(ingested.length === 1, ingested);
+  assert.match(ingested[0], /ingest --file .* --/);
+
+  // docs-only update (md classified non-material) is still detected & ingested
+  const before = ingested.length;
+  writeFileSync(doc, "# space in name\nupdated body again\n");
+  const res2 = await autoIngestChangedDocs(dir, "sc1", { execImpl: execFake });
+  assert.ok(res2.changedDocs.some((d) => d.rel.endsWith("some note.md")), "doc-only update is detected");
+  assert.equal(ingested.length, before + 1);
+
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("baseline recovery: unresolved ingestion keeps the change visible; resolved pass refreshes", async () => {
+  const dir = scratch();
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "keep.md"), "# keep\nbody\n");
+  const noop = (file, args, opts, cb) => {
+    if (args[1] === "ingest") { cb(null, JSON.stringify({ status: "DOC_INGEST_INDEXED", file: "docs/keep.md" }), ""); return; }
+    cb(new Error("no git"), "", "");
+  };
+  // Bootstrap baseline.
+  await autoIngestChangedDocs(dir, "rec", { execImpl: noop });
+  const created1 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8")).created;
+
+  // Author a change; ingestion FAILS (gateway down). Baseline must NOT refresh,
+  // so the change stays discoverable on the next check.
+  writeFileSync(join(dir, "docs", "keep.md"), "# keep\nbody\nnow unverified addition\n");
+  const failImpl = (file, args, opts, cb) => {
+    if (args[1] === "ingest") { cb(null, JSON.stringify({ status: "DOC_INGEST_PENDING", reason: "not searchable" }), ""); return; }
+    cb(new Error("no git"), "", "");
+  };
+  const pass1 = await autoIngestChangedDocs(dir, "rec", { execImpl: failImpl });
+  assert.equal(pass1.results[0].status, "DOC_INGEST_PENDING");
+  const created2 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8")).created;
+  assert.equal(created2, created1, "baseline must not refresh while ingestion is unresolved");
+
+  // Next check re-discovers the SAME change and now resolves it; baseline refreshes.
+  const pass2 = await autoIngestChangedDocs(dir, "rec", { execImpl: noop });
+  assert.ok(pass2.changedDocs.some((d) => d.rel.endsWith("keep.md")), "unchanged ingestion target is re-discovered");
+  assert.equal(pass2.results[0].status, "DOC_INGEST_INDEXED");
+  const created3 = JSON.parse(readFileSync(baselinePath("rec", dir), "utf8")).created;
+  assert.notEqual(created3, created1, "baseline refreshes once ingestion is resolved");
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("observed material changes exclude pre-existing dirty files", async () => {
+  const dir = scratch();
+  const execFake = (file, args, opts, cb) => {
+    if (args[0] === "status") cb(null, " M pre-existing.py\0", "");
+    else cb(null, "", "");
+  };
+  const obs = await observeWorkspace(dir, "mb", { execImpl: execFake });
+  assert.deepEqual(obs.newDirty, [], "baseline matches the present dirty set -> nothing attributed");
+  const { material } = classifyFiles(obs.newDirty || []);
+  assert.equal(material.length, 0);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("CLI end-to-end refuses material DOC_NOT_REQUIRED; check on unknown session refuses", async () => {
+  const dir = scratch();
+  const capture = { lines: [] };
+  const origLog = console.log;
+  const origCwd = process.cwd();
+  try {
+    console.log = (...a) => { capture.lines.push(a.join(" ")); };
+    process.chdir(dir);
+    let rc = await cliMain(["assess", "--session", "m1", "--files", "a.py", "--doc-status", "DOC_NOT_REQUIRED", "--reason", "small change", "--capture-status", "CAPTURED"]);
+    assert.equal(rc, 1);
+    rc = await cliMain(["check", "--session", "unknown-session"]);
+    assert.equal(rc, 1);
+    assert.match(JSON.parse(capture.lines[capture.lines.length - 1]).findings[0], /no assessment for this session/);
+  } finally {
+    console.log = origLog;
+    process.chdir(origCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
