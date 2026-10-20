@@ -18,13 +18,18 @@ for f in scripts/*.py; do check python3 -m py_compile "$f"; done
 rm -rf scripts/__pycache__ 2>/dev/null || true
 
 step "node syntax"
-for f in scripts/*.mjs ghost/*.mjs openchamber/plugins/product-office/*.js \
+for f in scripts/*.mjs ghost/*.mjs adapters/claude-code/*.mjs \
+         openchamber/plugins/product-office/*.js \
          openchamber/plugins/runbook-nudge/*.js; do check node --check "$f"; done
 
 step "unit tests"
 check node --test scripts/cohere-quota.test.mjs
 check node --test scripts/setup-agent-profiles.test.mjs
 check node --test scripts/extraction-failover.test.mjs
+check node --test scripts/install-claude-code.profiles.test.mjs
+check node --test adapters/claude-code/integration.test.mjs
+check node --test adapters/claude-code/memory-hook.test.mjs
+check node --test adapters/claude-code/installer.test.mjs
 check node --test ghost/dream.test.mjs
 check node --test ghost/ghost-gateway.test.mjs
 check python3 tests/test-memory-security.py
@@ -50,6 +55,9 @@ done
 step "repoql bundle"
 check node -e 'const fs=require("fs");const s=fs.readFileSync("openchamber/opencode.jsonc","utf8").replace(/\/\*[\s\S]*?\*\//g,"").replace(/^[ \t]*\/\/.*$/gm,"");const d=JSON.parse(s);if(!d.mcp||!d.mcp.repoql||d.mcp.repoql.type!=="local")throw new Error("repoql MCP entry missing");if(!JSON.stringify(d.mcp.repoql).includes("rql"))throw new Error("repoql MCP entry must call rql");'
 check test -f docs/REPOQL-SETUP.md
+check test -f docs/CLAUDE-CODE-SETUP.md
+check test -f adapters/claude-code/agent-map.mjs
+check test -f adapters/claude-code/memory-hook.mjs
 check test -f compose/repoql.override.yml
 check grep -qi "repoql" openchamber/AGENTS.md
 

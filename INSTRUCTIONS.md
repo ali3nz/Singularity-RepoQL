@@ -86,7 +86,28 @@ cd Singularity-RepoQL
    script exercises capture (add → search) end-to-end
    against the memory core and must print a passing result.
 
-3. If Claude Code is not installed in WSL2, use Anthropic's native WSL
+3. Install the specialised Claude Code agents + memory hooks (new step —
+   gives Claude Code the same self-learning specialists that come with
+   OpenChamber, as native Claude Code subagents):
+
+   ```bash
+   node scripts/install-claude-code.mjs install
+   ```
+
+   This installs the seven `singularity-*` subagent definitions to
+   `~/.claude/agents/`, merges the SubagentStart (memory recall) and
+   SubagentStop (lesson capture) hooks and env into `~/.claude/settings.json`
+   (merging, never replacing; a timestamped backup is written), provisions/
+   verifies the agents' persistent MemoryCore profiles (the same identities the
+   OpenChamber agents use), and registers the `singularity-repoql` MCP server
+   when a Linux `rql` is detected. Re-running it is idempotent. Full details,
+   flags (`--scope project`, `--team/--user`, `--dry-run`) and verification:
+   [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md). If a scoped user
+   key was not yet provisioned, the installer still completes and the hooks
+   continue without memory until `provision-secrets.py --memory-user-key` has
+   been run; re-run the installer afterwards.
+
+4. If Claude Code is not installed in WSL2, use Anthropic's native WSL
    installer and verify it before wiring the proxy:
 
    ```bash
@@ -112,18 +133,25 @@ cd Singularity-RepoQL
    From then on Claude Code sessions are captured by the memory stack
    through the proxy automatically.
 
-4. Variant A does NOT install OpenChamber or Claude Office. Do not copy
-   `openchamber/` anywhere. Claude Code keeps using its own agents — the
-   specialised agents in this repository belong to Variant B's
-   OpenChamber runtime.
+5. Variant A does NOT install OpenChamber or Claude Office. Do not copy
+   `openchamber/` anywhere. With step 3 done, Claude Code users still get the
+   specialised agents — as native Claude Code subagents under their own
+   persistent MemoryCore identities — without any OpenChamber dependency. (The
+   `openchamber/agents/` definitions themselves remain the OpenChamber runtime
+   config; the Claude Code integration reuses them only as the source of the
+   shared MemoryCore identities.)
 
-Variant A is done after step 3. Skip to "Report".
+Variant A is done after step 5. Skip to "Report".
 
 ## 3. Variant B — memory stack + OpenChamber + Claude Office
 
 1. **Memory stack first** — execute Variant A steps 1–2 exactly as written
-   (the same stack powers both variants; skip only the Claude Code wiring in
-   step A3 unless the user also wants Claude Code captured).
+   (the same stack powers both variants; skip the Claude Code wiring — step A3
+   subagent installer and the proxy settings in A4 — unless the user also
+   runs Claude Code on this machine). When Claude Code is also used, run the
+   step A3 installer as well: it binds the native Claude Code subagents to the
+   SAME MemoryCore identities these OpenChamber agents use, so one Singularity
+   instance serves both clients consistently.
 
 2. **Install the OpenChamber configuration bundle**. With Docker Compose
    deployments the repo's `data/opencode/config/` directory is bind-mounted

@@ -10,8 +10,13 @@ path — nothing is promoted silently.
 | Source | How |
 |---|---|
 | Claude Code / harnesses | every request through the proxy (`:8096`) is captured |
+| Claude Code specialised agents | with `scripts/install-claude-code.mjs`: each finished `singularity-*` subagent contributes ONE bounded, redacted lesson via the SubagentStop hook, persisted under the agent's own MemoryCore identity through the reconciled write path (query-before-write → add → verify; stable task id, so retries do not duplicate) |
 | OpenChamber | the `product-office` plugin captures completed turns (user/assistant pairs) for sessions under the capture roots |
 | Anything | `POST /v3/conversation/add` with a scope (`team_id`, `user_id`, `agent_id`, `session_id`, `task_id`, `messages`) |
+
+Adding a record is never equated with having learned it: the reconciled path
+verifies persistence, trivial subagent output is never captured, and a failed
+or degraded capture is reported instead of silently assumed.
 
 Captured conversations land immediately as **L0 units** — raw, addressable,
 and searchable right away.
@@ -36,6 +41,11 @@ list shows extraction work progressing per scope.
   agent's context at session start — your agent simply sees prior context.
 - The OpenChamber plugin recalls per session and reconciles new turns back
   into the store.
+- With the Claude Code integration, each `singularity-*` subagent starts with
+  a bounded recall from its OWN identity (SubagentStart hook: ≤4 L0 + ≤4 L1
+  items, clipped, clearly stamped advisory-only). Recalled context never
+  overrides the current operator request or verified code, and a MemoryCore
+  outage degrades the recall visibly without blocking the agent.
 - Everything is also reachable on demand: `POST /v3/conversation/search` with
   a scope and query.
 

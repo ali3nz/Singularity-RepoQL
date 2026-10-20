@@ -13,7 +13,13 @@ code intelligence (structure, symbols, concepts) from the RepoQL you already
 run, alongside the memory system. See
 [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md).
 
-Claude Code works out of the box through the proxy — no UI required.
+Claude Code works out of the box through the proxy — no UI required. In
+addition, the specialised agents (code reviewer, quality fixer, web
+researcher, thinker, explore, general, Board of Advisors) install as native
+Claude Code subagents with persistent MemoryCore identities, automatic memory
+recall and lesson capture through the existing loop, and RepoQL over MCP
+(`node scripts/install-claude-code.mjs install`; see
+[`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md)).
 
 Status: **release candidate**. A partial Windows 11 + WSL2 acceptance run
 passed on one machine on 2026-10-19 using the WSL-native Docker Engine: the
@@ -35,8 +41,8 @@ Windows support therefore remains **experimental**. See
 | Claude Office (:3128, optional) | 2D activity visualizer fed by the plugin or by harness adapters | optional |
 | Ghost (`ghost/`, :18003 gateway, optional) | Persistent companion agent with 3-tier memory and a daily checkpointed 6-step dream cycle (`dream.mjs`) | optional |
 | Knowledge promotion (`scripts/knowledge-promotion.py`) | Explicit, reversible promotion of verified knowledge into a curated store, indexed into Memory Core | optional |
-| Harness adapters (`adapters/claude-code/`) | Hook-based metadata events for the visualizer | optional |
-| RepoQL (your installation) | Code intelligence — index, tools, concepts — connected over MCP by the OpenChamber bundle | yes for this variant (installed separately) |
+| Harness adapters (`adapters/claude-code/`) | Office visualizer hook adapter, plus the **native Claude Code agent integration**: seven specialised subagents (`singularity-*`) with persistent MemoryCore identities, SubagentStart recall + SubagentStop lesson capture through the existing loop, and RepoQL over MCP | optional |
+| RepoQL (your installation) | Code intelligence — index, tools, concepts — connected over MCP by the OpenChamber bundle and by the Claude Code integration (`scripts/install-claude-code.mjs`) | yes for this variant (installed separately) |
 
 ## Requirements
 
@@ -151,7 +157,7 @@ office/        README.md, office.compose.yml
 ghost/         README.md, ghost.compose.yml, setup-ghost.sh, dream.mjs, ghost-memory.mjs, ghost-turn.mjs, ghost-gateway.mjs, seed/, systemd/
 compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
 scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
-adapters/      claude-code/ (hook-based Office adapter)
+adapters/      claude-code/ (Office adapter + Claude Code native-agent integration)
 templates/     product.env.example
 docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
 tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh

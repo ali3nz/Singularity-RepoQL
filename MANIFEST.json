@@ -1,7 +1,7 @@
 {
   "name": "Singularity-RepoQL",
-  "version": "0.1.0-rc1",
-  "generated": "2026-10-19T21:05:00Z",
+  "version": "0.1.0-rc2",
+  "generated": "2026-10-20T01:30:00Z",
   "description": "Self-hosted, self-learning memory for coding agents with RepoQL code intelligence wired in: the memory stack quickstart, OpenChamber integration (agents + memory plugin + RepoQL MCP), optional Claude Office visualizer, optional Ghost persistent companion agent that dreams, and harness adapters.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {
@@ -47,6 +47,12 @@
       "source": "https://github.com/RepoQL/RepoQL",
       "vendored": false,
       "note": "connects the OpenChamber bundle to the user's existing rql installation over MCP; RepoQL is installed and licensed separately (repoql.com)"
+    },
+    "claude_code_agent_integration": {
+      "path": "adapters/claude-code (agents/, agent-map.mjs, memory-hook.mjs, settings-merge.mjs) + scripts/install-claude-code.mjs",
+      "source": "authored for this repository",
+      "vendored": false,
+      "note": "native Claude Code subagents (seven singularity-* roles incl. the Board of Advisors) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost stays a separate optional add-on and standalone remains main-agent guidance, not a subagent"
     },
     "memory_startup_safety": {
       "path": "scripts/start-memory-stack.sh + scripts/redact-memory-startup.py + scripts/verify-memory-user-key.py (and the loopback publishing boundary check)",

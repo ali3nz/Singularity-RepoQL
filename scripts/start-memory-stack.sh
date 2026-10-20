@@ -60,16 +60,23 @@ if [[ "${SINGULARITY_ALLOW_WIDE_MEMORY_PORTS:-}" == "1" ]]; then ALLOW_WIDE_MEMO
 # containers are not tdai-*-named), so the loop greps inside the body and only
 # `echo` (rc=0) can end it. Wide publishing means the HOST IP is the wildcard
 # (see `docker port` output: 8420/tcp -> 0.0.0.0:8420).
-wide="$(docker ps --format '{{.Names}}' | while read -r name; do
-  case "$name" in
-    tdai-*)
-      docker port "$name" 2>/dev/null | awk -v n="$name" '
-        { h = $NF; sub(/:[0-9]+$/, "", h); if (h == "0.0.0.0" || h == "::" || h == "[::]") print n, $0 }
-      '
-      ;;
-  esac
-done
-)"
+wide=""
+if command -v docker >/dev/null 2>&1; then
+  wide="$(docker ps --format '{{.Names}}' | while read -r name; do
+    case "$name" in
+      tdai-*)
+        docker port "$name" 2>/dev/null | awk -v n="$name" '
+          { h = $NF; sub(/:[0-9]+$/, "", h); if (h == "0.0.0.0" || h == "::" || h == "[::]") print n, $0 }
+        '
+        ;;
+    esac
+  done
+  )"
+else
+  # No docker CLI on this host: there is no publishing topology to inspect.
+  # The boundary check still runs unchanged on any host where docker exists.
+  echo 'note: docker CLI not found — the loopback publishing boundary was not checked on this host.' >&2
+fi
 if [[ -n "$wide" ]]; then
   if [[ "$ALLOW_WIDE_MEMORY_PORTS" == 1 ]]; then
     echo 'WARNING: Memory Core ports are published on the wildcard interface:' >&2

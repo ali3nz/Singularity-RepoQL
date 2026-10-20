@@ -1,4 +1,16 @@
-# Claude Code adapter — feed the Claude Office visualizer from a harness hook
+# Claude Code adapter — harness integration for Singularity
+
+Two independent pieces live here:
+
+1. **Office visualizer adapter** (below): hook-based metadata events for the
+   Claude Office visualizer.
+2. **Native agent integration** ([`docs/CLAUDE-CODE-SETUP.md`](../../docs/CLAUDE-CODE-SETUP.md)):
+   the seven `singularity-*` subagent definitions in `agents/`, the
+   SubagentStart (recall) / SubagentStop (lesson capture) MemoryCore hooks in
+   `memory-hook.mjs`, and an idempotent installer (`scripts/install-claude-code.mjs`)
+   that wires them to persistent identities and registers RepoQL MCP.
+
+---
 
 Lets Claude Code (or any harness with lifecycle hooks) drive the **Claude Office** visualizer
 without OpenChamber. The Office event contract is small and stable: eight event types with

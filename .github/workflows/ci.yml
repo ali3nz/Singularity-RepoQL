@@ -28,6 +28,10 @@ jobs:
           node --test openchamber/plugins/runbook-nudge/*.test.mjs
           node --test scripts/cohere-quota.test.mjs
           node --test scripts/extraction-failover.test.mjs
+          node --test scripts/install-claude-code.profiles.test.mjs
+          node --test adapters/claude-code/integration.test.mjs
+          node --test adapters/claude-code/memory-hook.test.mjs
+          node --test adapters/claude-code/installer.test.mjs
           node --test ghost/dream.test.mjs
           node --test ghost/ghost-gateway.test.mjs
 

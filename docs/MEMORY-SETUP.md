@@ -151,6 +151,14 @@ node scripts/setup-agent-profiles.mjs             # seed missing profiles
   own project scope (`project-<hash>`, agent `build`). These per-agent profiles
   are separate identities for explicit recall (`POST /v3/conversation/search`
   with the agent's scope); the plugin does not read them automatically.
+- Claude Code note: seeding a profile alone does NOT wire a runtime to it.
+  For Claude Code, `node scripts/install-claude-code.mjs` closes that gap: it
+  installs native `singularity-*` subagent definitions, merges SubagentStart
+  (bounded recall from the agent's OWN profile) and SubagentStop (one bounded
+  redacted lesson capture per finished agent through the reconciled write
+  path) hooks, and binds the Claude Code names to the SAME identities recorded
+  here — one logical agent, one identity across OpenChamber and Claude Code.
+  Details and verification: [`CLAUDE-CODE-SETUP.md`](CLAUDE-CODE-SETUP.md).
 - Ghost is excluded: it keeps its own `ghost-companion` profile (see
   [GHOST-SETUP.md](GHOST-SETUP.md)); a second `ghost` scope would conflict.
 - Defaults: team `openchamber-agents`, user from the memory config
