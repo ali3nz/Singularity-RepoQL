@@ -16,6 +16,8 @@ import {
   applyAgentFiles,
   applySettings,
   agentRemovalPlan,
+  resolveVariant,
+  VARIANTS,
   integrationEnv,
   parseFlags,
   planAgentFiles,
@@ -338,4 +340,44 @@ test("state record round-trip and uninstall file plan", () => {
   // a foreign agent file in the same directory is never touched
   const foreign = join(agentsDir, "some-users-agent.md");
   assert.ok(!plan.includes(foreign));
+});
+
+test("variant matrix: exactly four variants with correct mandatory flags", () => {
+  assert.deepEqual(Object.keys(VARIANTS), ["1", "2", "3", "4"]);
+  assert.equal(VARIANTS[1].ghost, false);
+  assert.equal(VARIANTS[2].ghost && VARIANTS[2].office && VARIANTS[2].ghostBackend, "claude-code");
+  assert.equal(VARIANTS[3].openchamber, true);
+  assert.equal(VARIANTS[4].ghost && VARIANTS[4].office && VARIANTS[4].ghostBackend, "openchamber");
+});
+
+test("resolveVariant: variant 2 requires Ghost+Office and reports the claude backend", () => {
+  const flags = { variant: "2", skipProfiles: false, scope: "user" };
+  const res = resolveVariant(flags, {});
+  assert.equal(res.ok, true, "the package bundles ghost/office so variant 2 resolves");
+  assert.ok(res.notes.some((n) => n.includes("GHOST_BACKEND=claude-code")));
+
+  // A user-modified checkout with the_ghost setup removed must refuse.
+  const missing = resolveVariant({ ...flags }, { ghostSetupExists: () => false });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.problems[0].includes("Ghost is mandatory"));
+
+  const officeMissing = resolveVariant({ ...flags }, { officeComposeExists: () => false });
+  assert.equal(officeMissing.ok, false);
+  assert.ok(officeMissing.problems[0].includes("Claude Office is mandatory"));
+});
+
+test("resolveVariant: variant 3/4 attach to an existing OpenChamber and refuse duplicates", () => {
+  const home = mkdtempSync(join(tmpdir(), "variant-home-"));
+  const absent = resolveVariant({ variant: "3", skipProfiles: false, scope: "user" }, { home, detectOpenchamber: () => false });
+  assert.equal(absent.ok, false);
+  assert.match(absent.problems.join(";"), /EXISTING OpenChamber/);
+  const present = resolveVariant({ variant: "4", skipProfiles: false, scope: "user" }, { home, detectOpenchamber: () => true });
+  assert.equal(present.ok, true);
+  assert.ok(present.notes.some((n) => n.includes("reusing the detected existing OpenChamber")));
+});
+
+test("resolveVariant: --skip-profiles conflicts with any variant because specialist agents are mandatory", () => {
+  const res = resolveVariant({ variant: "1", skipProfiles: true, scope: "user" }, {});
+  assert.equal(res.ok, false);
+  assert.match(res.problems[0], /mandatory in every variant/);
 });

@@ -91,15 +91,24 @@ have_line <(echo "$out") "tdai-old:stopped-binding" "stopped wildcard intent rep
 rm -rf "$d"
 
 # --enforce stops only containers created after the baseline.
-: > "$TMPLOG"
-d="$(make_stub_dir enforce-wide "$TMPLOG")"
-printf 'tdai-old\ntdai-pre\n' > "$PWD/.boundary-baseline"
-PATH="$d:$PATH" "$BOUNDARY" --enforce "$PWD/.boundary-baseline" >/dev/null 2>&1; rc=$?
+# All scratch state lives in THIS case's own dir (never $PWD): stop log,
+# baseline and stub share one tree so unrelated cwd/permissions can never
+# influence the case, and tool stderr is retained for failure diagnostics.
+ECASE="/tmp/boundary-enforce-$$"
+mkdir -p "$ECASE"
+: > "$ECASE/stops.log"
+d="$(make_stub_dir enforce-wide "$ECASE/stops.log")"
+printf 'tdai-old\ntdai-pre\n' > "$ECASE/baseline"
+err="$(PATH="$d:$PATH" "$BOUNDARY" --enforce "$ECASE/baseline" 2>&1)"; rc=$?
 assert_rc 1 "$rc" "--enforce reports when it had to stop something"
-have_line "$TMPLOG" "tdai-new" "the newly created wide container was stopped"
-no_line "$TMPLOG" "tdai-pre" "the pre-existing wide container was NOT touched"
-no_line "$TMPLOG" "tdai-old" "unrelated pre-existing container NOT touched"
-rm -rf "$d" "$PWD/.boundary-baseline" "$TMPLOG"
+have_line "$ECASE/stops.log" "tdai-new" "the newly created wide container was stopped"
+no_line "$ECASE/stops.log" "tdai-pre" "the pre-existing wide container was NOT touched"
+no_line "$ECASE/stops.log" "tdai-old" "unrelated pre-existing container NOT touched"
+if [[ "$fail" -ne 0 || "$rc" != 1 ]]; then
+  echo "diagnostics: tool stderr: $err" >&2
+  echo "diagnostics: stub: $(cat "$d/docker")" >&2
+fi
+rm -rf "$d" "$ECASE"
 
 echo "pass=$pass failures=$fail"
 [[ "$fail" -eq 0 ]] || exit 1

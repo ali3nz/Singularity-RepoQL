@@ -78,10 +78,10 @@ export async function pickModel({ gatewayUrl, key, fetchImpl = globalThis.fetch 
 }
 
 /**
- * Provider-failure ladder (issue 741/§11): ordered model fallback for dream
- * steps. A retryable failure (429/5xx/timeout) advances to the next model;
- * every hop is recorded (models_used, fallback_attempts) in the run state and
- * the deadline is honored between hops — no unbounded retry, no silent
+ * Provider-failure ladder: ordered model fallback for dream steps. A
+ * retryable failure (429/5xx/timeout) advances to the next model; every hop
+ * is recorded (models_used, fallback_attempts) in the run state and the
+ * deadline is honored between hops — no unbounded retry, no silent
  * downgrade: the ladder path stays visible in the run result.
  */
 export function makeLadderCallImpl(ladder, { gatewayUrl, key, state, deadlineMs, fetchImpl = globalThis.fetch } = {}) {
@@ -461,7 +461,7 @@ export async function runDream({
   maxStepRetries = 2,
   callImpl = null,
   model = null,
-  models = null, // optional ordered fallback ladder (issue 741); takes precedence over `model` discovery
+  models = null, // optional ordered fallback ladder; takes precedence over `model` discovery
   gatewayUrl = process.env.GATEWAY_URL || "http://127.0.0.1:18003/v1",
   gatewayKey = process.env.GATEWAY_API_KEY || "",
   now = () => new Date(),
@@ -488,8 +488,7 @@ export async function runDream({
   const resolveModel = async () => {
     if (!runModel) runModel = await pickModel({ gatewayUrl, key: gatewayKey });
     return runModel;
-  };
-  // Ordered provider-failure ladder (issue 741/§11 semantics): when a model
+  };  // Ordered provider-failure ladder: when a model list is configured, dream
   // list is configured, dream steps fail across models before giving up.
   const ladderImpl = (Array.isArray(models) && models.length)
     ? makeLadderCallImpl(models, { gatewayUrl, key: gatewayKey, state, deadlineMs })

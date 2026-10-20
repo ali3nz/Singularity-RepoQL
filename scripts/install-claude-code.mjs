@@ -131,10 +131,62 @@ export function detectRql(home, env = process.env) {
 }
 
 // ── flags ────────────────────────────────────────────────────────────────────
+// ── installation variants (§5): exactly four ────────────────────────────────
+// Variant 1 Claude Code + MemoryCore; 2 Claude Code Complete (adds Ghost +
+// Office, Ghost via the claude backend); 3 Existing OpenChamber + MemoryCore;
+// 4 OpenChamber Complete (adds Ghost + Office on the openchamber backend).
+// Variant selection only VALIDATES and REPORTS mandatory capabilities — the
+// underlying install flow (profiles, hooks, routing, RepoQL MCP) stays single
+// and reused; no second installer is created.
+export const VARIANTS = Object.freeze({
+  1: { name: "Claude Code + MemoryCore", ghost: false, office: false },
+  2: { name: "Claude Code Complete", ghost: true, office: true, ghostBackend: "claude-code" },
+  3: { name: "Existing OpenChamber + MemoryCore", ghost: false, office: false, openchamber: true },
+  4: { name: "OpenChamber Complete", ghost: true, office: true, ghostBackend: "openchamber", openchamber: true },
+});
+
+/**
+ * Validate a variant selection against the environment without changing it:
+ * returns { ok, problems, notes }. Mandatory capabilities must be VERIFIED,
+ * not merely configured, so the installer reports what is still missing
+ * rather than claiming success.
+ */
+export function resolveVariant(flags, deps = {}) {
+  const v = VARIANTS[flags.variant];
+  if (!v) return { ok: false, problems: [`variant ${flags.variant} is not one of 1..4`], notes: [] };
+  const problems = [];
+  const notes = [];
+  if (flags.skipProfiles) problems.push("specialist-agent profile provisioning is mandatory in every variant — --skip-profiles cannot be combined with a variant");
+  if (flags.scope !== "user") notes.push(`variant runs written at user scope; project scope (${flags.scope}) still works for the integration itself`);
+  if (v.ghost) {
+    // Deps may override existence probes (unit tests, relocated checkouts).
+    const ghostOk = deps.ghostSetupExists ? deps.ghostSetupExists(join(ROOT, "ghost", "setup-ghost.sh")) : existsSync(join(ROOT, "ghost", "setup-ghost.sh"));
+    if (!ghostOk) problems.push("Ghost is mandatory for this variant but ghost/setup-ghost.sh is missing from the package");
+    else notes.push(`Ghost backend for this variant: ${v.ghostBackend} — set GHOST_BACKEND=${v.ghostBackend} when running ghost/ghost-gateway.mjs (see ghost/README.md)`);
+  }
+  if (v.office) {
+    const officeOk = deps.officeComposeExists ? deps.officeComposeExists(join(ROOT, "office", "office.compose.yml")) : existsSync(join(ROOT, "office", "office.compose.yml"));
+    if (!officeOk) problems.push("Claude Office is mandatory for this variant but office/office.compose.yml is missing from the package");
+  }
+  if (v.openchamber) {
+    // Never install a duplicate OpenChamber: detect the EXISTING instance.
+    const home = deps.home || process.env.HOME || "";
+    const existing = deps.detectOpenchamber
+      ? deps.detectOpenchamber()
+      : (existsSync(join(home, ".config", "opencode")) || existsSync(join(home, ".local", "share", "opencode")));
+    if (!existing) {
+      problems.push("this variant attaches to an EXISTING OpenChamber installation but none was detected (~/.config/opencode or ~/.local/share/opencode) — install OpenChamber first (docs/OPENCHAMBER-SETUP.md)");
+    } else {
+      notes.push("reusing the detected existing OpenChamber installation; nothing gets reinstalled");
+    }
+  }
+  return { ok: problems.length === 0, problems, notes, variant: v };
+}
+
 export function parseFlags(argv, home, cwd) {
   const flags = { scope: "user", projectDir: resolve(cwd), team: "", user: "", skipProfiles: false, skipRepoqlMcp: false, dryRun: false,
     mainMemory: null, // null = offer interactively (TTY), off when non-interactive
-    replaceProvider: false, probe: false };
+    replaceProvider: false, probe: false, variant: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--scope") {
@@ -151,6 +203,10 @@ export function parseFlags(argv, home, cwd) {
     else if (a === "--no-main-memory") flags.mainMemory = false;
     else if (a === "--replace-provider") flags.replaceProvider = true;
     else if (a === "--probe") flags.probe = true;
+    else if (a === "--variant") {
+      flags.variant = argv[++i];
+      if (!["1", "2", "3", "4"].includes(flags.variant)) throw new UsageError("--variant must be 1, 2, 3 or 4 (see README §START HERE)");
+    }
     else throw new UsageError(`unknown argument: ${a}`);
   }
   flags.settingsPath = settingsPathFor(flags.scope, home, flags.projectDir);
@@ -405,6 +461,22 @@ async function readLine(prompt) {
 export async function runInstall(flags) {
   log(`installing the Singularity Claude Code integration (${flags.scope} scope)${flags.dryRun ? " — dry run" : ""}`);
 
+  // Variant validation (§5): mandatory capabilities are verified BEFORE any
+  // files change; a variant with unmet requirements refuses install.
+  let variantOutcome = null;
+  if (flags.variant) {
+    variantOutcome = resolveVariant(flags);
+    log(`  variant:  ${flags.variant} — ${variantOutcome.variant.name}`);
+    for (const n of variantOutcome.notes) log(`  variant note: ${n}`);
+    if (!variantOutcome.ok) {
+      for (const p of variantOutcome.problems) warn(`  variant REFUSED: ${p}`);
+      warn(`  variant:  installation stopped unmodified; resolve the mandatory capabilities above, then re-run`);
+      return 4; // variant requirement refusal: the on-disk state was not touched
+    }
+  } else {
+    log("  variant:  none selected — install runs with the base integration only (README §START HERE lists variants 1-4)");
+  }
+
   // Main-agent memory decision: explicit flags win; otherwise offer interactively
   // and default OFF for non-interactive runs (the guided experience still OFFERS,
   // and automation opts in with --enable-main-memory).
@@ -500,6 +572,9 @@ export async function runInstall(flags) {
       agentLedger,
       mcp: mcp && !mcp.present ? { name: mcp.name, transport: mcp.transport, command: mcp.command, scope: mcp.scope } : null,
       profileLedger: join(ROOT, "data/agent-profiles/ledger.json"),
+      variant: flags.variant
+        ? { id: flags.variant, name: VARIANTS[flags.variant].name, ghostBackend: VARIANTS[flags.variant].ghostBackend || null, verified: variantOutcome.ok }
+        : null,
     });
   }
 
@@ -669,6 +744,7 @@ export async function runStatus(flags) {
   log(`install: scope=${record.scope} settings=${record.settingsPath} installedAt=${record.installedAt}`);
   log(`agents dir: ${record.agentsDir}`);
   log(`hooks: ${record.hooksScript}${record.docHooksScript ? ` + ${record.docHooksScript}` : ""}`);
+  if (record.variant) log(`variant: ${record.variant.id} — ${record.variant.name}${record.variant.ghostBackend ? ` (ghost backend: ${record.variant.ghostBackend})` : ""}${record.variant.verified ? "" : " [unverified]"}`);
   log(`env keys: ${Object.keys(record.envWritten || {}).join(", ") || "(none)"}`);
   const settings = readJson(record.settingsPath);
   const events = settings?.hooks ? Object.keys(settings.hooks).filter((k) => ["SubagentStart", "SubagentStop", "SessionStart", "Stop"].includes(k)) : [];

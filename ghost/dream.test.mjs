@@ -61,7 +61,7 @@ test("cleanErr redacts bearer tokens and sk- keys", () => {
   assert.ok(cleaned.includes("<redacted>"));
 });
 
-test("model ladder advances on retryable failure and records hops (issue 741 semantics)", { skip: !makeLadderCallImpl || !runDream }, async () => {
+test("model ladder advances on retryable failure and records hops", async () => {
   const state = {};
   let modelCalls = [];
   const fakeFetch = async (url, opts = {}) => {
