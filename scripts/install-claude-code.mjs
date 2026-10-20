@@ -709,28 +709,33 @@ export function gateComplete(checked, missing) {
  * (ctx.probes) for unit tests, but an injected stub never turns into a
  * product PASS: the gate still reports what it could not prove.
  */
-async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, probes = {}, execIn = null, rqlPath = null }) {
+async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, identity, probes = {}, execIn = null, rqlPath = null }) {
   const missing = [];
   const checked = [];
   const note = (ok, label, detail = "") => {
     checked.push(`${ok ? "ok" : "MISSING"}: ${label}${detail ? ` — ${detail}` : ""}`);
     if (!ok) missing.push(detail ? `${label} (${detail})` : label);
   };
-  const memCfg = memoryConfigPath ? readJson(memoryConfigPath) : null;
 
-  // 1. live authentication + scope: the key must be a scoped, NON-administrative
-  //    identity. Presence, a non-empty file or an HTTP 200 are never enough.
-  const identity = probes.memoryIdentity
-    ? await probes.memoryIdentity({ config: memCfg, baseUrl: memoryBaseUrl })
-    : await probeMemoryIdentity({ config: memCfg, baseUrl: memoryBaseUrl });
+  // 1. live authentication + scope: decided ONCE by the caller (verifyOptionTarget)
+  //    and shared with every credential-using check below. Presence, a non-empty
+  //    file or an HTTP 200 are never enough.
   note(identity.ok, "scoped memory identity authenticated (live auth/verify, non-administrative)", identity.detail);
+
+  // B7: a credential-using runtime proof runs ONLY with that verified scoped
+  // identity. An administrative, unverified or rejected key is never reused by
+  // the memory loop, the documentation ingestion or the model lane.
+  const scoped = identity.ok === true;
+  const notRun = (what) => ({ ok: false, state: "NOT_RUN",
+    detail: `not run: ${what} needs a verified scoped memory identity — an administrative, unverified or rejected key is never used` });
 
   // 2. the shipped memory API loop (capture -> search -> knowledge promotion).
   //    This is an API-level proof only; normal-session capture and recall are
   //    checked separately in item 6 below and are never implied by this one.
-  const loop = probes.memoryLoop
-    ? await probes.memoryLoop({ root: ROOT, memoryConfigPath, memoryBaseUrl })
-    : await probeMemoryLoop({ root: ROOT, memoryConfigPath, memoryBaseUrl });
+  const loop = !scoped ? notRun("the memory loop")
+    : probes.memoryLoop
+      ? await probes.memoryLoop({ root: ROOT, memoryConfigPath, memoryBaseUrl })
+      : await probeMemoryLoop({ root: ROOT, memoryConfigPath, memoryBaseUrl });
   note(loop.ok, "memory API loop: capture, search and verified knowledge promotion", loop.detail);
 
   // 3. a real RepoQL MCP tools/call (read-only query)
@@ -739,10 +744,11 @@ async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, probes = {
     : await probeRepoqlMcp({ rqlPath, cwd: ROOT, execIn });
   note(mcp.ok, "RepoQL MCP server answers a real call", mcp.detail);
 
-  // 4. automatic documentation assessment + verified ingestion
-  const docs = probes.docIngestion
-    ? await probes.docIngestion({ root: ROOT, memoryConfigPath, memoryBaseUrl })
-    : await probeDocIngestion({ root: ROOT, memoryConfigPath, memoryBaseUrl });
+  // 4. automatic documentation assessment + verified ingestion (scoped identity only)
+  const docs = !scoped ? notRun("documentation ingestion")
+    : probes.docIngestion
+      ? await probes.docIngestion({ root: ROOT, memoryConfigPath, memoryBaseUrl })
+      : await probeDocIngestion({ root: ROOT, memoryConfigPath, memoryBaseUrl });
   note(docs.ok, "documentation assessment and verified ingestion", docs.detail);
 
   // 5. two working providers with a controlled failover
@@ -761,7 +767,7 @@ async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, probes = {
     : await probeOrdinarySessionRecall();
   note(ordinary.ok, "ordinary-session automatic capture and NEW-session recall via the native hooks", ordinary.detail);
 
-  return { checked, missing };
+  return { checked, missing, identityOk: scoped };
 }
 
 /**
@@ -841,6 +847,16 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     }
   }
 
+  // The scoped memory identity is decided ONCE, live, from the TARGET's own
+  // configuration. Every credential-using check below (Ghost memory, memory
+  // loop, documentation ingestion, model lane) depends on this single decision.
+  const memCfgEarly = memoryConfigPath ? readJson(memoryConfigPath) : null;
+  const memBaseEarly = memCfgEarly ? hostMemoryBaseUrl(memCfgEarly) : "";
+  const identity = probes.memoryIdentity
+    ? await probes.memoryIdentity({ config: memCfgEarly, baseUrl: memBaseEarly })
+    : await probeMemoryIdentity({ config: memCfgEarly, baseUrl: memBaseEarly });
+  const scoped = identity.ok === true;
+
   // 7. options 2/4: Ghost functional (config, memory identity, dream cycle, backend)
   if (v.ghost) {
     // Static configuration state is reported as static — never as functional
@@ -851,7 +867,11 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     if (!envOk) missing.push("Ghost static config (secrets/ghost.env)");
 
     let memOk = false, memDetail = "";
-    try {
+    // B7: the Ghost memory probe authenticates with the target's key, so it runs
+    // ONLY with a verified scoped identity — never with an administrative one.
+    if (!scoped) {
+      memDetail = `not run: ${identity.detail} — an administrative, unverified or rejected key is never used`;
+    } else try {
       const inst = target || (ctx && ctx.target) || detectOpenchamberInstance();
       if (v.openchamber && (inst.kind === "container" || inst.kind === "compose-managed")) {
         // Probe INSIDE the target: that is where the in-network alias resolves.
@@ -986,6 +1006,7 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
   const proofs = await verifyRuntimeProofs({
     memoryConfigPath,
     memoryBaseUrl: memBase,
+    identity,
     probes,
     execIn,
     rqlPath: detectRql(process.env.HOME, process.env),
@@ -998,12 +1019,18 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
   // a proof. Option 3 uses the operator's own OpenChamber provider, so the
   // product's own lane is not part of that option.
   if (v.ghost || !v.openchamber) {
-    const lane = resolveModelLane({ flavour: "host", env: process.env, upstreamEnvContent: readUpstreamEnvContent(ROOT) });
-    const laneProbe = probes.modelLane
-      ? await probes.modelLane({ lane, key: (memCfg && memCfg.userKey) || "" })
-      : await probeModelLane({ gatewayUrl: lane.route, key: (memCfg && memCfg.userKey) || "", serviceId: lane.spaceId });
-    note(laneProbe.ok, "model lane registered and working (real completion through the derived lane)",
-      laneProbe.ok ? laneProbe.detail : `${laneProbe.detail} — ${modelLaneAdvice(laneProbe.state)}`);
+    if (!scoped) {
+      // B7: the lane authenticates with the target's key — never an administrative one.
+      note(false, "model lane registered and working (real completion through the derived lane)",
+        `not run: ${identity.detail} — the lane never uses an administrative, unverified or rejected key`);
+    } else {
+      const lane = resolveModelLane({ flavour: "host", env: process.env, upstreamEnvContent: readUpstreamEnvContent(ROOT) });
+      const laneProbe = probes.modelLane
+        ? await probes.modelLane({ lane, key: (memCfg && memCfg.userKey) || "" })
+        : await probeModelLane({ gatewayUrl: lane.route, key: (memCfg && memCfg.userKey) || "", serviceId: lane.spaceId });
+      note(laneProbe.ok, "model lane registered and working (real completion through the derived lane)",
+        laneProbe.ok ? laneProbe.detail : `${laneProbe.detail} — ${modelLaneAdvice(laneProbe.state)}`);
+    }
   }
 
   // A capability that was never checked is never complete: an empty check

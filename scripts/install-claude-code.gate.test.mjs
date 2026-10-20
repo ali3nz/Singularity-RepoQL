@@ -159,6 +159,47 @@ test("the product default never claims ordinary-session recall: the HOLD is expl
   assert.match(r.detail, /live ordinary session/);
 });
 
+test("no credential-using probe runs with an ADMINISTRATIVE identity: the key is never reused (B7)", async () => {
+  // Every probe that authenticates with the target's memory key is a spy. With an
+  // administrative identity none of them may run, and each dependent check is
+  // reported MISSING ("not run"), never as a pass.
+  const calls = [];
+  const spy = (name, out) => async () => { calls.push(name); return out; };
+  const r = await verifyOptionTarget(VARIANTS[1], { variant: "1" }, {
+    probes: {
+      memoryIdentity: async () => ({ ok: false, state: "ADMIN", detail: "the configured key is an ADMINISTRATIVE credential" }),
+      memoryLoop: spy("loop", { ok: true, state: "VERIFIED", detail: "must not run" }),
+      docIngestion: spy("docs", { ok: true, state: "VERIFIED", detail: "must not run" }),
+      modelLane: spy("lane", { ok: true, state: "OK", detail: "must not run" }),
+      repoqlMcp: OK_PROBES.repoqlMcp,
+      providerFailover: OK_PROBES.providerFailover,
+    },
+  }, null);
+  assert.deepEqual(calls, [], "no credential-using probe may run with an administrative identity");
+  assert.match(lineFor(r, "scoped memory identity authenticated"), /^MISSING:/);
+  assert.match(lineFor(r, "memory API loop"), /not run/);
+  assert.match(lineFor(r, "documentation assessment"), /not run/);
+  assert.match(lineFor(r, "model lane registered"), /not run/);
+  assert.equal(r.complete, false);
+});
+
+test("a verified scoped identity is what lets the credential-using probes run (B7 positive control)", async () => {
+  const calls = [];
+  const spy = (name, out) => async () => { calls.push(name); return out; };
+  const r = await verifyOptionTarget(VARIANTS[1], { variant: "1" }, {
+    probes: {
+      memoryIdentity: async () => ({ ok: true, state: "OK", detail: "scoped" }),
+      memoryLoop: spy("loop", { ok: true, state: "VERIFIED_API", detail: "injected" }),
+      docIngestion: spy("docs", { ok: true, state: "VERIFIED", detail: "injected" }),
+      modelLane: spy("lane", { ok: true, state: "OK", detail: "injected" }),
+      repoqlMcp: OK_PROBES.repoqlMcp,
+      providerFailover: OK_PROBES.providerFailover,
+    },
+  }, null);
+  assert.deepEqual(calls.sort(), ["docs", "lane", "loop"]);
+  assert.match(lineFor(r, "memory API loop"), /^ok:/);
+});
+
 test("an ADMINISTRATIVE key is refused: the gate never passes on an admin credential (B7)", async () => {
   const svc = await stubService({ code: 0, data: { total: 7 } });
   try {
