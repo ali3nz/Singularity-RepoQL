@@ -37,6 +37,22 @@ const okFetch = (calls, accepted = ["id-1"]) => async (url, init) => {
   calls.push({ url, body: JSON.parse(init.body) });
   return new Response(JSON.stringify({ code: 0, data: { accepted_ids: accepted } }), { status: 200 });
 };
+// Live-verify mock: a search returns the stored charter for agents that were
+// really seeded, so a cached ledger entry is proven to exist instead of being
+// reported from the cache alone.
+const liveFetch = (calls, seeded = new Set()) => async (url, init) => {
+  const body = JSON.parse(init.body);
+  calls.push({ url, body });
+  if (url.endsWith("/v3/conversation/search")) {
+    const name = body.agent_id;
+    const messages = seeded.has(name)
+      ? [{ id: `m-${name}`, session_id: `agent-profile-${name}`, content: `Persistent MemoryCore profile for OpenChamber agent "${name}" (Singularity-RepoQL). Role: x` }]
+      : [];
+    return new Response(JSON.stringify({ code: 0, data: { messages } }), { status: 200 });
+  }
+  seeded.add(body.agent_id);
+  return new Response(JSON.stringify({ code: 0, data: { accepted_ids: ["id-1"] } }), { status: 200 });
+};
 const now = () => "2026-10-20T00:00:00Z";
 
 test("listAgents returns agent .md files sorted, excluding Ghost (already self-profiled)", () => {
@@ -69,10 +85,11 @@ test("identityFor: agent name is agent_id; team and user are overridable", () =>
   });
 });
 
-test("first run seeds each agent under its own scope; second run is a no-op", async () => {
+test("first run seeds each agent under its own scope; the second run verifies live and writes nothing", async () => {
   const fx = fixture({ alpha: md("A role"), beta: md("B role") });
   const calls = [];
-  const opts = { agentsDir: fx.agentsDir, ledgerPath: fx.ledgerPath, env: {}, cfg, fetchImpl: okFetch(calls), now };
+  const seeded = new Set();
+  const opts = { agentsDir: fx.agentsDir, ledgerPath: fx.ledgerPath, env: {}, cfg, fetchImpl: liveFetch(calls, seeded), now };
 
   const first = await provisionAgentProfiles(opts);
   assert.equal(first.failed, 0);
@@ -85,8 +102,22 @@ test("first run seeds each agent under its own scope; second run is a no-op", as
   assert.deepEqual(Object.keys(readLedger(fx.ledgerPath).profiles).sort(), ["alpha", "beta"]);
 
   const second = await provisionAgentProfiles(opts);
-  assert.deepEqual(second.results.map((r) => r.status), ["present", "present"]);
-  assert.equal(calls.length, 2, "no new MemoryCore writes on re-run");
+  assert.deepEqual(second.results.map((r) => r.status), ["verified", "verified"]);
+  assert.equal(calls.filter((c) => c.url.endsWith("/v3/conversation/add")).length, 2, "no new MemoryCore writes on re-run");
+  assert.equal(calls.filter((c) => c.url.endsWith("/v3/conversation/search")).length, 2, "each cached profile is probed live");
+});
+
+test("a stale ledger entry is re-seeded, never reported as a live profile", async () => {
+  const fx = fixture({ alpha: md("A role") });
+  const calls = [];
+  const opts = { agentsDir: fx.agentsDir, ledgerPath: fx.ledgerPath, env: {}, cfg, fetchImpl: okFetch(calls), now };
+  const first = await provisionAgentProfiles(opts);
+  assert.deepEqual(first.results.map((r) => r.status), ["seeded"]);
+  // The ledger claims alpha, but the live probe finds no charter for it.
+  const second = await provisionAgentProfiles(opts);
+  assert.deepEqual(second.results.map((r) => r.status), ["seeded"], "a stale ledger entry is not a live profile");
+  assert.ok(calls.some((c) => c.url.endsWith("/v3/conversation/search")), "the cached profile was probed live");
+  assert.ok(calls.filter((c) => c.url.endsWith("/v3/conversation/add")).length === 2, "a stale profile is re-seeded");
 });
 
 test("a MemoryCore rejection is reported as failed and not recorded in the ledger", async () => {
@@ -114,8 +145,8 @@ test("partial failure seeds the good agents and retries only the failed one", as
   assert.deepEqual(first.results.map((r) => r.status), ["seeded", "failed"]);
   assert.deepEqual(Object.keys(readLedger(fx.ledgerPath).profiles), ["alpha"]);
 
-  const second = await provisionAgentProfiles({ ...opts, fetchImpl: okFetch([]) });
-  assert.deepEqual(second.results.map((r) => r.status), ["present", "seeded"]);
+  const second = await provisionAgentProfiles({ ...opts, fetchImpl: liveFetch([], new Set(["alpha"])) });
+  assert.deepEqual(second.results.map((r) => r.status), ["verified", "seeded"]);
   assert.equal(second.failed, 0);
 });
 

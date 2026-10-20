@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, utimesSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 import {
   acquireDreamLock,
   releaseDreamLock,
+  restoreNewerOwner,
   DREAM_STEPS,
   dreamStepPrompts,
   parseMemoryEntries,
@@ -163,6 +165,136 @@ test("dream lock is exclusive and releases on the owning handle only", () => {
     const h3 = acquireDreamLock(agentDir);
     assert.equal(h3.acquired, true, "lock is reacquirable after release");
     releaseDreamLock(h3);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("stale lock takeover: a dead owner and an expired mtime are reclaimed", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-stale-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+
+    // 1. the recorded owner is dead -> the lock is taken over
+    writeFileSync(lockPath, JSON.stringify({ pid: 999999, createdAt: new Date().toISOString() }), { mode: 0o600 });
+    const h1 = acquireDreamLock(agentDir);
+    assert.equal(h1.acquired, true, "a lock whose owner is dead is taken over");
+    assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, process.pid, "the new owner is recorded");
+    releaseDreamLock(h1);
+
+    // 2. the lock file is older than the stale window -> taken over
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), { mode: 0o600 });
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    utimesSync(lockPath, old, old);
+    const h2 = acquireDreamLock(agentDir, { staleMs: 1000 });
+    assert.equal(h2.acquired, true, "an expired lock is taken over");
+    releaseDreamLock(h2);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a live owner is never displaced and a busy contender preserves the owner record", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-live-"));
+  const agentDir = join(tmp, "data", "ghost");
+  try {
+    const h1 = acquireDreamLock(agentDir);
+    assert.equal(h1.acquired, true);
+    const before = readFileSync(h1.path, "utf8");
+    const h2 = acquireDreamLock(agentDir, { staleMs: 1000 });
+    assert.equal(h2.acquired, false, "a fresh lock of a live owner is not taken over");
+    assert.equal(h2.busy, true);
+    assert.equal(readFileSync(h1.path, "utf8"), before, "the owner's record is preserved byte for byte");
+    releaseDreamLock(h1);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a newer owner that appears during a takeover is restored, never destroyed", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-restore-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ pid: 4242 }), { mode: 0o600 });
+    const taken = `${lockPath}.take-test`;
+    renameSync(lockPath, taken);
+    // a NEWER owner wrote its record while the stale one was being judged
+    writeFileSync(taken, JSON.stringify({ pid: 9999 }), { mode: 0o600 });
+    restoreNewerOwner(taken, lockPath);
+    assert.ok(existsSync(lockPath), "the newer owner's lock is back in place");
+    assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, 9999, "the newer owner's record is intact");
+    assert.ok(!existsSync(taken), "the renamed copy is cleaned up");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("two concurrent dream processes: exactly one acquires the lock", async () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-race-"));
+  const agentDir = join(tmp, "data", "ghost");
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    const mod = new URL("./dream.mjs", import.meta.url).pathname;
+    const runner = `import(${JSON.stringify(mod)}).then((m) => {
+      const h = m.acquireDreamLock(${JSON.stringify(agentDir)});
+      if (h.acquired) { console.log("WON"); setTimeout(() => { m.releaseDreamLock(h); process.exit(0); }, 500); }
+      else { console.log("BUSY"); process.exit(0); }
+    });`;
+    const run = () => new Promise((res) => {
+      const c = spawn(process.execPath, ["-e", runner]);
+      let out = "";
+      c.stdout.on("data", (d) => { out += String(d); });
+      c.on("close", () => res(out));
+    });
+    const outs = await Promise.all([run(), run()]);
+    const wins = outs.filter((o) => o.includes("WON")).length;
+    assert.equal(wins, 1, `exactly one process may hold the dream lock (got ${wins}: ${outs.join("|")})`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("journal outcomes: only a completed consolidation ends the day", async () => {
+  const tmp = mkdtempSync(join(tmpdir(), "ghost-dream-outcome-"));
+  const today = "2026-10-20";
+  try {
+    const memDir = join(tmp, "memory");
+    mkdirSync(memDir, { recursive: true });
+    writeFileSync(join(memDir, "persona.md"), "# Persona — Ghost\nPersistent companion.", "utf8");
+    writeFileSync(join(memDir, "MEMORY.md"), "# Ghost Long-Term Reflections\n", "utf8");
+    mkdirSync(join(tmp, "dreams"), { recursive: true });
+
+    // an UNKNOWN outcome never ends the day
+    writeFileSync(join(tmp, "dreams", `${today}.md`), `# Dream ${today} (ghost) — checkpointed\n\n- outcome: capped\n`, "utf8");
+    let calls = 0;
+    const res = await runDream({
+      agentId: "ghost", agentDir: tmp, fresh: false,
+      callImpl: async () => { calls++; return "Step output with enough characters to pass the length threshold."; },
+      now: () => new Date("2026-10-20T12:00:00Z"),
+    });
+    assert.notEqual(res.status, "not-due", "an unknown outcome never blocks the day's dream");
+    assert.ok(calls > 0, "the dream actually ran");
+
+    // a COMPLETED consolidation ends the day and is not duplicated
+    const completeDir = join(tmp, "complete", "dreams");
+    mkdirSync(completeDir, { recursive: true });
+    writeFileSync(join(completeDir, `${today}.md`), `# Dream ${today} (ghost) — complete\n\n- outcome: complete\n`, "utf8");
+    const agentDir2 = join(tmp, "complete");
+    mkdirSync(join(agentDir2, "memory"), { recursive: true });
+    writeFileSync(join(agentDir2, "memory", "persona.md"), "# Persona\n", "utf8");
+    writeFileSync(join(agentDir2, "memory", "MEMORY.md"), "# Memory\n", "utf8");
+    let calls2 = 0;
+    const res2 = await runDream({
+      agentId: "ghost", agentDir: agentDir2, fresh: false,
+      callImpl: async () => { calls2++; return "Step output with enough characters to pass the length threshold."; },
+      now: () => new Date("2026-10-20T12:00:00Z"),
+    });
+    assert.equal(res2.status, "not-due", "a completed consolidation ends the day");
+    assert.equal(calls2, 0, "a completed day runs no model call");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

@@ -30,6 +30,9 @@ check node --test scripts/cohere-quota.test.mjs
 check node --test scripts/setup-agent-profiles.test.mjs
 check node --test scripts/extraction-failover.test.mjs
 check node --test scripts/install-claude-code.profiles.test.mjs
+check node --test scripts/install-claude-code.gate.test.mjs
+check node --test scripts/attach-openchamber.test.mjs
+check bash tests/manifest-regression.test.sh
 check node --test adapters/claude-code/integration.test.mjs
 check node --test adapters/claude-code/memory-hook.test.mjs
 check node --test adapters/claude-code/installer.test.mjs

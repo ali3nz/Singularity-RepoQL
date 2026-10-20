@@ -103,3 +103,18 @@ with the `product-office` alias through its compose file.
 
 Capture → extraction → recall, with an explicit promotion path for curated
 knowledge. Full walkthrough: [`MEMORY-LOOP.md`](MEMORY-LOOP.md).
+
+## Repository layout
+
+```text
+openchamber/   AGENTS.md, agents/, opencode.jsonc, dcp.jsonc, plugins/product-office/
+memory/        README.md, upstream/ (vendored quickstart), .env.example
+office/        README.md, office.compose.yml
+ghost/         README.md, ghost.compose.yml, setup-ghost.sh, dream.mjs, ghost-memory.mjs, ghost-turn.mjs, ghost-gateway.mjs, seed/, systemd/
+compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
+scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
+adapters/      claude-code/ (Office adapter + Claude Code native-agent integration + doc hooks)
+templates/     product.env.example
+docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, CLAUDE-CODE-SETUP, DOC-INGESTION, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
+tests/         validate-local.sh, validate-manifest.sh, manifest-regression.test.sh, validate-memory-loop.sh, validate-repoql.sh
+```

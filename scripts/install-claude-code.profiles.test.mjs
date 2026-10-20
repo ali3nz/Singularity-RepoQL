@@ -26,8 +26,17 @@ const repoFixture = () => {
 test("profiles bind to one shared identity per role; ghost stays excluded; ledger records all passes", async () => {
   const root = repoFixture();
   const calls = [];
+  const seeded = new Set();
   const fetchImpl = async (url, init) => {
-    calls.push({ url, body: JSON.parse(init.body) });
+    const body = JSON.parse(init.body);
+    calls.push({ url, body });
+    if (url.endsWith("/v3/conversation/search")) {
+      const messages = seeded.has(body.agent_id)
+        ? [{ id: `m-${body.agent_id}`, session_id: `agent-profile-${body.agent_id}`, content: `Persistent MemoryCore profile for OpenChamber agent "${body.agent_id}" (Singularity-RepoQL). Role: x` }]
+        : [];
+      return new Response(JSON.stringify({ code: 0, data: { messages } }), { status: 200 });
+    }
+    seeded.add(body.agent_id);
     return new Response(JSON.stringify({ code: 0, data: { accepted_ids: ["id-1"] } }), { status: 200 });
   };
   const out = await provisionProfiles({ repoRoot: root, env: {}, dryRun: false, log: () => {}, fetchImpl });
@@ -40,12 +49,16 @@ test("profiles bind to one shared identity per role; ghost stays excluded; ledge
   assert.ok(adds.every((c) => c.body.team_id === "openchamber-agents" && c.body.user_id === "pilot-operator"),
     "same defaults the OpenChamber profile seeder resolves — one identity per role");
 
-  // second run: ledger says present, no network writes
-  const before = calls.length;
+  // second run: the ledger is re-verified LIVE (a read), and nothing is written
+  const writesBefore = calls.filter((c) => c.url.endsWith("/v3/conversation/add")).length;
+  const searchesBefore = calls.filter((c) => c.url.endsWith("/v3/conversation/search")).length;
   const again = await provisionProfiles({ repoRoot: root, env: {}, dryRun: false, log: () => {}, fetchImpl });
   assert.equal(again.failed, 0);
-  assert.deepEqual(again.results.map((r) => r.status), ["present", "present", "present"]);
-  assert.equal(calls.length, before, "idempotent re-run contacts nothing");
+  assert.deepEqual(again.results.map((r) => r.status), ["verified", "verified", "verified"]);
+  assert.equal(calls.filter((c) => c.url.endsWith("/v3/conversation/add")).length, writesBefore,
+    "idempotent re-run writes nothing");
+  assert.equal(calls.filter((c) => c.url.endsWith("/v3/conversation/search")).length - searchesBefore, 3,
+    "each cached profile is probed live before it is reported as verified");
 
   // ledger is private and records the binding
   const ledgerPath = join(root, "data/agent-profiles/ledger.json");

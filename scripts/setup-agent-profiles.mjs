@@ -4,7 +4,10 @@
 // a team/user/agent scope in MemoryCore plus a seeded charter record, so each
 // agent's memory exists and can be recalled under its own identity.
 //
-// Idempotent: profiles recorded in the ledger are skipped, so re-running is safe.
+// Idempotent: profiles recorded in the ledger are re-verified live (an
+// authenticated search) and only reported "verified" when the charter really
+// exists; a stale ledger entry is re-seeded instead of being presented as a
+// live profile.
 // Ghost is excluded: it already owns its persistent profile (ghost-companion scope,
 // see ghost/setup-ghost.sh) and must not gain a second, conflicting `ghost` scope.
 //
@@ -127,12 +130,38 @@ export async function provisionAgentProfiles({
       identity = identityFor(name, env, cfg.identity);
     }
     const rec = ledger.profiles[name];
-    // Present only when the recorded scope matches the requested scope; a changed
-    // team or user override must re-seed, never report a profile that was not written.
+    // A cached ledger entry is NOT acceptance evidence. Present only when the
+    // recorded scope matches the requested scope; a changed team or user
+    // override must re-seed, never report a profile that was not written.
     if (rec?.seeded_at && rec.team_id === identity.team_id && rec.user_id === identity.user_id
         && rec.agent_id === identity.agent_id) {
-      results.push({ name, status: "present", identity });
-      continue;
+      if (dryRun) {
+        results.push({ name, status: "would-verify", identity });
+        continue;
+      }
+      // Probe the identity LIVE (authenticated search) before reporting it as
+      // present: a stale ledger must never be presented as a live profile.
+      let live;
+      try {
+        live = await callMemoryCore("/v3/conversation/search", {
+          ...identity,
+          query: `OpenChamber agent "${name}" charter`,
+          limit: 10,
+        }, cfg, fetchImpl);
+      } catch (err) {
+        results.push({ name, status: "failed", identity, detail: `verify request error: ${err?.name || "error"}` });
+        continue;
+      }
+      if (live.code !== 0) {
+        results.push({ name, status: "failed", identity, detail: `verify ${live.message || live.error || `code ${live.code ?? "?"}`}` });
+        continue;
+      }
+      if ((live.data?.messages || []).some((m) => isCharterFor(m, name, `agent-profile-${name}`))) {
+        results.push({ name, status: "verified", identity });
+        continue;
+      }
+      // The ledger claims the profile but the live probe found nothing: fall
+      // through and seed it again.
     }
     if (dryRun) {
       results.push({ name, status: identityMap ? "would-verify" : "would-seed", identity });

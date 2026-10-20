@@ -24,7 +24,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { AGENT_MAP } from "../adapters/claude-code/agent-map.mjs";
@@ -43,6 +43,13 @@ import {
 } from "../adapters/claude-code/main-memory.mjs";
 import { loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
 import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs";
+// Shared OpenChamber discovery: the installer and the attach flow must resolve
+// the SAME target config dir (a native data dir with no OpenCode config must
+// never silently fall back to the package's own data/opencode/config).
+import { discoverOpenchamber, resolveConfigDir } from "./attach-openchamber.mjs";
+// Native Office payload contract: the gate ingests an event produced by the
+// SHIPPED plugin mapper, not a hand-written shape.
+import { mapOfficeEvent } from "../openchamber/plugins/product-office/office-events.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AGENTS_SRC = join(ROOT, "adapters/claude-code/agents");
@@ -177,12 +184,14 @@ export function parseOptionChoice(reply) {
 /** Usage surface: four numbered installation options + advanced configuration. */
 export function usageText() {
   return [
-    "usage: install-claude-code.mjs install|uninstall|status [--variant 1|2|3|4]",
+    "usage: install-claude-code.mjs install|uninstall|status|gate [--variant 1|2|3|4]",
     "",
     "commands:",
     "  install    run one of the four installation options (selected with --variant)",
     "  uninstall  remove the Singularity integration (memories and profiles are kept)",
     "  status     report what is installed (--probe verifies main-agent routing)",
+    "  gate       verify an option's target capabilities without installing Claude Code",
+    "             (options 3/4: --variant 3|4 [--container NAME | --config-dir DIR])",
     "",
     "installation options — exactly four, selected with --variant:",
     ...installOptionLines(),
@@ -191,6 +200,7 @@ export function usageText() {
     "  --scope user|project  --project-dir DIR  --team T  --user U",
     "  --enable-main-memory | --no-main-memory  --replace-provider",
     "  --skip-profiles  --skip-repoql-mcp  --probe  --dry-run",
+    "  --container NAME  --config-dir DIR  (gate target selection)",
   ].join("\n");
 }
 
@@ -201,27 +211,22 @@ export function usageText() {
  * container. Read-only: nothing here starts, stops or reconfigures anything.
  */
 export function detectOpenchamberInstance(deps = {}) {
-  const home = deps.home || process.env.HOME || "";
-  const nativeDir = join(home, ".config", "opencode");
-  if (existsSync(nativeDir) || existsSync(join(home, ".local", "share", "opencode"))) {
-    return { kind: "native", configDir: existsSync(nativeDir) ? nativeDir : null };
-  }
-  if (deps.docker !== false) {
-    const ps = spawnSync("docker", ["ps", "--format", "{{.Names}} {{.Image}}"], { encoding: "utf8" });
-    if (ps.status === 0) {
-      const managed = [], foreign = [];
-      for (const line of String(ps.stdout || "").split("\n")) {
-        const parts = line.trim().split(/\s+/);
-        const name = parts[0], image = parts[1] || "";
-        if (!name) continue;
-        if (!/openchamber/i.test(name) && !/openchamber/i.test(image)) continue;
-        (name === "singularity-openchamber" ? managed : foreign).push(name);
-      }
-      if (managed.length) return { kind: "compose-managed", container: managed[0], configDir: join(ROOT, "data/opencode/config") };
-      if (foreign.length) return { kind: "container", container: foreign[0] };
-    }
-  }
-  return { kind: "none" };
+  if (deps.detectOpenchamberInstance) return deps.detectOpenchamberInstance();
+  return discoverOpenchamber({ home: deps.home, docker: deps.docker });
+}
+
+/**
+ * Resolve the host-side config directory of the detected instance. This is the
+ * only supported source of truth for an attach option's target config: a
+ * container's config comes from its bind mounts, a native install from
+ * ~/.config/opencode, and the package's own stack from the repo data dir. There
+ * is deliberately NO package-local fallback: an unresolved target is reported
+ * as missing, never silently pointed at data/opencode/config.
+ */
+export function targetConfigDir(inst) {
+  if (!inst || inst.kind === "none") return null;
+  if (inst.kind === "container") return resolveConfigDir(inst); // throws with a precise message
+  return inst.configDir || null;
 }
 
 export function resolveVariant(flags, deps = {}) {
@@ -264,7 +269,7 @@ export function resolveVariant(flags, deps = {}) {
 export function parseFlags(argv, home, cwd) {
   const flags = { scope: "user", projectDir: resolve(cwd), team: "", user: "", skipProfiles: false, skipRepoqlMcp: false, dryRun: false,
     mainMemory: null, // null = offer interactively (TTY), off when non-interactive
-    replaceProvider: false, probe: false, variant: null };
+    replaceProvider: false, probe: false, variant: null, container: null, configDir: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--scope") {
@@ -285,6 +290,8 @@ export function parseFlags(argv, home, cwd) {
       flags.variant = argv[++i];
       if (!["1", "2", "3", "4"].includes(flags.variant)) throw new UsageError("--variant must be 1, 2, 3 or 4 (see README §START HERE)");
     }
+    else if (a === "--container") flags.container = argv[++i];
+    else if (a === "--config-dir") flags.configDir = argv[++i];
     else throw new UsageError(`unknown argument: ${a}`);
   }
   flags.settingsPath = settingsPathFor(flags.scope, home, flags.projectDir);
@@ -538,9 +545,142 @@ function hostOfficeEndpoint(endpoint) {
   return m ? `http://127.0.0.1:3128${m[1]}` : String(endpoint || "");
 }
 
-async function verifyOptionCapabilities(flags, ctx) {
-  const { settings, main, profileOutcome, mcp, variantOutcome } = ctx;
-  const v = variantOutcome.variant;
+/** Read one KEY=VALUE from a dotenv file (never prints the value). */
+const readEnvValue = (p, key) => {
+  try {
+    const t = readFileSync(p, "utf8");
+    const m = t.match(new RegExp(`^\\s*${key}\\s*=\\s*(.*)$`, "m"));
+    return m ? m[1].trim().replace(/^["']|["']$/g, "") : "";
+  } catch { return ""; }
+};
+
+/**
+ * Functional dream acceptance: a COMPLETED consolidation journal dated today.
+ * A checkpointed journal is explicitly NOT acceptance (a checkpoint is not a
+ * finished consolidation), and a pre-existing unrelated journal does not count.
+ * Provenance (a memory commit or changed files) is required alongside the
+ * completed outcome so a "complete" line cannot be asserted without evidence.
+ */
+function dreamOutcomeToday(agentDir = join(ROOT, "data/ghost")) {
+  const dir = join(agentDir, "dreams");
+  const today = new Date().toISOString().slice(0, 10);
+  let files = [];
+  try { files = readdirSync(dir).filter((f) => f.endsWith(".md")).sort(); } catch { return { complete: false, detail: "no dream journal directory" }; }
+  const todays = files.filter((f) => f.includes(today));
+  if (!todays.length) return { complete: false, detail: "no dream journal dated today" };
+  const read = (f) => { try { return readFileSync(join(dir, f), "utf8") || ""; } catch { return ""; } };
+  const complete = todays.find((f) => /^- outcome:\s*complete\b/m.test(read(f)));
+  if (!complete) {
+    const checkpointed = todays.some((f) => /^- outcome:\s*checkpointed\b/m.test(read(f)));
+    return { complete: false, provenance: false, detail: checkpointed
+      ? "today's journal is checkpointed — a checkpoint is not a completed consolidation"
+      : "today's journal records no completed consolidation" };
+  }
+  const text = read(complete);
+  const hasCommit = /^- commit:\s*(?!\(no memory commit this run\))\S/m.test(text);
+  const hasChanged = /^- changed_files:\s*(?!none\b)\S/m.test(text);
+  return { complete: true, provenance: hasCommit || hasChanged, journal: complete, detail: "completed consolidation" };
+}
+
+/**
+ * Host-side transport mapping for the in-network memory alias. The plugin
+ * config pins the in-network alias (http://memory-core:8420); the host reaches
+ * the same service on its published loopback port (the product's host-side
+ * scripts use http://127.0.0.1:8420 too). This maps the TRANSPORT only — the
+ * config directory is never guessed.
+ */
+function hostMemoryBaseUrl(cfg) {
+  const raw = String(cfg?.baseUrl || "");
+  const m = raw.match(/^https?:\/\/(?:memory-core|tdai-memory-core)(:\d+)?/);
+  if (!m) return raw;
+  return `http://127.0.0.1${m[1] || ":8420"}`;
+}
+
+/**
+ * Run a probe child process and collect its output. The probe is ASYNC on
+ * purpose: a synchronous child would block the parent's event loop, so an
+ * in-process service (used by the tests) could never answer the probe.
+ */
+function runProbe(cmd, args, { env, timeout = 25000 } = {}) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(cmd, args, { cwd: ROOT, env: env || process.env });
+    } catch (e) {
+      resolve({ code: -1, out: "", err: String(e?.message || e) });
+      return;
+    }
+    let out = "", err = "";
+    child.stdout?.on("data", (d) => { out += String(d); });
+    child.stderr?.on("data", (d) => { err += String(d); });
+    const timer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* already gone */ } }, timeout);
+    child.on("error", (e) => { clearTimeout(timer); resolve({ code: -1, out, err: err || String(e?.message || e) }); });
+    child.on("close", (code) => { clearTimeout(timer); resolve({ code, out, err }); });
+  });
+}
+
+const lastLine = (s) => String(s || "").trim().split("\n").filter(Boolean).slice(-1)[0] || "";
+
+/** Host-side probe: the shipped strict ghost-memory client, authenticated. */
+async function probeGhostMemoryOnHost(configPath) {
+  const cfg = readJson(configPath);
+  const env = { ...process.env, SINGULARITY_MEMORY_CONFIG: configPath };
+  const mapped = hostMemoryBaseUrl(cfg);
+  if (mapped) env.GHOST_MC_URL = mapped;
+  const r = await runProbe("node", [join(ROOT, "ghost/ghost-memory.mjs"), "stats"], { env, timeout: 25000 });
+  if (r.code === 0) {
+    return { ok: true, detail: `authenticated Ghost memory identity reachable (${configPath}${mapped ? " via " + mapped : ""})` };
+  }
+  const tail = lastLine(r.err || r.out);
+  return { ok: false, detail: `ghost memory stats failed rc=${r.code}${tail ? `: ${tail}` : ""}` };
+}
+
+/**
+ * In-container probe (installation options 3/4): the identity is checked
+ * INSIDE the target, where the in-network alias actually resolves. Read-only:
+ * the config is read, two authenticated count calls are made, and only a
+ * verdict (no secret, no message content) is printed.
+ */
+async function probeGhostMemoryInContainer(container, configPath) {
+  const script = `
+const fs=require('fs');
+let c;try{c=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));}catch(e){console.log(JSON.stringify({error:'config-missing-or-unreadable'}));process.exit(1);}
+const base=String(c.baseUrl||'').replace(/\\/+$/,'');
+const key=c.userKey||c.gatewayKey||'';
+if(!base||!key){console.log(JSON.stringify({error:'no-service-key'}));process.exit(1);}
+const h={'content-type':'application/json','x-tdai-service-id':c.serviceId||'default','authorization':(c.authPrefix||'Bearer ')+key};
+if(c.userKey)h['x-tdai-user-key']=c.userKey;
+const id={team_id:c.ghostTeamId||'ghost-companion',user_id:c.ghostUserId||'pilot-operator',agent_id:c.ghostAgentId||'ghost'};
+(async()=>{try{
+  const r=await fetch(base+'/v3/conversation/count',{method:'POST',headers:h,body:JSON.stringify(id)});
+  const j=await r.json();
+  if(j.code!==0){console.log(JSON.stringify({error:'count-failed',code:j.code}));process.exit(1);}
+  const a=await fetch(base+'/v3/atomic/count',{method:'POST',headers:h,body:JSON.stringify(id)});
+  const k=await a.json();
+  if(k.code!==0){console.log(JSON.stringify({error:'count-failed',code:k.code}));process.exit(1);}
+  console.log(JSON.stringify({ok:true,l0:Number(j.data&&j.data.total||0),l1:Number(k.data&&k.data.total||0)}));
+}catch(e){console.log(JSON.stringify({error:String((e&&e.message)||e)}));process.exit(1);}})();`;
+  const r = await runProbe("docker", ["exec", container, "node", "-e", script, configPath], { timeout: 30000 });
+  if (r.code !== 0) {
+    const tail = lastLine(r.err || r.out);
+    return { ok: false, detail: `in-container memory probe failed rc=${r.code}${tail ? `: ${tail}` : ""}` };
+  }
+  let j = null;
+  try { j = JSON.parse(lastLine(r.out) || "null"); } catch { j = null; }
+  if (!j || !j.ok) return { ok: false, detail: `in-container memory probe: ${j?.error || "unreadable result"}` };
+  return { ok: true, detail: `authenticated Ghost memory identity reachable inside ${container} (l0=${j.l0}, l1=${j.l1})` };
+}
+
+/**
+ * Option-target capability checks (installation options 3/4, and the Ghost /
+ * Office parts of option 2). Shared by the full install gate and the
+ * `gate` command, so the native OpenChamber entrypoint exercises the SAME code.
+ * @param v variant definition
+ * @param flags parsed flags (flags.variant used for messages)
+ * @param ctx install context ({ target, variantOutcome })
+ * @param target detected/explicit OpenChamber target
+ */
+export async function verifyOptionTarget(v, flags, ctx, target) {
   const missing = [];
   const checked = [];
   const note = (ok, label, detail = "") => {
@@ -548,125 +688,87 @@ async function verifyOptionCapabilities(flags, ctx) {
     if (!ok) missing.push(detail ? `${label} (${detail})` : label);
   };
 
-  if (flags.dryRun) return { complete: true, missing, checked, dryRun: true };
-
-  // 1. specialist agent definitions installed with packaged content
-  try {
-    const recheck = planAgentFiles(flags.agentsTarget);
-    const okAll = recheck.length === Object.keys(AGENT_MAP).length && recheck.every((f) => f.status === "present");
-    note(okAll, "seven specialist agent definitions installed",
-      okAll ? "" : `${recheck.filter((f) => f.status !== "present").length} file(s) do not match the packaged content`);
-  } catch (e) { note(false, "seven specialist agent definitions installed", String(e?.message || e)); }
-
-  // 2. memory + documentation hooks merged into settings
-  try {
-    const st = readSettingsFileStrict(flags.settingsPath);
-    const events = st.malformed ? [] : Object.keys(st.settings?.hooks || {});
-    const okHooks = ALL_HOOK_EVENTS.every((k) => events.includes(k));
-    note(okHooks, "memory + documentation hooks merged", okHooks ? "" : `present: ${events.join(", ") || "(none)"}`);
-  } catch (e) { note(false, "memory + documentation hooks merged", String(e?.message || e)); }
-
-  // 3. specialist MemoryCore profiles provisioned (never skippable)
-  const prof = profileOutcome || { skipped: true, results: [], failed: 0 };
-  const profOk = !prof.skipped && prof.failed === 0 && Array.isArray(prof.results) &&
-    prof.results.length >= 7 && prof.results.every((r) => ["seeded", "present", "verified"].includes(r.status));
-  note(profOk, "specialist MemoryCore profiles provisioned",
-    prof.skipped ? "skipped — provision the plugin secrets, then re-run" : prof.failed ? `${prof.failed} failed` : "");
-
-  // 4. RepoQL MCP registered (mandatory in every option)
-  if (flags.skipRepoqlMcp) {
-    note(false, "RepoQL MCP registered", "--skip-repoql-mcp cannot pass an installation option");
-  } else {
-    note(Boolean(mcp), "RepoQL MCP registered",
-      mcp ? (mcp.present ? "already configured" : `registered (${mcp.command})`) : "rql or claude CLI not detected — see docs/REPOQL-SETUP.md");
-  }
-
-  // 5. normal-session memory routing (options 1/2; consent decline => INCOMPLETE)
-  if (v.openchamber && !flags.mainMemory) {
-    checked.push("ok: normal-session routing handled by the OpenChamber plugin for this option");
-  } else {
-    const mainOk = main && (main.applied || (main.mode === "verified-existing"));
-    if (mainOk) note(true, "normal-session memory routing", `mode: ${main.mode}`);
-    else if (main?.refused) note(false, "normal-session memory routing", `refused: ${(main.conflicts || []).join("; ")} — pass --replace-provider after explicit consent, or keep your provider`);
-    else note(false, "normal-session memory routing",
-      main?.skipped
-        ? `declined or unprovisioned (${main.reason || "consent declined"}) — a declined capability leaves the install INCOMPLETE; it is never forced`
-        : "not applied");
-  }
-
   // 6. options 3/4: existing OpenChamber reused, bundle present, plugin secrets live
   if (v.openchamber) {
-    const inst = detectOpenchamberInstance();
-    note(inst.kind !== "none", "existing OpenChamber detected (reused, never reinstalled)", inst.kind === "none" ? "none found" : inst.kind);
+    const inst = target;
+    note(inst.kind !== "none", "existing OpenChamber detected (reused, never reinstalled)",
+      inst.kind === "none" ? "none found" : `${inst.kind}${inst.container ? `: ${inst.container}` : ""}`);
     if (inst.kind !== "none") {
-      let bundleOk = false, detail = "";
-      try {
-        if (inst.kind === "container") {
-          const c = spawnSync("docker", ["exec", inst.container, "sh", "-c",
-            "test -f /home/openchamber/.config/opencode/plugins/product-office/package.json && test -f /home/openchamber/.config/opencode/AGENTS.md"], { encoding: "utf8" });
-          bundleOk = c.status === 0;
-          detail = bundleOk ? `inside ${inst.container}` : "product-office plugin bundle not found inside the container config";
+      let cfgDir = null, cfgErr = "";
+      try { cfgDir = targetConfigDir(inst); } catch (e) { cfgErr = String(e?.message || e); }
+      note(Boolean(cfgDir), "OpenChamber config directory resolved",
+        cfgDir || (cfgErr || `no config dir for ${inst.kind} — pass an explicit target (--config-dir/--container) or fix the OpenChamber install`));
+      if (cfgDir) {
+        const bundleOk = existsSync(join(cfgDir, "plugins", "product-office", "package.json")) && existsSync(join(cfgDir, "AGENTS.md"));
+        note(bundleOk, "OpenChamber memory-plugin bundle present",
+          bundleOk ? cfgDir : `bundle incomplete in ${cfgDir} — run scripts/attach-openchamber.mjs --variant ${flags.variant}`);
+        // The target's OWN MCP wiring must declare the RepoQL MCP: the attach
+        // never overwrites a target's opencode.jsonc, so a pre-existing
+        // RepoQL identity survives — and this check proves the code
+        // intelligence is actually wired into the target.
+        const ocCfgPath = join(cfgDir, "opencode.jsonc");
+        let repoqlOk = false, repoqlDetail = "";
+        if (existsSync(ocCfgPath)) {
+          const ocText = readFileSync(ocCfgPath, "utf8");
+          repoqlOk = /"repoql"\s*:/.test(ocText);
+          repoqlDetail = repoqlOk
+            ? ocCfgPath
+            : `${ocCfgPath} declares no mcp.repoql entry — add the block from docs/REPOQL-SETUP.md (the attach never overwrites your own config)`;
         } else {
-          const dir = inst.configDir || join(ROOT, "data/opencode/config");
-          bundleOk = existsSync(join(dir, "plugins", "product-office", "package.json")) && existsSync(join(dir, "AGENTS.md"));
-          detail = bundleOk ? dir : `bundle incomplete in ${dir} — copy openchamber/ per docs/OPENCHAMBER-SETUP.md`;
+          repoqlDetail = `no opencode.jsonc in the target config (${cfgDir})`;
         }
-      } catch (e) { detail = String(e?.message || e); }
-      note(bundleOk, "OpenChamber memory-plugin bundle present", detail);
-      // plugin secrets with a scoped runtime key (inside a foreign container
-      // the value is checked in-container and never leaves it)
-      let secretsOk = false, secDetail = "";
-      try {
-        if (inst.kind === "container") {
-          const cc = spawnSync("docker", ["exec", inst.container, "sh", "-c",
-            `if [ -f /home/openchamber/.config/opencode/product-secrets/memory.json ]; then node -e "const j=JSON.parse(require('fs').readFileSync('/home/openchamber/.config/opencode/product-secrets/memory.json','utf8'));process.exit(j.userKey?0:1)"; else exit 3; fi`],
-            { encoding: "utf8" });
-          secretsOk = cc.status === 0;
-          secDetail = secretsOk ? `verified inside ${inst.container} (scoped user key present; not printed)`
-            : `memory.json missing or has no scoped userKey inside ${inst.container} (rc=${cc.status}) — run the option's provisioning step`;
-        } else {
-          const cfgDir = inst.configDir || join(ROOT, "data/opencode/config");
-          const memCfgPath = join(cfgDir, "product-secrets", "memory.json");
-          const cfg = readJson(memCfgPath);
-          secretsOk = Boolean(cfg && typeof cfg.userKey === "string" && cfg.userKey);
-          secDetail = secretsOk ? memCfgPath : "memory.json missing or has no scoped userKey (run provision-secrets.py --memory-user-key ...)";
-        }
-      } catch (e) { secDetail = String(e?.message || e); }
-      note(secretsOk, "plugin memory credentials provisioned (scoped user key)", secDetail);
+        note(repoqlOk, "RepoQL MCP declared in the target's opencode.jsonc", repoqlDetail);
+        const memCfgPath = join(cfgDir, "product-secrets", "memory.json");
+        const cfg = readJson(memCfgPath);
+        const secretsOk = Boolean(cfg && typeof cfg.userKey === "string" && cfg.userKey);
+        note(secretsOk, "plugin memory credentials provisioned (scoped user key)",
+          secretsOk ? memCfgPath : "memory.json missing or has no scoped userKey in the target config");
+      }
     }
   }
 
   // 7. options 2/4: Ghost functional (config, memory identity, dream cycle, backend)
   if (v.ghost) {
-    note(existsSync(join(ROOT, "secrets", "ghost.env")), "Ghost configured (secrets/ghost.env)", "run bash ghost/setup-ghost.sh");
+    // Static configuration state is reported as static — never as functional
+    // acceptance. The functional checks below are the authenticated memory
+    // probe and the completed-consolidation journal.
+    const envOk = existsSync(join(ROOT, "secrets", "ghost.env"));
+    checked.push(`${envOk ? "ok" : "MISSING"}: Ghost static config (secrets/ghost.env)${envOk ? "" : " — run bash ghost/setup-ghost.sh"}`);
+    if (!envOk) missing.push("Ghost static config (secrets/ghost.env)");
+
     let memOk = false, memDetail = "";
     try {
-      const ghostCfg = v.openchamber
-        ? join((detectOpenchamberInstance().configDir || join(ROOT, "data/opencode/config")), "product-secrets", "memory.json")
-        : join(ROOT, "data/opencode/config/product-secrets/memory.json");
-      const r = spawnSync("node", [join(ROOT, "ghost/ghost-memory.mjs"), "stats"], {
-        cwd: ROOT, encoding: "utf8", timeout: 20000,
-        env: { ...process.env, SINGULARITY_MEMORY_CONFIG: ghostCfg },
-      });
-      memOk = r.status === 0;
-      memDetail = memOk ? "ghost-companion memory identity reachable" : `ghost memory stats failed rc=${r.status}`;
+      const inst = target || (ctx && ctx.target) || detectOpenchamberInstance();
+      if (v.openchamber && (inst.kind === "container" || inst.kind === "compose-managed")) {
+        // Probe INSIDE the target: that is where the in-network alias resolves.
+        const p = await probeGhostMemoryInContainer(inst.container, "/home/openchamber/.config/opencode/product-secrets/memory.json");
+        memOk = p.ok; memDetail = p.detail;
+      } else {
+        const cfgDir = v.openchamber ? targetConfigDir(inst) : join(ROOT, "data/opencode/config");
+        const ghostCfg = cfgDir ? join(cfgDir, "product-secrets", "memory.json") : null;
+        if (!ghostCfg) memDetail = "no resolved OpenChamber config dir for the Ghost memory config";
+        else {
+          const p = await probeGhostMemoryOnHost(ghostCfg);
+          memOk = p.ok; memDetail = p.detail;
+        }
+      }
     } catch (e) { memDetail = String(e?.message || e); }
-    note(memOk, "Ghost memory identity reachable", memDetail);
-    const stateFile = join(ROOT, "data/ghost/dreams/.state.json");
-    let dreamEvidence = existsSync(stateFile);
-    let dreamDetail = dreamEvidence ? "checkpointed dream state present (resume pending or complete)" : "";
-    if (!dreamEvidence) {
-      try { dreamEvidence = readdirSync(join(ROOT, "data/ghost/dreams")).some((f) => f.endsWith(".md")); dreamDetail = dreamEvidence ? "dream journal present" : ""; } catch { /* dir absent */ }
-    }
+    note(memOk, "Ghost memory identity reachable (authenticated probe)", memDetail);
+
+    const dream = dreamOutcomeToday((ctx && ctx.ghostAgentDir) || undefined);
+    note(dream.complete && dream.provenance, "Ghost dream consolidation completed today",
+      dream.complete
+        ? `${dream.journal} — ${dream.provenance ? "with memory commit/changed files" : "no provenance recorded"}`
+        : (dream.detail || "no dream journal for today"));
+
     let daemon = false;
     const ps = spawnSync("docker", ["ps", "--format", "{{.Names}}"], { encoding: "utf8" });
     if (ps.status === 0) daemon = String(ps.stdout || "").split("\n").includes("singularity-ghost-dream");
-    note(dreamEvidence || daemon, "Ghost dream cycle started (daemon running or dream evidence present)",
-      dreamEvidence || daemon ? (daemon ? "dream daemon running" : dreamDetail) : "run bash ghost/setup-ghost.sh, start ghost/ghost.compose.yml, and let one dream run (docs/GHOST-SETUP.md)");
+    checked.push(`${daemon ? "ok" : "note"}: Ghost dream daemon ${daemon ? "running" : "not running — a one-shot dream still counts if the journal is complete"}`);
+
     if (v.ghostBackend === "claude-code") {
       const cliOk = Boolean(claudeBinary());
       note(cliOk, "Ghost claude-code backend available (claude CLI)", cliOk ? "" : "claude CLI not detected — the Claude Code backend cannot run turns");
-      // gateway verification when it is running; required for interactive turns
       try {
         const res = await fetch("http://127.0.0.1:18003/healthz", { signal: AbortSignal.timeout(4000) });
         const j = await res.json().catch(() => null);
@@ -695,7 +797,7 @@ async function verifyOptionCapabilities(flags, ctx) {
     }
   }
 
-  // 8. options 2/4: Claude Office functional (reachable AND authenticated ingest)
+  // 8. options 2/4: Claude Office functional (native payload consumed, read back)
   if (v.office) {
     let officeOk = false, officeDetail = "";
     try {
@@ -704,24 +806,132 @@ async function verifyOptionCapabilities(flags, ctx) {
         officeDetail = "office.json missing endpoint/ingestKey (run provision-secrets.py for an option that includes Office)";
       } else {
         const url = hostOfficeEndpoint(cfg.endpoint);
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-API-Key": cfg.ingestKey },
-          body: JSON.stringify({
-            event_type: "session_start",
-            session_id: `install-verify-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            data: { session_name: "singularity-install-verify", status: "active" },
-            data: { agent_id: `install-verify-${Date.now()}`, display_name: "Singularity install verification", project_name: "install-check" },
-          }),
-          signal: AbortSignal.timeout(6000),
-        });
-        officeOk = res.ok;
-        officeDetail = officeOk ? `authenticated ingest accepted (HTTP ${res.status})` : `ingest rejected HTTP ${res.status}`;
+        const base = url.replace(/\/api\/v1\/events$/, "");
+        // Build the payload with the SHIPPED plugin mapper (native contract),
+        // then read the session list back with the read key to prove the event
+        // was actually consumed — a POST 200 alone is not acceptance.
+        const sessionID = `ses_verify${Date.now().toString(36)}`;
+        const mapped = mapOfficeEvent(
+          { type: "session.created", created: Date.now(), data: { sessionID } },
+          { location: { directory: "/home/openchamber/workspaces/install-verify" }, parentID: null }
+        );
+        if (!mapped.length) {
+          officeDetail = "native event mapper produced no event (capture-root contract)";
+        } else {
+          const payload = mapped[0];
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-API-Key": cfg.ingestKey },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(6000),
+          });
+          if (!res.ok) {
+            officeDetail = `ingest rejected HTTP ${res.status}`;
+          } else {
+            const adminKey = process.env.CLAUDE_OFFICE_API_KEY
+              || readEnvValue(join(ROOT, "secrets", "claude-office.env"), "CLAUDE_OFFICE_API_KEY");
+            if (!adminKey) {
+              officeDetail = "read key unavailable — cannot verify the event was consumed (set CLAUDE_OFFICE_API_KEY)";
+            } else {
+              const list = await fetch(`${base}/api/v1/sessions`, {
+                headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
+              });
+              if (!list.ok) {
+                officeDetail = `session read-back failed HTTP ${list.status}`;
+              } else {
+                const sessions = await list.json().catch(() => null);
+                const hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id);
+                if (!hit) {
+                  officeDetail = `ingest returned HTTP 200 but session ${payload.session_id} was not present on read-back`;
+                } else if (hit.projectName !== payload.data.project_name) {
+                  officeDetail = `consumed but project_name was not stored (read-back projectName=${JSON.stringify(hit.projectName)})`;
+                } else if (hit.displayName !== payload.data.project_name) {
+                  // Claude Office derives the session display name from
+                  // data.project_name (its own documented priority), so the
+                  // read-back must carry that value.
+                  officeDetail = `consumed but the derived display name differs (read-back displayName=${JSON.stringify(hit.displayName)})`;
+                } else {
+                  officeOk = true;
+                  officeDetail = `native event consumed and read back (HTTP 200; session ${payload.session_id}, project ${payload.data.project_name})`;
+                }
+              }
+            }
+          }
+        }
       }
     } catch (e) { officeDetail = `Office not reachable: ${String(e?.message || e).slice(0, 120)}`; }
-    note(officeOk, "Claude Office reachable and authenticated (synthetic ingest event accepted)", officeDetail);
+    note(officeOk, "Claude Office reachable and authenticated (native event consumed)", officeDetail);
   }
+
+  return { complete: missing.length === 0, missing, checked };
+}
+
+async function verifyOptionCapabilities(flags, ctx) {
+  const { settings, main, profileOutcome, mcp, variantOutcome } = ctx;
+  const v = variantOutcome.variant;
+  const missing = [];
+  const checked = [];
+  const note = (ok, label, detail = "") => {
+    checked.push(`${ok ? "ok" : "MISSING"}: ${label}${detail ? ` — ${detail}` : ""}`);
+    if (!ok) missing.push(detail ? `${label} (${detail})` : label);
+  };
+
+  if (flags.dryRun) return { complete: true, missing, checked, dryRun: true };
+
+  // 1. specialist agent definitions installed with packaged content
+  try {
+    const recheck = planAgentFiles(flags.agentsTarget);
+    const okAll = recheck.length === Object.keys(AGENT_MAP).length && recheck.every((f) => f.status === "present");
+    note(okAll, "seven specialist agent definitions installed",
+      okAll ? "" : `${recheck.filter((f) => f.status !== "present").length} file(s) do not match the packaged content`);
+  } catch (e) { note(false, "seven specialist agent definitions installed", String(e?.message || e)); }
+
+  // 2. memory + documentation hooks merged into settings
+  try {
+    const st = readSettingsFileStrict(flags.settingsPath);
+    const events = st.malformed ? [] : Object.keys(st.settings?.hooks || {});
+    const okHooks = ALL_HOOK_EVENTS.every((k) => events.includes(k));
+    note(okHooks, "memory + documentation hooks merged", okHooks ? "" : `present: ${events.join(", ") || "(none)"}`);
+  } catch (e) { note(false, "memory + documentation hooks merged", String(e?.message || e)); }
+
+  // 3. specialist MemoryCore profiles provisioned (never skippable). A cached
+  // ledger entry ("present") is NOT acceptance evidence — the seeder now probes
+  // each cached profile live before reporting "verified", so only a live,
+  // authenticated existence check (seeded|verified) passes.
+  const prof = profileOutcome || { skipped: true, results: [], failed: 0 };
+  const profOk = !prof.skipped && prof.failed === 0 && Array.isArray(prof.results) &&
+    prof.results.length >= 7 && prof.results.every((r) => ["seeded", "verified"].includes(r.status));
+  note(profOk, "specialist MemoryCore profiles provisioned",
+    prof.skipped ? "skipped — provision the plugin secrets, then re-run" : prof.failed ? `${prof.failed} failed` : "");
+
+  // 4. RepoQL MCP registered (mandatory in every option)
+  if (flags.skipRepoqlMcp) {
+    note(false, "RepoQL MCP registered", "--skip-repoql-mcp cannot pass an installation option");
+  } else {
+    note(Boolean(mcp), "RepoQL MCP registered",
+      mcp ? (mcp.present ? "already configured" : `registered (${mcp.command})`) : "rql or claude CLI not detected — see docs/REPOQL-SETUP.md");
+  }
+
+  // 5. normal-session memory routing (options 1/2; consent decline => INCOMPLETE)
+  if (v.openchamber && !flags.mainMemory) {
+    checked.push("ok: normal-session routing handled by the OpenChamber plugin for this option");
+  } else {
+    const mainOk = main && (main.applied || (main.mode === "verified-existing"));
+    if (mainOk) note(true, "normal-session memory routing", `mode: ${main.mode}`);
+    else if (main?.refused) note(false, "normal-session memory routing", `refused: ${(main.conflicts || []).join("; ")} — pass --replace-provider after explicit consent, or keep your provider`);
+    else note(false, "normal-session memory routing",
+      main?.skipped
+        ? `declined or unprovisioned (${main.reason || "consent declined"}) — a declined capability leaves the install INCOMPLETE; it is never forced`
+        : "not applied");
+  }
+
+  // 6-8. option-target checks (existing OpenChamber reuse, Ghost functional,
+  // Claude Office consumption) — shared with the `gate` command so the native
+  // OpenChamber entrypoint exercises the same code path.
+  const target = ctx.target || detectOpenchamberInstance();
+  const t = await verifyOptionTarget(v, flags, ctx, target);
+  for (const c of t.checked) checked.push(c);
+  missing.push(...t.missing);
 
   return { complete: missing.length === 0, missing, checked };
 }
@@ -1083,9 +1293,57 @@ export async function runStatus(flags) {
   return 0;
 }
 
+/**
+ * Native OpenChamber entrypoint for installation options 3/4: verify the
+ * option's target capabilities WITHOUT installing Claude Code. Exercises the
+ * same verifyOptionTarget code the full install gate runs.
+ *
+ *   node scripts/install-claude-code.mjs gate --variant 3|4 [--container NAME | --config-dir DIR]
+ *
+ * Exit 0 = INSTALL COMPLETE (target capabilities verified); 5 = INSTALL
+ * INCOMPLETE (the missing items are printed). Nothing is written.
+ */
+export async function runGate(argv) {
+  let flags;
+  try {
+    flags = parseFlags(argv, process.env.HOME, process.cwd());
+  } catch (e) {
+    log(`usage error: ${e.message}`);
+    log(usageText());
+    return 2;
+  }
+  if (!flags.variant) {
+    warn("gate requires --variant 3|4 (the installation options that attach to an existing OpenChamber)");
+    return 2;
+  }
+  // The target is supplied explicitly or discovered; resolveVariant's existence
+  // check is satisfied by the explicit/discovered target below.
+  const variantOutcome = resolveVariant(flags, { detectOpenchamber: () => true });
+  if (!variantOutcome.ok) {
+    for (const p of variantOutcome.problems) warn(`  option REFUSED: ${p}`);
+    return 4;
+  }
+  let target;
+  if (flags.container) {
+    target = { kind: "container", container: flags.container };
+  } else if (flags.configDir) {
+    if (!existsSync(flags.configDir)) { warn(`--config-dir ${flags.configDir} does not exist`); return 2; }
+    target = { kind: "native", configDir: flags.configDir };
+  } else {
+    target = detectOpenchamberInstance();
+  }
+  log(`gate: option ${flags.variant} — ${variantOutcome.variant.name}`);
+  log(`gate: target ${target.kind}${target.container ? ` (${target.container})` : ""}${target.configDir ? ` config=${target.configDir}` : ""}`);
+  const r = await verifyOptionTarget(variantOutcome.variant, flags, { variantOutcome, target }, target);
+  for (const c of r.checked) log(`  ${c}`);
+  if (r.complete) log(`INSTALL COMPLETE — option ${flags.variant} target capabilities verified`);
+  else log(`INSTALL INCOMPLETE — option ${flags.variant}: ${r.missing.join("; ")}`);
+  return r.complete ? 0 : 5;
+}
+
 export async function main(argv) {
   const [command, ...rest] = argv;
-  if (!["install", "uninstall", "status"].includes(command)) {
+  if (!["install", "uninstall", "status", "gate"].includes(command)) {
     log(usageText());
     return 2;
   }
@@ -1099,6 +1357,7 @@ export async function main(argv) {
   }
   if (command === "install") return runInstall(flags);
   if (command === "uninstall") return runUninstall(flags);
+  if (command === "gate") return runGate(rest);
   return runStatus(flags);
 }
 

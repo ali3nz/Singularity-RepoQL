@@ -24,6 +24,13 @@
 #   6. print the readiness table
 #
 # Run from the repository root:  scripts/start.sh
+#
+# The installation option is the ONE explicit input:
+#   SINGULARITY_VARIANT=3 bash scripts/start.sh   # existing OpenChamber + MemoryCore
+#   SINGULARITY_VARIANT=4 bash scripts/start.sh   # existing OpenChamber + MemoryCore + Ghost + Claude Office
+# The same number is what `node scripts/install-claude-code.mjs install --variant N`
+# takes and what the README briefs name. Options 1 and 2 are Claude Code
+# installs: run the installer with --variant 1 or --variant 2.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -89,7 +96,20 @@ else
   log "attached $MEMORY_CONTAINER to $NET as memory-core"
 fi
 
+# ── the ONE explicit installation-option input ───────────────────────────────
+# The whole product is selected by ONE option number. The installer takes it as
+# `--variant N`, this script takes it as SINGULARITY_VARIANT=N, and the README
+# briefs name the same number. This script ATTACHES to an EXISTING
+# OpenChamber, so only options 3 and 4 are meaningful here; options 1 and 2
+# are Claude Code installs and are refused with the exact command to run.
 ATTACH_VARIANT="${SINGULARITY_VARIANT:-3}"
+case "$ATTACH_VARIANT" in
+  3|4) ;;
+  *)
+    fail "SINGULARITY_VARIANT must be 3 or 4 for scripts/start.sh (it attaches to an EXISTING OpenChamber). Installation options 1 and 2 are Claude Code installs — run: node scripts/install-claude-code.mjs install --variant 1 (or 2)"
+    ;;
+esac
+log "installation option: $ATTACH_VARIANT"
 OC_MANAGED="singularity-openchamber"
 MANAGED_EXISTS=0; docker inspect "$OC_MANAGED" >/dev/null 2>&1 && MANAGED_EXISTS=1
 MANAGED_RUNNING="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -x "$OC_MANAGED" || true)"
@@ -122,6 +142,13 @@ elif [[ "$MODE" == attach-native ]]; then
   ATTACH_ARGS=(--config-dir "$NATIVE_CONFIG")
 else
   ATTACH_ARGS=()
+fi
+# Option 4 includes Ghost: its consent is the option choice itself, and the
+# Ghost setup/credentials are provisioned through the same attach flow, so the
+# target config ends up with the full option-4 capability set. Option 3 never
+# provisions Ghost (or Office) — those belong to options 2 and 4 only.
+if [[ "$ATTACH_VARIANT" == "4" ]]; then
+  ATTACH_ARGS+=(--with-ghost)
 fi
 if ! node "$ROOT/scripts/attach-openchamber.mjs" --variant "$ATTACH_VARIANT" "${ATTACH_ARGS[@]}"; then
   fail "attaching the Singularity bundle to the existing OpenChamber failed"
@@ -213,19 +240,27 @@ else
   log "attach mode: $ATTACH_TARGET is YOUR existing OpenChamber — restart it yourself to load the plugins; this script never restarts it"
 fi
 
-# ── 5. Claude Office (optional) ──────────────────────────────────────────────
-if [[ -f "$ROOT/secrets/claude-office.env" ]]; then
-  docker compose -f "$ROOT/office/office.compose.yml" up -d
+# ── 5. Claude Office (options 2 and 4 only) ───────────────────────────────────
+if [[ "$ATTACH_VARIANT" == "4" ]]; then
+  if [[ -f "$ROOT/secrets/claude-office.env" ]]; then
+    docker compose -f "$ROOT/office/office.compose.yml" up -d
+  else
+    log "skipping Claude Office: secrets/claude-office.env missing (run python3 scripts/provision-secrets.py --variant 4)"
+  fi
 else
-  log "skipping Claude Office: secrets/claude-office.env missing (run scripts/provision-secrets.py)"
+  log "installation option 3 excludes Claude Office — not started (see docs/OPENCHAMBER-SETUP.md)"
 fi
 
-# ── 5b. Ghost — persistent agent that dreams (optional) ──────────────────────
-if [[ -f "$ROOT/secrets/ghost.env" ]]; then
-  bash "$ROOT/ghost/setup-ghost.sh"
-  docker compose -f "$ROOT/ghost/ghost.compose.yml" up -d
+# ── 5b. Ghost — persistent agent that dreams (options 2 and 4 only) ───────────
+if [[ "$ATTACH_VARIANT" == "4" ]]; then
+  if [[ -f "$ROOT/secrets/ghost.env" ]]; then
+    bash "$ROOT/ghost/setup-ghost.sh"
+    docker compose -f "$ROOT/ghost/ghost.compose.yml" up -d
+  else
+    log "skipping Ghost: secrets/ghost.env missing (run python3 scripts/provision-secrets.py --variant 4 --with-ghost, or bash ghost/setup-ghost.sh)"
+  fi
 else
-  log "skipping Ghost: secrets/ghost.env missing (run bash ghost/setup-ghost.sh or python3 scripts/provision-secrets.py --with-ghost)"
+  log "installation option 3 excludes Ghost — not started (see docs/GHOST-SETUP.md)"
 fi
 
 # ── 6. readiness ─────────────────────────────────────────────────────────────

@@ -57,6 +57,36 @@ The shipped agents (`standalone` and `ghost` are primary; the rest are subagents
 | `quality-fixer` | write-capable fixer scoped to its staged context directory |
 | `board` | Board of Advisors — eight-persona strategic judgment panel (financial officer, tax strategist, attorney, corporate strategist, investment advisor, real estate advisor, estate planner, insurance & risk advisor) |
 
+### 2a. What the attach never overwrites
+
+`scripts/attach-openchamber.mjs` (used by `scripts/start.sh` for installation
+options 3 and 4) installs the bundle into an **existing** instance. Three
+files are the target's own identity and are **preserved** when the target
+already carries a different version:
+
+- `AGENTS.md` — the target's own agent instructions,
+- `opencode.jsonc` — the target's own MCP wiring, including a **pre-existing
+  RepoQL identity** (its own `rql` path stays in charge),
+- `dcp.jsonc` — the target's own DCP configuration.
+
+The product's version of a preserved file is written next to the attach backup
+as `<file>.product` (in `data/attach-backups/<stamp>/`) and never applied on
+top of the target's version; merge it deliberately if you want it. Every other
+bundle file is replaced as before, with a backup of the previous content and
+no deletion of anything. The capability gate checks that the **target's** own
+`opencode.jsonc` declares the `repoql` MCP entry.
+
+The attach also needs a scoped MemoryCore user key for the target's plugin: it
+reuses the package's own scoped key for the same memory stack, or you can pass
+one explicitly with `--memory-user-key <key>` / `MEMORY_USER_KEY`. Without any
+key the target's `memory.json` stays empty and the gate reports the target
+`INCOMPLETE` — it is never reported as verified.
+
+A disposable acceptance harness for both options (seeded target, idempotence,
+rollback, teardown scope) lives in
+[`tests/acceptance/attach-harness.sh`](../tests/acceptance/attach-harness.sh):
+`bash tests/acceptance/attach-harness.sh 3|4`.
+
 ## 3. Provision credentials and start
 
 Start the memory stack first with `scripts/start-memory-stack.sh`. Build
@@ -138,3 +168,5 @@ startup failure and everything else works unchanged. Full walkthrough:
   (channels simply stay off).
 - Keep `data/opencode/config/` out of version control — it holds credentials
   (`product-secrets/`, mode 0600).
+
+_Last updated: 2026-10-20 (attach preservation rules, scoped-key reuse, acceptance harness)._

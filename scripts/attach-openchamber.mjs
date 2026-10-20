@@ -7,6 +7,10 @@
 //   - NEVER deletes a file, and never overwrites without a backup: every file
 //     whose content would change is copied to data/attach-backups/<stamp>/ first;
 //   - unrelated files in the target config stay untouched;
+//   - the target's OWN identity files (AGENTS.md, opencode.jsonc, dcp.jsonc)
+//     are never overwritten: when the target has its own version the product's
+//     copy is kept next to the backup as <file>.product for a deliberate
+//     merge (a pre-existing RepoQL identity therefore survives the attach);
 //   - plugin credentials are provisioned INTO the discovered config
 //     (provision-secrets.py --plugin-dir); existing values are preserved;
 //   - for a containerized instance the rql presence is checked and the manual
@@ -16,7 +20,7 @@
 // Usage:
 //   node scripts/attach-openchamber.mjs [--discover]
 //        [--container NAME | --config-dir DIR] [--variant 3|4] [--dry-run]
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -26,7 +30,17 @@ const BUNDLE = join(ROOT, "openchamber");
 const PLUGIN_DIR = join(ROOT, "data/opencode/config/product-secrets");
 const OC_CONFIG_DEST = "/home/openchamber/.config/opencode";
 
+// Files the attach NEVER overwrites when the target already carries its own
+// version: the target's instructions (AGENTS.md) and its own MCP wiring
+// (opencode.jsonc / dcp.jsonc) ARE the target's identity — a pre-existing
+// RepoQL identity must survive the attach. The product's version is kept next
+// to the attach backup so the operator can merge it deliberately. The
+// package's own compose-managed config dir is NOT a foreign target: there the
+// product owns the files and replaces them as before.
+const PRESERVE_ON_CONFLICT = new Set(["AGENTS.md", "opencode.jsonc", "dcp.jsonc"]);
+
 const log = (m) => console.log(`[attach] ${m}`);
+const readJsonFile = (p) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
 const warn = (m) => console.warn(`[attach] ${m}`);
 
 export function discoverOpenchamber(deps = {}) {
@@ -71,7 +85,7 @@ export function resolveConfigDir(target) {
 }
 
 /** Build the per-file copy plan for the bundle. status: create|replace|present. */
-export function planBundleFiles(configDir, srcRoot = BUNDLE) {
+export function planBundleFiles(configDir, srcRoot = BUNDLE, { preserveConflicts = false } = {}) {
   const plan = [];
   const walk = (src, dst, rel) => {
     for (const e of readdirSync(src, { withFileTypes: true })) {
@@ -85,6 +99,7 @@ export function planBundleFiles(configDir, srcRoot = BUNDLE) {
           curSha = sha(d);
           status = curSha === sha(s) ? "present" : "replace";
         }
+        if (status === "replace" && preserveConflicts && PRESERVE_ON_CONFLICT.has(r)) status = "preserve";
         plan.push({ rel: r, src: s, dst: d, status, prevSha: curSha, prevMode: existsSync(d) ? statSync(d).mode & 0o777 : null });
       }
     }
@@ -101,6 +116,15 @@ export function applyBundle(plan, configDir, { dryRun }) {
   const changed = [];
   for (const f of plan) {
     if (f.status === "present") { log(`unchanged  ${f.rel}`); continue; }
+    if (f.status === "preserve") {
+      if (dryRun) { log(`(dry run) preserve ${f.rel} (the target keeps its own version)`); continue; }
+      mkdirSync(backupDir, { recursive: true });
+      const keepPath = join(backupDir, f.rel.replace(/\//g, "__") + ".product");
+      copyFileSync(f.src, keepPath);
+      log(`preserved ${f.rel} — the target has its own version; the product's copy is at ${keepPath} (merge it deliberately, docs/OPENCHAMBER-SETUP.md)`);
+      changed.push({ rel: f.rel, status: "preserve", backupPath: keepPath });
+      continue;
+    }
     if (dryRun) { log(`(dry run) ${f.status.padEnd(7)} ${f.rel}`); continue; }
     mkdirSync(dirname(f.dst), { recursive: true });
     let backupPath = null;
@@ -109,7 +133,7 @@ export function applyBundle(plan, configDir, { dryRun }) {
       backupPath = join(backupDir, f.rel.replace(/\//g, "__"));
       mkdirSync(dirname(backupPath), { recursive: true });
       copyFileSync(f.dst, backupPath);
-      try { import("node:fs").then(({ chmodSync }) => chmodSync(backupPath, 0o600)); } catch { /* best effort */ }
+      try { chmodSync(backupPath, 0o600); } catch { /* best effort */ }
     }
     copyFileSync(f.src, f.dst);
     log(`${f.status.padEnd(7)} ${f.rel}${backupPath ? ` (backup: ${backupPath})` : ""}`);
@@ -152,7 +176,7 @@ async function main(argv) {
   log(`config directory: ${configDir}`);
   if (dryRun) log("(dry run — nothing written)");
 
-  const plan = planBundleFiles(configDir);
+  const plan = planBundleFiles(configDir, BUNDLE, { preserveConflicts: target.kind !== "compose-managed" });
   applyBundle(plan, configDir, { dryRun });
 
   const pluginDir = join(configDir, "product-secrets");
@@ -160,7 +184,26 @@ async function main(argv) {
     mkdirSync(pluginDir, { recursive: true });
     const args = ["scripts/provision-secrets.py", "--plugin-dir", pluginDir, "--variant", variant];
     if (variant === "4" && withGhost) args.push("--with-ghost");
-    const pr = spawnSync("python3", args, { cwd: ROOT, encoding: "utf8" });
+    // A scoped MemoryCore user key for the target's plugin: an explicit
+    // --memory-user-key / MEMORY_USER_KEY wins; otherwise the package's own
+    // scoped key for the SAME memory stack is reused, so the attached plugin
+    // can actually authenticate. Without one, memory.json is written with an
+    // empty key and the capability gate reports the target INCOMPLETE.
+    const provisionEnv = { ...process.env };
+    const explicitKey = get("--memory-user-key") || process.env.MEMORY_USER_KEY || "";
+    if (explicitKey) {
+      provisionEnv.MEMORY_USER_KEY = explicitKey;
+      log("memory user key: taken from --memory-user-key/MEMORY_USER_KEY");
+    } else {
+      const pkgMem = readJsonFile(join(PLUGIN_DIR, "memory.json"));
+      if (pkgMem && typeof pkgMem.userKey === "string" && pkgMem.userKey) {
+        provisionEnv.MEMORY_USER_KEY = pkgMem.userKey;
+        log("memory user key: reusing the package's own scoped key for this memory stack (never printed)");
+      } else {
+        log("memory user key: NONE available — the target's plugin credentials stay empty; run scripts/provision-secrets.py --memory-user-key <key> and re-attach");
+      }
+    }
+    const pr = spawnSync("python3", args, { cwd: ROOT, encoding: "utf8", env: provisionEnv });
     log(pr.stdout?.trim() || "provision-secrets produced no output");
     if (pr.status !== 0) {
       warn(`credential provisioning exited ${pr.status} — ${(pr.stderr || "").trim().split("\n").slice(-2).join(" | ")}`);

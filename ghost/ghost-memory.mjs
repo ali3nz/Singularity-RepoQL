@@ -121,13 +121,33 @@ export async function runGhostMemoryCli(argv = process.argv.slice(2), opts = {})
   }
 
   if (cmd === "stats") {
+    // Strict diagnostic: a missing/unreadable config, missing credentials, a
+    // non-JSON or semantic-error response, or an incomplete identity all fail.
+    // Exit 0 is reserved for two authenticated count calls that returned code 0.
+    const env = opts.env || process.env;
+    const cfgPath = env.SINGULARITY_MEMORY_CONFIG
+      || resolve(process.cwd(), "data/opencode/config/product-secrets/memory.json");
+    let parsed = null;
+    try { parsed = JSON.parse(readFileSync(cfgPath, "utf8")) || null; } catch { parsed = null; }
+    if (!parsed) return { exitCode: 1, output: { error: "config-missing-or-unreadable", path: cfgPath } };
+    if (!cfg.gatewayKey && !cfg.userKey) return { exitCode: 1, output: { error: "no-service-key", path: cfgPath } };
     const [l0, l1] = await Promise.all([
       callMemoryCore("/v3/conversation/count", cfg.identity, cfg, fetchImpl),
       callMemoryCore("/v3/atomic/count", cfg.identity, cfg, fetchImpl),
     ]);
+    const reason = (r) => (r.error || (r.code !== undefined && r.code !== 0) || r.status)
+      ? (r.error || r.message || `code ${r.code ?? "?"}`) : null;
+    const r0 = reason(l0), r1 = reason(l1);
+    if (r0 || r1) {
+      return { exitCode: 1, output: { error: "memory-count-failed", l0: r0, l1: r1 } };
+    }
+    const ident = cfg.identity || {};
+    if (!ident.team_id || !ident.user_id || !ident.agent_id) {
+      return { exitCode: 1, output: { error: "identity-incomplete", identity: ident } };
+    }
     return {
       exitCode: 0,
-      output: { identity: cfg.identity, l0_messages: l0.data?.total ?? 0, l1_atomic: l1.data?.total ?? 0 },
+      output: { identity: ident, l0_messages: Number(l0.data?.total ?? 0), l1_atomic: Number(l1.data?.total ?? 0) },
     };
   }
 

@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node ghost/dream.mjs [--agent ghost] [--agent-dir data/ghost] [--fresh] [--force]
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, openSync, closeSync } from "node:fs";import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, linkSync } from "node:fs";import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -221,6 +221,9 @@ export function isDue(agentDir, today = todayIso(), agentId = "ghost") {
 // judged stale, delete it ONLY when it is still the same record, and restore
 // it when a newer owner appeared in the gap (a newer owner is never displaced).
 export const DREAM_LOCK_STALE_MS = 45 * 60 * 1000; // cap is 25 min + retries margin
+// A lock file younger than this is treated as "the owner is still writing its
+// record": it is never taken over, so a live owner is never displaced.
+export const DREAM_LOCK_WRITE_GRACE_MS = 5000;
 
 function dreamLockPath(agentDir) {
   return join(dreamsDirFor(agentDir), ".dream.lock");
@@ -235,40 +238,66 @@ function safeReadJson(p) {
   try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; }
 }
 
+/** Synchronous sleep — the lock path must not yield the event loop. */
+function sleepSync(ms) {
+  const sab = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(sab), 0, 0, ms);
+}
+
 export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowMs = Date.now() } = {}) {
   const path = dreamLockPath(agentDir);
   mkdirSync(dreamsDirFor(agentDir), { recursive: true });
   for (let attempt = 0; attempt < 3; attempt++) {
+    // The owner record is linked into place in ONE step: a contender can never
+    // observe an empty or half-written lock file (which used to read as
+    // "stale" and could displace a live owner mid-write).
+    const tmp = `${path}.new-${process.pid}-${randomUUID()}`;
+    let created = false;
     try {
-      const fd = openSync(path, "wx", 0o600);
-      writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), "utf8");
-      closeSync(fd);
-      return { path, acquired: true, released: () => releaseDreamLockAgent(agentDir, path) };
-    } catch (e) {
-      if (e?.code !== "EEXIST") throw e;
-      const rec = safeReadJson(path);
-      let mtimeMs = 0;
-      try { mtimeMs = statSync(path).mtimeMs; } catch { /* gone mid-read: retry */ }
-      const stale = !rec
-        || (rec.pid && !processAlive(rec.pid))
-        || (mtimeMs && nowMs - mtimeMs > staleMs);
-      if (!stale) return { path, acquired: false, busy: true };
-      // Serialised stale takeover: rename first, then delete only the record
-      // we actually judged stale; restore a newer owner that appeared meanwhile.
-      const taken = `${path}.take-${process.pid}-${randomUUID()}`;
-      try { renameSync(path, taken); } catch { return { path, acquired: false, busy: true }; }
-      const observed = safeReadJson(taken);
-      if (!rec || (observed && observed.pid === rec.pid)) {
-        try { unlinkSync(taken); } catch { /* best-effort */ }
-        continue; // retry the exclusive create
-      }
-      // A newer owner exists: restore instead of destroying it.
-      try { linkSync(taken, path); } catch { /* the newer owner is already back in place */ }
-      try { unlinkSync(taken); } catch { /* best-effort */ }
-      return { path, acquired: false, busy: true };
+      writeFileSync(tmp, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), { mode: 0o600, flag: "wx" });
+      try { linkSync(tmp, path); created = true; } catch (e) { if (e?.code !== "EEXIST") throw e; }
+    } finally {
+      try { unlinkSync(tmp); } catch { /* best-effort */ }
     }
+    if (created) return { path, acquired: true, released: () => releaseDreamLockAgent(agentDir, path) };
+
+    const rec = safeReadJson(path);
+    let mtimeMs = 0;
+    try { mtimeMs = statSync(path).mtimeMs; } catch { /* gone mid-read: retry */ }
+    if (!rec && mtimeMs && nowMs - mtimeMs < DREAM_LOCK_WRITE_GRACE_MS) {
+      // The owner is still writing its record: wait briefly, never take over.
+      sleepSync(50);
+      continue;
+    }
+    const stale = !rec
+      || (rec.pid && !processAlive(rec.pid))
+      || (mtimeMs && nowMs - mtimeMs > staleMs);
+    if (!stale) return { path, acquired: false, busy: true };
+    // Serialised stale takeover: rename first, then delete only the record
+    // we actually judged stale; restore a newer owner that appeared meanwhile.
+    const taken = `${path}.take-${process.pid}-${randomUUID()}`;
+    try { renameSync(path, taken); } catch { return { path, acquired: false, busy: true }; }
+    const observed = safeReadJson(taken);
+    if (!rec || (observed && observed.pid === rec.pid)) {
+      try { unlinkSync(taken); } catch { /* best-effort */ }
+      continue; // retry the exclusive create
+    }
+    // A newer owner exists: restore instead of destroying it.
+    restoreNewerOwner(taken, path);
+    return { path, acquired: false, busy: true };
   }
   return { path, acquired: false, busy: true };
+}
+
+/**
+ * Put a newer owner back in place after a stale takeover judged a record
+ * stale: the record that appeared meanwhile is RESTORED, never destroyed.
+ * Exported for the race regression.
+ */
+export function restoreNewerOwner(taken, path) {
+  try { linkSync(taken, path); } catch { /* the newer owner is already back in place */ }
+  try { unlinkSync(taken); } catch { /* best-effort */ }
+  return true;
 }
 
 function releaseDreamLockAgent(agentDir, path) {

@@ -23,12 +23,15 @@ automatically included in options 2 and 4 and absent from options 1 and 3;
 everything beyond the four choices below is advanced configuration inside the
 selected option:
 
-| Option | Harness | MemoryCore + specialist agents | Automatic docs + knowledge lifecycle | Ghost | Claude Office |
-|---|---|---|---|---|---|
-| **1 — Claude Code + MemoryCore** | existing Claude Code | required | required | — | — |
-| **2 — Claude Code Complete** | existing Claude Code | required | required | **required** | **required** |
-| **3 — Existing OpenChamber + MemoryCore** | existing OpenChamber (reused/attached, never reinstalled) | required | required | — | — |
-| **4 — OpenChamber Complete** | existing OpenChamber (reused/attached, never reinstalled) | required | required | **required** | **required** |
+1. **Claude Code + MemoryCore** — your existing Claude Code, plus MemoryCore,
+   the seven specialist agents, the documentation lifecycle and RepoQL MCP.
+2. **Claude Code Complete** — everything in option 1 **plus** Ghost and Claude
+   Office. Both are mandatory; no selector adds or removes them.
+3. **Existing OpenChamber + MemoryCore** — your existing OpenChamber, attached
+   and never reinstalled, plus the same memory, agents, documentation
+   lifecycle and RepoQL MCP.
+4. **OpenChamber Complete** — everything in option 3 **plus** Ghost and Claude
+   Office. Both are mandatory; no selector adds or removes them.
 
 **Option 1 — Claude Code + MemoryCore:**
 
@@ -108,12 +111,16 @@ nothing forced. Verify per docs/OPENCHAMBER-SETUP.md plus
 bash tests/validate-memory-loop.sh (expect LOOP OK). Report every command,
 its result, and anything that deviated from the documented behavior.
 ```
+
 The installer verifies every mandatory capability of the selected option
 (specialist MemoryCore profiles, memory + documentation hooks, RepoQL MCP,
 normal-session routing — plus Ghost and Claude Office for options 2/4) against
 live state before reporting success: a declined consent or missing component
 leaves the install `INSTALL INCOMPLETE` (exit 5); nothing was forced and no
-mandatory capability was ever waived.
+mandatory capability was ever waived. The attach options expose the same
+checks without installing Claude Code:
+`node scripts/install-claude-code.mjs gate --variant 3|4` (exit 0 = verified,
+exit 5 = incomplete, nothing is written).
 
 Status: **release candidate**. A partial Windows 11 + WSL2 acceptance run
 passed on one machine on 2026-10-19 using the WSL-native Docker Engine: the
@@ -123,54 +130,14 @@ UI RepoQL tool call, reboot resilience, and backup/restore remain unverified;
 Windows support therefore remains **experimental**. See
 [`docs/platforms/windows.md`](docs/platforms/windows.md).
 
-## Components
-
-- **Memory Core** (`memory-core`, :8420) — L0–L3 capture, extraction, search
-  gateway; the experiential-memory plane. RepoQL remains authoritative for
-  code and verified knowledge; MemoryCore is advisory context.
-- **Memory Hub** (`memory-hub`; Panel :8125, Knowledge :8424) — admin panel
-  + knowledge service used by the documentation/lifecycle gates.
-- **LLM Proxy** (`proxy`, :8096) — front door for coding agents: captures
-  conversations (single owner per event scope), injects memory, skills and
-  knowledge. The default published boundary is loopback only.
-- **Extraction failover router** (`scripts/extraction-failover.mjs`, :8430
-  when enabled) — retries extraction across a provider ladder on transient
-  failures with a shared monthly budget ledger.
-- **OpenChamber** (:3127) — workspace UI + `product-office` memory plugin
-  (brought by you; never reinstalled by this package).
-- **Claude Office** (:3128) — activity visualizer (installation options
-  2 and 4).
-- **Ghost** (`ghost/`, gateway :18003) — persistent companion agent with a
-  checkpointed 6-step dream cycle; `GHOST_BACKEND` selects the runtime
-  (`openchamber` container or `claude-code` CLI, no docker needed).
-- **Knowledge promotion** (`scripts/knowledge-promotion.py` + brokered
-  capture) — evidence-gated, provenance-stamped promotion into the curated
-  store; never an agent free-for-all.
-- **Harness integration** (`adapters/claude-code/` + `openchamber/`) — seven
-  specialised subagents with persistent MemoryCore identities, ordinary
-  session routing, SubagentStart recall / SubagentStop capture, documentation
-  hooks, RepoQL over MCP, and the installation-option gates in
-  `scripts/install-claude-code.mjs`.
-- **RepoQL (yours)** — code intelligence connected over MCP; installed
-  separately ([`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md)).
-
 ## Requirements
 
 - Docker Engine 24+ with Compose v2. On Windows, run one engine reachable
   from WSL2: either Docker Desktop WSL integration or a Linux Engine inside
   WSL2 (the latter was used for the acceptance runs).
-- Measured incremental disk on the reference Windows 11 + WSL2 machine
-  (2026-10-20, WSL-native engine; existing RepoQL/OpenChamber excluded):
-  memory stack images ≈ 4.6 GB (`memory-core` 1.34 GB + `memory-hub` 2.02 GB
-  + `memory-proxy` 1.22 GB) with SQLite volumes currently ≈ 5 MB (plan several
-  GB for long-running capture + backups); the Claude Code options (1/2) add
-  nothing beyond the clone (≈ 200 MB worktree incl. data); OpenChamber image
-  4.9 GB and Office image 0.6 GB count ONLY for options 3/4 when you genuinely
-  lack them. Plan ≈ 6 GB headroom for options 1–2 and ≈ 12 GB only if you also
-  pull OpenChamber and Office from scratch.
-- Two configured processing-provider credentials for extraction (a ladder;
-  see §Providers in docs/ARCHITECTURE.md). NVIDIA build, GroqCloud, Cerebras
-  and OpenRouter all publish OpenAI-compatible endpoints.
+- Two configured processing-provider credentials for extraction (a ladder).
+  NVIDIA build, GroqCloud, Cerebras and OpenRouter all publish
+  OpenAI-compatible endpoints.
 - An OpenAI-compatible or Anthropic-compatible endpoint for user-visible proxy
   traffic. A local model server is valid when reachable from both WSL2 and
   the containers; successful connectivity checks do not establish model
@@ -179,188 +146,66 @@ Windows support therefore remains **experimental**. See
   [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md); the OpenChamber container
   needs a Linux rql, installed in WSL2 on Windows).
 - Ports: `8420` core · `8125` panel · `8424` knowledge · `8096` proxy (all
-  loopback-bound by default via scripts/start-memory-stack.sh); `3127`
+  loopback-bound by default via `scripts/start-memory-stack.sh`); `3127`
   OpenChamber · `3128` Office (loopback) · `8430` failover router when used.
+- Disk: plan ≈ 6 GB headroom for options 1–2, and ≈ 12 GB only if you also
+  pull OpenChamber (4.9 GB) and Office (0.6 GB) from scratch. Measured
+  per-image sizes: [`docs/platforms/windows.md`](docs/platforms/windows.md).
 
-## Quick start — memory stack (enough for Claude Code)
+## Sign-up — the first identity
 
-```bash
-cd memory/upstream
-./verify.sh --skip-llm     # environment/preflight only
-cd ../..
-scripts/start-memory-stack.sh
-(cd memory/upstream && ./verify.sh)
-```
+The memory stack keeps its admin key in `memory/upstream/.admin-key` (mode
+0600, never printed). Sign in to the Panel at `http://<host>:8125` with that
+key, create a **Team** and a business user, and drive the harness with the
+user's key — never the admin key. The full walkthrough (start the stack,
+verify auth, first login, point the harness at the proxy, prove the loop,
+backup and restore) is in
+[`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md); the loop proof itself is
+[`docs/MEMORY-LOOP.md`](docs/MEMORY-LOOP.md).
 
-The safe wrapper runs the byte-exact Tencent startup, redacts its output, and
-requires `auth/verify` to return `data.valid=true` (the upstream verifier only
-checks HTTP 200, which also occurs for an invalid key). The admin key is stored
-in `memory/upstream/.admin-key` with mode 0600 and is not printed. Do not run
-`memory/upstream/start-all.sh` directly. The wrapper asks for the memory-group
-and proxy-group LLM configurations; one provider may serve both. Defaults:
-Core `8420` · Panel `8125` · Knowledge `8424` · Proxy `8096`.
+## Where the details live
 
-Then point Claude Code at the proxy (persist in `~/.claude/settings.json`):
-
-```json
-{ "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8096/claude-code/default",
-    "ANTHROPIC_AUTH_TOKEN": "<your sk-mem-… user key>",
-    "ANTHROPIC_MODEL": "<your upstream model>" } }
-```
-
-Open the Panel at `http://<host>:8125`, use the local admin key file when
-needed (never paste its value into a transcript), and create a Team and a
-business user. Drive the harness with that user's key rather than the admin
-key. To verify capture and recall, follow
-[`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md).
-
-Other harnesses follow the same proxy pattern — see the upstream project's
-`agents/` directory.
-
-## OpenChamber (required for installation options 3 and 4 — attach, never reinstall)
-
-OpenChamber is installed from its own upstream project; this repository ships
-the configuration bundle and the memory plugin:
-
-1. Have OpenChamber running (any upstream variant; see
-   [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md) for prerequisites).
-   Options 3/4 attach to the existing instance — native (`~/.config/opencode`),
-   compose-managed or any other container — and never create a second one.
-2. `bash scripts/start.sh` starts the memory stack wiring and then either
-   attaches to the detected instance (`node scripts/attach-openchamber.mjs`
-   copies the `openchamber/` bundle — AGENTS.md, `agents/`, `opencode.jsonc`,
-   `dcp.jsonc`, `plugins/` — with per-file backups, never deletions), or, only
-   when you explicitly choose managed mode, brings up its own
-   `singularity-openchamber` container.
-3. Provision plugin credentials scoped to the option
-   (`python3 scripts/provision-secrets.py --variant 3|4 [--with-ghost]`), and
-   open the UI.
-
-With the plugin active, every completed OpenChamber turn is captured into
-Memory Core, relevant memory is recalled into new sessions, and — when Claude
-Office is installed — session activity appears in the visualizer.
-
-## RepoQL integration
-
-The OpenChamber bundle declares the `repoql` MCP server and ships a compose
-override that mounts your `rql` binary into the container; `scripts/start.sh`
-detects the binary and applies it automatically. Walkthrough:
-[`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md).
-
-## Claude Office (included in installation options 2 and 4)
-
-Options 1 and 3 do not include Office and there is no selector to add it:
-Office is only part of the complete options. Build from the upstream project
-(a fork carrying the Focus/seating updates is
-used by the reference deployment) and start it with
-`office/office.compose.yml`. See [`office/README.md`](office/README.md) and
-[`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md).
-
-## Ghost (included in installation options 2 and 4)
-
-Ghost is a persistent AI companion agent that maintains a three-tier memory
-layout (Memory Stack `/v1/memories`, RepoQL `rql`, and local git-backed
-reflection markdown in `data/ghost/memory/`) and runs a daily checkpointed
-6-step dream cycle (`experiences -> related -> patterns -> evolution -> consolidate -> summary`).
-Enable it with `bash ghost/setup-ghost.sh` (or
-`python3 scripts/provision-secrets.py --with-ghost`) and start it via
-`scripts/start.sh` or `ghost/ghost.compose.yml`. Clean-slate seed templates
-only — zero personal memories are shipped. See [`ghost/README.md`](ghost/README.md)
-and [`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md).
-
-## Advanced configuration — knowledge promotion and extraction failover
-
-- Promotion: `scripts/knowledge-promotion.py --propose TITLE BODY SOURCE` …
-  `--promote PROPOSAL --truth-name NAME` (explicit, reversible, provenance kept;
-  indexed into Memory Core with content-hash dedup).
-- Failover: `scripts/extraction-failover.mjs` + `scripts/cohere-quota.mjs` as an
-  optional router in front of the core's extraction endpoint. A single-provider
-  installation does not need it.
-
-## Documentation enforcement and automatic MemoryCore ingestion
-
-Runbooks and guides are first-class outputs, not an afterthought. Both client
-surfaces (OpenChamber and Claude Code) follow the same shared policy:
-
-- material tasks report `DOC_UPDATED` / `DOC_NOT_REQUIRED` (with a reason) /
-  `DOC_BLOCKED`; only genuinely non-material work may skip documentation
-- updated runbooks are ingested (`scripts/memory-doc-ingest.py ingest`) and
-  verified as genuinely SEARCHABLE (`DOC_INGEST_INDEXED`), not merely noted
-- detection is automatic: each client keeps a per-session documentation
-  baseline and ingests every new or changed eligible runbook at task close —
-  including newly created, untracked, docs-only files — with no operator
-  command
-- revisions supersede previous ones; retrieval offers the current procedure
-  and excludes stale versions
-- `node scripts/doc-policy.mjs check --session <id>` re-verifies any task's
-  documentation closure deterministically (usable from review and CI); the
-  gate re-derives ingestion evidence from the ledger itself, so a claimed
-  status is never proof
-
-Details, statuses, revision management and troubleshooting:
-[`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md).
-
-## Repository layout
-
-```text
-openchamber/   AGENTS.md, agents/, opencode.jsonc, dcp.jsonc, plugins/product-office/
-memory/        README.md, upstream/ (vendored quickstart), .env.example
-office/        README.md, office.compose.yml
-ghost/         README.md, ghost.compose.yml, setup-ghost.sh, dream.mjs, ghost-memory.mjs, ghost-turn.mjs, ghost-gateway.mjs, seed/, systemd/
-compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
-scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
-adapters/      claude-code/ (Office adapter + Claude Code native-agent integration + doc hooks)
-templates/     product.env.example
-docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, CLAUDE-CODE-SETUP, DOC-INGESTION, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
-tests/         validate-local.sh, validate-memory-loop.sh, validate-repoql.sh
-```
+- **Components, networks, trust boundaries, repository layout** —
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Memory stack, first login, harness routing, backup/restore** —
+  [`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md)
+- **Claude Code setup (options 1 and 2)** —
+  [`docs/CLAUDE-CODE-SETUP.md`](docs/CLAUDE-CODE-SETUP.md)
+- **OpenChamber attach, never reinstall (options 3 and 4)** —
+  [`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md)
+- **RepoQL MCP and `rql` installation** —
+  [`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md)
+- **Claude Office (options 2 and 4)** —
+  [`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md) ·
+  [`office/README.md`](office/README.md)
+- **Ghost (options 2 and 4)** —
+  [`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md) ·
+  [`ghost/README.md`](ghost/README.md)
+- **Documentation policy, ingestion and supersession** —
+  [`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md)
+- **Knowledge promotion and extraction failover** —
+  [`docs/memory-capture-promotion.md`](docs/memory-capture-promotion.md) ·
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Troubleshooting** — [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
+- **Windows/WSL2 walkthrough** —
+  [`docs/platforms/windows.md`](docs/platforms/windows.md) ·
+  [`INSTRUCTIONS.md`](INSTRUCTIONS.md)
 
 ## Install — give this to your agent
 
-Use the copyable briefs in **START HERE** at the top of this README — they
-are the four installation options, selected with `--variant 1|2|3|4`
-(options 3/4 attach to an existing OpenChamber; interactive installs offer
-the same numbered menu). There are no other installation options and no
-optional component selectors: Ghost and Claude Office are automatically
-included in options 2 and 4 and absent from options 1 and 3; everything else
-(scope, team/user, provider replacement, probes, dry runs) is advanced
-configuration within the selected option. The full Windows-specific
-walkthrough remains in [`INSTRUCTIONS.md`](INSTRUCTIONS.md), which leads with
-the same option matrix. An install refuses to report success while a
-mandatory capability (profiles, routing, hooks, RepoQL MCP — or Ghost and
-Office for options 2/4) is missing or unverified.
-## Documentation
-
-
-
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
-[`docs/ARCHITECTURE-ALIGNMENT.md`](docs/ARCHITECTURE-ALIGNMENT.md) ·
-
-[`docs/MEMORY-SETUP.md`](docs/MEMORY-SETUP.md) ·
-
-[`docs/MEMORY-LOOP.md`](docs/MEMORY-LOOP.md) ·
-
-[`docs/DOC-INGESTION.md`](docs/DOC-INGESTION.md) ·
-
-[`docs/OPENCHAMBER-SETUP.md`](docs/OPENCHAMBER-SETUP.md) ·
-
-[`docs/REPOQL-SETUP.md`](docs/REPOQL-SETUP.md) ·
-
-[`docs/memory-capture-promotion.md`](docs/memory-capture-promotion.md) ·
-
-[`docs/OFFICE-SETUP.md`](docs/OFFICE-SETUP.md) ·
-
-[`docs/GHOST-SETUP.md`](docs/GHOST-SETUP.md) ·
-
-[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
-
-
+Use the copyable briefs in **START HERE** above: they are the four
+installation options, selected with `--variant 1|2|3|4` (options 3/4 attach
+to an existing OpenChamber; interactive installs offer the same numbered
+menu). There are no other installation options and no optional component
+selectors: Ghost and Claude Office are automatically included in options 2
+and 4 and absent from options 1 and 3; everything else (scope, team/user,
+provider replacement, probes, dry runs) is advanced configuration within the
+selected option. The full Windows-specific walkthrough is in
+[`INSTRUCTIONS.md`](INSTRUCTIONS.md). An install refuses to report success
+while a mandatory capability (profiles, routing, hooks, RepoQL MCP — or Ghost
+and Office for options 2/4) is missing or unverified.
 
 ## License
 
-
-
 MIT — see [`LICENSE`](LICENSE). Upstream components keep their own licenses;
-
 see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
