@@ -72,8 +72,8 @@ export function runCommand(cmd, args, { env = process.env, cwd = undefined, time
 export function classifyMemoryScope({ valid, userType } = {}) {
   if (!valid) return { state: "AUTH_FAILED", scoped: false };
   const t = String(userType || "").trim().toLowerCase();
-  if (!t) return { state: "UNVERIFIED", scoped: false };
   if (ADMIN_USER_TYPES.has(t)) return { state: "ADMIN", scoped: false };
+  if (t !== "business_user") return { state: "UNVERIFIED", scoped: false };
   return { state: "OK", scoped: true };
 }
 
@@ -111,11 +111,12 @@ export async function probeMemoryIdentity({ config, baseUrl, fetchImpl = globalT
       method: "POST", headers, body: JSON.stringify({ user_key: key }),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (!res.ok) return { ok: false, state: "AUTH_FAILED", detail: "the memory service rejected the authentication request" };
     payload = await res.json().catch(() => null);
   } catch (e) {
     return { ok: false, state: "UNREACHABLE", detail: `the memory service is not reachable: ${snippet(e?.message || e, 90)}` };
   }
-  const valid = Boolean(payload && payload.data && payload.data.valid === true);
+  const valid = Boolean(payload?.code === 0 && payload?.data?.valid === true);
   const userType = payload?.data?.user?.user_type || "";
   const userId = payload?.data?.user?.user_id || "";
   const cls = classifyMemoryScope({ valid, userType });
@@ -138,9 +139,9 @@ export async function probeMemoryIdentity({ config, baseUrl, fetchImpl = globalT
       signal: AbortSignal.timeout(timeoutMs),
     });
     const j = await res.json().catch(() => null);
-    if (j && j.code !== 0) {
+    if (!res.ok || !j || j.code !== 0 || !j.data || typeof j.data !== "object" || Array.isArray(j.data)) {
       return { ok: false, state: "WRONG_SCOPE", userType, userId,
-        detail: `the scoped key cannot act in the configured identity (count code ${j.code}) — the key belongs to a different user/team scope` };
+        detail: "the memory service did not confirm access to the configured identity — check the key's user/team scope" };
     }
   } catch (e) {
     return { ok: false, state: "UNREACHABLE", userType, userId,
@@ -327,5 +328,5 @@ export async function probeProviderFailover({ root, timeout = 60000, fetchImpl =
   if (!reply || !Array.isArray(reply.choices)) {
     return { ok: false, state: "INCOMPLETE", detail: `the failover router (${ladder.length} providers in its ladder) answered /health but no real completion came back through it` };
   }
-  return { ok: true, state: "VERIFIED", detail: `the failover router completed a real request through ${ladder.length} providers in its ladder (ladder: ${ladder.join(", ")}). The switch from one provider to the next is proven by scripts/extraction-failover.test.mjs, not by this live probe` };
+  return { ok: false, state: "INCOMPLETE", detail: `the router completed one real request with ${ladder.length} configured provider entries, but this does not prove both providers work or a controlled live failover. Verify each provider and induce a controlled primary failure before accepting this capability` };
 }

@@ -41,6 +41,23 @@ MEMORY_CONTAINER="${MEMORY_CORE_CONTAINER:-tdai-memory-core}"
 log()  { printf '%s [start] %s\n' "$(date -u +%FT%TZ)" "$*"; }
 fail() { log "FAILED: $*"; exit 1; }
 
+# Select the option before any directory, network or container mutation.
+ATTACH_VARIANT="${SINGULARITY_VARIANT:-}"
+INCOMPLETE_REASON=""
+if [[ -z "$ATTACH_VARIANT" ]]; then
+  if [[ -t 0 && -t 1 ]]; then
+    printf 'installation option — 3 = existing OpenChamber + MemoryCore, 4 = + Ghost + Claude Office: '
+    read -r ATTACH_VARIANT || ATTACH_VARIANT=""
+  fi
+fi
+case "$ATTACH_VARIANT" in
+  3|4) ;;
+  *)
+    fail "select installation option 3 or 4 before starting: SINGULARITY_VARIANT=3 bash scripts/start.sh (or 4). Options 1/2 use node scripts/install-claude-code.mjs install --variant 1 (or 2). No changes were made."
+    ;;
+esac
+log "installation option: $ATTACH_VARIANT"
+
 command -v docker >/dev/null 2>&1 || fail "docker not found on PATH"
 
 # ── 1. memory stack ──────────────────────────────────────────────────────────
@@ -104,26 +121,6 @@ fi
 # are Claude Code installs and are refused with the exact command to run.
 # An UNSET option is never silently resolved to one of them: an interactive
 # terminal is asked, a non-interactive run stops with the exact commands.
-ATTACH_VARIANT="${SINGULARITY_VARIANT:-}"
-INCOMPLETE_REASON=""
-if [[ -z "$ATTACH_VARIANT" ]]; then
-  if [[ -t 0 && -t 1 ]]; then
-    printf 'installation option — 3 = existing OpenChamber + MemoryCore, 4 = + Ghost + Claude Office: '
-    read -r ATTACH_VARIANT || ATTACH_VARIANT=""
-    if [[ ! "$ATTACH_VARIANT" =~ ^[34]$ ]]; then
-      fail "no installation option selected — start stopped without changes. Run one of: SINGULARITY_VARIANT=3 bash scripts/start.sh   |   SINGULARITY_VARIANT=4 bash scripts/start.sh"
-    fi
-  else
-    fail "SINGULARITY_VARIANT is not set — start stopped without changes. Installation options 3 and 4 are explicit: SINGULARITY_VARIANT=3 bash scripts/start.sh (existing OpenChamber + MemoryCore) or SINGULARITY_VARIANT=4 bash scripts/start.sh (existing OpenChamber + MemoryCore + Ghost + Claude Office)"
-  fi
-fi
-case "$ATTACH_VARIANT" in
-  3|4) ;;
-  *)
-    fail "SINGULARITY_VARIANT must be 3 or 4 for scripts/start.sh (it attaches to an EXISTING OpenChamber). Installation options 1 and 2 are Claude Code installs — run: node scripts/install-claude-code.mjs install --variant 1 (or 2)"
-    ;;
-esac
-log "installation option: $ATTACH_VARIANT"
 OC_MANAGED="singularity-openchamber"
 MANAGED_EXISTS=0; docker inspect "$OC_MANAGED" >/dev/null 2>&1 && MANAGED_EXISTS=1
 MANAGED_RUNNING="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -x "$OC_MANAGED" || true)"

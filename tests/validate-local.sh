@@ -36,6 +36,7 @@ check node --test scripts/model-lane.test.mjs
 check node --test scripts/runtime-proofs.test.mjs
 check node --test scripts/attach-openchamber.test.mjs
 check bash tests/manifest-regression.test.sh
+check bash tests/start-selection.test.sh
 check node --test adapters/claude-code/integration.test.mjs
 check node --test adapters/claude-code/memory-hook.test.mjs
 check node --test adapters/claude-code/installer.test.mjs

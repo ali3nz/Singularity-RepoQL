@@ -2,6 +2,10 @@
 
 Singularity-RepoQL gives your coding agents memory and code intelligence that survive the session. Pick exactly one of the four installation options below and hand its brief, as written, to your AI agent.
 
+![RepoQL provides source-linked technical knowledge; Tencent MemoryCore provides scoped experience and bounded recall. Rules, source and live evidence outrank recalled memory.](docs/assets/memory-architecture.png)
+
+Architecture illustration from the WikiJS Memory Architecture page.
+
 ## Choose exactly one installation option
 
 1. **Option 1** — Claude Code + Tencent MemoryCore
@@ -127,7 +131,8 @@ The installer reports INCOMPLETE until every mandatory capability of the chosen 
   - Groq — https://console.groq.com/
   - Cerebras — https://cloud.cerebras.ai/
   - OpenRouter — https://openrouter.ai/
-- The shipped extraction failover router is wired to Groq and Cohere keys (`secrets/groq-api-key` and `secrets/cohere-api-key`). Cohere has no signup link in this repository: sign up with Cohere directly. The two-provider requirement is met only when the gate verifies a working router.
+  - Cohere — https://dashboard.cohere.com/
+- The shipped extraction failover router currently supports Groq and Cohere. Other provider accounts are useful only where the selected integration supports them; verify both extraction providers and a controlled live fallback before accepting failover.
 
 ## Technical documentation
 

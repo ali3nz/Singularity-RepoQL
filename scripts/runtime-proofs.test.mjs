@@ -45,6 +45,8 @@ test("the key type is classified: administrative, scoped and undiscriminable are
   assert.equal(classifyMemoryScope({ valid: true, userType: "admin" }).state, "ADMIN");
   assert.equal(classifyMemoryScope({ valid: true, userType: "business_user" }).state, "OK");
   assert.equal(classifyMemoryScope({ valid: true, userType: "" }).state, "UNVERIFIED");
+  assert.equal(classifyMemoryScope({ valid: true, userType: "unknown_role" }).state, "UNVERIFIED");
+  assert.equal(classifyMemoryScope({ valid: true, userType: "service_admin" }).state, "UNVERIFIED");
   assert.equal(classifyMemoryScope({ valid: false, userType: "business_user" }).state, "AUTH_FAILED");
   assert.equal(classifyMemoryScope({}).state, "AUTH_FAILED");
 });
@@ -100,6 +102,43 @@ test("a key that cannot act in the configured identity is WRONG_SCOPE", async ()
     assert.equal(r.ok, false);
     assert.equal(r.state, "WRONG_SCOPE");
   } finally { await svc.close(); }
+});
+
+test("HTTP errors and malformed authentication envelopes never verify an identity", async () => {
+  for (const response of [
+    { ok: false, body: { code: 0, data: { valid: true, user: { user_type: "business_user" } } } },
+    { ok: true, body: null },
+    { ok: true, body: { data: { valid: true, user: { user_type: "business_user" } } } },
+    { ok: true, body: { code: 500, data: { valid: true, user: { user_type: "business_user" } } } },
+  ]) {
+    let calls = 0;
+    const r = await probeMemoryIdentity({
+      config: { baseUrl: "http://memory.invalid", userKey: "fixture-key" },
+      fetchImpl: async () => { calls++; return { ok: response.ok, json: async () => response.body }; },
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.state, "AUTH_FAILED");
+    assert.equal(calls, 1, "a rejected authentication must not attempt scoped operations");
+  }
+});
+
+test("HTTP errors and malformed count envelopes never prove user/team scope", async () => {
+  for (const response of [
+    { ok: false, body: { code: 0, data: { total: 1 } } },
+    { ok: true, body: null },
+    { ok: true, body: {} },
+    { ok: true, body: { code: 0 } },
+    { ok: true, body: { code: 0, data: [] } },
+  ]) {
+    const r = await probeMemoryIdentity({
+      config: { baseUrl: "http://memory.invalid", userKey: "fixture-key" },
+      fetchImpl: async (url) => url.endsWith("/auth/verify")
+        ? { ok: true, json: async () => ({ code: 0, data: { valid: true, user: { user_type: "business_user" } } }) }
+        : { ok: response.ok, json: async () => response.body },
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.state, "WRONG_SCOPE");
+  }
 });
 
 test("no key is NO_CREDENTIALS and no request is made", async () => {
@@ -265,7 +304,7 @@ test("the failover proof needs two provider credentials (MISSING otherwise)", as
   assert.equal(r.state, "MISSING");
 });
 
-test("the failover probe is VERIFIED only with a two-provider ladder and a real completion", async () => {
+test("one completion and two configured providers do not prove controlled live failover", async () => {
   const root = mkdtempSync(join(tmpdir(), "failover-root-"));
   mkdirSync(join(root, "secrets"), { recursive: true });
   writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
@@ -273,8 +312,9 @@ test("the failover probe is VERIFIED only with a two-provider ladder and a real 
   const ok = await stubRouter({ ladder: ["groq-120b", "cohere-a+"], completion: { choices: [{ message: { content: "pong" } }] } });
   try {
     const r = await probeProviderFailover({ root, routerUrl: ok.url });
-    assert.equal(r.ok, true, r.detail);
-    assert.equal(r.state, "VERIFIED");
+    assert.equal(r.ok, false, r.detail);
+    assert.equal(r.state, "INCOMPLETE");
+    assert.match(r.detail, /does not prove both providers work/);
   } finally { await ok.close(); }
 });
 

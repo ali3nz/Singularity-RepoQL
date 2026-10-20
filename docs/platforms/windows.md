@@ -4,27 +4,13 @@ This walkthrough targets RepoQL users who want the memory stack and OpenChamber
 alongside their existing Windows RepoQL installation. The Linux containers
 run inside WSL2; no native Windows container port is involved.
 
-## Acceptance status (2026-10-19)
+## Platform support
 
-A partial live acceptance run passed on one Windows 11 / Ubuntu 24.04 WSL2
-machine using the WSL-native Docker Engine 29.1.3 and RepoQL 1.7.15. Docker
-Desktop WSL integration is an alternative but was not exercised in this run.
-The platform remains **experimental**: machine OS build/kernel metadata and
-several UI, reboot, and backup/restore steps were not verified.
-
-Verified: memory stack health and `verify.sh`; memory capture/recall
-loop; Claude Code proxy smoke test (HTTP 200); the OpenChamber and Claude Office images built from
-OpenChamber `bf977d2ed` and Claude Office `1fce512`; OpenChamber and Office
-HTTP endpoints returned 200, with Office healthy; rql 1.7.15 was mounted in
-OpenChamber and the `rql mcp` initialize handshake passed. The RepoQL host
-status check and recovery drill used disposable in-container git workspaces,
-not a user's project.
-
-Not verified: creating a Team/business user in the Panel; selecting agents or
-making a RepoQL tool call in a real OpenChamber UI session; plugin event
-appearance from an interactive session; Docker Desktop-specific behavior;
-full cross-container stale-claim failure wording; Windows reboot; backup and
-restore. Do not claim full acceptance until these are tested.
+Windows support uses Linux containers through WSL2 and remains experimental.
+Choose either a WSL-native Docker Engine or Docker Desktop's WSL integration,
+and validate the selected engine and installation option on your machine.
+Use the checklist below; endpoint health alone does not establish functional
+memory, native plugin events or successful RepoQL tool calls.
 
 ## Prerequisites
 
@@ -83,19 +69,15 @@ detected instance's config directory — `node scripts/attach-openchamber.mjs`
 does this with per-file backups (see `INSTRUCTIONS.md`); for a compose-managed
 instance this is `data/opencode/config/`. This directory is
 specific to the container runtime: do not copy it over Windows Electron's
-configuration or a user's existing native OpenCode configuration. Build
-`openchamber:local` and `claude-office:local` before the product start; see
+configuration or a user's existing native OpenCode configuration. Reuse the
+existing OpenChamber image; only option 4 needs `claude-office:local`. See
 [`OPENCHAMBER-SETUP.md`](../OPENCHAMBER-SETUP.md) and
 [`OFFICE-SETUP.md`](../OFFICE-SETUP.md).
 
-Create the UI password file without echoing its value:
+Start the selected attach flow without replacing the existing UI credentials:
 
 ```bash
-umask 077
-mkdir -p secrets
-python3 -c 'import secrets; print("OPENCHAMBER_UI_PASSWORD=" + secrets.token_urlsafe(32))' > secrets/openchamber.env
-chmod 600 secrets/openchamber.env
-scripts/start.sh
+SINGULARITY_VARIANT=3 scripts/start.sh  # use 4 for OpenChamber Complete
 ```
 
 The startup script creates its bind-mount directories as the WSL user before
@@ -123,26 +105,25 @@ OpenChamber and Claude Office bind to loopback. `tests/validate-repoql.sh`
 checks the mounted rql binary, workspace-scoped host status, and MCP initialize
 handshake; a real UI tool call still needs a human session check.
 
-## Acceptance checklist
+## Validation checklist
 
-- [x] Memory stack and `verify.sh`; memory capture/recall loop.
-- [x] Claude Code proxy smoke test returned HTTP 200.
-- [x] OpenChamber and Office containers started; ports 3127/3128
-      returned HTTP 200; Office health was healthy.
-- [x] RepoQL 1.7.15 in the container and MCP initialize handshake.
+- [ ] Memory stack and `verify.sh`; memory capture/recall loop.
+- [ ] Claude Code proxy responds and ordinary sessions capture and recall
+      automatically in a new session (options 1/2).
+- [ ] Existing OpenChamber remains usable with its configuration preserved
+      (options 3/4); Claude Office displays native events (options 2/4 only).
+- [ ] RepoQL binary in the target and MCP initialize handshake.
 - [ ] Create a Team and business user in the Panel.
 - [ ] Verify plugin session capture/Office activity from a real UI session.
 - [ ] Make a RepoQL tool call in the UI against a WSL project and observe
       `<project>/.repoql/`.
-- [x] Run the one-time `rql serve --path .` recovery in a disposable scratch
-      workspace after abruptly stopping its RepoQL host; it returned to ready.
-      Cross-container stale-claim wording and a user's actual project remain
-      untested.
+- [ ] Exercise documented RepoQL recovery in a disposable scratch workspace,
+      including cross-container stale-claim handling where applicable. Never
+      interrupt a user's active RepoQL host for a recovery drill.
 - [ ] Recreate the OpenChamber container while preserving RepoQL state.
 - [ ] Reboot Windows and confirm containers return or can be restored by
       `scripts/start.sh`.
 - [ ] Create a backup and restore it into clean volumes.
 
-Record the Windows OS build, WSL kernel, Docker Engine/Desktop version, and
-rql version with any future acceptance report. The OS build and WSL kernel
-were not captured in the partial run documented here.
+When diagnosing platform issues, include the Windows OS build, WSL kernel,
+Docker Engine/Desktop version and RepoQL version, without credentials.
