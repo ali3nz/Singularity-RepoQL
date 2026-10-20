@@ -1,18 +1,23 @@
 // Unit tests for the installation-option capability gate
-// (scripts/install-claude-code.mjs verifyOptionTarget / targetConfigDir).
+// (scripts/install-claude-code.mjs verifyOptionTarget / targetConfigDir /
+// runGate / runInstall).
 //
-// No product service is contacted: the memory service is a local stub, so the
-// negative cases (missing config, wrong target dir, invalid key, unavailable
-// service) are hermetic and deterministic.
+// No product service is contacted: the memory service is a local stub and the
+// FUNCTIONAL proof layer is injected, so the negative cases (missing config,
+// wrong target dir, invalid key, administrative key, unavailable service) are
+// hermetic and deterministic.
 //
 // Run: node --test scripts/install-claude-code.gate.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { verifyOptionTarget, detectOpenchamberInstance, targetConfigDir, VARIANTS } from "./install-claude-code.mjs";
+import {
+  verifyOptionTarget, detectOpenchamberInstance, targetConfigDir, VARIANTS,
+  gateComplete, main,
+} from "./install-claude-code.mjs";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -31,6 +36,16 @@ const stubService = (payload) => new Promise((res) => {
     close: () => new Promise((r) => s.close(r)),
   }));
 });
+
+/** The injected proof layer: every runtime proof answers OK. */
+const OK_PROBES = {
+  memoryIdentity: async () => ({ ok: true, state: "OK", detail: "injected" }),
+  memoryLoop: async () => ({ ok: true, state: "VERIFIED", detail: "injected" }),
+  repoqlMcp: async () => ({ ok: true, state: "VERIFIED", detail: "injected" }),
+  docIngestion: async () => ({ ok: true, state: "VERIFIED", detail: "injected" }),
+  providerFailover: async () => ({ ok: true, state: "VERIFIED", detail: "injected" }),
+  modelLane: async () => ({ ok: true, state: "OK", detail: "injected" }),
+};
 
 /** A native OpenChamber-shaped config dir with a valid plugin bundle. */
 const nativeTarget = (memory) => {
@@ -60,6 +75,22 @@ const completeGhostDir = () => {
 
 const lineFor = (result, label) => result.checked.find((c) => c.includes(label)) || "";
 
+/** Run a command through the CLI entrypoint and capture its output. */
+const runCli = async (argv) => {
+  const out = [];
+  const origLog = console.log, origWarn = console.warn;
+  console.log = (...a) => out.push(a.join(" "));
+  console.warn = (...a) => out.push(a.join(" "));
+  let rc = 0;
+  try {
+    rc = await main(argv);
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+  }
+  return { rc, out: out.join("\n") };
+};
+
 test("targetConfigDir never falls back to the package config when the target has none", () => {
   assert.equal(targetConfigDir(null), null);
   assert.equal(targetConfigDir({ kind: "none" }), null);
@@ -81,26 +112,89 @@ test("discovery: a home with only a data dir is NOT an OpenChamber target (N6)",
   assert.equal(found2.configDir, join(home2, ".config", "opencode"));
 });
 
+test("an EMPTY check list is never complete (B6)", () => {
+  assert.equal(gateComplete([], []), false, "no check is no proof");
+  assert.equal(gateComplete([], ["x"]), false);
+  assert.equal(gateComplete(["ok: something"], ["x"]), false);
+  assert.equal(gateComplete(["ok: something"], []), true);
+  assert.equal(gateComplete(null, null), false);
+});
+
 test("a native target with a valid config, bundle and memory identity passes its target checks", async () => {
   const svc = await stubService({ code: 0, data: { total: 7 } });
   try {
     const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-test", authPrefix: "Bearer ", serviceId: "openchamber" });
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target }, target);
+    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes: OK_PROBES }, target);
     assert.match(lineFor(r, "OpenChamber config directory resolved"), /^ok:/);
     assert.match(lineFor(r, "OpenChamber memory-plugin bundle present"), /^ok:/);
-    assert.match(lineFor(r, "plugin memory credentials provisioned"), /^ok:/);
-    assert.equal(r.complete, true, r.missing.join("; "));
+    assert.match(lineFor(r, "plugin memory credentials present"), /^ok:/);
+    assert.match(lineFor(r, "scoped memory identity authenticated"), /^ok:/);
+    assert.match(lineFor(r, "RepoQL MCP server answers a real call"), /^ok:/);
+    // Fail-closed: the ordinary-session capture/recall HOLD is the ONLY open
+    // item of a fully-stubbed target, so the product default never completes.
+    assert.deepEqual(r.missing.map((m) => m.split(" (")[0]),
+      ["ordinary-session automatic capture and NEW-session recall via the native hooks"], r.missing.join("; "));
+    assert.equal(r.complete, false, "the ordinary-session HOLD keeps the option INCOMPLETE");
   } finally { await svc.close(); }
+});
+
+test("the gate completes ONLY when the ordinary-session proof is also supplied (harness stub, not a product pass)", async () => {
+  const svc = await stubService({ code: 0, data: { total: 7 } });
+  try {
+    const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-test", authPrefix: "Bearer ", serviceId: "openchamber" });
+    const target = { kind: "native", configDir };
+    const probes = { ...OK_PROBES, ordinarySession: async () => ({ ok: true, state: "VERIFIED", detail: "harness stub" }) };
+    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes }, target);
+    assert.equal(r.missing.length, 0, r.missing.join("; "));
+    assert.equal(r.complete, true);
+  } finally { await svc.close(); }
+});
+
+test("the product default never claims ordinary-session recall: the HOLD is explicit and not a pass", async () => {
+  const { probeOrdinarySessionRecall } = await import("./install-claude-code.mjs");
+  const r = await probeOrdinarySessionRecall();
+  assert.equal(r.ok, false);
+  assert.equal(r.state, "HOLD");
+  assert.match(r.detail, /live ordinary session/);
+});
+
+test("an ADMINISTRATIVE key is refused: the gate never passes on an admin credential (B7)", async () => {
+  const svc = await stubService({ code: 0, data: { total: 7 } });
+  try {
+    const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-admin", serviceId: "openchamber" });
+    const target = { kind: "native", configDir };
+    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, {
+      target,
+      probes: { ...OK_PROBES, memoryIdentity: async () => ({ ok: false, state: "ADMIN", detail: "the configured key is an ADMINISTRATIVE credential" }) },
+    }, target);
+    assert.match(lineFor(r, "scoped memory identity authenticated"), /^MISSING:/);
+    assert.match(lineFor(r, "scoped memory identity authenticated"), /ADMINISTRATIVE/);
+    assert.equal(r.complete, false);
+  } finally { await svc.close(); }
+});
+
+test("an unusable memory service (no auth service) is INCOMPLETE (B7)", async () => {
+  const svc = await stubService({ code: 0, data: { total: 1 } });
+  const url = svc.url;
+  await svc.close(); // nothing listens any more
+  const { configDir } = nativeTarget({ baseUrl: url, userKey: "sk-test" });
+  const target = { kind: "native", configDir };
+  const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, {
+    target,
+    probes: { ...OK_PROBES, memoryIdentity: async () => ({ ok: false, state: "UNREACHABLE", detail: "the memory service is not reachable" }) },
+  }, target);
+  assert.match(lineFor(r, "scoped memory identity authenticated"), /^MISSING:/);
+  assert.equal(r.complete, false);
 });
 
 test("a target whose own opencode.jsonc declares no repoql MCP is INCOMPLETE", async () => {
   const svc = await stubService({ code: 0, data: { total: 7 } });
   try {
-    const { root, configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-test" });
+    const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-test" });
     writeFileSync(join(configDir, "opencode.jsonc"), '{ "mcp": { "other": {} } }\n');
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target }, target);
+    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes: OK_PROBES }, target);
     assert.match(lineFor(r, "RepoQL MCP declared"), /^MISSING:/);
     assert.equal(r.complete, false);
   } finally { await svc.close(); }
@@ -111,8 +205,8 @@ test("a missing memory config in the target is INCOMPLETE (never silently satisf
   try {
     const { configDir } = nativeTarget(null); // no product-secrets/memory.json
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target }, target);
-    assert.match(lineFor(r, "plugin memory credentials provisioned"), /^MISSING:/);
+    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes: OK_PROBES }, target);
+    assert.match(lineFor(r, "plugin memory credentials present"), /^MISSING:/);
     assert.equal(r.complete, false);
   } finally { await svc.close(); }
 });
@@ -121,12 +215,11 @@ test("a config in the WRONG directory is not used (no wrong-dir fallback)", asyn
   const svc = await stubService({ code: 0, data: { total: 7 } });
   try {
     const { root, configDir } = nativeTarget(null); // the target has NO config of its own
-    // a plausible-looking config OUTSIDE the target config dir
     mkdirSync(join(root, "elsewhere", "product-secrets"), { recursive: true });
     writeFileSync(join(root, "elsewhere", "product-secrets", "memory.json"), JSON.stringify({ baseUrl: svc.url, userKey: "sk-test" }));
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target }, target);
-    assert.match(lineFor(r, "plugin memory credentials provisioned"), /^MISSING:/,
+    const r = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes: OK_PROBES }, target);
+    assert.match(lineFor(r, "plugin memory credentials present"), /^MISSING:/,
       "only the target's own config dir counts");
   } finally { await svc.close(); }
 });
@@ -136,21 +229,10 @@ test("an invalid key (service rejects it) is INCOMPLETE", async () => {
   try {
     const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-bad" });
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir() }, target);
+    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir(), probes: OK_PROBES }, target);
     assert.match(lineFor(r, "Ghost memory identity reachable"), /^MISSING:/);
     assert.equal(r.complete, false);
   } finally { await svc.close(); }
-});
-
-test("an unavailable memory service is INCOMPLETE", async () => {
-  const svc = await stubService({ code: 0, data: { total: 1 } });
-  const url = svc.url;
-  await svc.close(); // nothing listens any more
-  const { configDir } = nativeTarget({ baseUrl: url, userKey: "sk-test" });
-  const target = { kind: "native", configDir };
-  const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir() }, target);
-  assert.match(lineFor(r, "Ghost memory identity reachable"), /^MISSING:/);
-  assert.equal(r.complete, false);
 });
 
 test("a checkpointed dream journal is NOT a completed consolidation (N1)", async () => {
@@ -162,7 +244,7 @@ test("a checkpointed dream journal is NOT a completed consolidation (N1)", async
     mkdirSync(join(agentDir, "dreams"), { recursive: true });
     writeFileSync(join(agentDir, "dreams", `${today()}.md`),
       `# Dream ${today()} (ghost) — checkpointed\n\n- outcome: checkpointed (step-failed:experiences)\n- changed_files: none\n- commit: (no memory commit this run)\n`, "utf8");
-    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: agentDir }, target);
+    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: agentDir, probes: OK_PROBES }, target);
     assert.match(lineFor(r, "Ghost dream consolidation completed today"), /^MISSING:/);
     assert.match(lineFor(r, "Ghost dream consolidation completed today"), /checkpoint/);
   } finally { await svc.close(); }
@@ -173,7 +255,7 @@ test("a completed dream journal with provenance IS accepted (N1)", async () => {
   try {
     const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-test" });
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir() }, target);
+    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir(), probes: OK_PROBES }, target);
     assert.match(lineFor(r, "Ghost dream consolidation completed today"), /^ok:/);
     assert.match(lineFor(r, "Ghost memory identity reachable"), /^ok:/);
   } finally { await svc.close(); }
@@ -184,9 +266,28 @@ test("Office is INCOMPLETE without an office.json (never a silent pass)", async 
   try {
     const { configDir } = nativeTarget({ baseUrl: svc.url, userKey: "sk-test" });
     const target = { kind: "native", configDir };
-    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir() }, target);
+    const r = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, ghostAgentDir: completeGhostDir(), probes: OK_PROBES }, target);
     assert.match(lineFor(r, "Claude Office"), /^MISSING:/);
   } finally { await svc.close(); }
+});
+
+test("the gate command REFUSES options 1 and 2 and never prints COMPLETE (B6)", async () => {
+  for (const v of ["1", "2"]) {
+    const { rc, out } = await runCli(["gate", "--variant", v]);
+    assert.equal(rc, 2, `option ${v} must be refused by the gate`);
+    assert.ok(!/INSTALL COMPLETE/.test(out), `option ${v} must never print INSTALL COMPLETE`);
+    assert.match(out, /3 and 4 only|ATTACH installation options/);
+  }
+});
+
+test("install --variant 3|4 is REFUSED before any mutation (B6)", async () => {
+  const home = mkdtempSync(join(tmpdir(), "install-refuse-"));
+  const { rc, out } = await runCli(["install", "--variant", "3"]);
+  assert.equal(rc, 2);
+  assert.match(out, /not a Claude Code install/);
+  assert.match(out, /SINGULARITY_VARIANT=3 bash scripts\/start\.sh/);
+  assert.match(out, /gate --variant 3/);
+  assert.equal(existsSync(join(home, ".claude")), false, "nothing was created");
 });
 
 test("the gate command target selection keeps the historical stack untouched", () => {

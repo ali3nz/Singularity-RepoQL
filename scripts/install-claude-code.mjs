@@ -50,6 +50,11 @@ import { discoverOpenchamber, resolveConfigDir } from "./attach-openchamber.mjs"
 // Native Office payload contract: the gate ingests an event produced by the
 // SHIPPED plugin mapper, not a hand-written shape.
 import { mapOfficeEvent } from "../openchamber/plugins/product-office/office-events.js";
+// The canonical model lane (derived, never a hardcoded route) and the
+// FUNCTIONALLY VERIFIED proof layer: the gate separates CONFIGURED facts from
+// runtime proofs, and a proof that cannot run is a FAIL-CLOSED MISSING.
+import { resolveModelLane, probeModelLane, modelLaneAdvice, readUpstreamEnvContent } from "./model-lane.mjs";
+import { probeMemoryIdentity, probeMemoryLoop, probeRepoqlMcp, probeDocIngestion, probeProviderFailover } from "./runtime-proofs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AGENTS_SRC = join(ROOT, "adapters/claude-code/agents");
@@ -190,8 +195,8 @@ export function usageText() {
     "  install    run one of the four installation options (selected with --variant)",
     "  uninstall  remove the Singularity integration (memories and profiles are kept)",
     "  status     report what is installed (--probe verifies main-agent routing)",
-    "  gate       verify an option's target capabilities without installing Claude Code",
-    "             (options 3/4: --variant 3|4 [--container NAME | --config-dir DIR])",
+    "  gate       verify an ATTACH option's target capabilities without installing Claude Code",
+    "             (options 3/4 only: --variant 3|4 [--container NAME | --config-dir DIR])",
     "",
     "installation options — exactly four, selected with --variant:",
     ...installOptionLines(),
@@ -680,15 +685,121 @@ const id={team_id:c.ghostTeamId||'ghost-companion',user_id:c.ghostUserId||'pilot
  * @param ctx install context ({ target, variantOutcome })
  * @param target detected/explicit OpenChamber target
  */
-export async function verifyOptionTarget(v, flags, ctx, target) {
+/**
+ * The completeness rule of the gate: a capability that was never checked is
+ * never complete. An empty check list can NEVER produce INSTALL COMPLETE.
+ */
+export function gateComplete(checked, missing) {
+  return Array.isArray(checked) && checked.length > 0 && Array.isArray(missing) && missing.length === 0;
+}
+
+/**
+ * The FUNCTIONALLY VERIFIED layer of the gate. Every probe here runs a REAL
+ * shipped product path against the TARGET's own configuration:
+ *
+ *   - live memory authentication + SCOPE classification (a key that is merely
+ *     present is never a scoped identity; an administrative key is refused)
+ *   - the shipped memory loop: capture, later-session retrieval and verified
+ *     knowledge promotion
+ *   - a real RepoQL MCP call (handshake + tools/list)
+ *   - the shipped documentation assessment + verified ingestion pipeline
+ *   - the shipped provider failover router (two working providers)
+ *
+ * A probe that cannot run is a FAIL-CLOSED MISSING. Stubs may be injected
+ * (ctx.probes) for unit tests, but an injected stub never turns into a
+ * product PASS: the gate still reports what it could not prove.
+ */
+async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, probes = {}, execIn = null, rqlPath = null }) {
   const missing = [];
   const checked = [];
   const note = (ok, label, detail = "") => {
     checked.push(`${ok ? "ok" : "MISSING"}: ${label}${detail ? ` — ${detail}` : ""}`);
     if (!ok) missing.push(detail ? `${label} (${detail})` : label);
   };
+  const memCfg = memoryConfigPath ? readJson(memoryConfigPath) : null;
+
+  // 1. live authentication + scope: the key must be a scoped, NON-administrative
+  //    identity. Presence, a non-empty file or an HTTP 200 are never enough.
+  const identity = probes.memoryIdentity
+    ? await probes.memoryIdentity({ config: memCfg, baseUrl: memoryBaseUrl })
+    : await probeMemoryIdentity({ config: memCfg, baseUrl: memoryBaseUrl });
+  note(identity.ok, "scoped memory identity authenticated (live auth/verify, non-administrative)", identity.detail);
+
+  // 2. the shipped memory API loop (capture -> search -> knowledge promotion).
+  //    This is an API-level proof only; normal-session capture and recall are
+  //    checked separately in item 6 below and are never implied by this one.
+  const loop = probes.memoryLoop
+    ? await probes.memoryLoop({ root: ROOT, memoryConfigPath, memoryBaseUrl })
+    : await probeMemoryLoop({ root: ROOT, memoryConfigPath, memoryBaseUrl });
+  note(loop.ok, "memory API loop: capture, search and verified knowledge promotion", loop.detail);
+
+  // 3. a real RepoQL MCP tools/call (read-only query)
+  const mcp = probes.repoqlMcp
+    ? await probes.repoqlMcp({ rqlPath, cwd: ROOT, execIn })
+    : await probeRepoqlMcp({ rqlPath, cwd: ROOT, execIn });
+  note(mcp.ok, "RepoQL MCP server answers a real call", mcp.detail);
+
+  // 4. automatic documentation assessment + verified ingestion
+  const docs = probes.docIngestion
+    ? await probes.docIngestion({ root: ROOT, memoryConfigPath, memoryBaseUrl })
+    : await probeDocIngestion({ root: ROOT, memoryConfigPath, memoryBaseUrl });
+  note(docs.ok, "documentation assessment and verified ingestion", docs.detail);
+
+  // 5. two working providers with a controlled failover
+  const providers = probes.providerFailover
+    ? await probes.providerFailover({ root: ROOT })
+    : await probeProviderFailover({ root: ROOT });
+  note(providers.ok, "two working providers with a controlled failover", providers.detail);
+
+  // 6. ORDINARY-SESSION capture and NEW-session recall through the native
+  //    lifecycle hooks. This needs a live Claude Code / OpenChamber conversation
+  //    that the gate cannot start. The shipped loop lists it as a manual step.
+  //    It stays a fail-closed HOLD — a configured hook is never accepted as the
+  //    proof, and the gate never fakes it.
+  const ordinary = probes.ordinarySession
+    ? await probes.ordinarySession({ root: ROOT, memoryConfigPath, memoryBaseUrl })
+    : await probeOrdinarySessionRecall();
+  note(ordinary.ok, "ordinary-session automatic capture and NEW-session recall via the native hooks", ordinary.detail);
+
+  return { checked, missing };
+}
+
+/**
+ * Ordinary-session proof. No automatic evidence exists in this environment: the
+ * proof needs a REAL conversation in a live Claude Code or OpenChamber session
+ * (captured automatically, then recalled by a following session). The gate
+ * cannot create that conversation, and reading a configured hook or a file is
+ * not proof. This is an explicit HOLD until such evidence can be produced.
+ */
+export async function probeOrdinarySessionRecall() {
+  return {
+    ok: false,
+    state: "HOLD",
+    detail: "HOLD — needs a live ordinary session: a real conversation must be captured automatically by the native hooks and recalled by a NEW session (the shipped memory loop lists this as a manual step; no automatic proof exists yet)",
+  };
+}
+
+export async function verifyOptionTarget(v, flags, ctx, target) {
+  const missing = [];
+  const checked = [];
+  const probes = (ctx && ctx.probes) || {};
+  // The TARGET's own configuration is the only source of truth for the
+  // credentials the plugin uses — never the package root.
+  let resolvedConfigDir = null;
+  let memoryConfigPath = null;
+  let officeConfigPath = null;
+  const note = (ok, label, detail = "") => {
+    checked.push(`${ok ? "ok" : "MISSING"}: ${label}${detail ? ` — ${detail}` : ""}`);
+    if (!ok) missing.push(detail ? `${label} (${detail})` : label);
+  };
 
   // 6. options 3/4: existing OpenChamber reused, bundle present, plugin secrets live
+  if (!v.openchamber) {
+    // Options 1/2 install into Claude Code: the package's own plugin
+    // configuration is the target configuration for them.
+    memoryConfigPath = join(ROOT, "data/opencode/config/product-secrets/memory.json");
+    officeConfigPath = join(ROOT, "data/opencode/config/product-secrets/office.json");
+  }
   if (v.openchamber) {
     const inst = target;
     note(inst.kind !== "none", "existing OpenChamber detected (reused, never reinstalled)",
@@ -696,6 +807,7 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     if (inst.kind !== "none") {
       let cfgDir = null, cfgErr = "";
       try { cfgDir = targetConfigDir(inst); } catch (e) { cfgErr = String(e?.message || e); }
+      resolvedConfigDir = cfgDir;
       note(Boolean(cfgDir), "OpenChamber config directory resolved",
         cfgDir || (cfgErr || `no config dir for ${inst.kind} — pass an explicit target (--config-dir/--container) or fix the OpenChamber install`));
       if (cfgDir) {
@@ -719,10 +831,12 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
         }
         note(repoqlOk, "RepoQL MCP declared in the target's opencode.jsonc", repoqlDetail);
         const memCfgPath = join(cfgDir, "product-secrets", "memory.json");
+        memoryConfigPath = memCfgPath;
+        officeConfigPath = join(cfgDir, "product-secrets", "office.json");
         const cfg = readJson(memCfgPath);
         const secretsOk = Boolean(cfg && typeof cfg.userKey === "string" && cfg.userKey);
-        note(secretsOk, "plugin memory credentials provisioned (scoped user key)",
-          secretsOk ? memCfgPath : "memory.json missing or has no scoped userKey in the target config");
+        note(secretsOk, "plugin memory credentials present (scoped user key — verified live below)",
+          secretsOk ? memCfgPath : "memory.json missing or has no userKey in the target config");
       }
     }
   }
@@ -744,8 +858,8 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
         const p = await probeGhostMemoryInContainer(inst.container, "/home/openchamber/.config/opencode/product-secrets/memory.json");
         memOk = p.ok; memDetail = p.detail;
       } else {
-        const cfgDir = v.openchamber ? targetConfigDir(inst) : join(ROOT, "data/opencode/config");
-        const ghostCfg = cfgDir ? join(cfgDir, "product-secrets", "memory.json") : null;
+        const ghostCfg = memoryConfigPath
+          || (v.openchamber ? null : join(ROOT, "data/opencode/config/product-secrets/memory.json"));
         if (!ghostCfg) memDetail = "no resolved OpenChamber config dir for the Ghost memory config";
         else {
           const p = await probeGhostMemoryOnHost(ghostCfg);
@@ -801,7 +915,9 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
   if (v.office) {
     let officeOk = false, officeDetail = "";
     try {
-      const cfg = readJson(join(ROOT, "data/opencode/config/product-secrets/office.json"));
+      // The TARGET's own office configuration (the package root is only the
+      // source for the Claude Code lane, where the package IS the target).
+      const cfg = readJson(officeConfigPath || join(ROOT, "data/opencode/config/product-secrets/office.json"));
       if (!cfg?.endpoint || !cfg?.ingestKey) {
         officeDetail = "office.json missing endpoint/ingestKey (run provision-secrets.py for an option that includes Office)";
       } else {
@@ -863,7 +979,37 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     note(officeOk, "Claude Office reachable and authenticated (native event consumed)", officeDetail);
   }
 
-  return { complete: missing.length === 0, missing, checked };
+  // ── FUNCTIONALLY VERIFIED: the real runtime proofs ────────────────────────
+  const memCfg = memoryConfigPath ? readJson(memoryConfigPath) : null;
+  const memBase = memCfg ? hostMemoryBaseUrl(memCfg) : "";
+  const execIn = target && target.kind === "container" ? target.container : null;
+  const proofs = await verifyRuntimeProofs({
+    memoryConfigPath,
+    memoryBaseUrl: memBase,
+    probes,
+    execIn,
+    rqlPath: detectRql(process.env.HOME, process.env),
+  });
+  for (const c of proofs.checked) checked.push(c);
+  missing.push(...proofs.missing);
+
+  // The model lane is DERIVED from the canonical configuration and must be
+  // proven by a real completion: a reachable proxy or a listed model is never
+  // a proof. Option 3 uses the operator's own OpenChamber provider, so the
+  // product's own lane is not part of that option.
+  if (v.ghost || !v.openchamber) {
+    const lane = resolveModelLane({ flavour: "host", env: process.env, upstreamEnvContent: readUpstreamEnvContent(ROOT) });
+    const laneProbe = probes.modelLane
+      ? await probes.modelLane({ lane, key: (memCfg && memCfg.userKey) || "" })
+      : await probeModelLane({ gatewayUrl: lane.route, key: (memCfg && memCfg.userKey) || "", serviceId: lane.spaceId });
+    note(laneProbe.ok, "model lane registered and working (real completion through the derived lane)",
+      laneProbe.ok ? laneProbe.detail : `${laneProbe.detail} — ${modelLaneAdvice(laneProbe.state)}`);
+  }
+
+  // A capability that was never checked is never complete: an empty check
+  // list can NEVER produce INSTALL COMPLETE.
+  if (!checked.length) missing.push("no capability check was executed (an empty check list is never complete)");
+  return { complete: gateComplete(checked, missing), missing, checked };
 }
 
 async function verifyOptionCapabilities(flags, ctx) {
@@ -933,7 +1079,9 @@ async function verifyOptionCapabilities(flags, ctx) {
   for (const c of t.checked) checked.push(c);
   missing.push(...t.missing);
 
-  return { complete: missing.length === 0, missing, checked };
+  // A capability that was never checked is never complete.
+  if (!checked.length) missing.push("no capability check was executed (an empty check list is never complete)");
+  return { complete: gateComplete(checked, missing), missing, checked };
 }
 
 // ── commands ─────────────────────────────────────────────────────────────────
@@ -972,6 +1120,15 @@ export async function runInstall(flags) {
       warn("exactly four installation options exist: select one with --variant 1|2|3|4 (README §START HERE)");
       return 2;
     }
+  }
+  // Installation options 3 and 4 ATTACH to an EXISTING OpenChamber: they are
+  // not Claude Code installations. The installer refuses them BEFORE touching
+  // anything and points at the documented native entrypoints.
+  if (["3", "4"].includes(String(flags.variant))) {
+    warn(`installation option ${flags.variant} attaches to an EXISTING OpenChamber and is not a Claude Code install — nothing was changed.`);
+    warn(`  start:   SINGULARITY_VARIANT=${flags.variant} bash scripts/start.sh`);
+    warn(`  verify:  node scripts/install-claude-code.mjs gate --variant ${flags.variant} [--container NAME | --config-dir DIR]`);
+    return 2;
   }
   const variantOutcome = resolveVariant(flags);
   log(`  option:   ${flags.variant} — ${variantOutcome.variant.name}`);
@@ -1314,6 +1471,15 @@ export async function runGate(argv) {
   }
   if (!flags.variant) {
     warn("gate requires --variant 3|4 (the installation options that attach to an existing OpenChamber)");
+    return 2;
+  }
+  if (!["3", "4"].includes(String(flags.variant))) {
+    // The gate verifies the ATTACH options only. Options 1/2 are Claude Code
+    // installations and are verified by their own installer — the gate must
+    // never answer for them (an empty check list once looked complete).
+    warn(`the gate verifies the ATTACH installation options (3 and 4) only — option ${flags.variant} is a Claude Code installation option:`);
+    warn(`  node scripts/install-claude-code.mjs install --variant ${flags.variant}`);
+    warn("usage: node scripts/install-claude-code.mjs gate --variant 3|4 [--container NAME | --config-dir DIR]");
     return 2;
   }
   // The target is supplied explicitly or discovered; resolveVariant's existence

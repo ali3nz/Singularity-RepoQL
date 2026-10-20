@@ -54,17 +54,33 @@ fi
 
 mkdir -p "$ROOT/secrets"
 chmod 700 "$ROOT/secrets"
+# The model lane is DERIVED from the canonical memory-stack configuration (the
+# same proxy port, lane and space id as the main-agent memory) — never a
+# hardcoded route: a lane the proxy does not register answers with a routing
+# error ("spaceId is required in the request path"), not with a model.
+PROXY_PORT="$(sed -n 's/^PROXY_PORT=\([0-9][0-9]*\).*/\1/p' "$ROOT/memory/upstream/.env" 2>/dev/null | head -n1 || true)"
+PROXY_PORT="${PROXY_PORT:-8096}"
+MODEL_LANE="${SINGULARITY_MODEL_LANE:-claude-code}"
+MODEL_SPACE="${SINGULARITY_MODEL_SPACE_ID:-${MEMORY_SERVICE_ID:-default}}"
+MODEL_BASE="http://proxy:${PROXY_PORT}/${MODEL_LANE}/${MODEL_SPACE}/v1"
+GHOST_BACKEND="${GHOST_BACKEND:-openchamber}"
 if [[ ! -f "$ROOT/secrets/ghost.env" ]]; then
   umask 077
-  cat > "$ROOT/secrets/ghost.env" <<'EOF'
+  cat > "$ROOT/secrets/ghost.env" <<EOF
 # Ghost optional add-on configuration (mode 0600).
 # Presence of secrets/ghost.env enables Ghost in scripts/start.sh.
 GHOST_TIMEZONE=UTC
-GHOST_UPSTREAM_BASE=http://proxy:8096/openai/default/v1
+GHOST_UPSTREAM_BASE=${MODEL_BASE}
+GHOST_DREAM_GATEWAY_URL=${MODEL_BASE}
+GHOST_BACKEND=${GHOST_BACKEND}
 GHOST_DREAM_CHECK_INTERVAL_SEC=3600
 EOF
   chmod 600 "$ROOT/secrets/ghost.env"
   log "created $ROOT/secrets/ghost.env (mode 0600)"
+elif grep -qE '^GHOST_(UPSTREAM_BASE|DREAM_GATEWAY_URL)=http://proxy:[0-9]+/openai/default/v1$' "$ROOT/secrets/ghost.env"; then
+  # Repair a structurally invalid lane; every other value is preserved.
+  sed -i -E "s#^GHOST_(UPSTREAM_BASE|DREAM_GATEWAY_URL)=.*#GHOST_\1=${MODEL_BASE}#" "$ROOT/secrets/ghost.env"
+  log "repaired the structurally invalid Ghost model lane in $ROOT/secrets/ghost.env -> ${MODEL_BASE}"
 fi
 
 log "Ghost clean-slate setup complete ($GHOST_DIR)"

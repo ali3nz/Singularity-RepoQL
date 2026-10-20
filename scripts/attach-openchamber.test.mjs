@@ -6,13 +6,23 @@
 // product's version is kept for a deliberate merge. The package's own
 // compose-managed config dir is not a foreign target: there the product owns
 // the files.
+//
+// Security (B7): an ADMINISTRATIVE credential is never propagated into a
+// target — it is refused in process and the option is reported INCOMPLETE.
+//
+// Undo (N-g): every attach records a manifest of the files it created or
+// replaced (with the before-hashes), and the supported `rollback` entrypoint
+// restores exactly those files, refuses foreign edits and is idempotent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planBundleFiles, applyBundle, attachMain } from "./attach-openchamber.mjs";
+import {
+  planBundleFiles, applyBundle, attachMain, rollbackAttach,
+  classifyCandidateKey, isSameSecret, readAdminKey,
+} from "./attach-openchamber.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BUNDLE = join(ROOT, "openchamber");
@@ -37,6 +47,22 @@ function seededTarget() {
   return dir;
 }
 
+/** Run the attach with the console captured. */
+async function runAttach(args) {
+  const out = [];
+  const origLog = console.log, origWarn = console.warn;
+  console.log = (...a) => { out.push(a.join(" ")); };
+  console.warn = (...a) => { out.push(a.join(" ")); };
+  let rc = 0;
+  try {
+    rc = await attachMain(args);
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+  }
+  return { rc, out: out.join("\n") };
+}
+
 test("a foreign target keeps its own AGENTS.md, opencode.jsonc and dcp.jsonc", () => {
   const dir = seededTarget();
   const plan = planBundleFiles(dir, BUNDLE, { preserveConflicts: true });
@@ -55,10 +81,11 @@ test("a foreign target keeps its own AGENTS.md, opencode.jsonc and dcp.jsonc", (
   assert.ok(existsSync(join(dir, "agents", "general.md")), "the product's agent is installed");
   assert.equal(readFileSync(join(dir, "agents", "mine.md"), "utf8"), "# my agent\n", "unrelated agents are untouched");
 
-  // the product's version of a preserved file is kept for a deliberate merge
+  // the product's version of a preserved file is kept for a deliberate merge:
+  // it is recorded as productCopy (a preserved file has no backupPath)
   const kept = res.changed.find((c) => c.rel === "AGENTS.md");
-  assert.ok(kept && kept.backupPath && existsSync(kept.backupPath), "the product's copy is kept next to the backup");
-  assert.ok(readFileSync(kept.backupPath, "utf8").length > 0);
+  assert.ok(kept && kept.productCopy && existsSync(kept.productCopy), "the product's copy is kept next to the backup");
+  assert.ok(readFileSync(kept.productCopy, "utf8").length > 0);
   rmSync(res.backupDir, { recursive: true, force: true });
   rmSync(dir, { recursive: true, force: true });
 });
@@ -92,28 +119,126 @@ test("a second attach is a no-op (idempotent)", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("the attach provisions a scoped memory key for the target without printing it", async () => {
+// ── B7: the admin key is never propagated ────────────────────────────────────
+
+test("the admin key is recognised in process and refused as a plugin credential (B7)", () => {
+  const admin = "sk-admin-key-for-the-test";
+  assert.equal(classifyCandidateKey(admin, { adminKey: admin }).class, "admin");
+  assert.equal(classifyCandidateKey("sk-business-key", { adminKey: admin }).class, "scoped");
+  assert.equal(classifyCandidateKey("", { adminKey: admin }).class, "none");
+  assert.equal(classifyCandidateKey("sk-system-root", { adminKey: "other" }).class, "admin");
+  assert.equal(isSameSecret(admin, admin), true);
+  assert.equal(isSameSecret(admin, "sk-admin-key-for-the-tes"), false);
+  assert.equal(isSameSecret(admin, "x"), false);
+  assert.equal(isSameSecret("", "x"), false);
+});
+
+test("an explicit scoped key is provisioned into the target and never printed (B7)", async () => {
   const dir = seededTarget();
-  const pkgMem = join(ROOT, "data/opencode/config/product-secrets/memory.json");
-  const out = [];
-  const origLog = console.log;
-  console.log = (...a) => { out.push(a.join(" ")); };
-  let rc = 0;
-  try {
-    rc = await attachMain(["--config-dir", dir, "--variant", "3"]);
-  } finally {
-    console.log = origLog;
-  }
-  assert.equal(rc, 0, "the attach must succeed");
+  const scoped = "sk-scoped-business-key";
+  const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", scoped]);
+  assert.equal(rc, 0, out);
   const memPath = join(dir, "product-secrets", "memory.json");
   assert.ok(existsSync(memPath), "the target's plugin memory.json is provisioned");
   const mem = JSON.parse(readFileSync(memPath, "utf8"));
-  const printed = out.join("\n");
-  if (mem.userKey) {
-    assert.ok(!printed.includes(mem.userKey), "the memory key must never be printed");
-  } else {
-    // no key available in this environment: the attach must say so honestly
-    assert.ok(/memory user key/.test(printed), "the missing key is reported");
+  assert.equal(mem.userKey, scoped, "the scoped key is the target's plugin credential");
+  assert.ok(!out.includes(scoped), "the key must never be printed");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("the ADMIN key is never written into a target (B7)", async () => {
+  const admin = readAdminKey();
+  if (!admin) {
+    // no admin key in this checkout: prove the refusal with the classifier
+    assert.equal(classifyCandidateKey("sk-system_admin", { adminKey: "" }).class, "admin");
+    return;
   }
+  const dir = seededTarget();
+  const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", admin]);
+  assert.equal(rc, 5, "an administrative credential must leave the option INCOMPLETE");
+  assert.match(out, /ADMINISTRATIVE|administrative/);
+  assert.ok(!out.includes(admin), "the admin key must never be printed");
+  const memPath = join(dir, "product-secrets", "memory.json");
+  if (existsSync(memPath)) {
+    const mem = JSON.parse(readFileSync(memPath, "utf8"));
+    assert.ok(!mem.userKey || !isSameSecret(mem.userKey, admin),
+      "the admin key must never land in the target's plugin configuration");
+  }
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("without a scoped key the attach reports INCOMPLETE and writes no credential (B7)", async () => {
+  const dir = seededTarget();
+  const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", ""]);
+  assert.equal(rc, 5, "no scoped key means the memory capability is INCOMPLETE");
+  assert.match(out, /memory user key|INCOMPLETE/);
+  const memPath = join(dir, "product-secrets", "memory.json");
+  if (existsSync(memPath)) {
+    const mem = JSON.parse(readFileSync(memPath, "utf8"));
+    const admin = readAdminKey();
+    assert.ok(!mem.userKey || !isSameSecret(mem.userKey, admin), "no administrative credential is written");
+  }
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// ── N-g: the supported rollback ───────────────────────────────────────────────
+
+test("the attach records a manifest and the rollback restores exactly what the attach wrote (N-g)", async () => {
+  const dir = seededTarget();
+  // a conflicting product file (not a preserved identity file) → a replace
+  writeFileSync(join(dir, "package.json"), "{\"mine\":true}\n");
+  const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", "sk-scoped-business-key"]);
+  assert.equal(rc, 0, out);
+  const m = out.match(/manifest\s+(\S+MANIFEST\.json)/);
+  assert.ok(m, `the attach must report its manifest (got: ${out})`);
+  const manifestPath = m[1];
+  const backupDir = dirname(manifestPath);
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  assert.ok(manifest.files.length > 0, "the manifest lists the files the attach touched");
+  const created = manifest.files.find((f) => f.status === "create");
+  const replaced = manifest.files.find((f) => f.status === "replace");
+  assert.ok(created && created.afterSha, "a created file is recorded with its after-hash");
+  assert.ok(replaced && replaced.prevSha && replaced.backupPath, "a replaced file is recorded with its before-hash");
+
+  // a foreign edit is REFUSED as a whole: the undo is all-or-nothing, so the
+  // replaced file must NOT have been restored by the refused attempt either
+  const original = readFileSync(created.dst, "utf8");
+  const replacedBefore = readFileSync(replaced.dst, "utf8");
+  writeFileSync(created.dst, "edited by the operator\n");
+  const refused = rollbackAttach(backupDir);
+  assert.equal(refused.ok, false, "a foreign edit must block the rollback");
+  assert.ok(refused.refused.length > 0);
+  assert.match(refused.refused[0], /changed since the attach/);
+  assert.equal(readFileSync(created.dst, "utf8"), "edited by the operator\n", "the foreign edit is preserved");
+  assert.equal(readFileSync(replaced.dst, "utf8"), replacedBefore, "a refused rollback writes nothing (all-or-nothing)");
+
+  // undo the foreign edit → the rollback removes what the attach created and
+  // restores what it replaced
+  writeFileSync(created.dst, original);
+  const done = rollbackAttach(backupDir);
+  assert.equal(done.ok, true, done.refused.join("; "));
+  assert.ok(done.removed.includes(created.rel), "the created file is removed again");
+  assert.equal(existsSync(created.dst), false);
+  if (replaced) {
+    assert.ok(done.restored.includes(replaced.rel), "the replaced file is restored from its backup");
+    assert.equal(readFileSync(replaced.dst, "utf8"), "{\"mine\":true}\n", "the pre-attach content is back");
+  }
+
+  // idempotent: a second rollback changes nothing and reports success
+  const again = rollbackAttach(backupDir);
+  assert.equal(again.ok, true);
+  assert.equal(again.removed.length, 0);
+  assert.equal(again.restored.length, 0);
+
+  rmSync(backupDir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("a rollback without a manifest refuses to touch anything (N-g)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "attach-nomanifest-"));
+  const r = rollbackAttach(dir);
+  assert.equal(r.ok, false);
+  assert.equal(r.rc, 2);
+  assert.match(r.detail, /no attach manifest/);
   rmSync(dir, { recursive: true, force: true });
 });

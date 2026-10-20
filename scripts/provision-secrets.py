@@ -14,10 +14,9 @@ paths and presence booleans.
 
 Least-privileged Memory Core identity (default): the OpenChamber plugin's
 runtime traffic uses a DEDICATED agent/business user key passed with
---memory-user-key (or MEMORY_USER_KEY). The admin key from the memory stack
-startup is administrative — the plugin no longer falls back to it silently.
-Pass --allow-admin-plugin-key only while a scoped key is being provisioned
-(e.g. tests or bring-up), never as the routine configuration.
+--memory-user-key (or MEMORY_USER_KEY). The memory stack's ADMINISTRATIVE key is
+never read into, copied to or propagated by this provisioner: there is no
+fallback flag. A supplied key equal to the admin key is refused (rc 2).
 """
 
 import argparse
@@ -54,6 +53,55 @@ def write_env_file(path: Path, values: dict) -> None:
     write_private(path, "".join(f"{k}={v}\n" for k, v in values.items()))
 
 
+# The proxy route the product's model traffic uses is DERIVED from the
+# canonical memory-stack configuration — never hardcoded. A hardcoded lane the
+# proxy does not register fails with a ROUTING error ("spaceId is required in
+# the request path") that looks like a credential problem but is not.
+BROKEN_MODEL_LANES = {
+    "http://proxy:8096/openai/default/v1",
+    "http://127.0.0.1:8096/openai/default/v1",
+}
+
+
+def proxy_port(base: Path) -> int:
+    """The proxy port from the memory stack's upstream .env (the same source
+    the Claude Code main-agent memory uses)."""
+    values = read_env_file(base / "memory" / "upstream" / ".env")
+    try:
+        return int(values.get("PROXY_PORT", "8096"))
+    except ValueError:
+        return 8096
+
+
+def resolve_model_lane(base: Path) -> str:
+    """The canonical model lane: <proxy>/<lane>/<space id>/v1 — the same
+    proxy, lane and space id as the main-agent memory."""
+    port = proxy_port(base)
+    space = (
+        os.environ.get("SINGULARITY_MODEL_SPACE_ID")
+        or os.environ.get("MEMORY_SERVICE_ID")
+        or "default"
+    )
+    lane = os.environ.get("SINGULARITY_MODEL_LANE") or "claude-code"
+    return f"http://proxy:{port}/{lane}/{space}/v1"
+
+
+def user_key_is_admin(base: Path, candidate: str) -> bool:
+    """True when CANDIDATE equals the memory stack's administrative key.
+
+    Read in-process and compared in constant time. The key value is never
+    printed, returned or logged: only the boolean leaves this function."""
+    import hmac
+    admin_file = base / "memory" / "upstream" / ".admin-key"
+    try:
+        admin = admin_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    if not admin or not candidate:
+        return False
+    return hmac.compare_digest(admin.encode("utf-8"), str(candidate).encode("utf-8"))
+
+
 def merge_json(path: Path, defaults: dict) -> dict:
     current = {}
     if path.exists():
@@ -79,10 +127,9 @@ def main() -> int:
                     help="Memory Core user key (sk-mem-...) for the OpenChamber plugin's runtime traffic; "
                          "create a dedicated (business-user scoped) key and pass it here"
                     )
-    ap.add_argument("--allow-admin-plugin-key", action="store_true",
-                    help="explicitly let the plugin fall back to the memory stack ADMIN key "
-                         "(bring-up convenience only — prefer a scoped runtime key)"
-                    )
+    # Hidden on purpose: the former administrative-key fallback is REFUSED with
+    # an explicit message (see main), it is no longer a documented option.
+    ap.add_argument("--allow-admin-plugin-key", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--variant", choices=["1", "2", "3", "4"], default=None,
                     help="installation option scope: Claude Office is part of options 2 and 4 ONLY — "
                          "options 1 and 3 never receive Office/Ghost provisioning or credentials. "
@@ -92,9 +139,25 @@ def main() -> int:
                          "used by the attach flow to provision into an EXISTING OpenChamber's config")
     ap.add_argument("--office-base-url", default="http://product-office:8000")
     ap.add_argument("--with-ghost", action="store_true", help="also provision secrets/ghost.env for the optional Ghost companion agent add-on")
+    ap.add_argument("--ghost-upstream-base", default=os.environ.get("GHOST_UPSTREAM_BASE", ""),
+                    help="explicit model lane for the Ghost dream daemon (default: the canonical lane derived from the memory stack config)")
+    ap.add_argument("--ghost-backend", choices=["claude-code", "openchamber"], default=None,
+                    help="which backend executes the Ghost turns (default: claude-code for option 2, openchamber for option 4)")
     args = ap.parse_args()
 
     base = Path(args.base_dir).resolve()
+    # B7: the administrative key is never propagated. Refused BEFORE any write
+    # (no directory, no office key, no plugin file is created by a refused run).
+    if args.allow_admin_plugin_key:
+        print("REFUSED: the administrative Memory Core key is never written into plugin "
+              "configuration (--allow-admin-plugin-key is no longer supported). Create a "
+              "scoped business-user key and pass it with --memory-user-key.", file=sys.stderr)
+        return 2
+    if args.memory_user_key and user_key_is_admin(base, args.memory_user_key.strip()):
+        print("REFUSED: the supplied memory user key is the memory stack ADMINISTRATIVE key — "
+              "it is never propagated to the plugin. Create a dedicated scoped business-user key "
+              "and pass that instead (nothing was written; no key value is printed).", file=sys.stderr)
+        return 2
     secrets_dir = base / "secrets"
     plugin_dir = Path(args.plugin_dir).resolve() if args.plugin_dir else base / "data" / "opencode" / "config" / "product-secrets"
     include_office = args.variant is None or args.variant in ("2", "4")
@@ -121,38 +184,30 @@ def main() -> int:
     else:
         office_values = {}
 
-    # 2. Memory Core identity for the plugin. Least-privileged by default: the
-    # plugin's runtime traffic must use its own scoped key, NOT the admin key.
-    user_key = args.memory_user_key
-    if not user_key and args.allow_admin_plugin_key:
-        admin_key_file = base / "memory" / "upstream" / ".admin-key"
-        if admin_key_file.exists():
-            user_key = admin_key_file.read_text().strip()
-            print(
-                "warning: plugins provisioned with the ADMIN key "
-                "(--allow-admin-plugin-key). Replace it with a scoped "
-                "runtime key as soon as you can create one.",
-                file=sys.stderr,
-            )
+    # 2. Memory Core identity for the plugin. The plugin's runtime traffic uses
+    # ONLY a dedicated scoped key supplied by the operator. The administrative
+    # key of the memory stack is NEVER read, copied or propagated here: there is
+    # no fallback path. An absent scoped key leaves userKey empty, which the
+    # installation gate reports as INCOMPLETE (never as a working identity).
+    # (The administrative-key refusal itself runs BEFORE any write, near the top
+    # of main(): a refused run must leave no file behind.)
+    user_key = args.memory_user_key.strip()
     if not user_key:
         print(
             "warning: no scoped runtime key passed with --memory-user-key. "
-            "memory.json is written with an empty userKey; create a "
-            "dedicated (least-privileged) Memory Core user key, then re-run "
-            "this script with --memory-user-key. Pass "
-            "--allow-admin-plugin-key only as an explicit temporary fallback.",
+            "memory.json is written with an empty userKey; create a dedicated "
+            "(least-privileged) Memory Core user key, then re-run this script "
+            "with --memory-user-key. The installation gate stays INCOMPLETE until then.",
             file=sys.stderr,
         )
 
+    # The gateway key is the memory proxy's bearer, NOT the plugin's identity:
+    # it is taken from the memory stack's own gateway setting only. It is never
+    # filled from the user key (that would hand the plugin the user credential
+    # as a bearer and mask a missing gateway setting).
     gateway_key = read_env_file(base / "memory" / "upstream" / ".env").get(
         "MEMORY_CORE_GATEWAY_API_KEY", ""
     )
-    # When the gateway gate is unset (the quickstart default — a non-empty
-    # value breaks the memory proxy's auth), the core accepts the admin user
-    # key as the effective bearer. Mirror that here so provisioned clients
-    # authenticate successfully out of the box.
-    if not gateway_key:
-        gateway_key = user_key
     memory_json = merge_json(plugin_dir / "memory.json", {
         "baseUrl": args.memory_base_url,
         "authPrefix": "Bearer ",
@@ -160,6 +215,12 @@ def main() -> int:
         "serviceId": args.memory_service_id,
         "userKey": user_key,
     })
+    # A pre-existing userKey that is the ADMIN key (written by an earlier run
+    # with the removed fallback) is actively repaired, never preserved.
+    if memory_json.get("userKey") and user_key_is_admin(base, memory_json.get("userKey")):
+        memory_json["userKey"] = user_key
+        write_private(plugin_dir / "memory.json", json.dumps(memory_json, indent=2) + "\n")
+        print("repaired: a stale administrative userKey was removed from the plugin memory config", file=sys.stderr)
     if include_office:
         merge_json(plugin_dir / "office.json", {
             "endpoint": args.office_base_url.rstrip("/") + "/api/v1/events",
@@ -169,13 +230,24 @@ def main() -> int:
     ghost_env = secrets_dir / "ghost.env"
     if args.with_ghost:
         ghost_values = read_env_file(ghost_env)
+        # The model lane is DERIVED (never a hardcoded route) and the backend
+        # matches the selected installation option: option 2 drives Ghost
+        # through Claude Code, option 4 through OpenChamber.
+        lane = args.ghost_upstream_base or resolve_model_lane(base)
+        backend = args.ghost_backend or ("claude-code" if args.variant == "2" else "openchamber")
         ghost_defaults = {
             "GHOST_TIMEZONE": "UTC",
-            "GHOST_UPSTREAM_BASE": "http://proxy:8096/openai/default/v1",
+            "GHOST_UPSTREAM_BASE": lane,
+            "GHOST_DREAM_GATEWAY_URL": lane,
+            "GHOST_BACKEND": backend,
             "GHOST_DREAM_CHECK_INTERVAL_SEC": "3600",
         }
         for k, v in ghost_defaults.items():
-            if not ghost_values.get(k):
+            existing = ghost_values.get(k)
+            # A structurally invalid lane (one the proxy does not register) is
+            # repaired; every other existing value — a custom endpoint the
+            # operator set deliberately — is preserved.
+            if not existing or (k in ("GHOST_UPSTREAM_BASE", "GHOST_DREAM_GATEWAY_URL") and existing in BROKEN_MODEL_LANES):
                 ghost_values[k] = v
         write_env_file(ghost_env, ghost_values)
 

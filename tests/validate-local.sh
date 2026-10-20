@@ -31,6 +31,9 @@ check node --test scripts/setup-agent-profiles.test.mjs
 check node --test scripts/extraction-failover.test.mjs
 check node --test scripts/install-claude-code.profiles.test.mjs
 check node --test scripts/install-claude-code.gate.test.mjs
+check node --test scripts/provision-secrets.test.mjs
+check node --test scripts/model-lane.test.mjs
+check node --test scripts/runtime-proofs.test.mjs
 check node --test scripts/attach-openchamber.test.mjs
 check bash tests/manifest-regression.test.sh
 check node --test adapters/claude-code/integration.test.mjs

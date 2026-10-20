@@ -59,8 +59,8 @@ key for routine agent traffic.
    workspace/person/agent.
 4. Wire the plugin to that key: `python3 scripts/provision-secrets.py --memory-user-key <the key>`
    (or set `MEMORY_USER_KEY` in the environment). The provisioner never
-   defaults the plugin to the admin key; `--allow-admin-plugin-key` exists
-   only as an explicit, temporary bring-up fallback.
+   reads, copies or propagates the administrative key: a supplied key equal
+   to it is refused (exit 2) before anything is written. There is no fallback flag.
 5. Loopback boundary: `scripts/start-memory-stack.sh` refuses to finish while
    any `tdai-*` port is published on the wildcard interface (override ONLY with
    `SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1`), because the quickstart upstream

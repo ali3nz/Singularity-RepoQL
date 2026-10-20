@@ -8,6 +8,8 @@ import {
   acquireDreamLock,
   releaseDreamLock,
   restoreNewerOwner,
+  createOwnerRecord,
+  linkUnsupported,
   DREAM_STEPS,
   dreamStepPrompts,
   parseMemoryEntries,
@@ -297,5 +299,93 @@ test("journal outcomes: only a completed consolidation ends the day", async () =
     assert.equal(calls2, 0, "a completed day runs no model call");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ── N-h: the lock must work on filesystems without hard links ────────────────
+
+test("a filesystem without hard links falls back to an exclusive owner record (N-h)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dream-lock-nolink-"));
+  const path = join(dir, ".dream.lock");
+  const record = JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), token: "t1" });
+
+  // a WSL /mnt/c drive answers EPERM/ENOTSUP/EXDEV for link()
+  for (const code of ["EPERM", "ENOTSUP", "EXDEV"]) {
+    const r = createOwnerRecord(path, record, {
+      link: () => { const e = new Error("link failed"); e.code = code; throw e; },
+    });
+    assert.equal(r.created, true, `${code}: the fallback must create the record`);
+    assert.equal(r.mode, "exclusive");
+    rmSync(path, { force: true });
+  }
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("the fallback writes the owner record in place and never overwrites a live owner (N-h)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dream-lock-fallback-"));
+  const path = join(dir, ".dream.lock");
+  const record = JSON.stringify({ pid: 4242, createdAt: new Date().toISOString(), token: "owner-1" });
+  const failLink = () => { const e = new Error("no links"); e.code = "EPERM"; throw e; };
+
+  const first = createOwnerRecord(path, record, { link: failLink });
+  assert.equal(first.created, true);
+  const onDisk = JSON.parse(readFileSync(path, "utf8"));
+  assert.equal(onDisk.pid, 4242);
+  assert.equal(onDisk.token, "owner-1");
+
+  // a contender: the record exists → no takeover, and the record is intact
+  const second = createOwnerRecord(path, JSON.stringify({ pid: 1, token: "other" }), { link: failLink });
+  assert.equal(second.created, false, "a live owner is never displaced");
+  assert.equal(JSON.parse(readFileSync(path, "utf8")).token, "owner-1");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("a filesystem that cannot create the record at all fails with an actionable error (N-h)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dream-lock-nocreate-"));
+  const path = join(dir, ".dream.lock");
+  const boom = (code) => () => { const e = new Error(code); e.code = code; throw e; };
+  assert.throws(() => createOwnerRecord(path, "{}", {
+    link: boom("EPERM"),
+    open: boom("EPERM"),
+  }), /EPERM/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("a LIVE owner with a fresh record is never displaced (N-h)", () => {
+  // The owner is this very process: its pid is alive, so the lock is busy.
+  // (A dead pid is a legitimate stale takeover and is covered by the
+  // stale-lock tests above — it must not be used to exercise "live owner".)
+  const dir = mkdtempSync(join(tmpdir(), "dream-lock-live-"));
+  mkdirSync(join(dir, "dreams"), { recursive: true });
+  const path = join(dir, "dreams", ".dream.lock"); // the real lock location
+  const now = Date.now();
+  writeFileSync(path, JSON.stringify({ pid: process.pid, createdAt: new Date(now).toISOString(), token: "live" }));
+  utimesSync(path, now / 1000, now / 1000);
+  const lock = acquireDreamLock(dir, { nowMs: now });
+  assert.equal(lock.acquired, false, "a live owner is never displaced");
+  assert.equal(JSON.parse(readFileSync(path, "utf8")).token, "live", "the live owner record is preserved");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("an empty owner record inside the write grace is never taken over (N-h)", () => {
+  // A record that is still being written (empty, fresh mtime) must be treated
+  // as an owner in progress: a contender waits and does not take it over.
+  const dir = mkdtempSync(join(tmpdir(), "dream-lock-grace-"));
+  mkdirSync(join(dir, "dreams"), { recursive: true });
+  const path = join(dir, "dreams", ".dream.lock"); // the real lock location
+  writeFileSync(path, "");
+  const now = Date.now();
+  utimesSync(path, now / 1000, now / 1000);
+  const lock = acquireDreamLock(dir, { nowMs: now });
+  assert.equal(lock.acquired, false, "an empty record inside the write grace is never taken over");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("the lock-unsupported error codes are classified correctly (N-h)", () => {
+  for (const code of ["EPERM", "ENOTSUP", "EXDEV", "EMLINK", "ENOSYS", "EOPNOTSUPP"]) {
+    assert.equal(linkUnsupported({ code }), true, code);
+  }
+  for (const code of ["EEXIST", "ENOENT", "EACCES"]) {
+    assert.equal(linkUnsupported({ code }), false, code);
   }
 });

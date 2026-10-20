@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node ghost/dream.mjs [--agent ghost] [--agent-dir data/ghost] [--fresh] [--force]
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, linkSync } from "node:fs";import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, linkSync, openSync, writeSync, fsyncSync, closeSync, copyFileSync } from "node:fs";import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -225,6 +225,18 @@ export const DREAM_LOCK_STALE_MS = 45 * 60 * 1000; // cap is 25 min + retries ma
 // record": it is never taken over, so a live owner is never displaced.
 export const DREAM_LOCK_WRITE_GRACE_MS = 5000;
 
+// Hard links are not available on every filesystem the product runs on (a
+// WSL /mnt/c drive answers EPERM/ENOTSUP/EXDEV). The lock then falls back to
+// an EXCLUSIVE create (open "wx") of the owner record: the record is created
+// in one step and written in place, and a contender never takes over a record
+// that is younger than the write grace — so a live owner is never displaced
+// and an empty record is never taken over early.
+export const DREAM_LOCK_UNSUPPORTED_LINK_CODES = ["EPERM", "ENOTSUP", "EXDEV", "EMLINK", "ENOSYS", "EOPNOTSUPP"];
+
+export function linkUnsupported(err) {
+  return DREAM_LOCK_UNSUPPORTED_LINK_CODES.includes(err?.code);
+}
+
 function dreamLockPath(agentDir) {
   return join(dreamsDirFor(agentDir), ".dream.lock");
 }
@@ -244,6 +256,49 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(sab), 0, 0, ms);
 }
 
+/**
+ * Create the owner record for the dream lock.
+ *
+ * Preferred: write the record to a temporary file and LINK it into place, so
+ * a contender never observes an empty or half-written record.
+ * Portable fallback (filesystems without hard links — a WSL /mnt/c drive
+ * answers EPERM/ENOTSUP/EXDEV): create the record EXCLUSIVELY (open "wx")
+ * and write it in place. The write grace keeps a contender from taking over
+ * that (still empty) record.
+ *
+ * The file-system calls are injectable so the portability regression can be
+ * exercised without a special filesystem.
+ */
+export function createOwnerRecord(path, record, {
+  link = linkSync, open = openSync, write = writeSync, fsync = fsyncSync, close = closeSync,
+  unlink = unlinkSync, writeFile = writeFileSync,
+} = {}) {
+  const tmp = `${path}.new-${process.pid}-${randomUUID()}`;
+  let created = false;
+  let mode = "link";
+  try {
+    writeFile(tmp, record, { mode: 0o600, flag: "wx" });
+    try { link(tmp, path); created = true; }
+    catch (e) {
+      if (e?.code === "EEXIST") { /* the lock exists: contention */ }
+      else if (linkUnsupported(e)) { mode = "exclusive"; }
+      else throw e;
+    }
+  } finally {
+    try { unlink(tmp); } catch { /* best-effort */ }
+  }
+  if (!created && mode === "exclusive") {
+    try {
+      const fd = open(path, "wx", 0o600);
+      try { write(fd, record); fsync(fd); } finally { close(fd); }
+      created = true;
+    } catch (e) {
+      if (e?.code !== "EEXIST") throw e;
+    }
+  }
+  return { created, mode };
+}
+
 export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowMs = Date.now() } = {}) {
   const path = dreamLockPath(agentDir);
   mkdirSync(dreamsDirFor(agentDir), { recursive: true });
@@ -251,15 +306,23 @@ export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowM
     // The owner record is linked into place in ONE step: a contender can never
     // observe an empty or half-written lock file (which used to read as
     // "stale" and could displace a live owner mid-write).
-    const tmp = `${path}.new-${process.pid}-${randomUUID()}`;
+    const token = randomUUID();
+    const record = JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), token });
     let created = false;
+    let mode = "link";
     try {
-      writeFileSync(tmp, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), { mode: 0o600, flag: "wx" });
-      try { linkSync(tmp, path); created = true; } catch (e) { if (e?.code !== "EEXIST") throw e; }
-    } finally {
-      try { unlinkSync(tmp); } catch { /* best-effort */ }
+      const r = createOwnerRecord(path, record);
+      created = r.created;
+      mode = r.mode;
+    } catch (e) {
+      // The filesystem cannot create an exclusive owner record at all: fail
+      // with an actionable message instead of an opaque catch.
+      const err = new Error(`the dream lock cannot be created on this filesystem (${e?.code || e}) — the dream state directory must live on a filesystem that supports exclusive file creation (ext4, or the container's own volume)`);
+      err.code = "DREAM_LOCK_UNSUPPORTED";
+      err.cause = e;
+      throw err;
     }
-    if (created) return { path, acquired: true, released: () => releaseDreamLockAgent(agentDir, path) };
+    if (created) return { path, acquired: true, mode, token, released: () => releaseDreamLockAgent(agentDir, path, token) };
 
     const rec = safeReadJson(path);
     let mtimeMs = 0;
@@ -295,14 +358,30 @@ export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowM
  * Exported for the race regression.
  */
 export function restoreNewerOwner(taken, path) {
-  try { linkSync(taken, path); } catch { /* the newer owner is already back in place */ }
+  try {
+    linkSync(taken, path);
+  } catch (e) {
+    if (e?.code === "EEXIST") { /* the newer owner is already back in place */ }
+    else if (linkUnsupported(e)) {
+      // Portable restore: copy the record into place (temp file + rename) and
+      // never clobber a newer owner that is already there.
+      try {
+        if (!existsSync(path)) {
+          const tmp = `${path}.restore-${process.pid}-${randomUUID()}`;
+          copyFileSync(taken, tmp);
+          renameSync(tmp, path);
+        }
+      } catch { /* best-effort */ }
+    }
+  }
   try { unlinkSync(taken); } catch { /* best-effort */ }
   return true;
 }
 
-function releaseDreamLockAgent(agentDir, path) {
+function releaseDreamLockAgent(agentDir, path, token = null) {
   const cur = safeReadJson(path);
   if (cur && process.pid && cur.pid !== process.pid) return false; // never remove another run's lock
+  if (cur && token && cur.token && cur.token !== token) return false; // never remove another owner's record
   try { unlinkSync(path); return true; } catch { return false; }
 }
 
@@ -310,6 +389,7 @@ export function releaseDreamLock(lockHandle) {
   if (!lockHandle?.acquired || !lockHandle?.path) return false;
   const cur = safeReadJson(lockHandle.path);
   if (cur && cur.pid !== process.pid) return false;
+  if (cur && lockHandle.token && cur.token && cur.token !== lockHandle.token) return false;
   try { unlinkSync(lockHandle.path); return true; } catch { return false; }
 }
 

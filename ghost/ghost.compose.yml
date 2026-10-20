@@ -38,7 +38,12 @@ services:
     env_file:
       - ${GHOST_ENV_FILE:-../secrets/ghost.env}
     environment:
-      GATEWAY_URL: "${GHOST_DREAM_GATEWAY_URL:-http://proxy:8096/openai/default/v1}"
+      # The model lane is DERIVED (see ghost/setup-ghost.sh and
+      # scripts/provision-secrets.py): a lane the proxy does not register
+      # answers with a routing error, never with a model.
+      GATEWAY_URL: "${GHOST_DREAM_GATEWAY_URL:-http://proxy:8096/claude-code/default/v1}"
+      GHOST_UPSTREAM_BASE: "${GHOST_UPSTREAM_BASE:-http://proxy:8096/claude-code/default/v1}"
+      GHOST_BACKEND: "${GHOST_BACKEND:-openchamber}"
       GHOST_DATA_DIR: "/data/ghost"
       GHOST_TIMEZONE: "${GHOST_TIMEZONE:-UTC}"
     volumes:

@@ -102,7 +102,21 @@ fi
 # briefs name the same number. This script ATTACHES to an EXISTING
 # OpenChamber, so only options 3 and 4 are meaningful here; options 1 and 2
 # are Claude Code installs and are refused with the exact command to run.
-ATTACH_VARIANT="${SINGULARITY_VARIANT:-3}"
+# An UNSET option is never silently resolved to one of them: an interactive
+# terminal is asked, a non-interactive run stops with the exact commands.
+ATTACH_VARIANT="${SINGULARITY_VARIANT:-}"
+INCOMPLETE_REASON=""
+if [[ -z "$ATTACH_VARIANT" ]]; then
+  if [[ -t 0 && -t 1 ]]; then
+    printf 'installation option — 3 = existing OpenChamber + MemoryCore, 4 = + Ghost + Claude Office: '
+    read -r ATTACH_VARIANT || ATTACH_VARIANT=""
+    if [[ ! "$ATTACH_VARIANT" =~ ^[34]$ ]]; then
+      fail "no installation option selected — start stopped without changes. Run one of: SINGULARITY_VARIANT=3 bash scripts/start.sh   |   SINGULARITY_VARIANT=4 bash scripts/start.sh"
+    fi
+  else
+    fail "SINGULARITY_VARIANT is not set — start stopped without changes. Installation options 3 and 4 are explicit: SINGULARITY_VARIANT=3 bash scripts/start.sh (existing OpenChamber + MemoryCore) or SINGULARITY_VARIANT=4 bash scripts/start.sh (existing OpenChamber + MemoryCore + Ghost + Claude Office)"
+  fi
+fi
 case "$ATTACH_VARIANT" in
   3|4) ;;
   *)
@@ -150,8 +164,17 @@ fi
 if [[ "$ATTACH_VARIANT" == "4" ]]; then
   ATTACH_ARGS+=(--with-ghost)
 fi
-if ! node "$ROOT/scripts/attach-openchamber.mjs" --variant "$ATTACH_VARIANT" "${ATTACH_ARGS[@]}"; then
-  fail "attaching the Singularity bundle to the existing OpenChamber failed"
+set +e
+node "$ROOT/scripts/attach-openchamber.mjs" --variant "$ATTACH_VARIANT" "${ATTACH_ARGS[@]}"
+ATTACH_RC=$?
+set -e
+if [[ "$ATTACH_RC" -ne 0 ]]; then
+  if [[ "$ATTACH_RC" -eq 5 ]]; then
+    INCOMPLETE_REASON="the attach reported an INCOMPLETE capability (see the messages above)"
+    log "INSTALL INCOMPLETE: $INCOMPLETE_REASON"
+  else
+    fail "attaching the Singularity bundle to the existing OpenChamber failed (rc=$ATTACH_RC)"
+  fi
 fi
 # The attach script provisioned INTO the discovered config; point the
 # profile seeder at THAT memory.json for this run.
@@ -267,3 +290,8 @@ fi
 log "readiness:"
 docker ps --format '{{.Names}}\t{{.Status}}' | grep -E 'tdai-|singularity-' || true
 log "done"
+if [[ -n "$INCOMPLETE_REASON" ]]; then
+  log "INSTALL INCOMPLETE — $INCOMPLETE_REASON"
+  log "verify the option with: node scripts/install-claude-code.mjs gate --variant $ATTACH_VARIANT"
+  exit 5
+fi
