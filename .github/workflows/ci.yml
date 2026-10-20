@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Gitleaks needs the push revision range, not a shallow HEAD alone.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
