@@ -32,8 +32,8 @@ The two systems complement each other:
   `REPOQL_RQL_PATH`.
 - Docker Engine and Compose v2 accessible inside WSL2: either a Linux Engine
   running in the distro or Docker Desktop's WSL2 engine with integration
-  enabled for that distro. This acceptance used the native WSL Engine; see
-  `docs/platforms/windows.md` for verified and untested platform details.
+  enabled for that distro. See `docs/platforms/windows.md` for platform
+  requirements and validation steps.
 - WSL2 distro with glibc >= 2.38 (Ubuntu 24.04+ or Debian 13+): the rql
   release binary requires it. An older Ubuntu in WSL2 (22.04, glibc
   2.35) will not run the rql binary — upgrade the distro or use the

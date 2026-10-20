@@ -16,8 +16,8 @@ included in options 2 and 4 and absent from options 1 and 3.
 - One Docker Engine reachable **inside the distro**, with Compose v2
   (`docker info` and `docker compose version` must succeed). This may be
   Docker Desktop with its WSL2 engine and distro integration enabled, or a
-  Linux Docker Engine installed inside WSL2. The 2026-10-19 live acceptance
-  used the WSL-native Engine; the Docker Desktop path was not exercised.
+  Linux Docker Engine installed inside WSL2. Validate the selected engine
+  and distro integration before making configuration changes.
 - `git`, `curl`, and Python 3 in WSL2; ~12 GB free disk and a stable internet
   connection. Keep the checkout under the WSL2 Linux filesystem (for example
   `~/projects`), not `/mnt/c`.
