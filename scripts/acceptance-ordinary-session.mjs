@@ -387,21 +387,44 @@ function workspaceUnderCaptureRoots(roots, env = process.env) {
 
 /**
  * One REAL headless OpenCode primary-agent session. Returns { ok, sessionId,
- * answer, detail }. The session id comes from the runtime's OWN session store
- * (storage/…/ses_*.json created during this run) — never from a fabricated
+ * answer, detail }. The session id comes FIRST from the runtime's own
+ * `--format json` event stream (OpenCode ≥ the shipped versions stream
+ * { type, sessionID, part } events; the text parts are the model's answer)
+ * and ONLY falls back to the session-store scan — never from a fabricated
  * marker; `knownSessionIds` keeps earlier runs' ids out of the claim.
  */
 export function runOpenchamberSession({ workspace, prompt, env = process.env, bin, timeoutMs = 300_000, knownSessionIds = new Set(), storageRoot, sinceMs }) {
   const b = bin || env.SING_OPENCODE_BIN || "opencode";
-  const r = spawnSync(b, ["run", prompt], { cwd: workspace, env, encoding: "utf8", timeout: timeoutMs, windowsHide: true });
-  if (r.error || r.status !== 0) {
-    if (r.error?.code === "ENOENT") return { ok: false, sessionId: null, answer: "", detail: `"${b}" not found on PATH — the native driver needs the target's installed OpenCode runtime` };
-    const err = String((r.error && r.error.message) || r.stderr || `exit ${r.status}`);
-    return { ok: false, sessionId: null, answer: "", detail: `opencode session failed: ${err.slice(0, 160)}` };
+  const r = spawnSync(b, ["run", prompt, "--format", "json"], { cwd: workspace, env, encoding: "utf8", timeout: timeoutMs, windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+  if (r.error && r.error.code === "ENOENT")
+    return { ok: false, sessionId: null, answer: "", detail: `"${b}" not found on PATH — the native driver needs the target's installed OpenCode runtime` };
+  // Parse the event stream: OpenCode emits one JSON event per line (older
+  // builds may stream differently or exit non-zero on partial streams — the
+  // parse is best-effort with the store-scan fallback below).
+  let sid = null;
+  const texts = [];
+  for (const line of String(r.stdout || "").split(/\r?\n/)) {
+    if (!line.startsWith("{")) continue;
+    try {
+      const ev = JSON.parse(line);
+      if (typeof ev.sessionID === "string" && /^ses_[A-Za-z0-9_-]+$/.test(ev.sessionID)) sid = ev.sessionID;
+      if (ev.type === "text" && typeof ev.part?.text === "string") texts.push(ev.part.text);
+    } catch { /* non-JSON line; ignore (the stream tolerates it) */ }
   }
-  const answer = String(r.stdout || "").slice(0, 2000);
-  const sid = findNewSessionId(storageRoot, knownSessionIds, sinceMs);
-  if (!sid) return { ok: true, sessionId: null, answer, detail: "run succeeded but no NEW ses_* session record was found in the OpenCode storage — the session id could not be proven" };
+  if (!sid) {
+    const m = /ses_[A-Za-z0-9_-]{8,}/.exec(String(r.stdout || "") + String(r.stderr || ""));
+    if (m) sid = m[0];
+  }
+  if (r.error || (r.status !== 0 && !sid)) {
+    const err = String((r.error && r.error.message) || r.stderr || `exit ${r.status}`);
+    return { ok: false, sessionId: null, answer: texts.join("\n").slice(0, 2000), detail: `opencode session failed: ${err.slice(0, 160)}` };
+  }
+  const answer = (texts.join("\n") || String(r.stdout || "")).slice(0, 2000);
+  if (!sid) {
+    const scan = findNewSessionId(storageRoot, knownSessionIds, sinceMs);
+    if (!scan) return { ok: true, sessionId: null, answer, detail: "run succeeded but no session id was recoverable from the event stream or the OpenCode storage — the session id could not be proven" };
+    sid = scan;
+  }
   return { ok: true, sessionId: sid, answer, detail: "" };
 }
 
