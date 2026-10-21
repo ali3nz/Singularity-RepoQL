@@ -22,7 +22,7 @@ The reference deployment builds from the public fork
 git clone https://github.com/ali3nz/claude-office
 cd claude-office
 # optional: pin the validated revision
-# git checkout 1fce512
+# git checkout 4ce0d00
 docker build -t claude-office:local .
 ```
 

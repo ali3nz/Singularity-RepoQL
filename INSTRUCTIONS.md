@@ -232,7 +232,7 @@ Option 1 is done after step 5. Skip to "Report".
 4. **Build the local images before starting the UI services.** Option 3 needs
    only `openchamber:local` (`docs/OPENCHAMBER-SETUP.md`); option 4
    additionally builds `claude-office:local` (`docs/OFFICE-SETUP.md`, the
-   validated `1fce512` revision). `scripts/start.sh` starts existing images;
+   validated `4ce0d00` revision). `scripts/start.sh` starts existing images;
    it does not build them.
 
 5. **Preflight the ports, then start the stack.** Check for listeners on
@@ -289,7 +289,7 @@ deselected, and nothing may be added to option 3: selecting option 4 is the
 only way the walkthrough installs them.
 
 1. **Office**: build `claude-office:local` (`docs/OFFICE-SETUP.md`, validated
-   revision `1fce512`), include port `3128` in the preflight (step 5), and
+   revision `4ce0d00`), include port `3128` in the preflight (step 5), and
    include `http://127.0.0.1:3128` in the endpoint check (step 6).
 2. **Ghost**: run `bash ghost/setup-ghost.sh` (clean-slate seed templates;
    `docs/GHOST-SETUP.md`) before `scripts/start.sh`, and confirm the dream
