@@ -19,17 +19,38 @@ ADMIN_KEY_FILE="${MEMORY_CORE_ADMIN_KEY_FILE:-$UPSTREAM/.admin-key}"
 if [[ "$ADMIN_KEY_FILE" != /* ]]; then ADMIN_KEY_FILE="$UPSTREAM/$ADMIN_KEY_FILE"; fi
 
 # ── pre-start security preflight: stop wildcard exposure BEFORE it exists ────
-# The upstream quickstart publishes the memory services on all host
-# interfaces. Incident prevention belongs at container-creation time, not only
-# after. Reuse policy check: SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 is the only
+# Two layers:
+#   1. Creation-time enforcement (preferred): a scoped `docker` CLI shim is put
+#      at the front of PATH for the upstream startup invocation ONLY — upstream
+#      _lib.sh resolves the Docker CLI with find_docker() (first `docker` on
+#      PATH), so the shim re-binds every -p/--publish to 127.0.0.1 before
+#      containers are created. Wildcard bindings then CANNOT exist; there is
+#      nothing to detect or unwind afterwards. The shim lives in a per-run
+#      private directory, never replaces the host's global Docker CLI, and is
+#      byte-exact-transparent for every non-run subcommand. Disable with
+#      SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 (escape hatch below).
+#   2. Inventory policy: even with the shim, refuse to start while a
+#      PRE-EXISTING tdai-* container holds wildcard bindings (reusing it would
+#      re-expose those ports; removal is the operator's call). The shim does
+#      not change pre-existing containers — they keep their own bindings.
+# Reuse policy check: SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 is the only
 # operator-controlled escape hatch (see the post-start enforcement below).
 ALLOW_WIDE_MEMORY_PORTS=0
 if [[ "${SINGULARITY_ALLOW_WIDE_MEMORY_PORTS:-}" == "1" ]]; then ALLOW_WIDE_MEMORY_PORTS=1; fi
 BOUNDARY="$ROOT/scripts/memory-port-boundary.sh"
+LOOPBACK_SHIM="$ROOT/scripts/memory-loopback-docker.sh"
 baseline_file="$(mktemp /tmp/singularity-memory-baseline.XXXXXX)"
+shim_dir=""
+cleanup() { rm -f "$baseline_file"; [[ -z "$shim_dir" ]] || rm -rf "$shim_dir"; return 0; }
+trap cleanup EXIT
 if command -v docker >/dev/null 2>&1 && [[ ! -f "$BOUNDARY" ]]; then
   echo 'FAILED: scripts/memory-port-boundary.sh is missing — refusing an unauditable startup while docker is present.' >&2
   echo '        Re-install the Singularity memory wrapper collection (scripts/) or remove docker from PATH.' >&2
+  rm -f "$baseline_file"
+  exit 1
+fi
+if command -v docker >/dev/null 2>&1 && [[ ! -f "$LOOPBACK_SHIM" ]]; then
+  echo 'FAILED: scripts/memory-loopback-docker.sh is missing — refusing a startup that could publish wildcard host bindings.' >&2
   rm -f "$baseline_file"
   exit 1
 fi
@@ -60,11 +81,26 @@ EOS
     fi
     printf 'preflight: no tdai-* container binds wildcard ports\n'
   fi
+  # Install the creation-time loopback shim in a PRIVATE per-run directory so
+  # upstream `find_docker()` (first `docker` on PATH) resolves the shim for
+  # this startup invocation only. Under SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1
+  # the shim is still installed (it honours that variable by passing
+  # everything through), keeping the runtime path identical in both modes.
+  if [[ "$ALLOW_WIDE_MEMORY_PORTS" != 1 ]]; then
+    shim_dir="$(mktemp -d /tmp/singularity-docker-shim.XXXXXX)"
+    cp "$LOOPBACK_SHIM" "$shim_dir/docker"
+  fi
 fi
 
 set +e
 (
-  cd "$UPSTREAM" && ./start-all.sh
+  cd "$UPSTREAM"
+  if [[ -n "$shim_dir" ]]; then
+    # Creation-time enforcement: upstream sees the loopback shim as `docker`.
+    PATH="$shim_dir:$PATH" ./start-all.sh
+  else
+    ./start-all.sh
+  fi
 ) 2>&1 | python3 "$ROOT/scripts/redact-memory-startup.py" "$ADMIN_KEY_FILE"
 pipeline_status=("${PIPESTATUS[@]}")
 set -e

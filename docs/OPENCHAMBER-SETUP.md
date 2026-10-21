@@ -35,6 +35,8 @@ OpenCode configuration directory:
 | `openchamber/dcp.jsonc` | `dcp.jsonc` | config for the DCP compaction plugin |
 | `openchamber/plugins/product-office/` | `plugins/product-office/` | the memory-capture plugin |
 | `openchamber/plugins/runbook-nudge/`  | `plugins/runbook-nudge/`  | the runbook/concept reminder plugin |
+| `scripts/doc-policy.mjs` | `plugins/singularity-runtime/scripts/doc-policy.mjs` | the shared documentation policy the plugins import at runtime — a byte-identical first-class dependency, so the deterministic import resolves in a foreign target |
+| `scripts/memory-doc-ingest.py` | `plugins/singularity-runtime/scripts/memory-doc-ingest.py` | the ingestion helper the shared policy drives, in its expected sibling layout |
 | `openchamber/package.json` | `package.json` | declares the config dir as an ESM package |
 
 With the Docker Compose path, the config dir is `data/opencode/config/` in

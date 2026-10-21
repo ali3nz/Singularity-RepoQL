@@ -117,6 +117,7 @@ Verify each capability with the repository's acceptance procedure and report the
 - Automatic extraction, documentation assessment, documentation updates and verified ingestion of the approved documentation.
 - Gated evaluation and promotion of knowledge candidates into verified knowledge.
 - RepoQL code intelligence wired into the client you already use.
+- One diagnostic entrypoint — `node scripts/doctor.mjs` — reports every capability of your installation (VERIFIED / INCOMPLETE / DEGRADED / NOT_CONFIGURED / FAILED), machine-readable with `--json`, and exits nonzero while anything is unverified.
 
 The installer reports INCOMPLETE until every mandatory capability of the chosen option is verified by a real check. Nothing is reported as working on configuration alone.
 
@@ -132,7 +133,7 @@ The installer reports INCOMPLETE until every mandatory capability of the chosen 
   - Cerebras — https://cloud.cerebras.ai/ - Go sign up and get an API key, its free. The rest can be ignored for now. 
   - OpenRouter — https://openrouter.ai/
   - Cohere — https://dashboard.cohere.com/
-- The shipped extraction failover router currently supports Groq and Cohere. Other provider accounts are useful only where the selected integration supports them; verify both extraction providers and a controlled live fallback before accepting failover.
+- The shipped extraction failover router supports Groq and Cohere out of the box (`secrets/groq-api-key`, `secrets/cohere-api-key`). Any additional OpenAI-compatible provider (NVIDIA, Cerebras, OpenRouter, …) can be onboarded with a PAIR in the secrets directory — `<name>-api-key` plus `<name>-api-provider.json` (`{ "name", "base" (https), "model" }`); a file that does not validate never becomes a hop. Verify both extraction providers and a controlled live fallback (`scripts/runtime-proofs.mjs`) before accepting failover.
 
 ## Technical documentation
 

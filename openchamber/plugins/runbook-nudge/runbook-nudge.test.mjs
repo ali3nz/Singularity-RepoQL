@@ -8,7 +8,56 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const root = mkdtempSync(join(tmpdir(), "rb-nudge-module-"));
 copyFileSync(process.env.RUNBOOK_PLUGIN || fileURLToPath(new URL("./index.js", import.meta.url)), join(root, "plugin.mjs"));
 const mod = await import(pathToFileURL(join(root, "plugin.mjs")));
-test.after(() => rmSync(root, { recursive: true, force: true }));
+test("loadSharedPolicy: no installed runtime copy is audited as unavailable (fail-open)", async () => {
+  const trail = [];
+  const policy = await mod.loadSharedPolicy((e) => trail.push(e));
+  assert.equal(policy, null);
+  const un = trail.filter(r => r.decision === "NUDGE-RB-DISCOVERY-UNAVAILABLE");
+  assert.equal(un.length, 1);
+  assert.match(un[0].reason, /singularity-runtime/);
+});
+
+test("loadSharedPolicy: loads the SHARED policy from its installed runtime sibling and rejects a spoiler module", async () => {
+  // Simulate the attach layout: plugins/<plugin>/index.mjs with a sibling
+  // singularity-runtime/scripts/doc-policy.mjs (the real shared policy).
+  const dir = mkdtempSync(join(tmpdir(), "rb-nudge-runtime-"));
+  try {
+    const pluginDir = join(dir, "plugins", "runbook-nudge");
+    const runtimeScripts = join(dir, "plugins", "singularity-runtime", "scripts");
+    mkdirSync(pluginDir, { recursive: true });
+    mkdirSync(runtimeScripts, { recursive: true });
+    copyFileSync(fileURLToPath(new URL("./index.js", import.meta.url)), join(pluginDir, "index.mjs"));
+    copyFileSync(fileURLToPath(new URL("../../../scripts/doc-policy.mjs", import.meta.url)), join(runtimeScripts, "doc-policy.mjs"));
+    const instance = await import(pathToFileURL(join(pluginDir, "index.mjs")).href);
+    const trail = [];
+    const policy = await instance.loadSharedPolicy((e) => trail.push(e));
+    assert.equal(typeof policy.autoIngestChangedDocs, "function");
+    assert.equal(typeof policy.saveSessionBaseline, "function");
+    assert.equal([...trail].some(r => r.decision === "NUDGE-RB-DISCOVERY-MODULE"), true, "module provenance audited");
+
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+
+  // A spoiler file masquerading as the shared policy is rejected by the API
+  // check — arbitrary untrusted content is never treated as policy. A separate
+  // directory keeps the import cache from masking the rejection.
+  const dir2 = mkdtempSync(join(tmpdir(), "rb-nudge-spoiler-"));
+  try {
+    const pluginDir = join(dir2, "plugins", "runbook-nudge");
+    const runtimeScripts = join(dir2, "plugins", "singularity-runtime", "scripts");
+    mkdirSync(pluginDir, { recursive: true });
+    mkdirSync(runtimeScripts, { recursive: true });
+    copyFileSync(fileURLToPath(new URL("./index.js", import.meta.url)), join(pluginDir, "index.mjs"));
+    writeFileSync(join(runtimeScripts, "doc-policy.mjs"), "export const autoIngestChangedDocs = \"spoiler\";\n");
+    const instance2 = await import(pathToFileURL(join(pluginDir, "index.mjs")).href);
+    const trail2 = [];
+    const rejected = await instance2.loadSharedPolicy((e) => trail2.push(e));
+    assert.equal(rejected, null);
+    assert.equal(trail2.filter(r => r.decision === "NUDGE-RB-DISCOVERY-UNAVAILABLE").length, 1);
+    assert.match(trail2[trail2.length - 1].reason, /not the policy API/);
+  } finally { rmSync(dir2, { recursive: true, force: true }); }
+});
+
+// ── existing tests appended below ──
 
 async function fixture(run) {
   const dir = mkdtempSync(join(tmpdir(), "rb-nudge-test-"));

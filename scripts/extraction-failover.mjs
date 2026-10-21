@@ -1,5 +1,5 @@
 import http from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { cohereQuota } from "./cohere-quota.mjs";
 
 /**
@@ -37,12 +37,68 @@ const LADDER = [
   { name: "groq-120b", base: GROQ_BASE, key: groqKey, model: "openai/gpt-oss-120b" },
   { name: "cohere-a+", base: COHERE_BASE, key: cohereKey, model: "command-a-plus-05-2026" },
   { name: "groq-20b", base: GROQ_BASE, key: groqKey, model: "openai/gpt-oss-20b" },
-].filter(p => p.key && !(process.env.EXTRACTION_FAILOVER_SKIP || "").split(",").map(s => s.trim()).filter(Boolean).includes(p.name));
+]
+  // Additional OpenAI-compatible providers are onboarded through a provider
+  // file PAIR in the secrets directory: any `<name>-api-key` gets its route
+  // from `<name>-api-provider.json`:
+  //   { "name": "nvidia-70b", "base": "https://integrate.api.nvidia.com/v1",
+  //     "model": "nvidia/nemotron-70b" }
+  // Validation is strict (https base, non-empty model, unique name, valid
+  // endpoint shape) — an unvalidated file never becomes a hop. The README's
+  // provider offer and the shipped router now cover the same surface.
+  .concat((() => {
+    let dir;
+    try { dir = readdirSync(SECRETS_DIR); } catch { return []; }
+    const out = [];
+    const seen = new Set(["groq-120b", "cohere-a+", "groq-20b"]);
+    for (const f of dir) {
+      const m = /^(?!groq-api-key$|cohere-api-key$)([a-zA-Z0-9][a-zA-Z0-9._-]*)-api-key$/.exec(f);
+      if (!m || m[1].endsWith("-api")) continue;
+      const short = m[1].replace(/-key$/, "");
+      let meta;
+      try {
+        meta = JSON.parse(readFileSync(SECRETS_DIR + "/" + short + "-api-provider.json", "utf8"));
+      } catch { continue; }
+      const name = String(meta.name || "").trim();
+      const base = String(meta.base || "").replace(/\/+$/, "");
+      const model = String(meta.model || "").trim();
+      if (!name || !base || !model) continue;                       // incomplete: never a hop
+      if (!/^https:\/\//.test(base)) continue;                      // plain-HTTP upstream: refused
+      if (!/^https:\/\/[^/]+\/.+/.test(base) || base.includes("localhost") || base.includes("127.0.0.1")) continue;
+      if (seen.has(name)) continue;                                 // duplicate name: refused
+      seen.add(name);
+      const key = readKey(f);
+      if (key) out.push({ name, base, key, model });
+    }
+    return out;
+  })())
+  .filter(p => p.key && !(process.env.EXTRACTION_FAILOVER_SKIP || "").split(",").map(s => s.trim()).filter(Boolean).includes(p.name));
 
 if (LADDER.length === 0) throw new Error("No extraction providers configured (missing key files or all providers skipped)");
 
 const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
 const state = { attempts: 0, failovers: 0, lastModel: null, lastError: null };
+
+// TEST-ONLY controlled injection point (never set in production compose): the
+// runtime-proofs acceptance drives a DETERMINISTIC primary failure and a
+// never-retried permanent auth failure through single-hop synthetic statuses.
+//           EXTRACTION_FAILOVER_INJECT=<provider-name>:<status>
+//           EXTRACTION_FAILOVER_INJECT_COUNT=<n>   (default 1)
+// The named provider's FIRST n hops return the synthetic status without any
+// upstream call; after the count the router is meth-free and behaves
+// normally. A warning is printed at startup while the knob is set, and
+// /health reports inject so the acceptance can PROVE the knob was removed.
+const rawInject = String(process.env.EXTRACTION_FAILOVER_INJECT || "");
+const INJECT_STATUS = new Set([401, 403, 408, 429, 500, 502, 503, 504]);
+const injectMatch = /^([a-zA-Z0-9._-]+):(4[0-9]{2}|5[0-9]{2})$/.exec(rawInject.trim());
+if (rawInject && !injectMatch) throw new Error(
+  "EXTRACTION_FAILOVER_INJECT is malformed (want <provider-name>:<http-status>)");
+const INJECT = injectMatch && INJECT_STATUS.has(Number(injectMatch[2]))
+  ? { provider: injectMatch[1], status: Number(injectMatch[2]), left: Math.max(1, Number(process.env.EXTRACTION_FAILOVER_INJECT_COUNT || 1)) }
+  : null;
+if (rawInject && injectMatch && !INJECT_STATUS.has(Number(injectMatch[2])))
+  throw new Error(`EXTRACTION_FAILOVER_INJECT status ${injectMatch[2]} is not an injectable test status`);
+if (INJECT) console.warn(`[failover] TEST-ONLY injection active: ${INJECT.provider} -> ${INJECT.status} for the next ${INJECT.left} hop(s)`);
 
 const _rawMaxBody = Number(process.env.EXTRACTION_FAILOVER_MAX_BODY_BYTES);
 const MAX_BODY_BYTES = Math.min(64 * 1024 * 1024, Math.max(1024, Number.isFinite(_rawMaxBody) && _rawMaxBody > 0 ? _rawMaxBody : 8 * 1024 * 1024));
@@ -104,7 +160,7 @@ async function pumpBody(upstreamBody, res, controller) {
 export const server = http.createServer(async (req, res) => {
   if (req.url === "/health" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ status: "ok", ...state, hopTimeoutMs: HOP_TIMEOUT_MS, ladder: LADDER.map(l => l.name) }));
+    return res.end(JSON.stringify({ status: "ok", ...state, hopTimeoutMs: HOP_TIMEOUT_MS, ladder: LADDER.map(l => l.name), inject: INJECT ? `${INJECT.provider}:${INJECT.status}` : null }));
   }
   if (!req.url?.startsWith("/chat/completions") || req.method !== "POST") {
     res.writeHead(404).end();
@@ -141,6 +197,21 @@ export const server = http.createServer(async (req, res) => {
       }
     }
     const body = JSON.stringify({ ...payload, model: provider.model });
+    // TEST-ONLY controlled injection (see the block above): a synthetic retryable
+    // or permanent status for this hop — no upstream call is made.
+    if (INJECT && INJECT.provider === provider.name && INJECT.left > 0) {
+      INJECT.left -= 1;
+      state.attempts++;
+      state.lastError = { provider: provider.name, injected: INJECT.status, at: Date.now() };
+      const retryable = RETRY_STATUS.has(INJECT.status);
+      if (retryable && index < LADDER.length - 1) {
+        state.failovers++;
+        console.warn(`[failover] TEST-INJECT ${provider.name} -> next (synthetic ${INJECT.status})`);
+        continue;
+      }
+      res.writeHead(INJECT.status, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: { message: "TEST-ONLY injected failure", injected: true } }));
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HOP_TIMEOUT_MS);
     try {

@@ -112,7 +112,7 @@ memory/        README.md, upstream/ (vendored quickstart), .env.example
 office/        README.md, office.compose.yml
 ghost/         README.md, ghost.compose.yml, setup-ghost.sh, dream.mjs, ghost-memory.mjs, ghost-turn.mjs, ghost-gateway.mjs, seed/, systemd/
 compose/       compose.yml (OpenChamber stack), repoql.override.yml, extraction-failover.compose.yml
-scripts/       start.sh, start-memory-stack.sh, redaction/verification helpers, provision-secrets.py, knowledge-promotion.py
+scripts/       start.sh, start-memory-stack.sh (+ the creation-time loopback docker shim), redaction/verification helpers, provision-secrets.py, knowledge-promotion.py, doctor.mjs (single diagnostic entrypoint), acceptance-ordinary-session.mjs (capture/recall acceptance)
 adapters/      claude-code/ (Office adapter + Claude Code native-agent integration + doc hooks)
 templates/     product.env.example
 docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, CLAUDE-CODE-SETUP, DOC-INGESTION, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING

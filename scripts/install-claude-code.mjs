@@ -779,18 +779,36 @@ async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, identity, 
 }
 
 /**
- * Ordinary-session proof. No automatic evidence exists in this environment: the
- * proof needs a REAL conversation in a live Claude Code or OpenChamber session
- * (captured automatically, then recalled by a following session). The gate
- * cannot create that conversation, and reading a configured hook or a file is
- * not proof. This is an explicit HOLD until such evidence can be produced.
+ * Ordinary-session proof (REAL, §6-round): ordinary capture and NEW-session
+ * recall are proven by EVIDENCE produced by
+ * scripts/acceptance-ordinary-session.mjs — two independent headless Claude
+ * sessions through the production memory proxy with a unique single-run tag,
+ * every stage recorded, corroborated LIVE against the memory service at gate
+ * time. A claim file, a manual checkbox or configured hooks are never enough:
+ *   - static schema checks (kind, both stages VERIFIED, two DISTINCT real
+ *     Claude session ids — UUID shaped, uniqueness, no key-shaped material);
+ *   - a live re-check that the tag is STILL searchable through the REAL
+ *     service (schema-complete fabrication can never pass; a fabricator
+ *     without the stack cannot corroborate);
+ * Everything else stays an explicit fail-closed HOLD naming the exact
+ * procedure — nothing is faked.
  */
 export async function probeOrdinarySessionRecall() {
-  return {
-    ok: false,
-    state: "HOLD",
-    detail: "HOLD — needs a live ordinary session: a real conversation must be captured automatically by the native hooks and recalled by a NEW session (the shipped memory loop lists this as a manual step; no automatic proof exists yet)",
-  };
+  const acceptance = await import("./acceptance-ordinary-session.mjs");
+  const path = process.env.SINGULARITY_ORDINARY_SESSION_EVIDENCE || "";
+  if (!path || !existsSync(path)) {
+    return {
+      ok: false,
+      state: "HOLD",
+      detail: "HOLD — needs a live ordinary session: run scripts/acceptance-ordinary-session.mjs run --evidence <file> (two real sessions: unique-tag capture, NEW-session recall through the production proxy), or set SINGULARITY_ORDINARY_SESSION_EVIDENCE to its evidence file; no evidence found",
+    };
+  }
+  const e = acceptance.evidenceFromDisk(path);
+  const verdict = acceptance.evidenceVerdict(e);
+  if (!verdict.ok) return { ok: false, state: verdict.state, detail: `ordinary-session evidence rejected: ${verdict.detail}` };
+  const live = await acceptance.verifyEvidenceLive(e, {});
+  if (!live.ok) return { ok: false, state: live.state, detail: `ordinary-session evidence not corroborated: ${live.detail}` };
+  return { ok: true, state: "VERIFIED", detail: `real ordinary-session capture and NEW-session recall verified with evidence ${path}: ${live.detail}` };
 }
 
 export async function verifyOptionTarget(v, flags, ctx, target) {

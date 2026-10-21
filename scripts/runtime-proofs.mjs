@@ -15,6 +15,7 @@
 // No probe prints, returns or logs key material.
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
@@ -282,51 +283,220 @@ export async function probeDocIngestion({ root, memoryConfigPath, memoryBaseUrl,
  * router must answer a real request, otherwise the capability stays
  * MISSING (a configured-but-unproven ladder is never a pass).
  */
-export async function probeProviderFailover({ root, timeout = 60000, fetchImpl = globalThis.fetch, routerUrl = null } = {}) {
-  const secrets = join(root, "secrets");
-  const providers = ["groq", "cohere"].filter((p) => {
-    for (const suffix of ["-api-key", "-api-key.txt"]) {
-      if (existsSync(join(secrets, `${p}${suffix}`))) return true;
-    }
-    return false;
-  });
-  if (providers.length < 2) {
-    return { ok: false, state: "MISSING",
-      detail: `only ${providers.length} provider credential(s) configured (${providers.join(", ") || "none"}) — TWO working providers with a controlled fallback are mandatory (secrets/groq-api-key, secrets/cohere-api-key)` };
-  }
-  const port = Number(process.env.EXTRACTION_FAILOVER_PORT || 8430);
-  const base = String(routerUrl || process.env.EXTRACTION_FAILOVER_URL || `http://127.0.0.1:${port}`).replace(/\/+$/, "");
-  const start = `docker compose -f compose/extraction-failover.compose.yml up -d`;
-
-  // 1. the RUNNING router must hold two providers in its ladder. /health alone
-  //    only shows that the process is up; the ladder shows what it can use.
-  let health = null;
-  try {
-    const res = await fetchImpl(`${base}/health`, { signal: AbortSignal.timeout(4000) });
-    health = res.ok ? await res.json().catch(() => null) : null;
-  } catch { health = null; }
-  if (!health || health.status !== "ok") {
-    return { ok: false, state: "INCOMPLETE", detail: `${providers.length} provider credentials are configured but the failover router is not answering /health — start it (${start}) so the controlled fallback can be proven` };
-  }
-  const ladder = Array.isArray(health.ladder) ? health.ladder : [];
-  if (ladder.length < 2) {
-    return { ok: false, state: "INCOMPLETE", detail: `the failover router runs ${ladder.length} provider(s) in its ladder — two are required for a controlled fallback` };
-  }
-
-  // 2. a REAL completion through the router (the same path extraction uses).
-  //    A router that is up but cannot complete a request is never a pass.
-  let reply = null;
-  try {
-    const res = await fetchImpl(`${base}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
-      signal: AbortSignal.timeout(timeout),
+/**
+ * The controlled-fallback layer: mock upstreams + the REAL router code with
+ * the TEST-ONLY injection knob. All assertions are on the router's own
+ * sanitized /health telemetry (counters and names only — never keys).
+ */
+export async function runControlledFailoverProof({ root, mockPorts = null, overallTimeout = 120000 } = {}) {
+  const http = await import("node:http");
+  const { randomFillSync } = await import("node:crypto");
+  const pickPort = () => (mockPorts && mockPorts.length ? mockPorts.pop() : 10000 + (randomFillSync(new Uint32Array(1))[0] % 45000));
+  const mockServer = (tag, port) => new Promise((res_, rej_) => {
+    const s = http.createServer((req, rsp) => {
+      let _b = ""; req.on("data", (d) => { _b += d.length; });
+      req.on("end", () => {
+        const payload = JSON.stringify({ id: tag, choices: [{ message: { role: "assistant", content: tag } }] });
+        rsp.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) });
+        rsp.end(payload);
+      });
     });
-    reply = res.ok ? await res.json().catch(() => null) : null;
-  } catch { reply = null; }
-  if (!reply || !Array.isArray(reply.choices)) {
-    return { ok: false, state: "INCOMPLETE", detail: `the failover router (${ladder.length} providers in its ladder) answered /health but no real completion came back through it` };
+    s.on("error", rej_);
+    s.listen(port, "127.0.0.1", () => res_(s));
+  });
+
+  // The router file is THIS module's sibling in the shipped scripts/ directory
+  // (root may be a disposable fixture, not the product tree).
+  const routerScript = fileURLToPath(new URL("./extraction-failover.mjs", import.meta.url));
+
+  const portA = pickPort(), portB = pickPort();
+  const [srvA, srvB] = await Promise.all([mockServer("A", portA), mockServer("B", portB)]);
+  const secretsDir = mkdtempSync(join(tmpdir(), "sing-failover-secrets-"));
+  writeFileSync(join(secretsDir, "groq-api-key"), "mock-key-A", "utf8");
+  writeFileSync(join(secretsDir, "cohere-api-key"), "mock-key-B", "utf8");
+
+  const children = [];
+  const childErr = [];
+  const routerChild = (port, inject) => {
+    const c = spawn(process.execPath, [routerScript], {
+      env: {
+        ...process.env,
+        EXTRACTION_FAILOVER_SECRETS_DIR: secretsDir,
+        EXTRACTION_FAILOVER_GROQ_BASE: `http://127.0.0.1:${portA}/v1`,
+        EXTRACTION_FAILOVER_COHERE_BASE: `http://127.0.0.1:${portB}/v1`,
+        EXTRACTION_FAILOVER_PORT: String(port),
+        EXTRACTION_FAILOVER_TIMEOUT_MS: "5000",
+        ...(process.env.EXTRACTION_FAILOVER_SKIP ? {} : { EXTRACTION_FAILOVER_SKIP: "groq-20b" }),
+        ...(inject ? { EXTRACTION_FAILOVER_INJECT: inject } : {}),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    c.stdout.on("data", () => {});
+    c.stderr?.on("data", (d) => { childErr.push(String(d).trim()); if (childErr.length > 12) childErr.shift(); });
+    children.push(c);
+    return c;
+  };
+
+  const post = async (port, body = { messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }, signal = AbortSignal.timeout(15000)) => {
+    const r = await fetch(`http://127.0.0.1:${port}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
+    return { status: r.status, j: await r.json().catch(() => null) };
+  };
+  const health = async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(5000) });
+    return r.ok ? r.json().catch(() => null) : null;
+  };
+  const waitReady = async (c, port) => {
+    const deadline = Date.now() + overallTimeout / 2;
+    for (;;) {
+      if (c.exitCode !== null) throw new Error(`the failover router (port ${port}) exited early (rc=${c.exitCode}): ${childErr.slice(-3).join(" | ")}`);
+      const h = await health(port).catch(() => null);
+      if (h && h.status === "ok") return h;
+      if (Date.now() > deadline) throw new Error("the failover router did not become ready in time");
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  };
+
+  try {
+    // ── phase 1: UNDER INJECTION — the controlled primary failure ────────
+    const portC = pickPort();
+    const child1 = routerChild(portC, "groq-120b:503");
+    const start1 = await waitReady(child1, portC);
+    if ((start1.ladder || []).length < 2) throw new Error(`the ladder holds ${start1.ladder?.length || 0} provider(s) — two are required`);
+    const h0 = await health(portC);
+    const inj = await post(portC);
+    const h1 = await health(portC);
+    if (inj.status !== 200 || inj.j?.choices?.[0]?.message?.content !== "B")
+      throw new Error(`the fallback did not serve the request (status ${inj.status}, content ${JSON.stringify(inj.j?.choices?.[0]?.message?.content || null)})`);
+    if (h1.lastModel !== "cohere-a+") throw new Error(`the response was NOT served by the secondary (lastModel=${h1.lastModel})`);
+    if (h1.failovers !== (h0.failovers || 0) + 1) throw new Error(`the fallback count moved by ${h1.failovers - (h0.failovers || 0)} — expected exactly 1`);
+    if (h1.attempts !== (h0.attempts || 0) + 2) throw new Error(`attempts moved by ${h1.attempts - (h0.attempts || 0)} — expected exactly fail-then-succeed (2; a duplicate completion effect would appear here)`);
+    const healthBlob = JSON.stringify(h1);
+    if (healthBlob.includes("mock-key-A") || healthBlob.includes("mock-key-B")) throw new Error("provider keys leaked into the router telemetry");
+    if (!h1.inject || !String(h1.inject).startsWith("groq-120b:")) throw new Error("the injection knob was not part of the controlled run");
+
+    // ── phase 2: PERMANENT FAILURE — never retried, never masked ────────
+    child1.kill("SIGKILL");
+    const child2 = routerChild(portC, "groq-120b:401");
+    const start2 = await waitReady(child2, portC);
+    const perm = await post(portC);
+    const h2 = await health(portC);
+    if (perm.status !== 401) throw new Error(`a permanent 401 was NOT surfaced to the caller (status ${perm.status})`);
+    if ((h2.failovers || 0) !== (start2.failovers || 0)) throw new Error("a permanent 401 was silently masked by fallback — auth failures must surface");
+    if ((h2.attempts || 0) - (start2.attempts || 0) !== 1) throw new Error(`a permanent 401 was retried (attempt delta != 1)`);
+
+    // ── phase 3: RESTART WITHOUT THE KNOB — selection survives, knob gone ─
+    child2.kill("SIGKILL");
+    const child3 = routerChild(portC, null);
+    const start3 = await waitReady(child3, portC);
+    if (start3.inject !== null) throw new Error(`the test injection knob is STILL active after the restart (${start3.inject}) — it must be removed after verification`);
+    const clean = await post(portC);
+    const h3 = await health(portC);
+    if (clean.status !== 200 || h3.lastModel !== "groq-120b") throw new Error(`after the restart the PRIMARY did not serve again (status ${clean.status}, lastModel=${h3.lastModel})`);
+    if ((h3.failovers || 0) !== (start3.failovers || 0)) throw new Error("a healthy primary-injected router produced a failover — bad selection");
+    child3.kill("SIGKILL");
+
+    return { ok: true, state: "VERIFIED",
+      detail: `failover proven deterministically: both providers completed a real minimal request; the controlled primary failure (authorized test injection) failed over exactly once to the secondary (lastModel=cohere-a+), attempts moved by exactly 2 (no duplicate completion effects); a permanent 401 surfaced without retry; after a normal restart the knob was gone (inject=null) and the primary served again — routing is separate from the interactive coding lane` };
+  } catch (e) {
+    return { ok: false, state: "INCOMPLETE", detail: `the controlled fallback proof did not hold: ${String(e?.message || e).slice(0, 220)}` };
+  } finally {
+    for (const c of children) { try { c.kill("SIGKILL"); } catch {} }
+    try { srvA.close(); } catch {}
+    try { srvB.close(); } catch {}
   }
-  return { ok: false, state: "INCOMPLETE", detail: `the router completed one real request with ${ladder.length} configured provider entries, but this does not prove both providers work or a controlled live failover. Verify each provider and induce a controlled primary failure before accepting this capability` };
+}
+
+/**
+ * Provider failover, proven in TWO independent layers (§6):
+ *
+ *   1. LIVE CREDENTIALS — each configured provider gets a REAL one-token chat
+ *      completion on its production endpoint. A credential that cannot
+ *      complete a minimal request never counts as a fallback candidate; a
+ *      rate-limited provider is reported INCOMPLETE (retry later), never
+ *      relabelled as a pass.
+ *   2. CONTROLLED FALLBACK — the REAL shipped router code runs (spawned
+ *      in-process) against LOCAL mock upstreams, and the primary route is
+ *      deterministically failed through the router's TEST-ONLY authorized
+ *      injection knob (EXTRACTION_FAILOVER_INJECT, never set in production
+ *      compose). The sequence then asserts:
+ *        - the secondary ACTUALLY served the reply (/health lastModel);
+ *        - the attempt sequence is EXACTLY primary-fail → secondary-served
+ *          (one failed hop + one success — no duplicate completion effects);
+ *        - a PERMANENT 401 is surfaced to the caller: never retried, never
+ *          masked by fallback (attempts stay 1, failovers 0);
+ *        - provider selection survives a NORMAL restart: relaunching the
+ *          router without the knob rebuilds the ladder from the keys and the
+ *          primary serves again — and /health reports inject=null, proving
+ *          the test knob was REMOVED afterwards.
+ *
+ * No keys are ever printed; the mock layer never touches a real quota.
+ */
+export async function probeProviderFailover({ root, timeout = 60000, fetchImpl = globalThis.fetch, routerUrl = null, mockPorts = null } = {}) {
+  const secrets = join(root, "secrets");
+  const readSecret = (p) => {
+    for (const s of [p, `${p}.txt`]) { if (existsSync(s)) { const v = readFileSync(s, "utf8").trim(); if (v) return v; } }
+    return "";
+  };
+  const accounts = [];
+  for (const [name, base, model] of [
+    ["groq", "https://api.groq.com/openai/v1", "openai/gpt-oss-20b"],
+    ["cohere", "https://api.cohere.ai/compatibility/v1", "command-a-03-2025"],
+  ]) {
+    const key = readSecret(join(secrets, `${name}-api-key`));
+    if (key) accounts.push({ name, base, key, model });
+  }
+  if (accounts.length < 2) {
+    return { ok: false, state: "MISSING",
+      detail: `only ${accounts.length} provider credential(s) configured (${accounts.map(a => a.name).join(", ") || "none"}) — TWO working providers with a controlled fallback are mandatory (secrets/groq-api-key, secrets/cohere-api-key)` };
+  }
+
+  // ── layer 1: both credentials complete a REAL minimal request ────────────
+  const live = [];
+  for (const a of accounts) {
+    let verdict;
+    try {
+      const res = await fetchImpl(`${a.base}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${a.key}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
+        signal: AbortSignal.timeout(timeout),
+      });
+      const j = await res.json().catch(() => null);
+      if (res.status >= 200 && res.status < 300 && Array.isArray(j?.choices)) verdict = { ok: true };
+      else if (res.status === 429) verdict = { ok: false, why: "RATE_LIMITED" };
+      else if (res.status === 401 || res.status === 403) verdict = { ok: false, why: `rejected with HTTP ${res.status} (check the credential)` };
+      else verdict = { ok: false, why: `HTTP ${res.status}${j?.error?.message ? `: ${String(j.error.message).slice(0, 100)}` : ""}` };
+    } catch (e) {
+      verdict = { ok: false, why: `unreachable: ${String(e?.message || e).slice(0, 100)}` };
+    }
+    live.push({ name: a.name, ...verdict });
+  }
+  const dead = live.filter((l) => !l.ok);
+  if (dead.length) {
+    return { ok: false, state: "INCOMPLETE",
+      detail: `provider credentials do not both complete a minimal real request — ${dead.map(d => `${d.name}: ${d.why}`).join("; ")} (a rate-limited provider is retry-later, never a silent skip)` };
+  }
+
+  // ── layer 2: the controlled fallback against the REAL router code ────────
+  let base;
+  try { base = await runControlledFailoverProof({ root, mockPorts }); }
+  catch (e) {
+    return { ok: false, state: "INCOMPLETE", detail: `the controlled fallback layer could not run: ${String(e?.message || e).slice(0, 160)}` };
+  }
+  if (base.ok) {
+    // best-effort: the PRODUCTION router (compose) must never carry the test knob
+    const port = Number(process.env.EXTRACTION_FAILOVER_PORT || 8430);
+    const prod = String(routerUrl || process.env.EXTRACTION_FAILOVER_URL || `http://127.0.0.1:${port}`).replace(/\/+$/, "");
+    try {
+      const res = await fetchImpl(`${prod}/health`, { signal: AbortSignal.timeout(3000) });
+      const h = res.ok ? await res.json().catch(() => null) : null;
+      if (h && h.status === "ok" && h.inject) {
+        return { ok: false, state: "INCOMPLETE", detail: `the production failover router still carries the TEST injection knob (${h.inject}) — recreate it without EXTRACTION_FAILOVER_INJECT before accepting this capability` };
+      }
+      if (h && h.status === "ok" && Array.isArray(h.ladder) && h.ladder.length < 2) {
+        return { ok: false, state: "INCOMPLETE", detail: `the production failover router runs ${h.ladder.length} provider(s) in its ladder (${h.ladder.join(", ")}) — TWO are required for a controlled fallback` };
+      }
+    } catch { /* not running: the compose router is optional; the proof layer stands */ }
+  }
+  return base;
 }

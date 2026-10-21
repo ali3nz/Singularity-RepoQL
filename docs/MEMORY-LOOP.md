@@ -103,7 +103,16 @@ changed eligible runbook at task close through this same engine — see
 `tests/validate-memory-loop.sh` exercises the machine-checkable chain against
 a running stack: add → search (capture + retrieval), propose → promote →
 index → searchable (knowledge path). The LLM-dependent half — extraction
-quality and recall in a live session — is a human check:
+quality and recall in a live session — has a scripted acceptance,
+`node scripts/acceptance-ordinary-session.mjs run`, which drives two REAL
+independent headless Claude sessions through the production proxy with a
+unique per-run tag: session A states the fact (automatic capture), the record
+must become searchable through the live service, and a genuinely NEW session
+must recall the number WITHOUT the fact being in its prompt. It fails closed
+(INCOMPLETE) whenever the live environment is absent and prints the supervised
+steps; its evidence file (SINGULARITY_ORDINARY_SESSION_EVIDENCE) is what the
+installation gate and `scripts/doctor.mjs` accept as ordinary-session recall
+proof — never a manual checkbox:
 
 1. Chat about something distinctive (e.g. name a fictional project).
 2. Confirm the session appears in the Panel (`:8125`).

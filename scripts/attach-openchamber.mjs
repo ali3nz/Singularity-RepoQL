@@ -340,13 +340,38 @@ async function main(argv) {
   log(`config directory: ${configDir}`);
   if (dryRun) log("(dry run — nothing written)");
 
+  // ── shared policy runtime (a first-class plugin dependency) ────────────────
+  // The plugin runtime imports the SHARED documentation policy module, which in
+  // turn drives scripts/memory-doc-ingest.py. A foreign target's config does
+  // not reach this repository's scripts/, so the attach carries both files into
+  // <config>/singularity-runtime/scripts/ — byte-identical copies, recorded in
+  // the same manifest, restorable by the same rollback. The deterministic
+  // plugin import (plugins/…/../singularity-runtime/scripts/doc-policy.mjs)
+  // then resolves in native AND containerized runtimes (the config dir is
+  // bind-mounted into the container).
+  const sharedRuntimePlan = [
+    "doc-policy.mjs",
+    "memory-doc-ingest.py",
+  ].map((name) => {
+    const src = join(ROOT, "scripts", name);
+    if (!existsSync(src)) throw new Error(`shared runtime dependency missing from the product: ${src}`);
+    const dst = join(configDir, "plugins", "singularity-runtime", "scripts", name);
+    let status = "create", curSha = null;
+    if (existsSync(dst)) {
+      curSha = sha(dst);
+      status = curSha === sha(src) ? "present" : "replace";
+    }
+    return { rel: `plugins/singularity-runtime/scripts/${name}`, src, dst, status, prevSha: curSha, prevMode: existsSync(dst) ? statSync(dst).mode & 0o777 : null };
+  });
+
   // ONE backup directory per attach: the bundle files and the credential
   // files share the same stamp and the same manifest.
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupDir = join(ROOT, "data", "attach-backups", stamp);
   const plan = planBundleFiles(configDir, BUNDLE, { preserveConflicts: target.kind !== "compose-managed" });
   const applied = applyBundle(plan, configDir, { dryRun, backupDir });
-  const manifestFiles = applied.changed.slice();
+  const sharedApplied = applyBundle(sharedRuntimePlan, configDir, { dryRun, backupDir });
+  const manifestFiles = applied.changed.concat(sharedApplied.changed);
 
   const pluginDir = join(configDir, "product-secrets");
   let credentialState = { ok: false, detail: "" };

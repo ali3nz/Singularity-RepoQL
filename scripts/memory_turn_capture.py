@@ -19,6 +19,7 @@ Exit codes: 0 ok, 2 usage, 3 input too large, 4 rql pre-check failed,
 """
 import argparse
 import json
+import os
 import pathlib
 import random
 import string
@@ -42,9 +43,17 @@ def load_state(path):
 
 
 def save_state(path, state):
+    # ATOMIC replacement (Opt-2): a crash between truncating and writing the
+    # cursor previously left a corrupted/empty state file; a tmp-write in the
+    # same directory plus rename() keeps the replacement all-or-nothing.
     state["lastRunTs"] = int(time.time())
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    tmp = path.with_name(f".{path.name}.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(state, indent=2) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
 
 
 def latest_window(entries):

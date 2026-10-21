@@ -14,6 +14,7 @@
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const START_REMINDER =
   "[runbook start nudge] Before substantial work, first check for active related work: " +
@@ -64,6 +65,27 @@ export const CLOSE_REMINDER =
   "indexed copy.";
 
 const MARKER = "[runbook closeout nudge]";
+
+/**
+ * Absolute paths of the installed policy runtime, when the attach installed it.
+ * Agent commands like `python3 scripts/doc-policy.mjs …` in the reminder text
+ * only resolve inside the product tree; a foreign target's workspace has no
+ * scripts/ directory, so the reminder names the ACTUAL runnable helpers when
+ * they exist. Empty string when nothing was installed (fail-open). The path is
+ * computed deterministically from this plugin's own location — never env-fed,
+ * never user-typed input.
+ */
+function helperHint() {
+  try {
+    if (String(process.env.OPENCHAMBER_RUNBOOK_NUDGE_COMMANDS || "").trim().toLowerCase() === "off") return "";
+    const here = dirname(fileURLToPath(import.meta.url));
+    const runtimeScripts = join(here, "..", "singularity-runtime", "scripts");
+    if (!existsSync(join(runtimeScripts, "doc-policy.mjs"))) return "";
+    return "\n\n[runbook helpers] Run the shared policy and ingestion helper from their installed runtime paths: " +
+      `\`python3 ${join(runtimeScripts, "memory-doc-ingest.py")} …\` and ` +
+      "\`node " + join(runtimeScripts, "doc-policy.mjs") + " …\`.";
+  } catch { return ""; }
+}
 const runbookOn = () => String(process.env.OPENCHAMBER_RUNBOOK_NUDGE || "on").trim().toLowerCase() !== "off";
 const safeSid = (sid) => String(sid).replace(/[^A-Za-z0-9_-]/g, "_");
 const stateDir = () => join(process.env.OPENCHAMBER_CAPABILITY_DIR
@@ -119,7 +141,7 @@ export const RunbookNudge = {
           if (event.system.some((part) => part?.type === "text" && typeof part.text === "string" && part.text.includes(MARKER))) return;
           const st = load(sid);
           const includeStart = !st.startDelivered;
-          event.system.push({ type: "text", text: (includeStart ? START_REMINDER + "\n\n" : "") + CLOSE_REMINDER });
+          event.system.push({ type: "text", text: (includeStart ? START_REMINDER + "\n\n" : "") + CLOSE_REMINDER + helperHint() });
           if (includeStart) {
             st.startDelivered = true; // only after actual request-context insertion
             save(sid, st);
@@ -146,14 +168,45 @@ const UNDOC_END_EVENTS = new Set([
 const UNDOC_BASELINE_EVENTS = new Set(["session.created"]); // per-session baseline start
 const DISCOVERY_MIN_INTERVAL_MS = 60_000;
 
-async function loadSharedPolicy(audit) {
-  try {
-    return await import(new URL("../../../scripts/doc-policy.mjs", import.meta.url));
-  } catch (e) {
-    audit({ tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY-UNAVAILABLE",
-            reason: `shared doc-policy module not importable (${String(e?.message || e).slice(0, 80)}); reminders remain, automatic discovery disabled` });
-    return null;
+/**
+ * Load the SHARED documentation policy from its installed runtime.
+ *
+ * Deterministic candidates only — no environment-configured paths, so no
+ * arbitrary untrusted file can be loaded as code:
+ *   1. ../singularity-runtime/scripts/doc-policy.mjs — the runtime dependency
+ *      copy the attach installer places inside the target config (works for
+ *      foreign/native AND containerized instances: the config dir is
+ *      bind-mounted into the container, and the sibling location keeps
+ *      doc-policy's own PRODUCT_ROOT/memory-doc-ingest.py paths intact);
+ *   2. ../../../scripts/doc-policy.mjs — the in-repository product layout
+ *      (a docs-policy import that happens to run inside the product tree).
+ * The loaded module must actually expose the policy API; anything else is
+ * treated as unavailable and audited (fail-open: reminders remain).
+ */
+export async function loadSharedPolicy(auditFn = audit) {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "..", "singularity-runtime", "scripts", "doc-policy.mjs"),
+    join(here, "..", "..", "..", "scripts", "doc-policy.mjs"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const policy = await import(pathToFileURL(candidate).href);
+      if (typeof policy?.autoIngestChangedDocs !== "function"
+          || typeof policy?.saveSessionBaseline !== "function"
+          || typeof policy?.collectEvidence !== "function") {
+        auditFn({ tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY-UNAVAILABLE",
+                  reason: `doc-policy candidate reached but not the policy API (${candidate}); reminders remain, automatic discovery disabled` });
+        return null;
+      }
+      auditFn({ tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY-MODULE",
+                reason: `shared doc-policy loaded from its installed runtime: ${candidate}` });
+      return policy;
+    } catch { /* try the next candidate */ }
   }
+  auditFn({ tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY-UNAVAILABLE",
+            reason: "shared doc-policy module not found in the installed runtime (expected <config>/plugins/singularity-runtime/scripts/doc-policy.mjs) — re-run the attach installer; reminders remain, automatic discovery disabled" });
+  return null;
 }
 
 async function registerDiscovery(ctx, auditFn = audit) {

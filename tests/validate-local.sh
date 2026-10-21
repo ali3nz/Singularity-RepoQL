@@ -21,7 +21,7 @@ for f in scripts/*.py; do check python3 -m py_compile "$f"; done
 rm -rf scripts/__pycache__ 2>/dev/null || true
 
 step "node syntax"
-for f in scripts/*.mjs ghost/*.mjs adapters/claude-code/*.mjs \
+for f in scripts/*.mjs ghost/*.mjs adapters/claude-code/*.mjs scripts/doctor.mjs \
          openchamber/plugins/product-office/*.js \
          openchamber/plugins/runbook-nudge/*.js; do check node --check "$f"; done
 
@@ -35,6 +35,9 @@ check node --test scripts/provision-secrets.test.mjs
 check node --test scripts/model-lane.test.mjs
 check node --test scripts/runtime-proofs.test.mjs
 check node --test scripts/attach-openchamber.test.mjs
+check node --test scripts/acceptance-ordinary-session.test.mjs
+check node --test scripts/provider-failover-proof.test.mjs
+check node --test scripts/doctor.test.mjs
 check bash tests/manifest-regression.test.sh
 check bash tests/start-selection.test.sh
 check node --test adapters/claude-code/integration.test.mjs

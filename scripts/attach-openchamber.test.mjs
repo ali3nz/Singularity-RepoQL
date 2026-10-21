@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   planBundleFiles, applyBundle, attachMain, rollbackAttach,
   classifyCandidateKey, isSameSecret, readAdminKey,
@@ -200,6 +200,29 @@ test("the attach records a manifest and the rollback restores exactly what the a
   assert.ok(created && created.afterSha, "a created file is recorded with its after-hash");
   assert.ok(replaced && replaced.prevSha && replaced.backupPath, "a replaced file is recorded with its before-hash");
 
+  // The shared policy runtime is a first-class plugin dependency of the attach:
+  // byte-identical copies land in <config>/singularity-runtime/scripts/ so the
+  // plugin's deterministic import resolves in the FOREIGN target runtime.
+  const runtimeFiles = manifest.files.filter((f) => f.rel.startsWith("plugins/singularity-runtime/scripts/"));
+  assert.equal(runtimeFiles.length, 2, "doc-policy.mjs and memory-doc-ingest.py are carried into the target");
+  for (const name of ["doc-policy.mjs", "memory-doc-ingest.py"]) {
+    const dst = join(dir, "plugins", "singularity-runtime", "scripts", name);
+    assert.ok(existsSync(dst), `${name} is installed into the target runtime`);
+    assert.equal(
+      readFileSync(dst, "utf8"),
+      readFileSync(join(ROOT, "scripts", name), "utf8"),
+      `${name} is a byte-identical copy of the repository's shared script`,
+    );
+  }
+
+  // And the plugin's deterministic candidate actually imports BOTH ways from
+  // the target's installed layout (the shared sibling copy wins first).
+  const targetPlugin = await import(pathToFileURL(join(dir, "plugins", "runbook-nudge", "index.js")).href);
+  const trail = [];
+  const attachedPolicy = await targetPlugin.loadSharedPolicy((e) => trail.push(e));
+  assert.equal(typeof attachedPolicy.autoIngestChangedDocs, "function", "shared policy loads from the attached runtime");
+  assert.equal([...trail].some(r => r.decision === "NUDGE-RB-DISCOVERY-MODULE"), true);
+
   // a foreign edit is REFUSED as a whole: the undo is all-or-nothing, so the
   // replaced file must NOT have been restored by the refused attempt either
   const original = readFileSync(created.dst, "utf8");
@@ -219,6 +242,10 @@ test("the attach records a manifest and the rollback restores exactly what the a
   assert.equal(done.ok, true, done.refused.join("; "));
   assert.ok(done.removed.includes(created.rel), "the created file is removed again");
   assert.equal(existsSync(created.dst), false);
+  for (const f of runtimeFiles) {
+    assert.ok(done.removed.includes(f.rel), `the shared runtime copy ${f.rel} is removed again by the rollback`);
+    assert.equal(existsSync(f.dst), false, `${f.rel} is gone after the rollback`);
+  }
   if (replaced) {
     assert.ok(done.restored.includes(replaced.rel), "the replaced file is restored from its backup");
     assert.equal(readFileSync(replaced.dst, "utf8"), "{\"mine\":true}\n", "the pre-attach content is back");

@@ -304,54 +304,72 @@ test("the failover proof needs two provider credentials (MISSING otherwise)", as
   assert.equal(r.state, "MISSING");
 });
 
-test("one completion and two configured providers do not prove controlled live failover", async () => {
+test("a provider credential that cannot complete a minimal real request is INCOMPLETE — never a silent skip", async () => {
   const root = mkdtempSync(join(tmpdir(), "failover-root-"));
   mkdirSync(join(root, "secrets"), { recursive: true });
   writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
   writeFileSync(join(root, "secrets", "cohere-api-key"), "placeholder\n");
-  const ok = await stubRouter({ ladder: ["groq-120b", "cohere-a+"], completion: { choices: [{ message: { content: "pong" } }] } });
-  try {
-    const r = await probeProviderFailover({ root, routerUrl: ok.url });
-    assert.equal(r.ok, false, r.detail);
-    assert.equal(r.state, "INCOMPLETE");
-    assert.match(r.detail, /does not prove both providers work/);
-  } finally { await ok.close(); }
+  const rejecting = async () => ({ status: 401, json: async () => ({ error: { message: "bad key" } }) });
+  const r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1", fetchImpl: rejecting });
+  assert.equal(r.ok, false, r.detail);
+  assert.equal(r.state, "INCOMPLETE");
+  assert.match(r.detail, /rejected with HTTP 401/);
 });
 
-test("a router with one provider in its ladder is INCOMPLETE", async () => {
+test("rate-limited live providers are INCOMPLETE (retry later), never a pass", async () => {
   const root = mkdtempSync(join(tmpdir(), "failover-root-"));
   mkdirSync(join(root, "secrets"), { recursive: true });
   writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
   writeFileSync(join(root, "secrets", "cohere-api-key"), "placeholder\n");
-  const one = await stubRouter({ ladder: ["groq-120b"], completion: { choices: [] } });
+  const limited = async () => ({ status: 429, json: async () => ({ error: { message: "rate limited" } }) });
+  const r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1", fetchImpl: limited });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /RATE_LIMITED|rate\s?limited/i);
+});
+
+test("both live providers verified + controlled fallback proven = VERIFIED (mock upstreams, no quota burn beyond two ping calls)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "failover-root-"));
+  mkdirSync(join(root, "secrets"), { recursive: true });
+  writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
+  writeFileSync(join(root, "secrets", "cohere-api-key"), "placeholder\n");
+  const liveOK = async () => ({ status: 200, json: async () => ({ choices: [{ message: { content: "pong" } }] }) });
+  const r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1", fetchImpl: liveOK });
+  assert.equal(r.ok, true, r.detail);
+  assert.equal(r.state, "VERIFIED");
+  assert.match(r.detail, /lastModel=cohere-a\+/);
+});
+
+test("a production router advertising ONE provider cannot host a controlled fallback — the gate says so explicitly", async () => {
+  const root = mkdtempSync(join(tmpdir(), "failover-root-"));
+  mkdirSync(join(root, "secrets"), { recursive: true });
+  writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
+  writeFileSync(join(root, "secrets", "cohere-api-key"), "placeholder\n");
+  const one = await stubRouter({ ladder: ["groq-120b"], completion: { choices: [] }, inject: null });
   try {
-    const r = await probeProviderFailover({ root, routerUrl: one.url });
+    // layer-1 fetches must look like completions; the /health fetch must answer
+    // like health. The /health call is proxied to the REAL stub router here.
+    const mixed = async (url) => {
+      if (String(url).includes("/health")) {
+        const res = await fetch(url);
+        return { status: 200, ok: true, json: async () => res.clone ? await res.json() : res };
+      }
+      return { status: 200, ok: true, json: async () => ({ choices: [{ message: { content: "pong" } }] }) };
+    };
+    const r = await probeProviderFailover({ root, routerUrl: one.url, fetchImpl: mixed });
     assert.equal(r.ok, false);
     assert.equal(r.state, "INCOMPLETE");
     assert.match(r.detail, /runs 1 provider/);
   } finally { await one.close(); }
 });
 
-test("a router that answers /health but completes nothing is INCOMPLETE", async () => {
+test("provider credentials that cannot be reached are INCOMPLETE with the real reason — never a silent pass", async () => {
   const root = mkdtempSync(join(tmpdir(), "failover-root-"));
   mkdirSync(join(root, "secrets"), { recursive: true });
   writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
   writeFileSync(join(root, "secrets", "cohere-api-key"), "placeholder\n");
-  const bad = await stubRouter({ ladder: ["groq-120b", "cohere-a+"], completion: { error: { message: "all extraction providers failed" } } });
-  try {
-    const r = await probeProviderFailover({ root, routerUrl: bad.url });
-    assert.equal(r.ok, false);
-    assert.equal(r.state, "INCOMPLETE");
-    assert.match(r.detail, /no real completion/);
-  } finally { await bad.close(); }
-});
-
-test("an unreachable failover router is INCOMPLETE (not a configured-only pass)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "failover-root-"));
-  mkdirSync(join(root, "secrets"), { recursive: true });
-  writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
-  writeFileSync(join(root, "secrets", "cohere-api-key"), "placeholder\n");
-  const r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1" });
+  const unreachable = async () => { throw new Error("connect ECONNREFUSED"); };
+  const r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1", fetchImpl: unreachable });
   assert.equal(r.ok, false);
   assert.equal(r.state, "INCOMPLETE");
+  assert.match(r.detail, /unreachable/);
 });

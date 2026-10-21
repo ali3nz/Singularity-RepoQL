@@ -80,6 +80,25 @@ Do not use `chmod 777`; preserve the 0600 modes on files under
 `data/opencode/config/product-secrets/`. On Windows, keep these directories on
 the WSL2 Linux filesystem, not DrvFs.
 
+**Automatic documentation discovery stays disabled (`NUDGE-RB-DISCOVERY-UNAVAILABLE`)**
+
+The runbook-nudge plugin runs the SHARED documentation policy at runtime; the
+attach installer carries it (with the ingestion helper, byte-identical) into
+`<config>/plugins/singularity-runtime/scripts/`. If that import is missing the
+plugin audibly degrades to advisory-only reminders:
+
+```bash
+ls <config>/plugins/singularity-runtime/scripts/     # expect: doc-policy.mjs memory-doc-ingest.py
+```
+
+If the directory is empty or stale, re-run the attach installer — it is part
+of the recorded attach manifest, so the rollback never leaves a half-installed
+runtime behind, and a re-attach re-provisions it:
+
+```bash
+node scripts/attach-openchamber.mjs --config-dir <config-dir> --variant 3|4
+```
+
 **Plugin channel says `not-configured` or `invalid-endpoint`**
 
 - `not-configured`: the config file is missing — run
