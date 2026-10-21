@@ -231,7 +231,14 @@ async function searchTag(tag, cfg, fetchImpl, env = {}) {
   // capture was written under.
   const searchCfg = { ...cfg, serviceId: env.m?.SINGULARITY_CC_SEARCH_SERVICE_ID || "default" };
   const identity = cfg.identity || loadGhostMemoryConfig(env.m).identity;
-  const q = (key) => callMemoryCore(key, { team_id: identity.team_id, user_id: identity.user_id, query: tag, limit: 4 }, searchCfg, fetchImpl);
+  // agent_id is part of the capture partition on this kernel: a tag written by
+  // an auto-provisioned agent identity is only returned when the search body
+  // binds the SAME agent (team+user without agent never matches).
+  const q = (key) => callMemoryCore(key, {
+    team_id: identity.team_id, user_id: identity.user_id,
+    ...(identity.agent_id ? { agent_id: identity.agent_id } : {}),
+    query: tag, limit: 4,
+  }, searchCfg, fetchImpl);
   const conv = await q("/v3/conversation/search").catch(() => null);
   const atom = await q("/v3/atomic/search").catch(() => null);
   // Real response shapes on this kernel: conversation/search -> {data:{messages:[…]}},
