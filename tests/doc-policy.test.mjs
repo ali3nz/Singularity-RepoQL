@@ -16,6 +16,9 @@ import {
   autoIngestChangedDocs,
   collectEvidence,
   recordAutomaticLearningAssessment,
+  listPendingCandidates,
+  writePendingCandidateAtomic,
+  pendingCandidateDir,
   main as cliMain,
 } from "../scripts/doc-policy.mjs";
 
@@ -393,7 +396,38 @@ test("§7 automatic assessment: material work without an agent token is DEFERRED
     assert.equal(rec.status, "DEFERRED");
     const stored = loadAssessment("la3", dir);
     assert.equal(stored.captureStatus, "DEFERRED");
-    assert.match(stored.deferredPending, /data\/selflearn\/pending/);
+    assert.match(stored.deferredPending, /data\/selflearn\/pending\/.+\.json$/);
+    // DEFERRED must be REAL durable work: a candidate file exists, not just a
+    // directory name in the assessment.
+    const pending = listPendingCandidates(dir);
+    assert.equal(pending.length, 1, "exactly one durable pending candidate");
+    assert.equal(pending[0].session, "la3");
+    assert.deepEqual(pending[0].files, ["src/a.py"]);
+    assert.equal(pending[0].status, "pending");
+    assert.equal(existsSync(join(dir, stored.deferredPending)), true, "the assessment points at the real candidate file");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 pending candidates are idempotent and resolve on a later eligible pass", async () => {
+  const dir = scratch();
+  try {
+    const a = writePendingCandidateAtomic("la5", ["src/a.py"], dir, { reason: "r" });
+    const b = writePendingCandidateAtomic("la5", ["src/a.py"], dir, { reason: "r" });
+    assert.equal(a.path, b.path, "the same session/file-set maps to the same candidate");
+    assert.equal(b.record.seenCount, 2);
+    assert.equal(listPendingCandidates(dir).length, 1, "no duplicate work item");
+    assert.equal(pendingCandidateDir(dir).startsWith(dir), true);
+
+    // A later automatic pass that reaches CAPTURED upgrades the automatic
+    // DEFERRED and resolves the pending candidate — no user instruction needed.
+    const first = await recordAutomaticLearningAssessment("la5", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"] });
+    assert.equal(first.status, "DEFERRED");
+    const later = await recordAutomaticLearningAssessment("la5", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [{ file: "docs/r.md", status: "DOC_INGEST_VERIFIED" }], observable: true });
+    assert.equal(later.status, "CAPTURED");
+    assert.equal(listPendingCandidates(dir).length, 0, "the resolved candidate leaves the pending queue");
+    const stored = loadAssessment("la5", dir);
+    assert.equal(stored.captureStatus, "CAPTURED");
+    assert.equal("deferredPending" in stored, false, "the stale pending pointer is cleared");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

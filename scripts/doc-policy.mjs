@@ -205,6 +205,78 @@ export function writeBaselineAtomic(session, root, record) {
   return path;
 }
 
+// ── durable pending learning candidates (§7) ─────────────────────────────────
+// A DEFERRED disposition must correspond to recoverable work, not just a
+// directory name. One candidate file per (session, file-set) lives under
+// data/selflearn/pending/<id>.json; the id is content-stable, so repeated hook
+// passes update lastSeenAt instead of duplicating the work item. A later
+// assessment for the same session that reaches CAPTURED or NO_LESSON resolves
+// its pending candidates, so eligible processing resumes without another
+// instruction from the user.
+export function pendingCandidateDir(root) {
+  return join(root, "data", "selflearn", "pending");
+}
+
+export function pendingCandidateId(session, files) {
+  return sha8(`${session || "unknown"}\n${[...new Set(files || [])].sort().join("\n")}`);
+}
+
+export function pendingCandidatePath(session, files, root) {
+  return join(pendingCandidateDir(root), `${pendingCandidateId(session, files)}.json`);
+}
+
+export function writePendingCandidateAtomic(session, files, root, extra = {}) {
+  const dir = pendingCandidateDir(root);
+  mkdirSync(dir, { recursive: true });
+  const path = pendingCandidatePath(session, files, root);
+  const now = new Date().toISOString();
+  let prev = null;
+  if (existsSync(path)) {
+    try { prev = JSON.parse(readFileSync(path, "utf8")); } catch { prev = null; }
+  }
+  const record = {
+    id: pendingCandidateId(session, files),
+    status: "pending",
+    session: session || null,
+    files: [...new Set(files || [])].sort(),
+    createdAt: prev?.createdAt || now,
+    lastSeenAt: now,
+    seenCount: (prev?.seenCount || 0) + 1,
+    ...extra,
+  };
+  const tmp = `${path}.tmp-${Date.now()}`;
+  writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n");
+  renameSync(tmp, path);
+  return { path, record, created: !prev };
+}
+
+export function listPendingCandidates(root) {
+  try {
+    return readdirSync(pendingCandidateDir(root))
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => {
+        try { return JSON.parse(readFileSync(join(pendingCandidateDir(root), f), "utf8")); }
+        catch { return null; }
+      })
+      .filter((r) => r && r.status === "pending");
+  } catch { return []; }
+}
+
+export function resolvePendingCandidates(session, root, disposition, reason) {
+  const now = new Date().toISOString();
+  let resolved = 0;
+  for (const rec of listPendingCandidates(root)) {
+    if (!session || rec.session !== session) continue;
+    const path = join(pendingCandidateDir(root), `${rec.id}.json`);
+    const next = { ...rec, status: "resolved", disposition, resolvedAt: now, resolutionReason: clip(reason || "", 160) };
+    const tmp = `${path}.tmp-${Date.now()}`;
+    writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
+    renameSync(tmp, path);
+    resolved++;
+  }
+  return resolved;
+}
+
 export function loadAssessment(session, root) {
   const p = assessmentPath(session, root);
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
@@ -414,7 +486,12 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   await new Promise((r) => setTimeout(r, 0));
   const root = env.SINGULARITY_REPO_ROOT || process.cwd();
   const existing = loadAssessment(session, root);
-  if (existing && CLAIM_STATUS.has(existing.captureStatus))
+  // An AGENT-claimed disposition is final. An AUTOMATIC DEFERRED is not: a
+  // later automatic pass may upgrade it to CAPTURED/NO_LESSON and resolve the
+  // durable pending candidates (that is how eligible processing resumes
+  // without another user instruction).
+  const upgradeableDeferred = (rec) => rec && rec.automatic === true && rec.captureStatus === "DEFERRED";
+  if (existing && CLAIM_STATUS.has(existing.captureStatus) && !upgradeableDeferred(existing))
     return { status: existing.captureStatus, assessment: null, detail: "an already-claimed assessment is kept (never overwritten)" };
   // Single write owner with a re-check at write time: a record CLAIMED by a
   // concurrent writer between this pass's load and its write is kept (the
@@ -422,8 +499,9 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   // means no hook pass can clobber another writer's honest disposition (§8).
   const guarded = (rec) => {
     const onDisk = loadAssessment(session, root);
-    if (onDisk && CLAIM_STATUS.has(onDisk.captureStatus)) return { written: false, record: onDisk };
+    if (onDisk && CLAIM_STATUS.has(onDisk.captureStatus) && !upgradeableDeferred(onDisk)) return { written: false, record: onDisk };
     const merged = { ...(onDisk || existing || {}), ...rec };
+    if (merged.captureStatus !== "DEFERRED") delete merged.deferredPending;
     writeAssessmentAtomic(session, root, merged);
     return { written: true, record: merged };
   };
@@ -443,6 +521,7 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   if (verifiedDocs.length) {
     const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map(() => "DOC_INGEST_VERIFIED"), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable candidate (promotion stays gated)", automatic: true, recordedAt: new Date().toISOString() });
     if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
+    resolvePendingCandidates(session, root, "CAPTURED", "verified ingestion superseded the pending candidate");
     return { status: "CAPTURED", assessment: rec.record, detail: `automatic CAPTURED from ${verifiedDocs.length} ledger-verified ingestion record(s)` };
   }
   const materialObserved = observable === false
@@ -452,11 +531,17 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     if (existing) return { status: existing.captureStatus || "NO_LESSON", assessment: existing, detail: "existing assessment kept" };
     const rec = guarded({ files: [], docStatus: "DOC_NOT_REQUIRED", docReason: "automatic pass: no material change observed in this session's window", docs: [], ingestion: [], captureStatus: "NO_LESSON", captureReason: "automatic: nothing material was observed, so no lesson candidate exists", automatic: true, recordedAt: new Date().toISOString() });
     if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
+    resolvePendingCandidates(session, root, "NO_LESSON", "a later pass observed nothing material");
     return { status: "NO_LESSON", assessment: rec.record, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
   }
-  const rec = guarded({ files: (results || []).map((r) => r.file), captureStatus: "DEFERRED", captureReason: "automatic: material work observed but the agent's verified lesson token is unreported — uses the gated propose path (data/selflearn pending), nothing is lost", automatic: true, recordedAt: new Date().toISOString(), deferredPending: "data/selflearn/pending" });
+  const pendingFiles = [...new Set([...(results || []).map((r) => r.file), ...(newDirty || [])])];
+  const candidate = writePendingCandidateAtomic(session, pendingFiles, root, {
+    reason: "automatic: material work observed but the agent's verified lesson token is unreported — gated promotion pending",
+    evidence: { files: pendingFiles, results: results || [], dirty: dirty || null, newDirty: newDirty || null },
+  });
+  const rec = guarded({ files: pendingFiles, captureStatus: "DEFERRED", captureReason: "automatic: material work observed but the agent's verified lesson token is unreported — uses the gated propose path (data/selflearn pending), nothing is lost", automatic: true, recordedAt: new Date().toISOString(), deferredPending: relPosix(root, candidate.path) });
   if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
-  return { status: "DEFERRED", assessment: rec.record, detail: "automatic DEFERRED: material work, gated promotion pending" };
+  return { status: "DEFERRED", assessment: rec.record, detail: `automatic DEFERRED: durable pending candidate ${relPosix(root, candidate.path)}${candidate.created ? " (new)" : " (reused)"}, gated promotion pending` };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
