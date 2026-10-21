@@ -594,7 +594,10 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
     };
     const verified = STAGES.every((s) => evidence.stages.find((x) => x.stage === s)?.state === "VERIFIED");
     if (!keep) try { rmSync(w1, { recursive: true, force: true }); } catch { /* keep operator data intact otherwise */ }
-    return { ok: !!verified, state: verified ? "VERIFIED" : "INCOMPLETE", evidence, detail: verified ? "OpenChamber-native capture and NEW-session recall verified end to end through the target's installed plugin and live memory service" : "the ordinary-session OpenChamber-native acceptance did not fully verify — see per-stage detail" };
+    // The same envelope `done()` uses: addressable, versioned, runtime-bound —
+    // the file the gate reads is always a complete verdict artifact.
+    const evidenceFull = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", startedAt: new Date(started).toISOString(), completedAt: nowIso(), ...evidence };
+    return { ok: !!verified, state: verified ? "VERIFIED" : "INCOMPLETE", evidence: evidenceFull, detail: verified ? "OpenChamber-native capture and NEW-session recall verified end to end through the target's installed plugin and live memory service" : "the ordinary-session OpenChamber-native acceptance did not fully verify — see per-stage detail" };
   } catch (e) {
     if (!keep) try { rmSync(w1, { recursive: true, force: true }); } catch { /* best effort */ }
     return done(`harness failure: ${String(e?.message || e).slice(0, 160)}`);
