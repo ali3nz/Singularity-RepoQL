@@ -178,7 +178,7 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
     stages[2] = record("CAPTURE_VERIFIED", capture, capture ? `ordinary session captured the unique fact (session ${sA.sessionId || "unknown"})` : `session A did not produce the fact line (${(sA.detail || "unrelated response").slice(0, 120)})`);
 
     // PERSISTED must come from the REAL service: search for the exact tag.
-    const searchA = await searchTag(tag, memoryConfig, fetchImpl);
+    const searchA = await searchTag(tag, memoryConfig, fetchImpl, env);
     const persisted = capture && searchA.hits > 0;
     stages[3] = record("PERSISTED", persisted, persisted ? `the record is searchable through the live service after session A (conversation=${searchA.conversation}, atomic=${searchA.atomic})` : `the tag is not searchable after session A (conversation=${searchA.conversation}, atomic=${searchA.atomic}) — capture did not persist`);
 
@@ -224,17 +224,23 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
   }
 }
 
-async function searchTag(tag, cfg, fetchImpl) {
-  const q = (key) => callMemoryCore(key, { team_id: cfg.identity.team_id, user_id: cfg.identity.user_id, query: tag, limit: 4 }, cfg, fetchImpl);
+async function searchTag(tag, cfg, fetchImpl, env = {}) {
+  // The claude-code lane captures under the proxy's URL-path client scope
+  // (/{agent}/{spaceId}/… → service partition `default`), which overrides the
+  // configured service id — so the search MUST use the same partition the
+  // capture was written under.
+  const searchCfg = { ...cfg, serviceId: env.m?.SINGULARITY_CC_SEARCH_SERVICE_ID || "default" };
+  const identity = cfg.identity || loadGhostMemoryConfig(env.m).identity;
+  const q = (key) => callMemoryCore(key, { team_id: identity.team_id, user_id: identity.user_id, query: tag, limit: 4 }, searchCfg, fetchImpl);
   const conv = await q("/v3/conversation/search").catch(() => null);
   const atom = await q("/v3/atomic/search").catch(() => null);
-  const hitsOf = (r, key) => {
-    const arr = r && !r.error ? (Array.isArray(r.data) ? r.data : (r.data?.results || [])) : [];
-    return JSON.stringify(arr).includes(tag);
-  };
+  // Real response shapes on this kernel: conversation/search -> {data:{messages:[…]}},
+  // atomic/search -> {data:{items:[…]}} (legacy {data:[…]} and {data:{results:[…]}}
+  // accepted too). A shape the search does not answer with can never "hit".
+  const hitsOf = (r) => { const d = r && !r.error ? (r.data ?? r) : null; const arr = Array.isArray(d) ? d : (d?.results || d?.messages || d?.items || []); return JSON.stringify(arr).includes(tag); };
   return {
-    conversation: hitsOf(conv, "v3/conversation/search"),
-    atomic: hitsOf(atom, "v3/atomic/search"),
+    conversation: hitsOf(conv),
+    atomic: hitsOf(atom),
     hits: hitsOf(conv) || hitsOf(atom) ? 1 : 0,
   };
 }
@@ -347,7 +353,7 @@ export async function verifyEvidenceLive(e, { env = process.env, fetchImpl = glo
       ? { ok: true, state: "VERIFIED", detail: `tag ${e.tag} is STILL searchable under the recorded scope ${ms.serviceId}/${ms.teamId.slice(0, 16)}… through the live memory service` }
       : { ok: false, state: "INCOMPLETE", detail: `tag ${e.tag} is NOT searchable under the recorded scope ${ms.serviceId}/${ms.teamId.slice(0, 16)}… — evidence is not corroborated (re-run the native acceptance)` };
   }
-  const s = await searchTag(e.tag, cfg, fetchImpl).catch(() => ({ hits: 0 }));
+  const s = await searchTag(e.tag, cfg, fetchImpl, env).catch(() => ({ hits: 0 }));
   return s.hits > 0
     ? { ok: true, state: "VERIFIED", detail: `tag ${e.tag} is still searchable through the live memory service` }
     : { ok: false, state: "INCOMPLETE", detail: `tag ${e.tag} is NOT searchable through the live memory service — evidence is not corroborated (re-run the acceptance)` };
