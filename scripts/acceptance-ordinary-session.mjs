@@ -39,7 +39,7 @@
 // exact supervised procedure for a human. The install gate fails closed on
 // INCOMPLETE.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -375,14 +375,25 @@ async function loadTargetScopeFactory(configDir) {
 
 /** Sessions under the plugin's capture roots only — the plugin's own contract. */
 function workspaceUnderCaptureRoots(roots, env = process.env) {
-  const base = env.SING_ORDINARY_NATIVE_WORKSPACE_BASE || ROOT; // the product checkout is inside the managed capture roots by install
-  for (const root of roots) {
-    if (!root.startsWith("/") || root === "/") continue;
-    const wl = join(root, ".sing-ordinary", String(process.pid));
-    try { mkdirSync(wl, { recursive: true }); return wl; } catch { /* try next root */ }
-  }
-  // Last resort: a temp dir is only usable when it lies under a capture root.
-  return null;
+  // The WORKSPACE the native runtime sees is inside the target (container path).
+  // The harness only needs a host-side dir it can spawn from: the bind-mounted
+  // workspaces root (SING_OPENCODE_WORKSPACE_HOST_ROOT), the product checkout
+  // (SING_ORDINARY_NATIVE_WORKSPACE_BASE/ROOT) or a plain temp dir — the scope
+  // derivation uses the REAL directory from the session record (or the mapped
+  // container path), never this host path.
+  const hostRoot = env.SING_OPENCODE_WORKSPACE_HOST_ROOT || env.SING_ORDINARY_NATIVE_WORKSPACE_BASE || ROOT;
+  const wl = join(hostRoot, ".sing-ordinary", String(process.pid));
+  try { mkdirSync(wl, { recursive: true }); return wl; } catch { return null; }
+}
+
+/** Map a host workspace path onto its target-side path (host-prefix->target-prefix). */
+export function mappedWorkspaceDir(w, env = process.env) {
+  const map = String(env.SING_OPENCODE_WORKSPACE_MAP || "");
+  if (!map) return w;
+  const i = map.indexOf("->");
+  if (i <= 0) return w;
+  const from = map.slice(0, i), to = map.slice(i + 2);
+  return w.startsWith(from) ? to + w.slice(from.length) : w;
 }
 
 /**
@@ -509,8 +520,9 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
     if (!sA.ok || !sA.answer.includes(tag) || !sA.sessionId) return done("the native capture stage did not verify", null, "INCOMPLETE");
 
     // The plugin's own scope contract decides the memory scope the record used.
-    const sessionARecord = readOpenCodeSession(storageRoot, sA.sessionId);
-    const directory = sessionARecord?.directory || sessionARecord?.location?.directory || workspaceARMdResolve(w1);
+    const sessionARecord = await readOpenCodeSessionRecord(storageRoot, sA.sessionId)
+      ||  (storageRoot && { directory: mappedWorkspaceDir(w1, env), projectID: undefined });
+    const directory = sessionARecord?.directory || mappedWorkspaceDir(w1, env);
     const projectID = sessionARecord?.projectID || "";
     if (!scopeFactory.withinMemoryRoots(directory)) return done(`session workspace ${directory} is outside the plugin's capture roots — the record is not attributable to the plugin`);
     let scope;
@@ -581,7 +593,36 @@ function readOpenCodeSession(storageRoot, sessionId) {
   return null;
 }
 
-function workspaceARMdResolve(p) { return p.replace(/[/\\]\.sing-ordinary[/\\][0-9]+$/, ""); }
+/**
+ * The REAL session record for the produced session id, from the target's OWN
+ * OpenCode storage. Primary source: the modern SQLite storage (opencode.db,
+ * typically bind-mounted) — read from a byte COPY so the live database is
+ * never locked or written. Fallback: the legacy per-session JSON layout.
+ * Returns { id, projectID, directory } — exactly what the plugin's own
+ * scopeForSession hashes, so the derived scope matches the real capture.
+ */
+export async function readOpenCodeSessionRecord(storageRoot, sessionId) {
+  if (!storageRoot || !sessionId) return null;
+  const dbPath = join(storageRoot, "opencode.db");
+  if (existsSync(dbPath)) {
+    let tmp = null;
+    try {
+      const { DatabaseSync } = await import("node:sqlite");
+      tmp = join(tmpdir(), `sing-ocdb-${randomUUID().slice(0, 8)}.db`);
+      copyFileSync(dbPath, tmp);
+      for (const ext of ["-wal", "-shm"]) {
+        try { copyFileSync(dbPath + ext, tmp + ext); } catch { /* absent */ }
+      }
+      const db = new DatabaseSync(tmp);
+      try {
+        const row = db.prepare("SELECT id, project_id, directory FROM session_v2 WHERE id = ?").get(sessionId);
+        if (row && row.directory) return { id: row.id, projectID: row.project_id, directory: row.directory };
+      } finally { db.close(); }
+    } catch { /* fall through to the json layout */ }
+    finally { if (tmp) for (const p of [tmp, tmp + "-wal", tmp + "-shm"]) { try { rmSync(p, { force: true }); } catch { /* gone */ } } }
+  }
+  return readOpenCodeSession(storageRoot, sessionId);
+}
 
 export function evidenceFromDisk(p) {
   try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; }
