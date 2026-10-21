@@ -15,6 +15,7 @@
 // restores exactly those files, refuses foreign edits and is idempotent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -204,8 +205,8 @@ test("the attach records a manifest and the rollback restores exactly what the a
   // byte-identical copies land in <config>/singularity-runtime/scripts/ so the
   // plugin's deterministic import resolves in the FOREIGN target runtime.
   const runtimeFiles = manifest.files.filter((f) => f.rel.startsWith("plugins/singularity-runtime/scripts/"));
-  assert.equal(runtimeFiles.length, 2, "doc-policy.mjs and memory-doc-ingest.py are carried into the target");
-  for (const name of ["doc-policy.mjs", "memory-doc-ingest.py"]) {
+  assert.equal(runtimeFiles.length, 3, "doc-policy.mjs, memory-doc-ingest.py and its sibling memory_client.py are carried into the target");
+  for (const name of ["doc-policy.mjs", "memory-doc-ingest.py", "memory_client.py"]) {
     const dst = join(dir, "plugins", "singularity-runtime", "scripts", name);
     assert.ok(existsSync(dst), `${name} is installed into the target runtime`);
     assert.equal(
@@ -214,6 +215,13 @@ test("the attach records a manifest and the rollback restores exactly what the a
       `${name} is a byte-identical copy of the repository's shared script`,
     );
   }
+
+  // The WHOLE non-stdlib closure must import in the attached runtime: run the
+  // actual ingestion helper's CLI from the INSTALLED copy (its Argparse banner
+  // importing memory_client proves the sibling layout), not just the JS module.
+  const helper = join(dir, "plugins", "singularity-runtime", "scripts", "memory-doc-ingest.py");
+  const banner = spawnSync("python3", [helper, "--help"], { encoding: "utf8", timeout: 30_000 });
+  assert.equal(banner.status, 0, `the installed ingestion helper must execute: ${banner.stderr}`);
 
   // And the plugin's deterministic candidate actually imports BOTH ways from
   // the target's installed layout (the shared sibling copy wins first).

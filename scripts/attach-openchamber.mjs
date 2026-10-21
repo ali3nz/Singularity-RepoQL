@@ -342,16 +342,18 @@ async function main(argv) {
 
   // ── shared policy runtime (a first-class plugin dependency) ────────────────
   // The plugin runtime imports the SHARED documentation policy module, which in
-  // turn drives scripts/memory-doc-ingest.py. A foreign target's config does
-  // not reach this repository's scripts/, so the attach carries both files into
-  // <config>/singularity-runtime/scripts/ — byte-identical copies, recorded in
-  // the same manifest, restorable by the same rollback. The deterministic
-  // plugin import (plugins/…/../singularity-runtime/scripts/doc-policy.mjs)
-  // then resolves in native AND containerized runtimes (the config dir is
-  // bind-mounted into the container).
+  // turn drives scripts/memory-doc-ingest.py (whose own sibling import needs
+  // scripts/memory_client.py). A foreign target's config does not reach this
+  // repository's scripts/, so the attach carries the WHOLE non-stdlib closure
+  // into <config>/plugins/singularity-runtime/scripts/ — byte-identical copies,
+  // recorded in the same manifest, restorable by the same rollback. The
+  // deterministic plugin import (plugins/…/../singularity-runtime/scripts/
+  // doc-policy.mjs) then resolves in native AND containerized runtimes (the
+  // config dir is bind-mounted into the container).
   const sharedRuntimePlan = [
     "doc-policy.mjs",
     "memory-doc-ingest.py",
+    "memory_client.py", // sibling import of memory-doc-ingest (its ONLY non-stdlib import) — without it the attached runtime cannot ingest at all
   ].map((name) => {
     const src = join(ROOT, "scripts", name);
     if (!existsSync(src)) throw new Error(`shared runtime dependency missing from the product: ${src}`);

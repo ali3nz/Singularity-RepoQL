@@ -9,6 +9,23 @@ import {
   evidenceVerdict, verifyEvidenceLive, record,
 } from "./acceptance-ordinary-session.mjs";
 
+const ses = (n) => `ses_${"abcdef123456".slice(0, 8)}${n}`;
+
+function completeOpenchamberEvidence(over = {}) {
+  return {
+    kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: 3,
+    tag: "SING-ORD-" + "ef56ab90",
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    distinctSessions: true,
+    sessions: [{ id: ses("a"), role: "capture", eventObserved: true }, { id: ses("b"), role: "recall", eventObserved: true }],
+    stages: STAGES.map((s) => ({ stage: s, state: "VERIFIED", detail: "" })),
+    memoryScope: { serviceId: "openchamber", teamId: "project-abcdef0123456789", agentId: "build", userId: "pilot-operator" },
+    cleanupScope: ["the disposable workspace was removed"],
+    ...over,
+  };
+}
+
 const uuid = () => `84e0f0d4-1c0a-4e2a-9b7e-${Math.random().toString(16).slice(2, 14).padEnd(12, "0").slice(0, 12)}`;
 
 function completeEvidence(over = {}) {
@@ -59,4 +76,49 @@ test("a stale or timestamp-impossible evidence is rejected", () => {
   assert.match(evidenceVerdict(old).detail, /stale|timestamps/);
   const reversed = completeEvidence({ completedAt: new Date(Date.now() - 3600 * 1000).toISOString() });
   assert.match(evidenceVerdict(reversed).detail, /timestamps/);
+});
+
+test("options never share acceptance evidence across runtimes (§4 binding)", () => {
+  // A Claude Code file can NEVER satisfy the OpenChamber gate.
+  const oc = evidenceVerdict(completeOpenchamberEvidence(), { expectRuntime: "openchamber", expectOption: 3 });
+  assert.equal(oc.state, "VERIFIED");
+  const ccGate = evidenceVerdict(completeOpenchamberEvidence(), { expectRuntime: "claude-code" });
+  assert.equal(ccGate.ok, false);
+  assert.match(ccGate.detail, /openchamber.*claude-code|claude-code.*own driver/s);
+  const ocGate = evidenceVerdict(completeEvidence(), { expectRuntime: "openchamber" });
+  assert.equal(ocGate.ok, false);
+  assert.match(ocGate.detail, /claude-code/);
+});
+
+test("option 3 evidence can never satisfy an option 4 gate", () => {
+  const gate = evidenceVerdict(completeOpenchamberEvidence({ option: 3 }), { expectRuntime: "openchamber", expectOption: 4 });
+  assert.equal(gate.ok, false);
+  assert.match(gate.detail, /option 3.*option 4|never share/s);
+  assert.equal(evidenceVerdict(completeOpenchamberEvidence({ option: 4 }), { expectRuntime: "openchamber", expectOption: 4 }).state, "VERIFIED");
+});
+
+test("OpenChamber evidence must record observed native events and its memory scope", () => {
+  const noEvents = completeOpenchamberEvidence({ sessions: [{ id: ses("a"), role: "capture" }, { id: ses("b"), role: "recall" }] });
+  assert.match(evidenceVerdict(noEvents, { expectRuntime: "openchamber", expectOption: null }).detail, /observed native lifecycle events|record the observed/);
+  const noScope = completeOpenchamberEvidence({ memoryScope: null });
+  assert.match(evidenceVerdict(noScope, { expectRuntime: "openchamber" }).detail, /memory scope/);
+  // non-ses_ ids are not OpenChamber-native ids
+  const foreignIds = completeOpenchamberEvidence({ sessions: [{ id: uuid(), role: "capture", eventObserved: true }, { id: uuid(), role: "recall", eventObserved: true }] });
+  assert.match(evidenceVerdict(foreignIds, { expectRuntime: "openchamber" }).detail, /OpenChamber/);
+});
+
+test("legacy version-1 evidence stays valid ONLY for the default claude-code gate", () => {
+  const legacy = completeEvidence();
+  legacy.version = 1;
+  assert.equal(evidenceVerdict(legacy).ok, true);
+  const ocGate = evidenceVerdict(legacy, { expectRuntime: "openchamber" });
+  assert.equal(ocGate.ok, false);
+  assert.match(ocGate.detail, /harness "claude-code"/);
+});
+
+test("the live layer binds the openchamber memory scope to the live target, never the package default", async () => {
+  const e = completeOpenchamberEvidence();
+  const r = await verifyEvidenceLive(e, { env: { SINGULARITY_MEMORY_CONFIG: "/nonexistent.json" } });
+  assert.equal(r.ok, false);
+  assert.equal(r.state, "INCOMPLETE");
 });

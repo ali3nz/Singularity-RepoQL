@@ -19,6 +19,16 @@ verified path (`scripts/memory-doc-ingest.py`, see `docs/DOC-INGESTION.md`).
   records asynchronously on its own budget.
 - The agent-facing loop in this repo is deliberately event-driven, never a
   scheduled service: it runs at session closes and reviews, not per message.
+- AUTOMATIC ASSESSMENT (added 2026-10): every doc-policy
+  `autoIngestChangedDocs` pass — the same lifecycle event both clients already
+  serve — now records an honest disposition in the session's assessment file:
+  CAPTURED (only when THIS pass's ingestion evidence is DOC_INGEST_VERIFIED),
+  NO_LESSON (nothing material observed), or DEFERRED (material work, agent
+  token unreported). It never auto-approves knowledge: evaluation is
+  automatic, promotion is not — the gated `propose` path below stays the only
+  route to capture surfaces. An already-claimed assessment is never
+  overwritten; each session owns its own record (concurrent passes are
+  idempotent, `scripts/doc-policy.mjs recordAutomaticLearningAssessment`).
 - No new hook framework, no second store, no background distiller ships.
 
 ## The loop

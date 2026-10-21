@@ -15,6 +15,7 @@ import {
   observeWorkspace,
   autoIngestChangedDocs,
   collectEvidence,
+  recordAutomaticLearningAssessment,
   main as cliMain,
 } from "../scripts/doc-policy.mjs";
 
@@ -354,6 +355,91 @@ test("CLI end-to-end refuses material DOC_NOT_REQUIRED; check on unknown session
     assert.match(JSON.parse(capture.lines[capture.lines.length - 1]).findings[0], /no assessment for this session/);
   } finally {
     console.log = origLog;
+    process.chdir(origCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── §7 automatic durable-learning assessment + §8 idempotent concurrency ──
+test("§7 automatic assessment: CAPTURED only from verified ingestion evidence, never auto-approved", async () => {
+  const dir = scratch();
+  try {
+    const env = { SINGULARITY_REPO_ROOT: dir };
+    const rec = await recordAutomaticLearningAssessment("la1", dir, { env, results: [{ file: "docs/r.md", status: "DOC_INGEST_VERIFIED" }], observable: true, newDirty: ["docs/r.md"] });
+    assert.equal(rec.status, "CAPTURED");
+    const stored = loadAssessment("la1", dir);
+    assert.equal(stored.captureStatus, "CAPTURED");
+    assert.equal(stored.ingestion[0], "DOC_INGEST_VERIFIED", "CAPTURED is evidence-derived, not a claim");
+    assert.equal(stored.automatic, true, "the record honestly marks its automatic origin");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 automatic assessment: NO_LESSON when nothing material was observed", async () => {
+  const dir = scratch();
+  try {
+    const rec = await recordAutomaticLearningAssessment("la2", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: [] });
+    assert.equal(rec.status, "NO_LESSON");
+    assert.match(rec.detail, /nothing material/);
+    const stored = loadAssessment("la2", dir);
+    assert.equal(stored.captureStatus, "NO_LESSON");
+    assert.equal(stored.docStatus, "DOC_NOT_REQUIRED");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 automatic assessment: material work without an agent token is DEFERRED, never lost", async () => {
+  const dir = scratch();
+  try {
+    const rec = await recordAutomaticLearningAssessment("la3", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"] });
+    assert.equal(rec.status, "DEFERRED");
+    const stored = loadAssessment("la3", dir);
+    assert.equal(stored.captureStatus, "DEFERRED");
+    assert.match(stored.deferredPending, /data\/selflearn\/pending/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7/§8 an agent-claimed assessment is NEVER overwritten, and repeats are idempotent", async () => {
+  const dir = scratch();
+  try {
+    writeAssessmentAtomic("la4", dir, { files: ["a.py"], docStatus: "DOC_UPDATED", docs: ["docs/r.md"], ingestion: ["DOC_INGEST_INDEXED"], captureStatus: "CAPTURED" });
+    const before = loadAssessment("la4", dir);
+    const rec = await recordAutomaticLearningAssessment("la4", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [{ file: "docs/r.md", status: "DOC_INGEST_VERIFIED" }], observable: true });
+    assert.equal(rec.status, "CAPTURED");
+    assert.equal(rec.assessment, null, "no second write happened");
+    const after = loadAssessment("la4", dir);
+    assert.deepEqual(after, before, "the agent-claimed record is byte-identical after the automatic pass");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§8 two simultaneous evaluations on two sessions produce one authoritative record per session", async () => {
+  const dir = scratch();
+  const jobs = [];
+  try {
+    for (let i = 0; i < 2; i++) {
+      for (let k = 0; k < 8; k++) { // repeated triggered passes, as concurrent hooks can fire twice
+        jobs.push(recordAutomaticLearningAssessment(`conc${i}`, dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [{ file: `docs/s${i}.md`, status: "DOC_INGEST_VERIFIED" }], observable: true, newDirty: [`docs/s${i}.md`] }));
+      }
+    }
+    const all = await Promise.all(jobs);
+    for (let i = 0; i < 2; i++) {
+      const recs = all.filter((r) => r.status === "CAPTURED"); // same disposition every time
+      assert.ok(recs.length >= 8, "every concurrent pass resolves to the same verified disposition");
+      const stored = loadAssessment(`conc${i}`, dir);
+      assert.equal(stored.captureStatus, "CAPTURED");
+      assert.ok(stored.files.includes(`docs/s${i}.md`), `session conc${i} owns its own authoritative record`);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 autoIngestChangedDocs carries the automatic learning disposition in its result", async () => {
+  const dir = scratch();
+  const origCwd = process.cwd();
+  try {
+    writeFileSync(join(dir, "README.md"), "# scratch project doc\n");
+    process.chdir(dir);
+    const r = await autoIngestChangedDocs(dir, "la7");
+    assert.ok(r.learning, "the pass reports its learning disposition");
+    assert.equal(r.learning.status, "NO_LESSON", "nothing changed in a fresh checkout → honest NO_LESSON, not silence");
+  } finally {
     process.chdir(origCwd);
     rmSync(dir, { recursive: true, force: true });
   }

@@ -25,6 +25,9 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   probeOrdinarySessionRecall,
+  probeOfficeFunctional,
+  probeGhostMemoryOnHost,
+  dreamOutcomeToday,
   readState as readInstallerState,
 } from "./install-claude-code.mjs";
 import { callMemoryCore, loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
@@ -34,6 +37,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_STATE_FILE = join(ROOT, "data/claude-code-integration.json");
 const OK_STATES = new Set(["VERIFIED", "NOT_CONFIGURED"]);
 const section = (name, state, detail = "", extra = {}) => ({ name, state, detail, ...extra });
+/** Is there a SELECTED installation? A mandatory component (e.g. two-provider
+ *  extraction failover) is INCOMPLETE on an installed host and merely
+ *  NOT_CONFIGURED before any installation (docs/doctor semantics, §6). */
+const installedSection = (selectedOption) => Number.isInteger(Number(selectedOption)) && Number(selectedOption) >= 1 && Number(selectedOption) <= 4;
 
 export async function doctor({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
   const out = [];
@@ -112,7 +119,12 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
     }
   }
 
-  // ── extraction router + provider ladder ───────────────────────────────────
+  // ── extraction router + provider ladder (CONFIGURED is never VERIFIED) ────
+  // Two working providers + verified failover are MANDATORY for every option,
+  // so a missing or single-provider router cannot count as success on an
+  // installed host. VERIFIED requires FUNCTIONAL evidence: one small real
+  // completion served through the router (a listed ladder is configuration,
+  // not proof).
   {
     const port = Number(env.EXTRACTION_FAILOVER_PORT || 8430);
     const base = String(env.EXTRACTION_FAILOVER_URL || `http://127.0.0.1:${port}`).replace(/\/+$/, "");
@@ -121,14 +133,31 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       const r = await fetchImpl(`${base}/health`, { signal: AbortSignal.timeout(4000) });
       h = r.ok ? await r.json().catch(() => null) : null;
     } catch { h = null; }
+    const ladder = Array.isArray(h?.ladder) ? h.ladder : [];
     if (!h || h.status !== "ok") {
-      out.push(section("extraction-router", "NOT_CONFIGURED", `no failover router answers at ${base}/health — start compose/extraction-failover.compose.yml when extraction failover is required`));
+      out.push(section("extraction-router", installedSection(selectedOption) ? "INCOMPLETE" : "NOT_CONFIGURED",
+        installedSection(selectedOption)
+          ? `MANDATORY: no failover router answers at ${base}/health — every option needs TWO working providers with verified failover (start compose/extraction-failover.compose.yml, then the provider proof in scripts/runtime-proofs.mjs)`
+          : `no failover router answers at ${base}/health — start compose/extraction-failover.compose.yml when extraction failover is required`));
     } else if (h.inject) {
       out.push(section("extraction-router", "FAILED", `the router still carries the TEST injection knob (${h.inject}) — recreate it without EXTRACTION_FAILOVER_INJECT`));
-    } else if (Array.isArray(h.ladder) && h.ladder.length >= 2) {
-      out.push(section("extraction-router", "VERIFIED", `router alive; ladder has ${h.ladder.length} provider(s) (${h.ladder.join(", ")}); attempts ${h.attempts || 0}, failovers ${h.failovers || 0}`));
+    } else if (ladder.length >= 2) {
+      // One bounded real completion through the ladder (tiny token budget).
+      let verified = false, vd = "";
+      try {
+        const r = await fetchImpl(`${base}/chat/completions`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        const j = await r.json().catch(() => null);
+        verified = r.ok && !!j?.choices?.[0]?.message?.content;
+        vd = verified ? "a real completion round-tripped through the router" : `the real completion did NOT succeed (HTTP ${r.status})`;
+      } catch (e) { vd = `the real completion could not run: ${String(e?.message || e).slice(0, 80)}`; }
+      out.push(section("extraction-router", verified ? "VERIFIED" : "CONFIGURED",
+        `router alive; ladder ${ladder.length} provider(s) (${ladder.join(", ")}); attempts ${h.attempts || 0}, failovers ${h.failovers || 0} — ${vd}`));
     } else {
-      out.push(section("extraction-router", "DEGRADED", `router alive with ${h.ladder?.length || 0} provider(s) — a controlled fallback needs TWO providers (scripts/runtime-proofs.mjs proves the pair)`));
+      out.push(section("extraction-router", "DEGRADED", `router alive with ${ladder.length} provider(s) — a controlled fallback needs TWO providers (set the provider key files; scripts/runtime-proofs.mjs proves the pair)`));
     }
   }
 
@@ -140,14 +169,32 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
     out.push(section("ordinary-session-recall", "DEGRADED", `recall evidence unreadable: ${String(e?.message || e).slice(0, 120)}`));
   }
 
-  // ── Ghost / Claude Office — only rows the SELECTED option ships ────────────
+  // ── Ghost / Claude Office — only rows the SELECTED option ships. Existence
+  // of a configuration file is CONFIGURATION, never a VERIFIED capability
+  // (§6): Ghost needs its authenticated memory identity + a completed dream
+  // consolidation; Office needs a real native event consumed AND read back.
   if (selectedOption === "2" || selectedOption === "4") {
     const ghostCfg = env.GHOST_MEMORY_CONFIG || join(ROOT, "data/opencode/config/product-secrets/ghost.json");
-    out.push(section("ghost", existsSync(ghostCfg) ? "VERIFIED" : "INCOMPLETE",
-      existsSync(ghostCfg) ? `ghost configuration present (${ghostCfg})` : `option ${selectedOption} selected but the ghost configuration is missing (${ghostCfg})`));
+    if (!existsSync(ghostCfg)) {
+      out.push(section("ghost", "INCOMPLETE", `option ${selectedOption} selected but the ghost configuration is missing (${ghostCfg})`));
+    } else {
+      const mem = await probeGhostMemoryOnHost(ghostCfg);
+      const dream = dreamOutcomeToday(env.GHOST_AGENT_DIR || undefined);
+      const state = mem.ok && dream.complete && dream.provenance ? "VERIFIED"
+        : mem.ok && dream.complete ? "INCOMPLETE" // consolidation provenance missing
+        : mem.ok ? "INCOMPLETE" : "DEGRADED"; // memory identity exists but the dream did not complete today
+      out.push(section("ghost", state,
+        `memory ${mem.ok ? "identity verified (authenticated probe)" : `NOT usable: ${mem.detail}`} | dream ${dream.complete ? (dream.provenance ? `completed with provenance (${dream.journal})` : "completed but WITHOUT provenance — not verifiable") : (dream.detail || "not completed today")}` +
+        (state !== "VERIFIED" ? " — config existence alone is CONFIGURED, never VERIFIED (docs/GHOST-SETUP.md)" : "")));
+    }
     const officeCfg = env.SINGULARITY_OFFICE_CONFIG || join(ROOT, "data/opencode/config/product-secrets/office.json");
-    out.push(section("claude-office", existsSync(officeCfg) ? "VERIFIED" : "INCOMPLETE",
-      existsSync(officeCfg) ? `office configuration present (${officeCfg})` : `option ${selectedOption} selected but the office configuration is missing (${officeCfg})`));
+    if (!existsSync(officeCfg)) {
+      out.push(section("claude-office", "INCOMPLETE", `option ${selectedOption} selected but the office configuration is missing (${officeCfg})`));
+    } else {
+      const office = await probeOfficeFunctional(officeCfg);
+      out.push(section("claude-office", office.ok ? "VERIFIED" : "DEGRADED",
+        office.ok ? office.detail : `native event NOT consumed/verified: ${office.detail}`));
+    }
   }
 
   return out;

@@ -373,7 +373,63 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
   if (!results.some((r) => r.status && !INGEST_RESOLVED_STATES.has(r.status))) {
     await saveSessionBaseline(session, dir, { execImpl, env });
   }
-  return { ...obs, results, ingested: targets.length, observable: obs.observable };
+  // ── automatic durable-learning assessment (§7) ─────────────────────────────
+  // Runs on the SAME lifecycle events this pass already serves for both
+  // clients (no new hook framework, no coordinator, no second store). It never
+  // approves knowledge by itself: CAPTURED is recorded only on the task's own
+  // verified ingestion evidence from THIS pass, NO_LESSON only when nothing
+  // material was observed, and everything else is DEFERRED so the agent's
+  // gated propose path (scripts/memory_turn_capture.py) still owns promotion.
+  let learning = null;
+  try {
+    learning = await recordAutomaticLearningAssessment(session, dir, { execImpl, env, results, observable: obs.observable, dirty: obs.dirty, newDirty: obs.newDirty });
+  } catch (e) {
+    learning = { status: "DEFERRED", assessment: null, detail: `automatic assessment could not run: ${String(e?.message || e).slice(0, 100)}` };
+  }
+  return { ...obs, results, ingested: targets.length, observable: obs.observable, learning };
+}
+
+/**
+ * The ONE automatic learning assessment. Honest disposition rules:
+ *   - CAPTURED: this pass verified the documentation (DOC_INGEST_VERIFIED in
+ *     the ledger) — the verified doc IS the task's durable knowledge; its
+ *     ledger record (searchable) is the automatic candidate, already deduped
+ *     by content hash. RepoQL promotion stays with the documented gated path.
+ *   - NO_LESSON: nothing material was observed this pass (no eligible doc
+ *     change, nothing new dirty) — the existing NO_LESSON contract.
+ *   - DEFERRED: material work exists but the agent's verified lesson token is
+ *     unreported — the candidate is RECORDED here (never lost), promotion
+ *     stays with the human/agent gated path.
+ * Idempotent + single write owner: a session assessment the agent already
+ * claimed (any explicit capture status) is NEVER overwritten; concurrent
+ * passes for the same session repeat the same deterministic write (atomic
+ * rename) so two sessions evaluate their own keys independently (§8).
+ */
+export async function recordAutomaticLearningAssessment(session, dir, { execImpl = null, env = process.env, results = [], observable = true, dirty = null, newDirty = null } = {}) {
+  const root = env.SINGULARITY_REPO_ROOT || process.cwd();
+  const existing = loadAssessment(session, root);
+  if (existing && ["CAPTURED", "NO_LESSON", "DEFERRED"].includes(existing.captureStatus))
+    return { status: existing.captureStatus, assessment: null, detail: "an already-claimed assessment is kept (never overwritten)" };
+  const guarded = (rec) => {
+    const merged = { ...(existing || {}), ...rec };
+    writeAssessmentAtomic(session, root, merged);
+    return merged;
+  };
+  const verifiedDocs = (results || []).filter((r) => r.status === "DOC_INGEST_VERIFIED");
+  if (verifiedDocs.length) {
+    const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map(() => "DOC_INGEST_VERIFIED"), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable candidate (promotion stays gated)", automatic: true, recordedAt: new Date().toISOString() });
+    return { status: "CAPTURED", assessment: rec, detail: `automatic CAPTURED from ${verifiedDocs.length} verified ingestion record(s)` };
+  }
+  const materialObserved = observable === false
+    ? (results || []).length > 0
+    : (newDirty ? newDirty.length > 0 : (results || []).length > 0);
+  if (!materialObserved) {
+    if (existing) return { status: existing.captureStatus || "NO_LESSON", assessment: existing, detail: "existing assessment kept" };
+    const rec = guarded({ files: [], docStatus: "DOC_NOT_REQUIRED", docReason: "automatic pass: no material change observed in this session's window", docs: [], ingestion: [], captureStatus: "NO_LESSON", captureReason: "automatic: nothing material was observed, so no lesson candidate exists", automatic: true, recordedAt: new Date().toISOString() });
+    return { status: "NO_LESSON", assessment: rec, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
+  }
+  const rec = guarded({ files: (results || []).map((r) => r.file), captureStatus: "DEFERRED", captureReason: "automatic: material work observed but the agent's verified lesson token is unreported — uses the gated propose path (data/selflearn pending), nothing is lost", automatic: true, recordedAt: new Date().toISOString(), deferredPending: "data/selflearn/pending" });
+  return { status: "DEFERRED", assessment: rec, detail: "automatic DEFERRED: material work, gated promotion pending" };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────

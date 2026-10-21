@@ -574,7 +574,7 @@ const readEnvValue = (p, key) => {
  * Provenance (a memory commit or changed files) is required alongside the
  * completed outcome so a "complete" line cannot be asserted without evidence.
  */
-function dreamOutcomeToday(agentDir = join(ROOT, "data/ghost")) {
+export function dreamOutcomeToday(agentDir = join(ROOT, "data/ghost")) {
   const dir = join(agentDir, "dreams");
   const today = new Date().toISOString().slice(0, 10);
   let files = [];
@@ -610,6 +610,74 @@ function hostMemoryBaseUrl(cfg) {
 }
 
 /**
+ * Claude Office FUNCTIONAL probe: a real native event payload built with the
+ * SHIPPED plugin mapper is POSTed with the ingest key, then the session list is
+ * read back with the read key. A POST 200 alone is NOT acceptance (§6): the
+ * event must have been consumed (read-back finds the session, project name
+ * stored, and the derived display name correct).
+ */
+export async function probeOfficeFunctional(officeConfigPath = join(ROOT, "data/opencode/config/product-secrets/office.json")) {
+  let officeOk = false, officeDetail = "";
+  try {
+    const cfg = readJson(officeConfigPath);
+    if (!cfg?.endpoint || !cfg?.ingestKey) {
+      officeDetail = `office config missing endpoint/ingestKey (${officeConfigPath}; run provision-secrets.py for an option that includes Office)`;
+    } else {
+      const url = hostOfficeEndpoint(cfg.endpoint);
+      const base = url.replace(/\/api\/v1\/events$/, "");
+      const sessionID = `ses_verify${Date.now().toString(36)}`;
+      const mapped = mapOfficeEvent(
+        { type: "session.created", created: Date.now(), data: { sessionID } },
+        { location: { directory: "/home/openchamber/workspaces/install-verify" }, parentID: null }
+      );
+      if (!mapped.length) {
+        officeDetail = "native event mapper produced no event (capture-root contract)";
+      } else {
+        const payload = mapped[0];
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-Key": cfg.ingestKey },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!res.ok) {
+          officeDetail = `ingest rejected HTTP ${res.status}`;
+        } else {
+          const adminKey = process.env.CLAUDE_OFFICE_API_KEY
+            || readEnvValue(join(ROOT, "secrets", "claude-office.env"), "CLAUDE_OFFICE_API_KEY");
+          if (!adminKey) {
+            officeDetail = "read key unavailable — cannot verify the event was consumed (set CLAUDE_OFFICE_API_KEY)";
+          } else {
+            const list = await fetch(`${base}/api/v1/sessions`, {
+              headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
+            });
+            if (!list.ok) {
+              officeDetail = `session read-back failed HTTP ${list.status}`;
+            } else {
+              const sessions = await list.json().catch(() => null);
+              const hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id);
+              if (!hit) {
+                officeDetail = `ingest returned HTTP 200 but session ${payload.session_id} was not present on read-back`;
+              } else if (hit.projectName !== payload.data.project_name) {
+                officeDetail = `consumed but project_name was not stored (read-back projectName=${JSON.stringify(hit.projectName)})`;
+              } else if (hit.displayName !== payload.data.project_name) {
+                // Claude Office derives the session display name from
+                // data.project_name (its own documented priority).
+                officeDetail = `consumed but the derived display name differs (read-back displayName=${JSON.stringify(hit.displayName)})`;
+              } else {
+                officeOk = true;
+                officeDetail = `native event consumed and read back (HTTP 200; session ${payload.session_id}, project ${payload.data.project_name})`;
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) { officeDetail = `Office not reachable: ${String(e?.message || e).slice(0, 120)}`; }
+  return { ok: officeOk, detail: officeDetail };
+}
+
+/**
  * Run a probe child process and collect its output. The probe is ASYNC on
  * purpose: a synchronous child would block the parent's event loop, so an
  * in-process service (used by the tests) could never answer the probe.
@@ -635,7 +703,7 @@ function runProbe(cmd, args, { env, timeout = 25000 } = {}) {
 const lastLine = (s) => String(s || "").trim().split("\n").filter(Boolean).slice(-1)[0] || "";
 
 /** Host-side probe: the shipped strict ghost-memory client, authenticated. */
-async function probeGhostMemoryOnHost(configPath) {
+export async function probeGhostMemoryOnHost(configPath) {
   const cfg = readJson(configPath);
   const env = { ...process.env, SINGULARITY_MEMORY_CONFIG: configPath };
   const mapped = hostMemoryBaseUrl(cfg);
@@ -717,7 +785,7 @@ export function gateComplete(checked, missing) {
  * (ctx.probes) for unit tests, but an injected stub never turns into a
  * product PASS: the gate still reports what it could not prove.
  */
-async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, identity, probes = {}, execIn = null, rqlPath = null }) {
+async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, identity, probes = {}, execIn = null, rqlPath = null, ordinaryBinding = null }) {
   const missing = [];
   const checked = [];
   const note = (ok, label, detail = "") => {
@@ -766,13 +834,15 @@ async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, identity, 
   note(providers.ok, "two working providers with a controlled failover", providers.detail);
 
   // 6. ORDINARY-SESSION capture and NEW-session recall through the native
-  //    lifecycle hooks. This needs a live Claude Code / OpenChamber conversation
-  //    that the gate cannot start. The shipped loop lists it as a manual step.
-  //    It stays a fail-closed HOLD — a configured hook is never accepted as the
-  //    proof, and the gate never fakes it.
+  //    lifecycle hooks. This needs a live conversation in the installed
+  //    runtime, so the gate consumes EVIDENCE and never fakes it. For an
+  //    OpenChamber target the evidence MUST be from the option's OWN native
+  //    driver (acceptance-ordinary-session.mjs --runtime openchamber): a
+  //    Claude Code file can never satisfy an OpenChamber install, and an
+  //    option-3 file can never satisfy an option-4 gate.
   const ordinary = probes.ordinarySession
     ? await probes.ordinarySession({ root: ROOT, memoryConfigPath, memoryBaseUrl })
-    : await probeOrdinarySessionRecall();
+    : await probeOrdinarySessionRecall(ordinaryBinding || {});
   note(ordinary.ok, "ordinary-session automatic capture and NEW-session recall via the native hooks", ordinary.detail);
 
   return { checked, missing, identityOk: scoped };
@@ -793,18 +863,21 @@ async function verifyRuntimeProofs({ memoryConfigPath, memoryBaseUrl, identity, 
  * Everything else stays an explicit fail-closed HOLD naming the exact
  * procedure — nothing is faked.
  */
-export async function probeOrdinarySessionRecall() {
+export async function probeOrdinarySessionRecall(binding = {}) {
   const acceptance = await import("./acceptance-ordinary-session.mjs");
   const path = process.env.SINGULARITY_ORDINARY_SESSION_EVIDENCE || "";
+  const runHint = binding.expectRuntime === "openchamber"
+    ? `run scripts/acceptance-ordinary-session.mjs run --runtime openchamber${binding.expectOption ? ` --option ${binding.expectOption}` : ""} --evidence <file> (two real OpenChamber/OpenCode sessions: unique-tag capture through the installed plugin, NEW-session recall; no Claude Code dependency)`
+    : "run scripts/acceptance-ordinary-session.mjs run --evidence <file> (two real sessions: unique-tag capture, NEW-session recall through the production proxy)";
   if (!path || !existsSync(path)) {
     return {
       ok: false,
       state: "HOLD",
-      detail: "HOLD — needs a live ordinary session: run scripts/acceptance-ordinary-session.mjs run --evidence <file> (two real sessions: unique-tag capture, NEW-session recall through the production proxy), or set SINGULARITY_ORDINARY_SESSION_EVIDENCE to its evidence file; no evidence found",
+      detail: `HOLD — needs a live ordinary session: ${runHint}, or set SINGULARITY_ORDINARY_SESSION_EVIDENCE to its evidence file; no evidence found`,
     };
   }
   const e = acceptance.evidenceFromDisk(path);
-  const verdict = acceptance.evidenceVerdict(e);
+  const verdict = acceptance.evidenceVerdict(e, binding);
   if (!verdict.ok) return { ok: false, state: verdict.state, detail: `ordinary-session evidence rejected: ${verdict.detail}` };
   const live = await acceptance.verifyEvidenceLive(e, {});
   if (!live.ok) return { ok: false, state: live.state, detail: `ordinary-session evidence not corroborated: ${live.detail}` };
@@ -963,70 +1036,8 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
 
   // 8. options 2/4: Claude Office functional (native payload consumed, read back)
   if (v.office) {
-    let officeOk = false, officeDetail = "";
-    try {
-      // The TARGET's own office configuration (the package root is only the
-      // source for the Claude Code lane, where the package IS the target).
-      const cfg = readJson(officeConfigPath || join(ROOT, "data/opencode/config/product-secrets/office.json"));
-      if (!cfg?.endpoint || !cfg?.ingestKey) {
-        officeDetail = "office.json missing endpoint/ingestKey (run provision-secrets.py for an option that includes Office)";
-      } else {
-        const url = hostOfficeEndpoint(cfg.endpoint);
-        const base = url.replace(/\/api\/v1\/events$/, "");
-        // Build the payload with the SHIPPED plugin mapper (native contract),
-        // then read the session list back with the read key to prove the event
-        // was actually consumed — a POST 200 alone is not acceptance.
-        const sessionID = `ses_verify${Date.now().toString(36)}`;
-        const mapped = mapOfficeEvent(
-          { type: "session.created", created: Date.now(), data: { sessionID } },
-          { location: { directory: "/home/openchamber/workspaces/install-verify" }, parentID: null }
-        );
-        if (!mapped.length) {
-          officeDetail = "native event mapper produced no event (capture-root contract)";
-        } else {
-          const payload = mapped[0];
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-API-Key": cfg.ingestKey },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(6000),
-          });
-          if (!res.ok) {
-            officeDetail = `ingest rejected HTTP ${res.status}`;
-          } else {
-            const adminKey = process.env.CLAUDE_OFFICE_API_KEY
-              || readEnvValue(join(ROOT, "secrets", "claude-office.env"), "CLAUDE_OFFICE_API_KEY");
-            if (!adminKey) {
-              officeDetail = "read key unavailable — cannot verify the event was consumed (set CLAUDE_OFFICE_API_KEY)";
-            } else {
-              const list = await fetch(`${base}/api/v1/sessions`, {
-                headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
-              });
-              if (!list.ok) {
-                officeDetail = `session read-back failed HTTP ${list.status}`;
-              } else {
-                const sessions = await list.json().catch(() => null);
-                const hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id);
-                if (!hit) {
-                  officeDetail = `ingest returned HTTP 200 but session ${payload.session_id} was not present on read-back`;
-                } else if (hit.projectName !== payload.data.project_name) {
-                  officeDetail = `consumed but project_name was not stored (read-back projectName=${JSON.stringify(hit.projectName)})`;
-                } else if (hit.displayName !== payload.data.project_name) {
-                  // Claude Office derives the session display name from
-                  // data.project_name (its own documented priority), so the
-                  // read-back must carry that value.
-                  officeDetail = `consumed but the derived display name differs (read-back displayName=${JSON.stringify(hit.displayName)})`;
-                } else {
-                  officeOk = true;
-                  officeDetail = `native event consumed and read back (HTTP 200; session ${payload.session_id}, project ${payload.data.project_name})`;
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (e) { officeDetail = `Office not reachable: ${String(e?.message || e).slice(0, 120)}`; }
-    note(officeOk, "Claude Office reachable and authenticated (native event consumed)", officeDetail);
+    const office = await probeOfficeFunctional(officeConfigPath);
+    note(office.ok, "Claude Office reachable and authenticated (native event consumed)", office.detail);
   }
 
   // ── FUNCTIONALLY VERIFIED: the real runtime proofs ────────────────────────
@@ -1040,6 +1051,11 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     probes,
     execIn,
     rqlPath: detectRql(process.env.HOME, process.env),
+    // An OpenChamber target verifies the option's OWN native driver: runtime
+    // "openchamber", bound to the exact installation option (3 or 4).
+    ordinaryBinding: v.openchamber
+      ? { expectRuntime: "openchamber", expectOption: Number(flags.variant) || null }
+      : null,
   });
   for (const c of proofs.checked) checked.push(c);
   missing.push(...proofs.missing);

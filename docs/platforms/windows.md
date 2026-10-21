@@ -105,7 +105,21 @@ OpenChamber and Claude Office bind to loopback. `tests/validate-repoql.sh`
 checks the mounted rql binary, workspace-scoped host status, and MCP initialize
 handshake; a real UI tool call still needs a human session check.
 
-## Validation checklist
+## Acceptance report (current)
+
+Recorded per the single evidence contract (kind/value states only, no unchecked
+boxes standing in for unrun tests):
+
+| capability | state | evidence |
+| --- | --- | --- |
+| Full local validation + CI | PASSED | `tests/validate-local.sh` exit 0 (`VALIDATION OK`, node-nightly CI green on the release head) |
+| Ordinary-session acceptance (IN-process, no Claude/OpenCode runtime) | INCOMPLETE | harness fails closed with the supervised procedure (`scripts/acceptance-ordinary-session.mjs run`); no authenticated runtime in the CI-host container |
+| OpenChamber-native acceptance (options 3/4) | INCOMPLETE | `--runtime openchamber` driver shipped (`scripts/acceptance-ordinary-session.mjs run --runtime openchamber --option 3`); reports fail-closed INCOMPLETE where no target OpenChamber config is found, expecting the right `SINGULARITY_OPENCHAMBER_CONFIG_DIR`; the .241-supervised run is still pending |
+| Physician (§ semantics) | NOT_TESTED (runtime) | `scripts/doctor.mjs` unit-tested (5 tests green) but never run as a full diagnostic against the actual `.241` installation |
+| Windows `.241` platform acceptance (bring-up to reboot recovery) | NOT_TESTED | no reachable `.241` from the release round environment — the checklist below is the operator procedure, NOT a completion record |
+| Loopback MemoryCore startup verification | NOT_TESTED (runtime) | shim + boundary tests green locally; the real startup on `.241` is a supervised step |
+
+## Validation checklist (operator procedure — nothing here is “done” until run)
 
 - [ ] Memory stack and `verify.sh`; memory capture/recall loop.
 - [ ] Claude Code proxy responds and ordinary sessions capture and recall
