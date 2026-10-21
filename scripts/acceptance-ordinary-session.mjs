@@ -568,7 +568,12 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
     const sB = runOpenchamberSession({ workspace: w1, prompt: recallPrompt, env, timeoutMs, knownSessionIds: known, storageRoot, sinceMs: Date.now() });
     if (sB.sessionId) known.add(sB.sessionId);
     const distinct = sA.sessionId && sB.sessionId && sA.sessionId !== sB.sessionId;
-    const recalled = distinct && sB.answer.includes(FACT_NUMBER) && !sB.answer.includes("?");
+    // "?" only fails the check as the ANSWER's verdict (the contract's not-found
+    // reply); a model that recalled the number and merely MENTIONED the '?'
+    // convention genuinely used the memory loop.
+    const refused = /^\s*\?\s*$/.test(sB.answer)
+      || /\b(can(?:not|'t|not)|could not|no (?:stored|matching|relevant) )\b/i.test(sB.answer) && !sB.answer.includes(FACT_NUMBER);
+    const recalled = distinct && sB.answer.includes(FACT_NUMBER) && !refused;
     stages[4] = record("NEW_SESSION_RECALL_VERIFIED", !!recalled,
       recalled ? `new session ${sB.sessionId.slice(0, 24)} recalled the fact (${FACT_NUMBER}) through the project-scope memory loop, never from session ${sA.sessionId.slice(0, 24)}`
         : `new session did NOT recall the fact (distinct=${distinct}, answer-with-number=${sB.answer.includes(FACT_NUMBER)}) — ${(sB.detail || sB.answer && "unrelated answer" || "memory loop did not supply the value").slice(0, 120)}`);
