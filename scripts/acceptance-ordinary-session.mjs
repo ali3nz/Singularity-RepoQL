@@ -472,11 +472,11 @@ function findNewSessionId(storageRoot, knownSessionIds, sinceMs) {
  * the target's installed plugin reacting to the real session lifecycle events,
  * and the recall is served by the plugin's live context hook from the store.
  */
-export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = globalThis.fetch, keep = false, timeoutMs = 300_000 } = {}) {
+export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = globalThis.fetch, keep = false, timeoutMs = 300_000, option = null } = {}) {
   const started = Date.now();
   const stages = STAGES.map((s) => record(s, false, "not reached"));
   const done = (detail, evidence = null, state = "INCOMPLETE") => {
-    const ev = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: null, startedAt: new Date(started).toISOString(), completedAt: nowIso(), stages, sessions: [], distinctSessions: false, cleanupScope: [], memoryScope: null, note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "", ...(evidence || {}) };
+    const ev = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: option ?? null, startedAt: new Date(started).toISOString(), completedAt: nowIso(), stages, sessions: [], distinctSessions: false, cleanupScope: [], memoryScope: null, note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "", ...(evidence || {}) };
     const all = STAGES.every((s) => ev.stages.find((x) => x.stage === s)?.state === "VERIFIED");
     return { ok: !!(evidence && all), state: evidence ? (all ? "VERIFIED" : "INCOMPLETE") : state, evidence: evidence ? ev : null, detail };
   };
@@ -579,7 +579,7 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
         : `new session did NOT recall the fact (distinct=${distinct}, answer-with-number=${sB.answer.includes(FACT_NUMBER)}) — ${(sB.detail || sB.answer && "unrelated answer" || "memory loop did not supply the value").slice(0, 120)}`);
 
     const evidence = {
-      tag, factLabel: tag, factNumber: FACT_NUMBER, option: null, // set by callers when the harness runs under an explicit install option
+      tag, factLabel: tag, factNumber: FACT_NUMBER, option: option ?? null, // set by callers when the harness runs under an explicit install option
       stages: [...stages],
       sessions: [
         { id: sA.sessionId, role: "capture", workspace: w1, eventObserved: true },
@@ -683,8 +683,9 @@ async function main(argv) {
     console.error(`unknown runtime "${runtime}" — claude-code (options 1/2) or openchamber (options 3/4)`);
     return 2;
   }
+  const optionValue = get("--option");
   const res = runtime === "openchamber"
-    ? await runOpenchamberAcceptance({ env: process.env, keep })
+    ? await runOpenchamberAcceptance({ env: process.env, keep, option: optionValue && ["3", "4"].includes(optionValue) ? optionValue : null })
     : await runOrdinaryAcceptance({ env: process.env, keep });
   if (res.evidence && outFile) {
     mkdirSync(dirname(resolve(outFile)), { recursive: true });
