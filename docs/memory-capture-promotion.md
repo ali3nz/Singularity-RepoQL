@@ -17,19 +17,87 @@ verified path (`scripts/memory-doc-ingest.py`, see `docs/DOC-INGESTION.md`).
 - The memory plugin is the ONLY automatic capture writer: it posts completed
   turns to the memory stack, and the stack extracts and dedups distilled
   records asynchronously on its own budget.
-- The agent-facing loop in this repo is deliberately event-driven, never a
-  scheduled service: it runs at session closes and reviews, not per message.
-- AUTOMATIC ASSESSMENT (added 2026-10): every doc-policy
-  `autoIngestChangedDocs` pass — the same lifecycle event both clients already
-  serve — now records an honest disposition in the session's assessment file:
-  CAPTURED (only when THIS pass's ingestion evidence is DOC_INGEST_VERIFIED),
-  NO_LESSON (nothing material observed), or DEFERRED (material work, agent
-  token unreported). It never auto-approves knowledge: evaluation is
-  automatic, promotion is not — the gated `propose` path below stays the only
-  route to capture surfaces. An already-claimed assessment is never
-  overwritten; each session owns its own record (concurrent passes are
-  idempotent, `scripts/doc-policy.mjs recordAutomaticLearningAssessment`).
-- No new hook framework, no second store, no background distiller ships.
+- The lesson pipeline is event-driven, never a per-message service: it runs on
+  the lifecycle completion event both clients already serve and can be resumed
+  by the scheduler CLI. Nothing new was added to the hook framework, no second
+  store and no background distiller ship.
+- AUTOMATIC ASSESSMENT: every doc-policy `autoIngestChangedDocs` pass records
+  an honest disposition in the session's assessment file: CAPTURED (only when
+  THIS pass's ingestion evidence is DOC_INGEST_VERIFIED, or when the session's
+  candidate was PROMOTED through the gated path), NO_LESSON (nothing material
+  observed), or DEFERRED (material work, agent token unreported). An
+  already-claimed assessment is never overwritten; each session owns its own
+  record (concurrent passes are idempotent).
+- DISCOVERY IS INDEPENDENT of that disposition: a CAPTURED session still gets
+  its lesson opportunity evaluated. Only files that can change behaviour count
+  as material — docs are documentation knowledge, and the runtime's own state
+  (`data/selflearn`, `data/doc-policy`, `data/doc-index`, `.repoql`) is never
+  task material.
+
+## The automatic lesson pipeline
+
+1. **Completion event.** The native lifecycle (Claude Code hooks or the
+   OpenChamber plugin) runs the doc-policy pass; `recordAutomaticLearningAssessment`
+   classifies the window and, when material files changed, writes a durable
+   candidate (`scripts/selflearn-candidates.mjs`, `data/selflearn/pending/<id>.json`)
+   BEFORE any model call. The record carries the contract: id, session, project
+   and agent scope, timestamps, files, bounded evidence (diffstat, clipped diff,
+   doc/test references), retry accounting and claim/lease fields.
+2. **Bounded formulation.** One model call through the installation's existing
+   processing lane (`SINGULARITY_SELFLEARN_LLM_*`, `product-secrets/selflearn.json`,
+   MemoryCore's `MEMORY_LLM_*`, or the canonical lane key) turns the evidence
+   into a strict `selflearn.lesson.v1` object (title, lesson, category,
+   generalizability, confidence, `needsVerification`, `evidenceRefs`). The model
+   formulates; it never establishes truth. A `noLesson` answer is recorded as
+   NO_LESSON.
+3. **Dedup and authority check.** `rql explore` plus workspace capsules are
+   compared textually; an equivalent existing concept resolves the candidate as
+   DUPLICATE (candidate bookkeeping only — no second authoritative record). A
+   failed RepoQL check keeps the candidate but never makes it promotion-eligible.
+4. **Verification.** Requirements are derived from the lesson, not from model
+   confidence: `evidence-refs-resolve` (every ref must be a file the discovery
+   recorded), `repoql-dedup-ran`, and `manual-verification` when the lesson
+   asserts behaviour the evidence does not demonstrate. Any pending requirement
+   leaves the candidate NEEDS_VERIFICATION.
+5. **Gated promotion.** A fully verified candidate becomes AWAITING_APPROVAL
+   with the exact existing surface printed in `promotion.command`
+   (`rql concept add …`). Promotion is never automatic: the operator runs that
+   command, then `selflearn-candidates.mjs mark-promoted --id <id> --concept-id
+   <CapsuleName>`. The next lifecycle pass records the session as CAPTURED with
+   the concept reference and keeps the candidate as provenance.
+
+### Candidate lifecycle states
+
+`DISCOVERED` → `EVALUATING` → (`CANDIDATE_READY`) → `DUPLICATE` | `NO_LESSON` |
+`NEEDS_VERIFICATION` → `AWAITING_APPROVAL` → `PROMOTED`, plus `DEFERRED`
+(retryable) and `FAILED` (retries exhausted). The states live in the ONE
+candidate framework; the session assessment maps onto existing RepoQL concepts —
+no second state system.
+
+### Recovery, retries and concurrency
+
+- A transient failure (provider unreachable, invalid model JSON) leaves the
+  candidate DEFERRED with `retries`, `lastError` and a bounded `nextAttemptAt`
+  (60 s base, doubling, 1 h cap). After 5 retries it is FAILED and visible in
+  `doctor`, never silently dropped.
+- Workers claim a candidate with a lease (`scripts/selflearn-candidates.mjs
+  run --limit N`); a stale claim (10 min) is recoverable, a live one makes a
+  second worker skip. Two concurrent sessions therefore evaluate their own
+  records exactly once, and no record is corrupted by parallel writes.
+- Resume after restart: `node scripts/selflearn-candidates.mjs run --root <project>`
+  (installed as `systemd/selflearn-candidates.timer` where systemd exists). It
+  resolves the same processing provider as the hooks, so a queued candidate is
+  not stranded when the interactive session is gone.
+- Queue size is capped (200 candidates); the oldest work is surfaced by
+  `doctor`, and the caps table below still governs interactive captures.
+
+### Observability
+
+`node scripts/doctor.mjs` reports the selflearn store of the CURRENT project
+(`SINGULARITY_REPO_ROOT` or cwd): pending, awaiting verification, awaiting
+approval, duplicates, no-lesson, failed, promoted, oldest pending age and the
+last promotion with its concept id. VERIFIED requires a real PROMOTED candidate;
+a populated queue is INCOMPLETE, and an empty store is NOT_CONFIGURED.
 
 ## The loop
 
@@ -66,7 +134,9 @@ verified path (`scripts/memory-doc-ingest.py`, see `docs/DOC-INGESTION.md`).
 
 ## Storage layout (git-ignored runtime state under `data/`)
 
-- `data/selflearn/pending/` — unconfirmed lesson scaffolds
+- `data/selflearn/pending/` — the durable candidate store (discovery records,
+  formulated lessons, verification state, promotions — same directory, one
+  framework)
 - `data/selflearn/confirmed/` — captured lessons (ledger copy)
 - `data/selflearn/state.json` — capture ledger (memory_turn_capture)
 - `data/selflearn/promotion-cursor.json` — {afterTs, doneIds, deferred, promotions}

@@ -102,7 +102,14 @@ with the `product-office` alias through its compose file.
 ## The memory loop
 
 Capture → extraction → recall, with an explicit promotion path for curated
-knowledge. Full walkthrough: [`MEMORY-LOOP.md`](MEMORY-LOOP.md).
+knowledge. The same lifecycle completion event also feeds ONE shared lesson
+pipeline for both harnesses (`scripts/selflearn-candidates.mjs` + `doc-policy.mjs`):
+durable candidate → one bounded model formulation → RepoQL dedup → requirement-
+based verification → `AWAITING_APPROVAL` with the existing `rql concept add`
+command. Promotion is always gated; candidates survive restarts with bounded
+retry (`selflearn-candidates.timer`), and `doctor` distinguishes pending work
+from promoted knowledge. Full walkthrough: [`MEMORY-LOOP.md`](MEMORY-LOOP.md),
+lesson contract: [`memory-capture-promotion.md`](memory-capture-promotion.md).
 
 ## Repository layout
 
@@ -116,5 +123,5 @@ scripts/       start.sh, start-memory-stack.sh (+ the creation-time loopback doc
 adapters/      claude-code/ (Office adapter + Claude Code native-agent integration + doc hooks)
 templates/     product.env.example
 docs/          ARCHITECTURE, MEMORY-SETUP, MEMORY-LOOP, OPENCHAMBER-SETUP, CLAUDE-CODE-SETUP, DOC-INGESTION, REPOQL-SETUP, OFFICE-SETUP, GHOST-SETUP, TROUBLESHOOTING
-tests/         validate-local.sh, validate-manifest.sh, manifest-regression.test.sh, validate-memory-loop.sh, validate-repoql.sh
+tests/         validate-local.sh, validate-manifest.sh, manifest-regression.test.sh, validate-memory-loop.sh, validate-repoql.sh, *.test.mjs (doc-policy, selflearn-candidates, doctor-selflearn, acceptance-ordinary-session)
 ```

@@ -50,6 +50,13 @@ Only `DOC_INGEST_INDEXED` (or a verified `DOC_INGEST_UNCHANGED`) closes the
 documentation requirement. A `PENDING`/`FAILED` state means the task is
 incomplete even if the implementation itself succeeded.
 
+Ingestion is also what makes a session's disposition CAPTURED: the automatic
+learning assessment derives CAPTURED only from THIS pass's ledger-verified
+ingestion, never from the pass's own status string. A docs-only change is
+documentation knowledge, not a code lesson, so it never creates a dummy
+lesson candidate — lesson discovery runs independently on material (behaviour-
+changing) files. See [`memory-capture-promotion.md`](memory-capture-promotion.md).
+
 ## Commands
 
 ```bash

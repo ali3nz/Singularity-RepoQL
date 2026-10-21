@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   EVKIND, EVVERSION, STAGES,
-  evidenceVerdict, verifyEvidenceLive, record,
+  evidenceVerdict, verifyEvidenceLive, record, completionVerdict,
   normalizeOptionId, findNewSessionId,
 } from "./acceptance-ordinary-session.mjs";
 import { mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
@@ -48,6 +48,24 @@ function completeEvidence(over = {}) {
     ...over,
   };
 }
+
+test("a standalone run cannot claim VERIFIED on evidence its own gate rejects (§11 parity)", () => {
+  const ev = completeOpenchamberEvidence();
+  assert.equal(completionVerdict(ev, { runtime: "openchamber", option: "3" }).ok, true);
+  // All five stages verified, but the recall session's native event was never
+  // observed: the verifier refuses, so the run must refuse too.
+  const noEvent = { ...ev, sessions: [{ ...ev.sessions[0], eventObserved: false }, ev.sessions[1]] };
+  assert.equal(completionVerdict(noEvent, { runtime: "openchamber", option: "3" }).ok, false);
+  assert.match(completionVerdict(noEvent, { runtime: "openchamber", option: "3" }).detail, /lifecycle event/i);
+  // Missing scope binding is equally fatal.
+  const noScope = { ...ev, memoryScope: null };
+  assert.equal(completionVerdict(noScope, { runtime: "openchamber", option: "3" }).ok, false);
+  // Option cross-use is refused, and an incomplete stage set can never pass.
+  assert.equal(completionVerdict(ev, { runtime: "openchamber", option: "4" }).ok, false);
+  assert.equal(completionVerdict({ ...ev, stages: ev.stages.slice(0, 4) }, { runtime: "openchamber", option: "3" }).ok, false);
+  // Claude Code evidence can never satisfy an OpenChamber completion rule.
+  assert.equal(completionVerdict(completeEvidence(), { runtime: "openchamber" }).ok, false);
+});
 
 test("stage record shape is strict and non-claiming", () => {
   const r = record("PERSISTED", true, "searchable");

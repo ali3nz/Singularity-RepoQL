@@ -352,6 +352,7 @@ async function main(argv) {
   // config dir is bind-mounted into the container).
   const sharedRuntimePlan = [
     "doc-policy.mjs",
+    "selflearn-candidates.mjs", // the shared automatic lesson pipeline doc-policy imports
     "memory-doc-ingest.py",
     "memory_client.py", // sibling import of memory-doc-ingest (its ONLY non-stdlib import) — without it the attached runtime cannot ingest at all
   ].map((name) => {
@@ -381,7 +382,7 @@ async function main(argv) {
     mkdirSync(pluginDir, { recursive: true });
     // The credential files the provisioning touches are part of the attach:
     // their previous content is captured so the rollback can restore it.
-    for (const name of ["memory.json", "office.json"]) {
+    for (const name of ["memory.json", "office.json", "selflearn.json"]) {
       const p = join(pluginDir, name);
       const existed = existsSync(p);
       let backupPath = null;

@@ -243,7 +243,10 @@ async function registerDiscovery(ctx, auditFn = audit) {
         (async () => {
           try {
             const dir = process.env.OPENCHAMBER_DOC_WORKSPACE || process.cwd();
-            const res = await policy.autoIngestChangedDocs(dir, sid);
+            // SELFLEARN_INLINE=1 is the lifecycle FAST PATH: the same shared
+            // pass discovers a durable candidate and runs one bounded lesson
+            // evaluation. The scheduler CLI drains any backlog later.
+            const res = await policy.autoIngestChangedDocs(dir, sid, { env: { ...process.env, SELFLEARN_INLINE: "1" } });
             auditFn({ sessionID: sid, tool: "runbook-nudge", decision: "NUDGE-RB-DISCOVERY",
                       reason: `auto-ingestion pass: ${res.ingested} changed doc(s); ${JSON.stringify(res.results.map(r => ({ f: r.file, s: r.status })))}` });
           } catch (e) {

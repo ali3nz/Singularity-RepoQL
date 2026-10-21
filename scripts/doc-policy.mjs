@@ -27,6 +27,15 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync, readdirSync } from "node:fs";
 import { join, resolve, isAbsolute, extname, dirname, relative as relPosix } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  candidateDir,
+  candidatePath,
+  candidateId,
+  discoverCandidate,
+  evaluateCandidates,
+  listCandidates,
+  loadCandidate,
+} from "./selflearn-candidates.mjs";
 
 const sha8 = (s) => createHash("sha256").update(String(s)).digest("hex").slice(0, 8);
 const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n) : s; };
@@ -41,7 +50,12 @@ export const DOC_INGEST_SCRIPT = join(PRODUCT_ROOT, "scripts", "memory-doc-inges
 // adjustments are NON-MATERIAL by default.
 export const SKIP_EXTS = new Set([".md", ".mdx", ".txt", ".rst", ".log", ".lock", ".sum", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2"]);
 export const SKIP_FILES = new Set(["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "SHA256SUMS", "MANIFEST.json"]);
-export const SKIP_DIR_PARTS = new Set(["__pycache__", ".git", "node_modules", "vendor", "dist", "build", "gen", "generated", "snapshots", "site-packages", ".venv", "venv", ".tox", "coverage", ".next"]);
+export const SKIP_DIR_PARTS = new Set(["__pycache__", ".git", ".repoql", "node_modules", "vendor", "dist", "build", "gen", "generated", "snapshots", "site-packages", ".venv", "venv", ".tox", "coverage", ".next"]);
+// Product RUNTIME state is never a task's material change: the self-learning
+// queue, the documentation ledger and the installed runtime config all live in
+// the workspace, and counting them made a repeated lifecycle pass invent a
+// candidate about its own bookkeeping files.
+const RUNTIME_STATE_RE = /(^|[\\/])(data[\\/](selflearn|doc-policy|doc-index|opencode|attach-backups|acceptance)[\\/]|\.repoql[\\/])/;
 
 export function classifyFiles(files) {
   const material = [];
@@ -54,7 +68,7 @@ export function classifyFiles(files) {
       SKIP_FILES.has(base) ||
       SKIP_EXTS.has(ext) ||
       parts.some((p) => SKIP_DIR_PARTS.has(p)) ||
-      /(^|[\\/])data[\\/](doc-policy|doc-index)[\\/]/.test(f) ||
+      RUNTIME_STATE_RE.test(f) ||
       base.includes(".min.") ||
       /\.bak|~$|-backup\.|\.tmp$/i.test(base);
     (skip ? skipped : material).push(f);
@@ -213,62 +227,44 @@ export function writeBaselineAtomic(session, root, record) {
 // assessment for the same session that reaches CAPTURED or NO_LESSON resolves
 // its pending candidates, so eligible processing resumes without another
 // instruction from the user.
+// The durable candidate store IS the pending store: one framework, one file
+// per task, with the full selflearn candidate contract (see
+// scripts/selflearn-candidates.mjs). These helpers keep the historical API for
+// callers/tests; they are thin adapters, never a second bookkeeping format.
 export function pendingCandidateDir(root) {
-  return join(root, "data", "selflearn", "pending");
+  return candidateDir(root);
 }
 
 export function pendingCandidateId(session, files) {
-  return sha8(`${session || "unknown"}\n${[...new Set(files || [])].sort().join("\n")}`);
+  return candidateId(session, files);
 }
 
 export function pendingCandidatePath(session, files, root) {
-  return join(pendingCandidateDir(root), `${pendingCandidateId(session, files)}.json`);
+  return candidatePath(candidateId(session, files), root);
 }
 
 export function writePendingCandidateAtomic(session, files, root, extra = {}) {
-  const dir = pendingCandidateDir(root);
-  mkdirSync(dir, { recursive: true });
-  const path = pendingCandidatePath(session, files, root);
-  const now = new Date().toISOString();
-  let prev = null;
-  if (existsSync(path)) {
-    try { prev = JSON.parse(readFileSync(path, "utf8")); } catch { prev = null; }
-  }
-  const record = {
-    id: pendingCandidateId(session, files),
-    status: "pending",
-    session: session || null,
-    files: [...new Set(files || [])].sort(),
-    createdAt: prev?.createdAt || now,
-    lastSeenAt: now,
-    seenCount: (prev?.seenCount || 0) + 1,
-    ...extra,
-  };
-  const tmp = `${path}.tmp-${Date.now()}`;
-  writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n");
-  renameSync(tmp, path);
-  return { path, record, created: !prev };
+  const res = discoverCandidate({ session, files, root, evidence: extra.evidence || {}, reason: extra.reason || "", agent: extra.agent || "agent" });
+  return { path: res.path || pendingCandidatePath(session, files, root), record: res.record, created: res.created };
 }
 
+/** Unresolved candidates (discovery/evaluation/retry) still in the queue. */
 export function listPendingCandidates(root) {
-  try {
-    return readdirSync(pendingCandidateDir(root))
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => {
-        try { return JSON.parse(readFileSync(join(pendingCandidateDir(root), f), "utf8")); }
-        catch { return null; }
-      })
-      .filter((r) => r && r.status === "pending");
-  } catch { return []; }
+  return listCandidates(root)
+    .filter((r) => ["DISCOVERED", "EVALUATING", "DEFERRED", "FAILED"].includes(r.state))
+    .map((r) => ({ ...r, status: "pending" }));
 }
 
+/** Legacy resolution path: only unresolved records are resolved; an evaluated
+ * candidate (a real lesson) is NEVER erased by a documentation disposition. */
 export function resolvePendingCandidates(session, root, disposition, reason) {
   const now = new Date().toISOString();
   let resolved = 0;
-  for (const rec of listPendingCandidates(root)) {
+  for (const rec of listCandidates(root)) {
     if (!session || rec.session !== session) continue;
-    const path = join(pendingCandidateDir(root), `${rec.id}.json`);
-    const next = { ...rec, status: "resolved", disposition, resolvedAt: now, resolutionReason: clip(reason || "", 160) };
+    if (!["DISCOVERED", "DEFERRED"].includes(rec.state)) continue;
+    const next = { ...rec, state: "NO_LESSON", status: "resolved", disposition, updatedAt: now, resolvedAt: now, resolutionReason: clip(reason || "", 160), claim: null };
+    const path = candidatePath(rec.id, root);
     const tmp = `${path}.tmp-${Date.now()}`;
     writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
     renameSync(tmp, path);
@@ -465,14 +461,16 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
 /**
  * The ONE automatic learning assessment. Honest disposition rules:
  *   - CAPTURED: this pass verified the documentation (DOC_INGEST_VERIFIED in
- *     the ledger) — the verified doc IS the task's durable knowledge; its
- *     ledger record (searchable) is the automatic candidate, already deduped
- *     by content hash. RepoQL promotion stays with the documented gated path.
+ *     the ledger) — the verified doc IS the task's durable documentation
+ *     knowledge. This disposition does NOT suppress lesson discovery.
  *   - NO_LESSON: nothing material was observed this pass (no eligible doc
  *     change, nothing new dirty) — the existing NO_LESSON contract.
  *   - DEFERRED: material work exists but the agent's verified lesson token is
- *     unreported — the candidate is RECORDED here (never lost), promotion
- *     stays with the human/agent gated path.
+ *     unreported — the durable discovery record is created here (never lost).
+ * DISCOVERY IS INDEPENDENT OF THE DOCUMENTATION DISPOSITION (Sol review):
+ * whenever material work is observed, a durable selflearn candidate is created
+ * before any model call, and the bounded evaluator runs on this same event.
+ * Promotion stays gated.
  * Idempotent + single write owner: a session assessment the agent already
  * claimed (any explicit capture status) is NEVER overwritten; concurrent
  * passes for the same session repeat the same deterministic write (atomic
@@ -505,6 +503,45 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     writeAssessmentAtomic(session, root, merged);
     return { written: true, record: merged };
   };
+  const observedFiles = [...new Set([...(results || []).map((r) => r.file).filter(Boolean), ...(newDirty || [])])];
+  // Durable discovery FIRST, independent of how the documentation assessment
+  // resolves: a CAPTURED session still gets its lesson opportunity evaluated.
+  // Only files that can change behaviour are eligible — a docs-only change is
+  // documentation knowledge, not a code lesson — and this runtime's own state
+  // files (data/selflearn, data/doc-policy, .repoql, …) are NOT task material.
+  // "Material work was observed" therefore uses the same classification as
+  // discovery: counting a raw untracked `data/` entry as material made every
+  // trivial pass look like deliverable work (real false positive on .241).
+  const materialFiles = classifyFiles(observedFiles).material;
+  const materialObserved = observable === false
+    ? (results || []).length > 0
+    : ((results || []).length > 0 || materialFiles.length > 0);
+  let discovered = null;
+  if (materialObserved && materialFiles.length) {
+    try {
+      discovered = discoverCandidate({
+        session, files: materialFiles, root,
+        evidence: { files: materialFiles, docs: (results || []).map((r) => r.file), ingestion: results || [], dirty: dirty || null, newDirty: newDirty || null },
+        reason: "automatic: material work observed on the lifecycle completion event",
+        agent: env.SINGULARITY_AGENT_ID || "agent",
+        env,
+      });
+    } catch { discovered = null; }
+  }
+  const evaluate = async () => {
+    // Inline evaluation is the lifecycle FAST PATH and must be explicitly
+    // enabled by the harness integration (SELFLEARN_INLINE=1); a plain CLI or
+    // test call only records discovery, so no caller makes surprise model
+    // calls and the scheduler/next session picks the work up.
+    if (!discovered || !discovered.record || env.SELFLEARN_INLINE !== "1") return null;
+    try {
+      const limit = Math.max(1, Math.min(Number(env.SELFLEARN_INLINE_LIMIT || 1) || 1, 3));
+      const res = await evaluateCandidates({ root, env, limit, installRoot: PRODUCT_ROOT });
+      return { provider: res.provider, evaluated: res.evaluated, outcomes: res.outcomes };
+    } catch (e) {
+      return { provider: null, evaluated: 0, error: clip(String(e?.message || e), 160) };
+    }
+  };
   // CAPTURED is ledger-evidence, never the ingest pass's own status string:
   // the pass reports DOC_INGEST_INDEXED/DOC_INGEST_UNCHANGED, while verified
   // existence is derived through collectEvidence (the same verify CLI the
@@ -519,29 +556,58 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     }
   }
   if (verifiedDocs.length) {
-    const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map(() => "DOC_INGEST_VERIFIED"), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable candidate (promotion stays gated)", automatic: true, recordedAt: new Date().toISOString() });
-    if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
-    resolvePendingCandidates(session, root, "CAPTURED", "verified ingestion superseded the pending candidate");
-    return { status: "CAPTURED", assessment: rec.record, detail: `automatic CAPTURED from ${verifiedDocs.length} ledger-verified ingestion record(s)` };
+    const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map(() => "DOC_INGEST_VERIFIED"), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable documentation knowledge (lesson discovery runs independently)", automatic: true, recordedAt: new Date().toISOString() });
+    if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})`, candidate: discovered?.record || null };
+    return { status: "CAPTURED", assessment: rec.record, candidate: discovered?.record || null, evaluation: await evaluate(), detail: `automatic CAPTURED from ${verifiedDocs.length} ledger-verified ingestion record(s)` };
   }
-  const materialObserved = observable === false
-    ? (results || []).length > 0
-    : (newDirty ? newDirty.length > 0 : (results || []).length > 0);
+  // The candidate THIS session already owns — created in this pass or carried
+  // from an earlier DEFERRED pass (candidateId, the pending pointer, or the
+  // session's own records). Resolving it is what lets a promoted lesson close
+  // the session disposition later, when the work window itself is no longer
+  // dirty (the promotion usually happens in a separate, gated step).
+  const candidateForSession = () => {
+    if (discovered?.record) return loadCandidate(discovered.record.id, root);
+    const held = existing?.candidateId || (existing?.deferredPending ? String(existing.deferredPending).split(/[\\/]/).pop().replace(/\.json$/, "") : null);
+    if (held) { const r = loadCandidate(held, root); if (r) return r; }
+    const mine = listCandidates(root).filter((r) => r.session === session);
+    return mine.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))[0] || null;
+  };
+  // A candidate the gated evaluator (or the operator's gated promotion) marked
+  // PROMOTED is verified knowledge: upgrade the disposition to CAPTURED with the
+  // concept reference so the ledger and doctor never report already-authoritative
+  // work as pending. Nothing here promotes by itself.
+  const captureIfPromoted = (cand, evaluation, files) => {
+    if (cand?.state !== "PROMOTED") return null;
+    const captured = guarded({ files: files || cand.files || [], captureStatus: "CAPTURED", captureReason: `automatic: selflearn candidate ${cand.id} was promoted through the gated path (${cand.promotion?.reference || "concept recorded"})`, candidateId: cand.id, promotion: cand.promotion || null, automatic: true, recordedAt: new Date().toISOString() });
+    if (!captured.written) return { status: captured.record.captureStatus, assessment: captured.record, candidate: cand, evaluation, detail: `another writer claimed the assessment concurrently — kept (${captured.record.captureStatus})` };
+    return { status: "CAPTURED", assessment: captured.record, candidate: cand, evaluation, detail: `automatic CAPTURED: candidate ${cand.id} promoted (${cand.promotion?.reference || "concept"}) and retrievable; provenance retained` };
+  };
   if (!materialObserved) {
-    if (existing) return { status: existing.captureStatus || "NO_LESSON", assessment: existing, detail: "existing assessment kept" };
+    // Nothing new in this window — but this session's earlier work may have been
+    // promoted since, or may still be queued. Report that honestly instead of
+    // replaying a stale DEFERRED or laundering queued work into NO_LESSON.
+    const cand = candidateForSession();
+    const promoted = captureIfPromoted(cand, null, cand?.files);
+    if (promoted) return promoted;
+    // A candidate the evaluator resolved WITHOUT new knowledge (nothing to learn,
+    // or the lesson duplicates verified existing concepts) is an honest
+    // NO_LESSON, not an indefinitely pending item.
+    if (cand && ["NO_LESSON", "DUPLICATE"].includes(cand.state)) {
+      const resolved = guarded({ files: [], docStatus: "DOC_NOT_REQUIRED", docReason: "automatic pass: this session's lesson opportunity resolved without new knowledge", docs: [], ingestion: [], captureStatus: "NO_LESSON", captureReason: `automatic: candidate ${cand.id} resolved ${cand.state} (${cand.resolutionReason || "evaluated"})`, candidateId: cand.id, automatic: true, recordedAt: new Date().toISOString() });
+      if (resolved.written) return { status: "NO_LESSON", assessment: resolved.record, candidate: cand, detail: `automatic NO_LESSON: candidate ${cand.id} resolved ${cand.state}` };
+    }
+    if (cand) return { status: "DEFERRED", assessment: existing, candidate: cand, detail: `automatic DEFERRED kept: candidate ${cand.id} is ${cand.state}; it stays queued until evaluation/promotion completes` };
     const rec = guarded({ files: [], docStatus: "DOC_NOT_REQUIRED", docReason: "automatic pass: no material change observed in this session's window", docs: [], ingestion: [], captureStatus: "NO_LESSON", captureReason: "automatic: nothing material was observed, so no lesson candidate exists", automatic: true, recordedAt: new Date().toISOString() });
     if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
-    resolvePendingCandidates(session, root, "NO_LESSON", "a later pass observed nothing material");
-    return { status: "NO_LESSON", assessment: rec.record, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
+    return { status: "NO_LESSON", assessment: rec.record, candidate: null, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
   }
-  const pendingFiles = [...new Set([...(results || []).map((r) => r.file), ...(newDirty || [])])];
-  const candidate = writePendingCandidateAtomic(session, pendingFiles, root, {
-    reason: "automatic: material work observed but the agent's verified lesson token is unreported — gated promotion pending",
-    evidence: { files: pendingFiles, results: results || [], dirty: dirty || null, newDirty: newDirty || null },
-  });
-  const rec = guarded({ files: pendingFiles, captureStatus: "DEFERRED", captureReason: "automatic: material work observed but the agent's verified lesson token is unreported — uses the gated propose path (data/selflearn pending), nothing is lost", automatic: true, recordedAt: new Date().toISOString(), deferredPending: relPosix(root, candidate.path) });
-  if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
-  return { status: "DEFERRED", assessment: rec.record, detail: `automatic DEFERRED: durable pending candidate ${relPosix(root, candidate.path)}${candidate.created ? " (new)" : " (reused)"}, gated promotion pending` };
+  const rec = guarded({ files: observedFiles, captureStatus: "DEFERRED", captureReason: "automatic: material work observed; the agent's verified lesson token is unreported — the durable selflearn candidate carries the work and resumes automatically", automatic: true, recordedAt: new Date().toISOString(), ...(discovered?.record ? { deferredPending: relPosix(root, candidatePath(discovered.record.id, root)) } : {}) });
+  if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})`, candidate: discovered?.record || null };
+  const evaluation = await evaluate();
+  const current = candidateForSession();
+  const promoted = captureIfPromoted(current, evaluation, observedFiles);
+  if (promoted) return promoted;
+  return { status: "DEFERRED", assessment: rec.record, candidate: current || discovered?.record || null, evaluation, detail: current ? `automatic DEFERRED: durable candidate ${current.state} ${relPosix(root, candidatePath(current.id, root))}${discovered?.created ? " (new)" : " (reused)"}, promotion stays gated` : "automatic DEFERRED: material work observed (no candidate file could be written)" };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────

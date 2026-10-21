@@ -81,7 +81,17 @@ State lives in `data/knowledge-store/` (`current-truth/`, `history/`,
 installation layout (`data/knowledge-store`, the plugin's `memory.json`) and
 can be overridden with `KNOWLEDGE_STORE` and `MEMORY_SECRETS`.
 
-## 4a. Documentation ingestion (shared engine; docs stay authoritative)
+## 4a. Lessons — automatic formulation, gated promotion
+
+The lifecycle completion event also runs the automatic lesson pipeline
+(`scripts/selflearn-candidates.mjs`): material work creates a durable candidate,
+ONE bounded model call through the installation's processing lane formulates a
+`selflearn.lesson.v1` object, RepoQL dedup and requirement-based verification
+run, and a fully verified lesson stops at `AWAITING_APPROVAL` with the exact
+`rql concept add …` command. Promotion itself is never automatic. Full contract,
+states, retry/resume and observability: [`memory-capture-promotion.md`](memory-capture-promotion.md).
+
+## 4b. Documentation ingestion (shared engine; docs stay authoritative)
 
 Runbooks and guides are ingested by the documentation engine
 (`scripts/memory-doc-ingest.py`, full guide: `docs/DOC-INGESTION.md`):

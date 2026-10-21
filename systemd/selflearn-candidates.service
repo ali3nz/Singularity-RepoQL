@@ -1,0 +1,18 @@
+[Unit]
+Description=Singularity self-learning candidate evaluation (one bounded pass)
+Documentation=file:///opt/singularity-repoql/docs/memory-capture-promotion.md
+# The lifecycle hooks are the fast path; this timer is the liveness backstop so
+# candidates left by a crashed/failed evaluation still get processed on a host
+# where no further agent session may ever start.
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/singularity-repoql
+# Edit WorkingDirectory to your checkout. The CLI is the SAME entry point the
+# hooks call in-process: it claims candidates atomically, so a concurrent hook
+# pass can never evaluate the same record twice.
+Environment=SINGULARITY_REPO_ROOT=/opt/singularity-repoql
+Environment=SELFLEARN_INLINE=off
+ExecStart=/usr/bin/env node /opt/singularity-repoql/scripts/selflearn-candidates.mjs run --root /opt/singularity-repoql --limit 2
+TimeoutStartSec=300
+Nice=10

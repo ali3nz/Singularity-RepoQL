@@ -227,6 +227,20 @@ def main() -> int:
             "ingestKey": office_values["CLAUDE_OFFICE_INGEST_KEY"],
         })
 
+    # Processing provider for the automatic lesson pipeline. The attached
+    # runtime lives inside the target's config directory, where the product's
+    # memory/upstream/.env is NOT mounted — so the resolved provider (URL,
+    # model, optional key) is carried beside the other product secrets. Mode
+    # 0600, never printed. Absent MEMORY_LLM_BASE_URL writes nothing and the
+    # pipeline reports "no processing provider configured" honestly.
+    upstream_values = read_env_file(base / "memory" / "upstream" / ".env")
+    if plugin_dir and upstream_values.get("MEMORY_LLM_BASE_URL"):
+        merge_json(plugin_dir / "selflearn.json", {
+            "url": upstream_values["MEMORY_LLM_BASE_URL"].rstrip("/"),
+            "model": upstream_values.get("MEMORY_LLM_MODEL", ""),
+            "key": upstream_values.get("MEMORY_LLM_API_KEY", ""),
+        })
+
     ghost_env = secrets_dir / "ghost.env"
     if args.with_ghost:
         ghost_values = read_env_file(ghost_env)
@@ -257,6 +271,7 @@ def main() -> int:
         "office_env": str(office_env) if include_office else None,
         "memory_json": str(plugin_dir / "memory.json"),
         "office_json": str(plugin_dir / "office.json") if include_office else None,
+        "selflearn_json": str(plugin_dir / "selflearn.json") if (plugin_dir / "selflearn.json").exists() else None,
         "ghost_env": str(ghost_env) if ghost_env.exists() else None,
         "office_keys_generated": generated,
         "memory_user_key_present": bool(memory_json.get("userKey")),

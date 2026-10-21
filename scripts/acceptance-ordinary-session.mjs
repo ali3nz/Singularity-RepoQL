@@ -132,12 +132,13 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
       note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "",
     };
     const ev = { ...base, ...(evidence || {}) };
-    const allVerified = STAGES.every((s) => ev.stages.some((x) => x.stage === s && x.state === "VERIFIED"));
+    const verdict = evidence ? completionVerdict(ev, { runtime: "claude-code" }) : null;
+    const verified = !!(evidence && verdict.ok);
     return {
-      ok: !!evidence && allVerified,
-      state: evidence ? (allVerified ? "VERIFIED" : "INCOMPLETE") : state,
+      ok: verified,
+      state: evidence ? (verified ? "VERIFIED" : "INCOMPLETE") : state,
       evidence: evidence ? ev : null,
-      detail,
+      detail: verified || !evidence ? detail : `${detail} — evidence rejected by the gate: ${verdict.detail}`,
     };
   };
   for (const s of STAGES) stages.push(record(s, false, "not reached"));
@@ -251,6 +252,20 @@ function commandOnPath(bin) {
  *  consumers pass their own binding. Legacy version-1 evidence (claude-code
  *  only) stays verdict-valid for the Claude gate.
  */
+/**
+ * The ONE completion rule: a real run reports VERIFIED only when its five
+ * stages verified AND the produced evidence satisfies the SAME gate the
+ * installer/downstream verifier applies (eventObserved, scope, ids, tag,
+ * timestamps). Used by both native drivers' `done()` so a standalone run can
+ * never claim VERIFIED on evidence its own verifier would reject.
+ */
+export function completionVerdict(ev, { runtime, option = null } = {}) {
+  const stagesOk = STAGES.every((s) => ev?.stages?.some((x) => x.stage === s && x.state === "VERIFIED"));
+  if (!stagesOk) return { ok: false, state: "INCOMPLETE", detail: "five acceptance stages are not all verified" };
+  const v = evidenceVerdict(ev, { expectRuntime: runtime, expectOption: option });
+  return { ok: v.ok, state: v.ok ? "VERIFIED" : "INCOMPLETE", detail: v.detail };
+}
+
 export function evidenceVerdict(e, { clockSkewMs = 10 * 60 * 1000, expectRuntime = "claude-code", expectOption = null } = {}) {
   if (!e || typeof e !== "object") return { ok: false, state: "INCOMPLETE", detail: "no ordinary-session evidence" };
   if (e.kind !== EVKIND)
@@ -507,8 +522,9 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
   const stages = STAGES.map((s) => record(s, false, "not reached"));
   const done = (detail, evidence = null, state = "INCOMPLETE") => {
     const ev = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: normalizeOptionId(option), startedAt: new Date(started).toISOString(), completedAt: nowIso(), stages, sessions: [], distinctSessions: false, cleanupScope: [], memoryScope: null, note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "", ...(evidence || {}) };
-    const all = STAGES.every((s) => ev.stages.find((x) => x.stage === s)?.state === "VERIFIED");
-    return { ok: !!(evidence && all), state: evidence ? (all ? "VERIFIED" : "INCOMPLETE") : state, evidence: evidence ? ev : null, detail };
+    const verdict = evidence ? completionVerdict(ev, { runtime: "openchamber", option: normalizeOptionId(option) }) : null;
+    const verified = !!(evidence && verdict.ok);
+    return { ok: verified, state: evidence ? (verified ? "VERIFIED" : "INCOMPLETE") : state, evidence: evidence ? ev : null, detail: verified || !evidence ? detail : `${detail} — evidence gate: ${verdict.detail}` };
   };
 
   // ── resolve the TARGET (option-specific config, never the package default) ─
@@ -643,12 +659,13 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
       runtimeDetail: { configDir: configDir.split(/[\\/]/).pop(), scopeSource: scopeFactory.source, memoryConfigPath: memTarget.memoryConfigPath.split(/[\\/]/).pop(), openCodeStorage: storageRoot || "(runtime default)" },
       note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "",
     };
-    const verified = STAGES.every((s) => evidence.stages.find((x) => x.stage === s)?.state === "VERIFIED");
     if (!keep) try { rmSync(w1, { recursive: true, force: true }); } catch { /* keep operator data intact otherwise */ }
     // The same envelope `done()` uses: addressable, versioned, runtime-bound —
-    // the file the gate reads is always a complete verdict artifact.
+    // the file the gate reads is always a complete verdict artifact, and the
+    // standalone verdict applies the SAME evidence gate as the installer.
     const evidenceFull = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", startedAt: new Date(started).toISOString(), completedAt: nowIso(), ...evidence };
-    return { ok: !!verified, state: verified ? "VERIFIED" : "INCOMPLETE", evidence: evidenceFull, detail: verified ? "OpenChamber-native capture and NEW-session recall verified end to end through the target's installed plugin and live memory service" : "the ordinary-session OpenChamber-native acceptance did not fully verify — see per-stage detail" };
+    const verdict = completionVerdict(evidenceFull, { runtime: "openchamber", option: normalizeOptionId(option) });
+    return { ok: verdict.ok, state: verdict.state, evidence: evidenceFull, detail: verdict.ok ? "OpenChamber-native capture and NEW-session recall verified end to end through the target's installed plugin and live memory service" : `the ordinary-session OpenChamber-native acceptance did not fully verify — ${verdict.detail}` };
   } catch (e) {
     if (!keep) try { rmSync(w1, { recursive: true, force: true }); } catch { /* best effort */ }
     return done(`harness failure: ${String(e?.message || e).slice(0, 160)}`);

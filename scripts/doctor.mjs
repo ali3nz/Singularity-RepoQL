@@ -32,6 +32,7 @@ import {
 } from "./install-claude-code.mjs";
 import { callMemoryCore, loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
 import { isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
+import { candidateSummary } from "./selflearn-candidates.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_STATE_FILE = join(ROOT, "data/claude-code-integration.json");
@@ -116,6 +117,44 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
           `indexed ${counts.DOC_INGEST_INDEXED || 0}, pending ${counts.DOC_INGEST_PENDING || 0}, failed ${counts.DOC_INGEST_FAILED || 0}, stale ${stale}` +
           (st !== "VERIFIED" ? " — retry with `python3 scripts/memory-doc-ingest.py retry`" : "")));
       }
+    }
+  }
+
+  // ── self-learning queue (a pending file is NOT proof of learning) ────────
+  // States are distinguished explicitly: DISCOVERED/DEFERRED = work waiting
+  // for evaluation, NEEDS_VERIFICATION/AWAITING_APPROVAL = a REAL formulated
+  // lesson, PROMOTED = authoritative knowledge, FAILED = processing failure.
+  // VERIFIED requires at least one actually promoted lesson; a populated queue
+  // alone is INCOMPLETE, never a pass.
+  {
+    // The selflearn store is PER PROJECT: the hooks write it under the task's
+    // own root. RepoQL doctor must therefore inspect the project the operator
+    // is running in (cwd), not the product checkout — running it inside a
+    // project that had already PROMOTED a lesson reported "no promotion yet"
+    // (real false negative on .241). With neither an explicit root nor a
+    // project store, fall back to the product checkout.
+    const cwdRoot = env.SINGULARITY_REPO_ROOT || process.cwd();
+    const root = cwdRoot !== ROOT && candidateSummary(cwdRoot).total === 0 && candidateSummary(ROOT).total > 0 ? ROOT : cwdRoot;
+    try {
+      const s = candidateSummary(root);
+      const b = s.byState || {};
+      const oldestDays = s.oldestPendingAt ? Math.max(0, Math.floor((Date.now() - Date.parse(s.oldestPendingAt)) / 86_400_000)) : null;
+      const counts = `discovered ${b.DISCOVERED || 0}, evaluating ${b.EVALUATING || 0}, deferred ${b.DEFERRED || 0}, awaiting verification ${s.awaitingVerification}, awaiting approval ${s.awaitingApproval}, duplicate ${b.DUPLICATE || 0}, no-lesson ${b.NO_LESSON || 0}, failed ${s.failed}, promoted ${b.PROMOTED || 0}`;
+      const last = s.lastPromotion ? ` | last promotion ${s.lastPromotion.conceptId || "?"} at ${s.lastPromotion.at || "?"}` : " | no promotion yet";
+      const oldest = oldestDays === null ? "" : ` | oldest pending ${oldestDays}d`;
+      let st;
+      if ((b.PROMOTED || 0) > 0) st = "VERIFIED";
+      else if (s.failed > 0) st = "DEGRADED";
+      else if (s.total === 0) st = "NOT_CONFIGURED";
+      else st = "INCOMPLETE";
+      const advice = st === "NOT_CONFIGURED" ? " (idle: no material task has been observed yet)"
+        : st === "VERIFIED" ? ""
+        : s.awaitingApproval > 0 ? " — approve one with `node scripts/selflearn-candidates.mjs list` then the printed gated command + mark-promoted"
+        : s.awaitingVerification > 0 ? " — verify with `node scripts/selflearn-candidates.mjs verify --id <id> --note <receipt>`"
+        : " — run `node scripts/selflearn-candidates.mjs run` (or install systemd/selflearn-candidates.timer)";
+      out.push(section("selflearn", st, counts + oldest + last + ` | store ${root}` + advice, { summary: s, root }));
+    } catch (e) {
+      out.push(section("selflearn", "DEGRADED", `learning queue unreadable: ${String(e?.message || e).slice(0, 120)}`));
     }
   }
 

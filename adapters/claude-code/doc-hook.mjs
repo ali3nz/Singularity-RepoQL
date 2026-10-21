@@ -33,6 +33,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   loadAssessment,
+  recordAutomaticLearningAssessment,
   evaluateAssessment,
   collectEvidence,
   observeWorkspace,
@@ -41,6 +42,7 @@ import {
   MAX_DOC_INGEST_PER_PASS,
   classifyFiles,
 } from "../../scripts/doc-policy.mjs";
+import { evaluateCandidates } from "../../scripts/selflearn-candidates.mjs";
 
 const MAX_BLOCKS = 3;
 const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n) : s; };
@@ -114,6 +116,14 @@ export async function runDocHook(argv, opts = {}) {
       // Baseline: pre-existing dirty files stay unattributable to this session.
       await saveSessionBaseline(input.session_id || "unknown", root, { env: opts.env || process.env });
     } catch { /* baseline failure must not break the session */ }
+    // Durable-queue resume (Sol: liveness must not depend on one session
+    // finishing). Bounded to ONE candidate; the scheduler CLI drains backlog.
+    try {
+      const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1 });
+      for (const o of resumed.outcomes || []) stderr.push(`singularity selflearn: resume ${o.id} -> ${o.state}${o.detail ? ` (${clip(o.detail, 100)})` : ""}`);
+    } catch (e) {
+      stderr.push(`singularity selflearn: resume skipped (${clip(String(e?.message || e), 100)})`);
+    }
     return {
       exitCode: 0,
       stdout: JSON.stringify({
@@ -183,6 +193,21 @@ export async function runDocHook(argv, opts = {}) {
         }
       } catch (e) {
         stderr.push(`singularity doc hook: observed state unavailable, continuing (${clip(String(e?.message || e), 120)})`);
+      }
+    }
+
+    // 2b. AUTOMATIC LEARNING: the SAME shared function the OpenChamber plugin
+    // uses. Creates a durable candidate and runs one bounded lesson evaluation
+    // on this completion event; a failure here never blocks the doc closeout.
+    if (session) {
+      try {
+        const learning = await recordAutomaticLearningAssessment(session, root, {
+          env: { ...(opts.env || process.env), SINGULARITY_REPO_ROOT: root, SELFLEARN_INLINE: "1" },
+          results: autoIngest, observable, dirty: obs?.dirty || null, newDirty: obs?.newDirty || null,
+        });
+        if (learning?.candidate) stderr.push(`singularity selflearn: candidate ${learning.candidate.state} (${learning.candidate.id})`);
+      } catch (e) {
+        stderr.push(`singularity selflearn: assessment skipped (${clip(String(e?.message || e), 100)})`);
       }
     }
 

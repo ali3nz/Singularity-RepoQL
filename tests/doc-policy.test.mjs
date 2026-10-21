@@ -17,6 +17,7 @@ import {
   collectEvidence,
   recordAutomaticLearningAssessment,
   listPendingCandidates,
+  resolvePendingCandidates,
   writePendingCandidateAtomic,
   pendingCandidateDir,
   main as cliMain,
@@ -77,6 +78,21 @@ test("classification: code/config is material, docs/locks/generated are skipped"
   ]);
   assert.deepEqual(material, ["src/server.py", "src/app.mjs", "compose/compose.yml", ".github/workflows/ci.yml"]);
   assert.equal(skipped.length, 8);
+});
+
+test("classifyFiles: product runtime state is never task material (regression)", () => {
+  // A repeated lifecycle pass used to see its OWN queue file and .repoql/
+  // capsule write as material work and invent a candidate about bookkeeping.
+  const { material } = classifyFiles([
+    ".repoql/.gitignore",
+    ".repoql/concepts/shape/LazyInit.md",
+    "data/selflearn/pending/abc123.json",
+    "data/doc-policy/assess-1.json",
+    "data/doc-index/ledger.json",
+    "data/opencode/config/opencode.jsonc",
+    "src/cache.py",
+  ]);
+  assert.deepEqual(material, ["src/cache.py"], "only real source counts");
 });
 
 test("no assessment recorded / DOC_BLOCKED behaves as before", () => {
@@ -408,7 +424,47 @@ test("§7 automatic assessment: material work without an agent token is DEFERRED
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("§7 pending candidates are idempotent and resolve on a later eligible pass", async () => {
+test("§7 runtime state files alone are NOT material work: NO_LESSON, no candidate", async () => {
+  const dir = scratch();
+  try {
+    // The runtime's own writes were counted as task material on .241, so every
+    // trivial session was recorded as DEFERRED with a bogus work item.
+    const rec = await recordAutomaticLearningAssessment("la8", dir, {
+      env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true,
+      newDirty: ["data/selflearn/pending/x.json", "data/doc-policy/la8.json", ".repoql/cache.sqlite"],
+    });
+    assert.equal(rec.status, "NO_LESSON");
+    assert.equal(listPendingCandidates(dir).length, 0, "no candidate for the runtime's own bookkeeping");
+    assert.equal(loadAssessment("la8", dir).captureStatus, "NO_LESSON");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 a candidate promoted by the gated evaluator upgrades the session from DEFERRED to CAPTURED", async () => {
+  const dir = scratch();
+  try {
+    const first = await recordAutomaticLearningAssessment("la7", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"] });
+    assert.equal(first.status, "DEFERRED");
+    // Simulate the gated evaluator's own promotion write (state + concept ref);
+    // nothing in this test promotes model output.
+    const file = join(dir, loadAssessment("la7", dir).deferredPending);
+    const rec = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({ ...rec, state: "PROMOTED", promotion: { ...(rec.promotion || {}), reference: "InitBeforeQuery", promotedAt: new Date().toISOString() } }));
+    // The promotion happens in a later gated step, so the closing pass may see
+    // no new dirty work at all — it must still resolve the session.
+    const later = await recordAutomaticLearningAssessment("la7", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: [] });
+    assert.equal(later.status, "CAPTURED", "promoted work is no longer reported as pending");
+    assert.equal(later.candidate.state, "PROMOTED");
+    const after = loadAssessment("la7", dir);
+    assert.equal(after.captureStatus, "CAPTURED");
+    assert.equal(after.candidateId, later.candidate.id);
+    assert.match(after.captureReason, /InitBeforeQuery/);
+    assert.equal("deferredPending" in after, false);
+    assert.equal(existsSync(file), true, "the promoted record is kept as provenance, not deleted");
+    assert.equal(listPendingCandidates(dir).length, 0, "promoted work leaves the pending queue");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 pending candidates are idempotent, survive a CAPTURED disposition, and resolve explicitly", async () => {
   const dir = scratch();
   try {
     const a = writePendingCandidateAtomic("la5", ["src/a.py"], dir, { reason: "r" });
@@ -418,16 +474,19 @@ test("§7 pending candidates are idempotent and resolve on a later eligible pass
     assert.equal(listPendingCandidates(dir).length, 1, "no duplicate work item");
     assert.equal(pendingCandidateDir(dir).startsWith(dir), true);
 
-    // A later automatic pass that reaches CAPTURED upgrades the automatic
-    // DEFERRED and resolves the pending candidate — no user instruction needed.
+    // Sol requirement: documentation disposition does NOT erase an unevaluated
+    // lesson. A later CAPTURED pass keeps the candidate queued for evaluation.
     const first = await recordAutomaticLearningAssessment("la5", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"] });
     assert.equal(first.status, "DEFERRED");
     const later = await recordAutomaticLearningAssessment("la5", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [{ file: "docs/r.md", status: "DOC_INGEST_VERIFIED" }], observable: true });
     assert.equal(later.status, "CAPTURED");
-    assert.equal(listPendingCandidates(dir).length, 0, "the resolved candidate leaves the pending queue");
+    assert.equal(listPendingCandidates(dir).length, 1, "CAPTURED never erases the lesson opportunity");
     const stored = loadAssessment("la5", dir);
     assert.equal(stored.captureStatus, "CAPTURED");
     assert.equal("deferredPending" in stored, false, "the stale pending pointer is cleared");
+    // Explicit resolution (the documented recovery path) removes queued work.
+    assert.equal(resolvePendingCandidates("la5", dir, "NO_LESSON", "explicit recovery"), 1);
+    assert.equal(listPendingCandidates(dir).length, 0, "resolved work leaves the queue");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

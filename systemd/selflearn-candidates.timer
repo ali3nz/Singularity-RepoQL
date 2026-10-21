@@ -1,0 +1,16 @@
+[Unit]
+Description=Periodic Singularity self-learning candidate evaluation
+Documentation=file:///opt/singularity-repoql/docs/memory-capture-promotion.md
+
+[Timer]
+# Bounded liveness backstop only: the lifecycle hooks run the same pass on task
+# completion, so a 15-minute tick costs one no-op process when the queue is
+# empty. `Persistent=true` resumes a missed tick after a reboot (no work lost).
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+RandomizedDelaySec=60
+Unit=selflearn-candidates.service
+
+[Install]
+WantedBy=timers.target
