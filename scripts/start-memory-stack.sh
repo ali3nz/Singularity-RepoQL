@@ -83,13 +83,11 @@ EOS
   fi
   # Install the creation-time loopback shim in a PRIVATE per-run directory so
   # upstream `find_docker()` (first `docker` on PATH) resolves the shim for
-  # this startup invocation only. Under SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1
-  # the shim is still installed (it honours that variable by passing
-  # everything through), keeping the runtime path identical in both modes.
-  if [[ "$ALLOW_WIDE_MEMORY_PORTS" != 1 ]]; then
-    shim_dir="$(mktemp -d /tmp/singularity-docker-shim.XXXXXX)"
-    cp "$LOOPBACK_SHIM" "$shim_dir/docker"
-  fi
+  # this startup invocation only. The shim is installed in BOTH modes: under
+  # SINGULARITY_ALLOW_WIDE_MEMORY_PORTS=1 it honours that variable by passing
+  # every binding through, so the runtime path is identical either way.
+  shim_dir="$(mktemp -d /tmp/singularity-docker-shim.XXXXXX)"
+  cp "$LOOPBACK_SHIM" "$shim_dir/docker"
 fi
 
 set +e

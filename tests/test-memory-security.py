@@ -134,7 +134,7 @@ def test_wrapper(tmp: Path) -> None:
     scripts.mkdir(parents=True)
     upstream.mkdir(parents=True)
     for name in ("start-memory-stack.sh", "redact-memory-startup.py", "verify-memory-user-key.py",
-                 "memory-port-boundary.sh"):
+                 "memory-port-boundary.sh", "memory-loopback-docker.sh"):
         shutil.copy2(ROOT / "scripts" / name, scripts / name)
 
     fake_upstream = upstream / "start-all.sh"
