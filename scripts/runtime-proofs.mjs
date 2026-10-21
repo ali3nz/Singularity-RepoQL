@@ -459,10 +459,13 @@ export async function probeProviderFailover({ root, timeout = 60000, fetchImpl =
   for (const a of accounts) {
     let verdict;
     try {
+      // The model name is REQUIRED by the OpenAI-compatible wire (Groq rejects an
+      // anonymous completion with HTTP 400 'model missing') — a credential probe
+      // without one proves nothing.
       const res = await fetchImpl(`${a.base}/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${a.key}` },
-        body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
+        body: JSON.stringify({ model: a.model, messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
         signal: AbortSignal.timeout(timeout),
       });
       const j = await res.json().catch(() => null);
