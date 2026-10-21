@@ -544,6 +544,23 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
     stages[3] = record("PERSISTED", persisted, persisted ? `the record is searchable from the real scope (conversation=${searchA.conversation}, atomic=${searchA.atomic})` : `the tag is not searchable from the real scope after session A (conversation=${searchA.conversation}, atomic=${searchA.atomic}) — persistence not verified`);
     if (!persisted) return done("persistence through the real scope not verified", null);
 
+    // The atomic index is updated by the memory service's ASYNC extraction pass
+    // (it can take a few minutes after the conversation row lands), and the
+    // recall hook reads exactly that index. A recall fired immediately would
+    // therefore see nothing and fail — never claim that. Wait (bounded) until
+    // the tag becomes searchable through the atomic surface before session B.
+    const waitMs = Math.max(0, Math.min(Number(env.SING_ORDINARY_RECALL_WAIT_MS) || 180_000, 300_000));
+    const waitStart = Date.now();
+    let atomicReady = false;
+    const sc = await searchTagScoped(tag, cfg, scope, fetchImpl).catch(() => null);
+    if (sc && sc.atomic) atomicReady = true;
+    while (!atomicReady && Date.now() - waitStart < waitMs) {
+      await new Promise((done) => setTimeout(done, 8000));
+      const s2 = await searchTagScoped(tag, cfg, scope, fetchImpl).catch(() => null);
+      if (s2 && s2.atomic) atomicReady = true;
+    }
+    stages[3] = record("PERSISTED", true, `${stages[3].detail || ""} (atomic-index ${atomicReady ? "ready after" : "NOT seen after"} ${Math.round((Date.now() - waitStart) / 1000)}s)`);
+
     // 5. NEW_SESSION_RECALL_VERIFIED: a GENUINELY NEW native session — new id,
     // new OpenCode turn, and its recall path is the plugin's live context hook
     // (atomic search) from the SAME scope. The prompt contains only the LABEL.
