@@ -584,7 +584,10 @@ async function searchTagScoped(tag, cfg, scope, fetchImpl) {
   const q = (key) => callMemoryCore(key, { team_id: scope.team_id, user_id: scope.user_id, agent_id: scope.agent_id, query: tag, limit: 4 }, cfg, fetchImpl);
   const conv = await q("/v3/conversation/search").catch(() => null);
   const atom = await q("/v3/atomic/search").catch(() => null);
-  const hitsOf = (r) => { const arr = r && !r.error ? (Array.isArray(r.data) ? r.data : (r.data?.results || [])) : []; return JSON.stringify(arr).includes(tag); };
+  // Real response shapes on this kernel: conversation/search -> {data:{messages:[…]}},
+  // atomic/search -> {data:{items:[…]}} (legacy {data:[…]} and {data:{results:[…]}}
+  // accepted too). A shape the search does not answer with can never "hit".
+  const hitsOf = (r) => { const d = r && !r.error ? (r.data ?? r) : null; const arr = Array.isArray(d) ? d : (d?.results || d?.messages || d?.items || []); return JSON.stringify(arr).includes(tag); };
   return { conversation: hitsOf(conv), atomic: hitsOf(atom), hits: hitsOf(conv) || hitsOf(atom) ? 1 : 0 };
 }
 
