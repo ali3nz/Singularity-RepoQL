@@ -27,6 +27,18 @@ export const DEFAULT_STEP_TIMEOUT_MIN = 6;
 export const DEFAULT_DREAM_TOTAL_CAP_MIN = 25;
 export const DREAM_MIN_CALL_MS = 5000;
 export const DREAM_CALL_DEFAULT_MS = 90000;
+
+/**
+ * The per-call budget a dream step is allowed. `--step-timeout-min` is in
+ * MINUTES (the shipped default is 6) and must actually reach the model call:
+ * a slow local model that needs more than the 90s fallback can never finish a
+ * dream otherwise, and the flag would be a no-op.
+ */
+export function dreamStepCallBudgetMs(stepTimeoutMin = DEFAULT_STEP_TIMEOUT_MIN) {
+  const min = Number(stepTimeoutMin);
+  const budget = Number.isFinite(min) && min > 0 ? min * 60_000 : DEFAULT_STEP_TIMEOUT_MIN * 60_000;
+  return Math.max(budget, DREAM_CALL_DEFAULT_MS);
+}
 export const FATAL_PROVIDER_CODES = Object.freeze(["SUBMITTED_UNKNOWN", "CLIENT_ABORTED", "BUDGET_EXHAUSTED", "DREAM_DEADLINE", "DREAM_STOP"]);
 
 export function todayIso(date = new Date(), timeZone = process.env.GHOST_TIMEZONE || "UTC") {
@@ -85,7 +97,7 @@ export async function pickModel({ gatewayUrl, key, fetchImpl = globalThis.fetch 
  * deadline is honored between hops — no unbounded retry, no silent
  * downgrade: the ladder path stays visible in the run result.
  */
-export function makeLadderCallImpl(ladder, { gatewayUrl, key, state, deadlineMs, fetchImpl = globalThis.fetch } = {}) {
+export function makeLadderCallImpl(ladder, { gatewayUrl, key, state, deadlineMs, defaultTimeoutMs = DREAM_CALL_DEFAULT_MS, fetchImpl = globalThis.fetch } = {}) {
   if (!Array.isArray(ladder) || !ladder.length) throw new Error("dream model ladder is empty");
   let idx = 0;
   state.models_used = state.models_used || [];
@@ -94,7 +106,7 @@ export function makeLadderCallImpl(ladder, { gatewayUrl, key, state, deadlineMs,
     for (;;) {
       const model = ladder[idx];
       if (state.models_used[state.models_used.length - 1] !== model) state.models_used.push(model);
-      const timeoutMs = deadlineMs ? dreamCallTimeoutMs(Date.now(), deadlineMs) : DREAM_CALL_DEFAULT_MS;
+      const timeoutMs = deadlineMs ? dreamCallTimeoutMs(Date.now(), deadlineMs, defaultTimeoutMs) : defaultTimeoutMs;
       try {
         return await callModel({ gatewayUrl, key, model, messages, maxTokens, retries: 0, timeoutMs, fetchImpl });
       } catch (e) {
@@ -673,7 +685,9 @@ export async function runDream({
   gatewayKey = process.env.GATEWAY_API_KEY || "",
   now = () => new Date(),
 } = {}) {
-  void stepTimeoutMin;
+  // The step budget (minutes) is the REAL per-call timeout: honoring the flag
+  // is what lets a slow self-hosted model finish a dream at all.
+  const callBudgetMs = dreamStepCallBudgetMs(stepTimeoutMin);
   if (!["ghost", "companion"].includes(agentId)) throw new Error("agent must be ghost or companion");
   const today = todayIso(now());
   const dreamsDir = dreamsDirFor(agentDir);
@@ -713,7 +727,7 @@ export async function runDream({
   };  // Ordered provider-failure ladder: when a model list is configured, dream
   // list is configured, dream steps fail across models before giving up.
   const ladderImpl = (Array.isArray(models) && models.length)
-    ? makeLadderCallImpl(models, { gatewayUrl, key: gatewayKey, state, deadlineMs })
+    ? makeLadderCallImpl(models, { gatewayUrl, key: gatewayKey, state, deadlineMs, defaultTimeoutMs: callBudgetMs })
     : null;
 
   const siblingId = "explorer";
@@ -768,7 +782,7 @@ export async function runDream({
         attempt++;
         try {
           const call = callImpl || ladderImpl || (async (messages, maxTokens) => {
-            const timeoutMs = deadlineMs ? dreamCallTimeoutMs(Date.now(), deadlineMs) : DREAM_CALL_DEFAULT_MS;
+            const timeoutMs = deadlineMs ? dreamCallTimeoutMs(Date.now(), deadlineMs, callBudgetMs) : callBudgetMs;
             const m = await resolveModel();
             state.model = m;
             return callModel({ gatewayUrl, key: gatewayKey, model: m, messages, maxTokens, retries: 1, timeoutMs });

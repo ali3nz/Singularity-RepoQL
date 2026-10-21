@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -67,6 +67,37 @@ test("docker exec failure maps to a 502 with the turn stderr, never a crash", as
   } finally {
     srv.close();
     rmSync(stub.dir, { recursive: true, force: true });
+  }
+});
+
+test("a completed gateway turn is persisted where the dream cycle reads experiences", async () => {
+  const stub = stubScript("persisted ghost answer", 0);
+  const agentDir = mkdtempSync(join(tmpdir(), "ghost-conv-"));
+  const previous = { bin: process.env.GHOST_DOCKER_BIN, dir: process.env.GHOST_CONVERSATIONS_DIR };
+  process.env.GHOST_DOCKER_BIN = stub.file;
+  process.env.GHOST_CONVERSATIONS_DIR = join(agentDir, "conversations");
+  const mod = await import(new URL("./ghost-gateway.mjs?v=4", import.meta.url).href);
+  const { collectRecentConversations } = await import(new URL("./dream.mjs", import.meta.url).href);
+  const { srv, port } = await listen(mod.handler);
+  try {
+    const res = await post(port, { user: "conv-roundtrip", messages: [{ role: "user", content: "remember the Thursday maintenance window" }] });
+    assert.equal(res.status, 200);
+    const lines = readFileSync(join(agentDir, "conversations", "conv-roundtrip", "messages.jsonl"), "utf8")
+      .trim().split("\n").map((l) => JSON.parse(l));
+    assert.deepEqual(lines.map((l) => l.message.role), ["user", "assistant"]);
+    assert.equal(lines[0].message.content, "remember the Thursday maintenance window");
+    assert.equal(lines[1].message.content, "persisted ghost answer");
+    // Round trip through the consumer: the dream cycle must actually see it.
+    const excerpt = collectRecentConversations(agentDir);
+    assert.match(excerpt, /remember the Thursday maintenance window/);
+    assert.match(excerpt, /persisted ghost answer/);
+  } finally {
+    srv.close();
+    process.env.GHOST_DOCKER_BIN = previous.bin;
+    if (previous.dir === undefined) delete process.env.GHOST_CONVERSATIONS_DIR;
+    else process.env.GHOST_CONVERSATIONS_DIR = previous.dir;
+    rmSync(stub.dir, { recursive: true, force: true });
+    rmSync(agentDir, { recursive: true, force: true });
   }
 });
 

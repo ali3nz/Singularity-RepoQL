@@ -8,6 +8,8 @@
 #   4. Installs openchamber/agents/ghost.md into data/opencode/config/agents/
 #      when the OpenChamber config directory exists
 #   5. Creates secrets/ghost.env (mode 0600) with default settings if absent
+#   6. Writes data/opencode/config/product-secrets/ghost.json (the memory
+#      identity the option-2/4 gate probes) when the plugin's memory.json exists
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,6 +52,36 @@ fi
 if [[ -d "$ROOT/data/opencode/config/agents" ]]; then
   cp "$ROOT/openchamber/agents/ghost.md" "$ROOT/data/opencode/config/agents/ghost.md"
   log "installed openchamber/agents/ghost.md -> data/opencode/config/agents/ghost.md"
+fi
+
+# Ghost's own memory identity file. Doctor's option-2/4 gate probes
+# product-secrets/ghost.json, and nothing else in the product writes it: a
+# bundled Ghost therefore always reported "ghost configuration is missing".
+# It is derived from the attached plugin's scoped memory identity (same
+# service, Ghost-specific team/user/agent ids); the key is never printed.
+PLUGIN_SECRETS="$ROOT/data/opencode/config/product-secrets"
+if [[ -f "$PLUGIN_SECRETS/memory.json" && ! -f "$PLUGIN_SECRETS/ghost.json" ]]; then
+  python3 - "$PLUGIN_SECRETS" <<'PY'
+import json, os, pathlib, sys
+
+dir = pathlib.Path(sys.argv[1])
+mem = json.loads((dir / "memory.json").read_text(encoding="utf-8"))
+ghost = {
+    "baseUrl": mem.get("baseUrl"),
+    "authPrefix": mem.get("authPrefix", "Bearer "),
+    "serviceId": mem.get("serviceId", "openchamber"),
+    "userKey": mem.get("userKey"),
+    "ghostTeamId": mem.get("ghostTeamId", "ghost-companion"),
+    "ghostUserId": mem.get("ghostUserId", "pilot-operator"),
+    "ghostAgentId": mem.get("ghostAgentId", "ghost"),
+}
+if not ghost["baseUrl"] or not ghost["userKey"]:
+    raise SystemExit("memory.json has no baseUrl/userKey — attach OpenChamber first")
+out = dir / "ghost.json"
+out.write_text(json.dumps(ghost, indent=2) + "\n", encoding="utf-8")
+os.chmod(out, 0o600)
+print(f"[ghost-setup] wrote {out}")
+PY
 fi
 
 mkdir -p "$ROOT/secrets"

@@ -18,6 +18,9 @@ import {
   cleanErr,
   runDream,
   makeLadderCallImpl,
+  dreamStepCallBudgetMs,
+  DEFAULT_STEP_TIMEOUT_MIN,
+  DREAM_CALL_DEFAULT_MS,
 } from "./dream.mjs";
 
 test("DREAM_STEPS has the 6-step reflection pipeline", () => {
@@ -104,6 +107,44 @@ test("model ladder advances on retryable failure and records hops", async () => 
     fetchImpl: async () => { throw new Error("should not be called"); },
   });
   await assert.rejects(() => call3([{ role: "user", content: "x" }], 500), /deadline/);
+});
+
+test("step timeout flag is a real per-call budget (minutes), never a no-op", () => {
+  assert.equal(dreamStepCallBudgetMs(DEFAULT_STEP_TIMEOUT_MIN), 6 * 60_000);
+  assert.equal(dreamStepCallBudgetMs(undefined), 6 * 60_000, "default step budget is the 6-minute default");
+  assert.equal(dreamStepCallBudgetMs(0), 6 * 60_000, "a missing/zero flag falls back to the default, never to 0ms");
+  assert.equal(dreamStepCallBudgetMs("nope"), 6 * 60_000);
+  assert.equal(dreamStepCallBudgetMs(1), DREAM_CALL_DEFAULT_MS, "a sub-default budget is floored at the shipped call budget");
+  assert.equal(dreamStepCallBudgetMs(12), 12 * 60_000);
+});
+
+test("model ladder honors the step budget instead of the fixed 90s cap", async () => {
+  const state = {};
+  // `primary-slow` never answers; the call must abort on DEFAULTTIMEOUT and the
+  // ladder must advance to the fallback, proving the budget reached the fetch.
+  const fakeFetch = async (url, opts = {}) => {
+    const body = JSON.parse(opts.body);
+    if (body.model === "primary-slow") {
+      // Hang until the call's own budget aborts the request. The keepalive
+      // timer mirrors a real socket: AbortSignal.timeout's timer is unref'd,
+      // so without it the process would exit instead of the abort firing.
+      await new Promise((resolve, reject) => {
+        const keep = setTimeout(resolve, 5000);
+        const onAbort = () => { clearTimeout(keep); reject(Object.assign(new Error("aborted by budget"), { name: "TimeoutError" })); };
+        if (opts.signal?.aborted) return onAbort();
+        opts.signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Fallback reflection output long enough for the length threshold." } }] }) };
+  };
+  const t0 = Date.now();
+  const call = makeLadderCallImpl(["primary-slow", "fallback-ok"], {
+    gatewayUrl: "http://127.0.0.1:1/v1", key: "", state, deadlineMs: null, defaultTimeoutMs: 40, fetchImpl: fakeFetch,
+  });
+  const out = await call([{ role: "user", content: "dream step" }], 500);
+  assert.match(out, /Fallback reflection/);
+  assert.equal(state.fallback_attempts, 1);
+  assert.ok(Date.now() - t0 < 5000, "the configured budget (40ms), not the 90s constant, bounded the call");
 });
 
 test("runDream executes all 6 steps with mock callImpl and commits consolidated memory", async () => {

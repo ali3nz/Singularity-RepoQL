@@ -19,7 +19,8 @@
 // instead of crashing on a missing docker binary.
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOSTS = (process.env.GHOST_GATEWAY_HOSTS || "127.0.0.1").split(",").map((s) => s.trim()).filter(Boolean);
@@ -38,6 +39,35 @@ const TURN_TIMEOUT_MS = Number(process.env.GHOST_TURN_TIMEOUT_MS || 900000);
 const MAX_CONCURRENCY = Number(process.env.GHOST_GATEWAY_CONCURRENCY || 1);
 
 let inflight = 0;
+
+/** Where Ghost's own conversations live (the dream cycle reads this tree). */
+export function conversationsDir(env = process.env) {
+  return env.GHOST_CONVERSATIONS_DIR
+    || join(env.GHOST_AGENT_DIR || env.GHOST_DATA_DIR || resolve("data/ghost"), "conversations");
+}
+
+/**
+ * Persist one completed Ghost turn so the dream cycle has experiences to
+ * reflect on. Nothing else writes this tree: without it `collectRecentConversations`
+ * is always empty, every dream proposes zero entries, and a bundled Ghost can
+ * never produce consolidation provenance.
+ *
+ * The layout matches what ghost/dream.mjs reads: `<conversations>/<id>/messages.jsonl`
+ * with `{ type: "message", timestamp, message: { role, content } }` lines.
+ */
+export function recordConversationTurn({ conversationId, userText, assistantText, at = Date.now(), dir = conversationsDir() } = {}) {
+  const safe = String(conversationId || "").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
+  if (!safe) return null;
+  const lines = [];
+  const stamp = new Date(at).toISOString();
+  if (userText) lines.push(JSON.stringify({ type: "message", timestamp: stamp, message: { role: "user", content: String(userText).slice(0, 4000) } }));
+  if (assistantText) lines.push(JSON.stringify({ type: "message", timestamp: stamp, message: { role: "assistant", content: String(assistantText).slice(0, 4000) } }));
+  if (!lines.length) return null;
+  const file = join(dir, safe, "messages.jsonl");
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, `${lines.join("\n")}\n`);
+  return file;
+}
 const queue = [];
 const stats = { requests: 0, completed: 0, failed: 0, rejected: 0, startedAt: new Date().toISOString() };
 
@@ -166,6 +196,12 @@ function drain() {
       .then((r) => {
         if (r.code === 0 && r.content) {
           stats.completed++;
+          // Best-effort: persisting the turn must never fail the HTTP answer.
+          try {
+            recordConversationTurn({ conversationId: job.conversationId, userText: job.userText, assistantText: r.content, dir: job.conversationsDir });
+          } catch (e) {
+            console.error(`[ghost-gateway] conversation persistence skipped: ${e?.message || e}`);
+          }
           job.res.json(200, {
             id: `chatcmpl-ghost-${Date.now().toString(36)}`,
             object: "chat.completion",
@@ -223,6 +259,10 @@ export const handler = async (req, res) => {
   const sys = messages.filter((m) => m.role === "system").map((m) => String(m.content || "")).join("\n\n");
   const rest = messages.filter((m) => m.role !== "system").map((m) => String(m.content || "")).join("\n\n");
   const label = process.env.GHOST_JOB_LABEL || (b?.model ? String(b.model).slice(0, 40) : "ghost-job");
+  // One conversation id per caller: an explicit header/`user` wins, otherwise
+  // the day bucket keeps a single running Ghost conversation (the dream cycle
+  // reads the most recent few conversations).
+  const conversationId = String(req.headers?.["x-ghost-conversation"] || b?.user || `gateway-${new Date().toISOString().slice(0, 10)}`);
   const prompt = (sys ? `[system]\n${sys}\n\n[task]\n` : "") + rest;
   stats.requests++;
   if (queue.length > 50) {
@@ -234,6 +274,9 @@ export const handler = async (req, res) => {
   queue.push({
     label: `ghost-job-${label}`,
     prompt,
+    conversationId,
+    userText: rest,
+    conversationsDir: conversationsDir(),
     res: {
       json: (code, obj) => {
         res.writeHead(code, { "content-type": "application/json" });
