@@ -7,13 +7,20 @@ import assert from "node:assert/strict";
 import {
   EVKIND, EVVERSION, STAGES,
   evidenceVerdict, verifyEvidenceLive, record,
+  normalizeOptionId, findNewSessionId,
 } from "./acceptance-ordinary-session.mjs";
+import { mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtempSync } from "node:fs";
 
 const ses = (n) => `ses_${"abcdef123456".slice(0, 8)}${n}`;
 
 function completeOpenchamberEvidence(over = {}) {
   return {
-    kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: 3,
+    // The REAL CLI writes the option as a string ("3"); the fixture must match
+    // the artifact shape the gate actually consumes.
+    kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: "3",
     tag: "SING-ORD-" + "ef56ab90",
     startedAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
@@ -88,6 +95,44 @@ test("options never share acceptance evidence across runtimes (§4 binding)", ()
   const ocGate = evidenceVerdict(completeEvidence(), { expectRuntime: "openchamber" });
   assert.equal(ocGate.ok, false);
   assert.match(ocGate.detail, /claude-code/);
+});
+
+test("option ids are canonical across CLI strings, numbers and gates (§4 binding)", () => {
+  assert.equal(normalizeOptionId("3"), "3");
+  assert.equal(normalizeOptionId(3), "3");
+  assert.equal(normalizeOptionId(4), "4");
+  assert.equal(normalizeOptionId(" 3 "), "3");
+  assert.equal(normalizeOptionId("03"), null);
+  assert.equal(normalizeOptionId("5"), null);
+  assert.equal(normalizeOptionId(null), null);
+  // The real CLI stores "3"; the installer gate compares with a number-like
+  // value. That combination MUST verify (it silently failed before).
+  assert.equal(evidenceVerdict(completeOpenchamberEvidence({ option: "3" }), { expectRuntime: "openchamber", expectOption: 3 }).state, "VERIFIED");
+  assert.equal(evidenceVerdict(completeOpenchamberEvidence({ option: 3 }), { expectRuntime: "openchamber", expectOption: "3" }).state, "VERIFIED");
+  // ...but the option binding itself is never weakened.
+  assert.match(evidenceVerdict(completeOpenchamberEvidence({ option: "4" }), { expectRuntime: "openchamber", expectOption: 3 }).detail, /option 4.*option 3|never share/s);
+});
+
+test("session-id fallback extracts a real ses_ id, never a store path (§5)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "acc-sid-"));
+  try {
+    const sub = join(dir, "sessions");
+    mkdirSync(sub, { recursive: true });
+    const newer = join(sub, "ses_abc12345678.json");
+    const older = join(sub, "ses_def98765432.json");
+    writeFileSync(newer, "{}");
+    writeFileSync(older, "{}");
+    const now = Date.now() / 1000;
+    utimesSync(newer, now, now);
+    utimesSync(older, now - 10, now - 10);
+    const id = findNewSessionId(dir, new Set(), Date.now() - 60_000);
+    assert.equal(id, "ses_abc12345678", "the newest real id is returned — not the file path");
+    assert.equal(id.includes("/") || id.includes("\\"), false);
+    // Two fresh records written in the same second are ambiguous → refuse.
+    utimesSync(older, now, now);
+    utimesSync(newer, now, now);
+    assert.equal(findNewSessionId(dir, new Set(), Date.now() - 60_000), null, "ambiguous matches are rejected, never guessed");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("option 3 evidence can never satisfy an option 4 gate", () => {

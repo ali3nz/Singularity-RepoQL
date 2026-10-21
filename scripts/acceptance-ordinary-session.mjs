@@ -56,6 +56,20 @@ const OPENCODE_SESSION_RE = /^ses_[A-Za-z0-9_-]{8,}$/; // OpenCode-native sessio
 export const EVKIND = "singularity-ordinary-session";
 export const EVVERSION = 2;
 export const STAGES = ["SERVICE_REACHABLE", "AUTHENTICATED", "CAPTURE_VERIFIED", "PERSISTED", "NEW_SESSION_RECALL_VERIFIED"];
+
+/**
+ * Canonical installation-option identity. The CLI accepts "3"/"4" (strings),
+ * older fixtures and the installer once used numbers, and JSON files can hold
+ * either. Every comparison goes through this helper so a real CLI-generated
+ * evidence file and the installer gate agree, while option 3 still never
+ * satisfies option 4 (or a Claude Code option). Returns null for anything that
+ * is not exactly one of the four options.
+ */
+export function normalizeOptionId(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const s = String(value).trim();
+  return ["1", "2", "3", "4"].includes(s) ? s : null;
+}
 export const RUNTIMES = {
   "claude-code": "two headless `claude` sessions through the production memory proxy (installation options 1 and 2)",
   "openchamber": "two genuine OpenChamber/OpenCode-native sessions through the installed capture plugin (installation options 3 and 4)",
@@ -246,7 +260,9 @@ export function evidenceVerdict(e, { clockSkewMs = 10 * 60 * 1000, expectRuntime
     return { ok: false, state: "INCOMPLETE", detail: `evidence version mismatch (got ${e.version})` };
   if (expectRuntime && e.runtime !== expectRuntime)
     return { ok: false, state: "INCOMPLETE", detail: `evidence was produced on harness "${e.runtime || "unknown"}", but this gate verifies the "${expectRuntime}" runtime — the acceptance must be re-run on the installed option's OWN driver` };
-  if (expectOption && (e.option || null) !== expectOption)
+  const evidenceOption = normalizeOptionId(e.option);
+  const expectedOption = normalizeOptionId(expectOption);
+  if (expectedOption && evidenceOption !== expectedOption)
     return { ok: false, state: "INCOMPLETE", detail: `evidence was bound to installation option ${e.option ?? "(none)"}, but this gate verifies option ${expectOption} — options never share acceptance evidence` };
   const raw = JSON.stringify(e);
   if (/sk-[A-Za-z0-9]{6,}/.test(raw)) return { ok: false, state: "FAILED", detail: "evidence contains key-shaped material — refuse and re-run" };
@@ -451,7 +467,7 @@ function listSessionFiles(dir, out = [], depth = 0) {
   return out;
 }
 
-function findNewSessionId(storageRoot, knownSessionIds, sinceMs) {
+export function findNewSessionId(storageRoot, knownSessionIds, sinceMs) {
   if (!storageRoot) return null;
   const files = listSessionFiles(storageRoot);
   const parsed = [];
@@ -463,7 +479,14 @@ function findNewSessionId(storageRoot, knownSessionIds, sinceMs) {
     parsed.push({ f, st: statSync(f) });
   }
   parsed.sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
-  return parsed[0] ? parsed[0].f : null;
+  const winner = parsed[0];
+  if (!winner) return null;
+  // Two new records written within the same second are not attributable to the
+  // session this run just executed — refuse instead of guessing.
+  if (parsed[1] && Math.abs(winner.st.mtimeMs - parsed[1].st.mtimeMs) < 1000) return null;
+  // The store file NAME carries the real id; a path is never a session id.
+  const id = /^ses_[A-Za-z0-9_-]+/.exec(basename(winner.f))?.[0] || null;
+  return id && OPENCODE_SESSION_RE.test(id) ? id : null;
 }
 
 /**
@@ -476,7 +499,7 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
   const started = Date.now();
   const stages = STAGES.map((s) => record(s, false, "not reached"));
   const done = (detail, evidence = null, state = "INCOMPLETE") => {
-    const ev = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: option ?? null, startedAt: new Date(started).toISOString(), completedAt: nowIso(), stages, sessions: [], distinctSessions: false, cleanupScope: [], memoryScope: null, note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "", ...(evidence || {}) };
+    const ev = { kind: EVKIND, version: EVVERSION, runtime: "openchamber", option: normalizeOptionId(option), startedAt: new Date(started).toISOString(), completedAt: nowIso(), stages, sessions: [], distinctSessions: false, cleanupScope: [], memoryScope: null, note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "", ...(evidence || {}) };
     const all = STAGES.every((s) => ev.stages.find((x) => x.stage === s)?.state === "VERIFIED");
     return { ok: !!(evidence && all), state: evidence ? (all ? "VERIFIED" : "INCOMPLETE") : state, evidence: evidence ? ev : null, detail };
   };
@@ -578,13 +601,34 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
       recalled ? `new session ${sB.sessionId.slice(0, 24)} recalled the fact (${FACT_NUMBER}) through the project-scope memory loop, never from session ${sA.sessionId.slice(0, 24)}`
         : `new session did NOT recall the fact (distinct=${distinct}, answer-with-number=${sB.answer.includes(FACT_NUMBER)}) — ${(sB.detail || sB.answer && "unrelated answer" || "memory loop did not supply the value").slice(0, 120)}`);
 
+    // eventObserved is EVIDENCE-BACKED, never asserted: a session counts as
+    // observed only when the installed plugin's own conversation rows exist for
+    // that runtime session id (the plugin writes them on real lifecycle events).
+    const readRows = async (sid, waitMs = 0) => {
+      if (!sid) return [];
+      const started = Date.now();
+      for (;;) {
+        const r = await callMemoryCore("/v3/conversation/query", { ...scope, session_id: sid, offset: 0, limit: 50 }, cfg, fetchImpl).catch(() => null);
+        const arr = r && !r.error ? (r.messages || r.data?.messages || []) : [];
+        if (arr.length || Date.now() - started >= waitMs) return arr;
+        await new Promise((done) => setTimeout(done, 5000));
+      }
+    };
+    const convRowsB = await readRows(sB.sessionId, 20_000);
+    const eventObservedA = !!capturedStore;
+    const eventObservedB = convRowsB.length > 0;
     const evidence = {
-      tag, factLabel: tag, factNumber: FACT_NUMBER, option: option ?? null, // set by callers when the harness runs under an explicit install option
+      tag, factLabel: tag, factNumber: FACT_NUMBER, option: normalizeOptionId(option), // set by callers when the harness runs under an explicit install option
       stages: [...stages],
       sessions: [
-        { id: sA.sessionId, role: "capture", workspace: w1, eventObserved: true },
-        { id: sB.sessionId || "unknown", role: "recall", workspace: w1, eventObserved: distinct },
+        { id: sA.sessionId, role: "capture", workspace: w1, eventObserved: eventObservedA },
+        { id: sB.sessionId || "unknown", role: "recall", workspace: w1, eventObserved: eventObservedB },
       ],
+      eventEvidence: {
+        source: "installed plugin conversation rows per runtime session id",
+        captureRows: convRows.length,
+        recallRows: convRowsB.length,
+      },
       distinctSessions: !!distinct,
       captureStore: "conversation",
       memoryScope: { serviceId: cfg.serviceId || memTarget.serviceId, teamId: scope.team_id, agentId: scope.agent_id || "build", userId: scope.user_id },

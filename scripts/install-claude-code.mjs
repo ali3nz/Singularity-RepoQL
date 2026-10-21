@@ -1054,7 +1054,8 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     // An OpenChamber target verifies the option's OWN native driver: runtime
     // "openchamber", bound to the exact installation option (3 or 4).
     ordinaryBinding: v.openchamber
-      ? { expectRuntime: "openchamber", expectOption: Number(flags.variant) || null }
+      // Canonical option ids are STRINGS (the CLI shape and the evidence shape).
+      ? { expectRuntime: "openchamber", expectOption: String(flags.variant) || null }
       : null,
   });
   for (const c of proofs.checked) checked.push(c);
