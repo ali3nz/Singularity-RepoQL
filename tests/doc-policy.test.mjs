@@ -430,6 +430,51 @@ test("§8 two simultaneous evaluations on two sessions produce one authoritative
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("§7 an indexed-but-unverified ingestion record is NEVER promoted to CAPTURED (consultant finding)", async () => {
+  const dir = scratch();
+  try {
+    // Ingest pass reports INDEXED (resolved), but the ledger verifier refuses
+    // (stub denies verification) → the disposition must stay DEFERRED.
+    const rec = await recordAutomaticLearningAssessment("la5", dir, {
+      env: { SINGULARITY_REPO_ROOT: dir }, results: [{ file: "docs/r.md", status: "DOC_INGEST_INDEXED" }], observable: true, newDirty: ["docs/r.md"],
+      execImpl: (file, args, opts, cb) => cb(null, JSON.stringify({ status: "DOC_INGEST_NOT_VERIFIED", reason: "stub refuses" }), ""),
+    });
+    assert.equal(rec.status, "DEFERRED", "a caller- or pass-reported INDEXED status is a claim, not proof");
+    const stored = loadAssessment("la5", dir);
+    assert.equal(stored.captureStatus, "DEFERRED");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 CAPTURED derives from the ledger verification through the SAME verify path", async () => {
+  const dir = scratch();
+  try {
+    const rec = await recordAutomaticLearningAssessment("la6", dir, {
+      env: { SINGULARITY_REPO_ROOT: dir }, results: [{ file: "docs/r.md", status: "DOC_INGEST_INDEXED" }], observable: true, newDirty: ["docs/r.md"],
+      execImpl: (file, args, opts, cb) => cb(null, JSON.stringify({ status: "DOC_INGEST_VERIFIED" }), ""),
+    });
+    assert.equal(rec.status, "CAPTURED");
+    const stored = loadAssessment("la6", dir);
+    assert.equal(stored.ingestion[0], "DOC_INGEST_VERIFIED");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§8 a record claimed by a concurrent writer between load and write is kept, not clobbered", async () => {
+  const dir = scratch();
+  try {
+    const started = recordAutomaticLearningAssessment("la8", dir, {
+      env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"],
+    });
+    // Simulate the race: the other writer claims WHILE our pass is evaluating.
+    writeAssessmentAtomic("la8", dir, { files: ["a.py"], docStatus: "DOC_UPDATED", docs: ["docs/r.md"], ingestion: [], captureStatus: "CAPTURED" });
+    const rec = await started;
+    assert.equal(rec.status, "CAPTURED", "the pass keeps the claim that appeared concurrently");
+    assert.match(rec.detail, /kept/);
+    const stored = loadAssessment("la8", dir);
+    assert.equal(stored.captureStatus, "CAPTURED", "the concurrent agent claim survives byte-intact");
+    assert.deepEqual(stored.files, ["a.py"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("§7 autoIngestChangedDocs carries the automatic learning disposition in its result", async () => {
   const dir = scratch();
   const origCwd = process.cwd();

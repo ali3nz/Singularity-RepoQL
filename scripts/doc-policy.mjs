@@ -352,6 +352,7 @@ export async function ingestDocChange(absDoc, docRoot, session, { execImpl = nul
 }
 
 const INGEST_RESOLVED_STATES = new Set(["DOC_INGEST_INDEXED", "DOC_INGEST_UNCHANGED"]);
+const CLAIM_STATUS = new Set(["CAPTURED", "NO_LESSON", "DEFERRED"]); // an explicit agent/automatic disposition
 
 // The shared auto-ingestion pass. Ingests only NEW/CHANGED eligible docs
 // (content-hash dedup inside memory-doc-ingest renders repeats as
@@ -406,19 +407,43 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
  * rename) so two sessions evaluate their own keys independently (§8).
  */
 export async function recordAutomaticLearningAssessment(session, dir, { execImpl = null, env = process.env, results = [], observable = true, dirty = null, newDirty = null } = {}) {
+  // One real macrotask yield at the start: the load → evaluate → write window
+  // is genuinely asynchronous for concurrent hook passes, so the write-time
+  // re-check below (and any concurrent claim) is exercised the same way in
+  // production as it is in the §8 test. The pass remains fail-safe either way.
+  await new Promise((r) => setTimeout(r, 0));
   const root = env.SINGULARITY_REPO_ROOT || process.cwd();
   const existing = loadAssessment(session, root);
-  if (existing && ["CAPTURED", "NO_LESSON", "DEFERRED"].includes(existing.captureStatus))
+  if (existing && CLAIM_STATUS.has(existing.captureStatus))
     return { status: existing.captureStatus, assessment: null, detail: "an already-claimed assessment is kept (never overwritten)" };
+  // Single write owner with a re-check at write time: a record CLAIMED by a
+  // concurrent writer between this pass's load and its write is kept (the
+  // on-disk check is repeated inside guarded) — the newest-claim-wins rule
+  // means no hook pass can clobber another writer's honest disposition (§8).
   const guarded = (rec) => {
-    const merged = { ...(existing || {}), ...rec };
+    const onDisk = loadAssessment(session, root);
+    if (onDisk && CLAIM_STATUS.has(onDisk.captureStatus)) return { written: false, record: onDisk };
+    const merged = { ...(onDisk || existing || {}), ...rec };
     writeAssessmentAtomic(session, root, merged);
-    return merged;
+    return { written: true, record: merged };
   };
-  const verifiedDocs = (results || []).filter((r) => r.status === "DOC_INGEST_VERIFIED");
+  // CAPTURED is ledger-evidence, never the ingest pass's own status string:
+  // the pass reports DOC_INGEST_INDEXED/DOC_INGEST_UNCHANGED, while verified
+  // existence is derived through collectEvidence (the same verify CLI the
+  // agent-facing assessment is held to), so an indexed-but-unverified record
+  // can never be promoted to CAPTURED here.
+  const ingestResults = (results || []).filter((r) => INGEST_RESOLVED_STATES.has(r.status));
+  let verifiedDocs = (results || []).filter((r) => r.status === "DOC_INGEST_VERIFIED");
+  if (!verifiedDocs.length && ingestResults.length) {
+    const evidence = await collectEvidence(ingestResults.map((r) => r.file), dir, execImpl);
+    for (const r of ingestResults) {
+      if (evidence[r.file]?.status === "DOC_INGEST_VERIFIED") verifiedDocs.push({ file: r.file, status: "DOC_INGEST_VERIFIED" });
+    }
+  }
   if (verifiedDocs.length) {
     const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map(() => "DOC_INGEST_VERIFIED"), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable candidate (promotion stays gated)", automatic: true, recordedAt: new Date().toISOString() });
-    return { status: "CAPTURED", assessment: rec, detail: `automatic CAPTURED from ${verifiedDocs.length} verified ingestion record(s)` };
+    if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
+    return { status: "CAPTURED", assessment: rec.record, detail: `automatic CAPTURED from ${verifiedDocs.length} ledger-verified ingestion record(s)` };
   }
   const materialObserved = observable === false
     ? (results || []).length > 0
@@ -426,10 +451,12 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   if (!materialObserved) {
     if (existing) return { status: existing.captureStatus || "NO_LESSON", assessment: existing, detail: "existing assessment kept" };
     const rec = guarded({ files: [], docStatus: "DOC_NOT_REQUIRED", docReason: "automatic pass: no material change observed in this session's window", docs: [], ingestion: [], captureStatus: "NO_LESSON", captureReason: "automatic: nothing material was observed, so no lesson candidate exists", automatic: true, recordedAt: new Date().toISOString() });
-    return { status: "NO_LESSON", assessment: rec, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
+    if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
+    return { status: "NO_LESSON", assessment: rec.record, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
   }
   const rec = guarded({ files: (results || []).map((r) => r.file), captureStatus: "DEFERRED", captureReason: "automatic: material work observed but the agent's verified lesson token is unreported — uses the gated propose path (data/selflearn pending), nothing is lost", automatic: true, recordedAt: new Date().toISOString(), deferredPending: "data/selflearn/pending" });
-  return { status: "DEFERRED", assessment: rec, detail: "automatic DEFERRED: material work, gated promotion pending" };
+  if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
+  return { status: "DEFERRED", assessment: rec.record, detail: "automatic DEFERRED: material work, gated promotion pending" };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
