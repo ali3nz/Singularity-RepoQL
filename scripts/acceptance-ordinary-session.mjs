@@ -82,7 +82,11 @@ export function record(stage, ok, detail = "") {
 const nowIso = () => new Date().toISOString();
 
 /** Run one disposable headless session; returns { ok, sessionId, answer, detail }. */
-export function runClaudeSession({ workspace, prompt, env, timeoutMs = 240_000 }) {
+export function runClaudeSession({ workspace, prompt, env, timeoutMs }) {
+  // Self-hosted / free-tier upstreams (OpenRouter free slugs) can run the
+  // memory-tool loop well past 240 s; the budget is tunable without a code
+  // change. Default stays 240s (paid upstreams answer in tens of seconds).
+  timeoutMs = timeoutMs || Number(env?.SINGULARITY_CC_SESSION_TIMEOUT_MS) || 240_000;
   const r = spawnSync("claude", ["-p", prompt, "--output-format", "json"], {
     cwd: workspace,
     env,
