@@ -1055,7 +1055,9 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
     // "openchamber", bound to the exact installation option (3 or 4).
     ordinaryBinding: v.openchamber
       // Canonical option ids are STRINGS (the CLI shape and the evidence shape).
-      ? { expectRuntime: "openchamber", expectOption: String(flags.variant) || null }
+      // Never String(undefined): an absent variant must stay null (no binding),
+      // not become the truthy literal "undefined".
+      ? { expectRuntime: "openchamber", expectOption: flags.variant || null }
       : null,
   });
   for (const c of proofs.checked) checked.push(c);

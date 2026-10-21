@@ -113,6 +113,16 @@ test("option ids are canonical across CLI strings, numbers and gates (§4 bindin
   assert.match(evidenceVerdict(completeOpenchamberEvidence({ option: "4" }), { expectRuntime: "openchamber", expectOption: 3 }).detail, /option 4.*option 3|never share/s);
 });
 
+test("an invalid expected option fails closed rather than skipping the binding (consult finding)", () => {
+  const g = evidenceVerdict(completeOpenchamberEvidence({ option: "3" }), { expectRuntime: "openchamber", expectOption: "undefined" });
+  assert.equal(g.ok, false);
+  assert.match(g.detail, /invalid installation option/);
+  const g2 = evidenceVerdict(completeOpenchamberEvidence({ option: "3" }), { expectRuntime: "openchamber", expectOption: Number.NaN });
+  assert.equal(g2.ok, false);
+  // No expectation at all remains the documented "runtime-only" gate.
+  assert.equal(evidenceVerdict(completeOpenchamberEvidence(), { expectRuntime: "openchamber", expectOption: null }).state, "VERIFIED");
+});
+
 test("session-id fallback extracts a real ses_ id, never a store path (§5)", () => {
   const dir = mkdtempSync(join(tmpdir(), "acc-sid-"));
   try {

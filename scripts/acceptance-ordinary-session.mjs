@@ -260,10 +260,17 @@ export function evidenceVerdict(e, { clockSkewMs = 10 * 60 * 1000, expectRuntime
     return { ok: false, state: "INCOMPLETE", detail: `evidence version mismatch (got ${e.version})` };
   if (expectRuntime && e.runtime !== expectRuntime)
     return { ok: false, state: "INCOMPLETE", detail: `evidence was produced on harness "${e.runtime || "unknown"}", but this gate verifies the "${expectRuntime}" runtime — the acceptance must be re-run on the installed option's OWN driver` };
-  const evidenceOption = normalizeOptionId(e.option);
-  const expectedOption = normalizeOptionId(expectOption);
-  if (expectedOption && evidenceOption !== expectedOption)
-    return { ok: false, state: "INCOMPLETE", detail: `evidence was bound to installation option ${e.option ?? "(none)"}, but this gate verifies option ${expectOption} — options never share acceptance evidence` };
+  // Fail CLOSED when an expectation was supplied but is not a real option: an
+  // invalid gate value must never silently skip the binding (consult finding).
+  const hasExpectation = !(expectOption === null || expectOption === undefined || String(expectOption).trim() === "");
+  if (hasExpectation) {
+    const expectedOption = normalizeOptionId(expectOption);
+    if (!expectedOption)
+      return { ok: false, state: "INCOMPLETE", detail: `the gate supplied an invalid installation option (${String(expectOption).slice(0, 20)}) — refusing rather than skipping the option binding` };
+    const evidenceOption = normalizeOptionId(e.option);
+    if (evidenceOption !== expectedOption)
+      return { ok: false, state: "INCOMPLETE", detail: `evidence was bound to installation option ${e.option ?? "(none)"}, but this gate verifies option ${expectOption} — options never share acceptance evidence` };
+  }
   const raw = JSON.stringify(e);
   if (/sk-[A-Za-z0-9]{6,}/.test(raw)) return { ok: false, state: "FAILED", detail: "evidence contains key-shaped material — refuse and re-run" };
   const missingStage = STAGES.find((s) => !e.stages?.some((x) => x.stage === s && x.state === "VERIFIED"));
