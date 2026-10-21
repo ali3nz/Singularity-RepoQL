@@ -116,7 +116,7 @@ export async function runDocHook(argv, opts = {}) {
       // Baseline: pre-existing dirty files stay unattributable to this session.
       await saveSessionBaseline(input.session_id || "unknown", root, { env: opts.env || process.env });
     } catch { /* baseline failure must not break the session */ }
-    // Durable-queue resume (Sol: liveness must not depend on one session
+    // Durable-queue resume (release-review requirement: liveness must not depend on one session
     // finishing). Bounded to ONE candidate; the scheduler CLI drains backlog.
     try {
       const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1 });
@@ -216,19 +216,31 @@ export async function runDocHook(argv, opts = {}) {
       let record = null;
       try { record = loadAssessment(session, root); } catch { record = null; }
       if (record) {
-        let findings;
-        try {
-          const evidence = record.docStatus === "DOC_UPDATED" && (record.docs || []).length
-            ? await collectEvidence(record.docs, root)
-            : null;
-          findings = evaluateAssessment(record, { evidence });
-        } catch (e) {
-          findings = [`FINDING: assessment evaluation failed (${clip(String(e?.message || e), 120)})`];
+        // An AUTOMATIC LEARNING-ONLY record (captureStatus DEFERRED, no
+        // documentation status) is the self-learning queue pointer, not a
+        // documentation assessment: it must never masquerade as the agent's
+        // claimed disposition, since that would swap the honest "material
+        // implementation change without a documentation assessment" closure
+        // message for a generic assessment reminder (and Chinese docs through
+        // the separate doc pipeline stay unaffected). Whenever the agent later
+        // records a real assessment, docStatus appears and this path is used.
+        const learningOnly = record.automatic === true && (record.docStatus == null);
+        if (!learningOnly) {
+          let findings;
+          try {
+            const evidence = record.docStatus === "DOC_UPDATED" && (record.docs || []).length
+              ? await collectEvidence(record.docs, root)
+              : null;
+            findings = evaluateAssessment(record, { evidence });
+          } catch (e) {
+            findings = [`FINDING: assessment evaluation failed (${clip(String(e?.message || e), 120)})`];
+          }
+          if (findings.length) return blockOnce(session, root, findings, stderr);
+          return { exitCode: 0, stdout: null, stderr };
         }
-        if (findings.length) return blockOnce(session, root, findings, stderr);
-        return { exitCode: 0, stdout: null, stderr };
+        stderr.push(`singularity doc hook: automatic learning record present (${record.captureStatus || "pending"}), no documentation assessment recorded yet`);
       }
-      if (materialObserved && !record) {
+      if (materialObserved && (!record || (record.automatic === true && (record.docStatus == null)))) {
         return blockOnce(session, root, [
           "FINDING: material implementation change observed without a documentation assessment — record one (node scripts/doc-policy.mjs assess --session <id> --files ... --doc-status DOC_UPDATED|DOC_NOT_REQUIRED [<reason>] --capture-status CAPTURED|NO_LESSON|DEFERRED); documentation-only or trivial work may report DOC_NOT_REQUIRED with a concrete reason.",
         ], stderr);

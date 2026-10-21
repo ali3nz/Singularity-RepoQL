@@ -467,7 +467,7 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
  *     change, nothing new dirty) — the existing NO_LESSON contract.
  *   - DEFERRED: material work exists but the agent's verified lesson token is
  *     unreported — the durable discovery record is created here (never lost).
- * DISCOVERY IS INDEPENDENT OF THE DOCUMENTATION DISPOSITION (Sol review):
+ * DISCOVERY IS INDEPENDENT OF THE DOCUMENTATION DISPOSITION (release-review requirement):
  * whenever material work is observed, a durable selflearn candidate is created
  * before any model call, and the bounded evaluator runs on this same event.
  * Promotion stays gated.
@@ -510,12 +510,17 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   // documentation knowledge, not a code lesson — and this runtime's own state
   // files (data/selflearn, data/doc-policy, .repoql, …) are NOT task material.
   // "Material work was observed" therefore uses the same classification as
-  // discovery: counting a raw untracked `data/` entry as material made every
-  // trivial pass look like deliverable work (real false positive on .241).
+  // discovery: counting the raw untracked `data/` entry or the ingestion pass's
+  // own results made every (docs-only) window look like deliverable code work
+  // and mis-claimed DEFERRED on pure documentation sessions (real false
+  // positive on .241). Doc knowledge is closed through the doc pipeline
+  // (docStatus/ingestion evidence), never through lesson discovery.
   const materialFiles = classifyFiles(observedFiles).material;
-  const materialObserved = observable === false
-    ? (results || []).length > 0
-    : ((results || []).length > 0 || materialFiles.length > 0);
+  // Docs-only ingestion still advances the disposition pipeline (it is the
+  // unverified-claim fallback §7 documents), but it must never be described as
+  // code-material work: the lesson reason text then says exactly what was seen.
+  const codeMaterial = materialFiles.length > 0;
+  const materialObserved = codeMaterial || (results || []).length > 0;
   let discovered = null;
   if (materialObserved && materialFiles.length) {
     try {
@@ -601,7 +606,9 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
     return { status: "NO_LESSON", assessment: rec.record, candidate: null, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
   }
-  const rec = guarded({ files: observedFiles, captureStatus: "DEFERRED", captureReason: "automatic: material work observed; the agent's verified lesson token is unreported — the durable selflearn candidate carries the work and resumes automatically", automatic: true, recordedAt: new Date().toISOString(), ...(discovered?.record ? { deferredPending: relPosix(root, candidatePath(discovered.record.id, root)) } : {}) });
+  const rec = guarded({ files: observedFiles, captureStatus: "DEFERRED", captureReason: codeMaterial
+      ? "automatic: material work observed; the agent's verified lesson token is unreported — the durable selflearn candidate carries the work and resumes automatically"
+      : "automatic: documentation-only ingestion observed (no code-material change); lesson discovery is not applicable, doc knowledge is captured through the doc pipeline", automatic: true, recordedAt: new Date().toISOString(), ...(discovered?.record ? { deferredPending: relPosix(root, candidatePath(discovered.record.id, root)) } : {}) });
   if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})`, candidate: discovered?.record || null };
   const evaluation = await evaluate();
   const current = candidateForSession();

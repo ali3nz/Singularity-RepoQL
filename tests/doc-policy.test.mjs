@@ -474,7 +474,7 @@ test("§7 pending candidates are idempotent, survive a CAPTURED disposition, and
     assert.equal(listPendingCandidates(dir).length, 1, "no duplicate work item");
     assert.equal(pendingCandidateDir(dir).startsWith(dir), true);
 
-    // Sol requirement: documentation disposition does NOT erase an unevaluated
+    // Release-review requirement: documentation disposition does NOT erase an unevaluated
     // lesson. A later CAPTURED pass keeps the candidate queued for evaluation.
     const first = await recordAutomaticLearningAssessment("la5", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"] });
     assert.equal(first.status, "DEFERRED");

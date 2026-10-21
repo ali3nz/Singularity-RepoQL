@@ -205,8 +205,8 @@ test("the attach records a manifest and the rollback restores exactly what the a
   // byte-identical copies land in <config>/singularity-runtime/scripts/ so the
   // plugin's deterministic import resolves in the FOREIGN target runtime.
   const runtimeFiles = manifest.files.filter((f) => f.rel.startsWith("plugins/singularity-runtime/scripts/"));
-  assert.equal(runtimeFiles.length, 3, "doc-policy.mjs, memory-doc-ingest.py and its sibling memory_client.py are carried into the target");
-  for (const name of ["doc-policy.mjs", "memory-doc-ingest.py", "memory_client.py"]) {
+  assert.equal(runtimeFiles.length, 4, "doc-policy.mjs, its selflearn-candidates.mjs dependency, memory-doc-ingest.py and its sibling memory_client.py are carried into the target");
+  for (const name of ["doc-policy.mjs", "selflearn-candidates.mjs", "memory-doc-ingest.py", "memory_client.py"]) {
     const dst = join(dir, "plugins", "singularity-runtime", "scripts", name);
     assert.ok(existsSync(dst), `${name} is installed into the target runtime`);
     assert.equal(
