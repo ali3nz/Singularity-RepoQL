@@ -326,6 +326,10 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
         EXTRACTION_FAILOVER_COHERE_BASE: `http://127.0.0.1:${portB}/v1`,
         EXTRACTION_FAILOVER_PORT: String(port),
         EXTRACTION_FAILOVER_TIMEOUT_MS: "5000",
+        // The quota ledger default (/data/…) is unwritable on CI runners; the
+        // controlled proof needs the secondary hop usable, so the child gets
+        // its own writable temp ledger (value-only path, never printed).
+        COHERE_QUOTA_FILE: join(secretsDir, "cohere-quota-ledger.json"),
         ...(process.env.EXTRACTION_FAILOVER_SKIP ? {} : { EXTRACTION_FAILOVER_SKIP: "groq-20b" }),
         ...(inject ? { EXTRACTION_FAILOVER_INJECT: inject } : {}),
       },

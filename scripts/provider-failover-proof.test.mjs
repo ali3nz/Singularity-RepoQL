@@ -56,6 +56,7 @@ test("injection knob: retryable status fails over, permanent status surfaces and
         EXTRACTION_FAILOVER_PORT: String(port),
         EXTRACTION_FAILOVER_TIMEOUT_MS: "3000",
         EXTRACTION_FAILOVER_SKIP: "groq-20b",
+        COHERE_QUOTA_FILE: join(tmpdir(), "knob-cohere-quota.json"),
         ...(inject ? { EXTRACTION_FAILOVER_INJECT: inject } : {}),
       },
       stdio: ["ignore", "ignore", "ignore"],
