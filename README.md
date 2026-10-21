@@ -130,9 +130,9 @@ The installer reports INCOMPLETE until every mandatory capability of the chosen 
 - Two LLM API provider accounts of your own, with keys you hold. Sign up directly with each provider; pricing, quotas and model availability are set by the provider:
   - NVIDIA — https://build.nvidia.com/
   - Groq — https://console.groq.com/     - Go sign up and get an API key, its free. The rest can be ignored for now. 
-  - Cerebras — https://cloud.cerebras.ai/ - Go sign up and get an API key, its free. The rest can be ignored for now. 
+  - Cerebras — https://cloud.cerebras.ai/ 
   - OpenRouter — https://openrouter.ai/
-  - Cohere — https://dashboard.cohere.com/
+  - Cohere — https://dashboard.cohere.com/ - Go sign up and get an API key, its free. The rest can be ignored for now. 
 - The shipped extraction failover router supports Groq and Cohere out of the box (`secrets/groq-api-key`, `secrets/cohere-api-key`). Any additional OpenAI-compatible provider (NVIDIA, Cerebras, OpenRouter, …) can be onboarded with a PAIR in the secrets directory — `<name>-api-key` plus `<name>-api-provider.json` (`{ "name", "base" (https), "model" }`); a file that does not validate never becomes a hop. Verify both extraction providers and a controlled live fallback (`scripts/runtime-proofs.mjs`) before accepting failover.
 
 ## Technical documentation
