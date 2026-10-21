@@ -529,9 +529,11 @@ export async function runOpenchamberAcceptance({ env = process.env, fetchImpl = 
     try { scope = scopeFactory.scopeForSession({ location: { directory }, projectID }, "build"); }
     catch (e) { return done(`the plugin's own scope derivation refused the session: ${String(e?.message || e).slice(0, 120)}`); }
 
-    // Capture/store read-back through the plugin's OWN reconcile query path.
+    // Capture/store read-back through the plugin's OWN reconcile query path
+    // (the plugin posts to memoryRequest(path) = baseUrl + /v3 + path, so the
+    // read-back must use the same surface).
     const queryBody = { ...scope, session_id: sA.sessionId, offset: 0, limit: 50 };
-    const rows = await callMemoryCore("/conversation/query", queryBody, cfg, fetchImpl).catch(() => null);
+    const rows = await callMemoryCore("/v3/conversation/query", queryBody, cfg, fetchImpl).catch(() => null);
     const convRows = rows && !rows.error ? (rows.messages || rows.data?.messages || []) : [];
     const capturedStore = JSON.stringify(convRows).includes(tag);
     stages[2] = record("CAPTURE_VERIFIED", !!capturedStore, capturedStore ? `the installed plugin wrote the turn for session ${sA.sessionId.slice(0, 24)} (scope ${scope.team_id.slice(0, 12)}…; ${convRows.length} row(s))` : `no conversation row for session ${sA.sessionId.slice(0, 24)} under the derived scope — capture never persisted`);
