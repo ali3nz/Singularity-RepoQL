@@ -9,6 +9,13 @@ live. Singularity feeds it two ways:
 - [`../adapters/claude-code/`](../adapters/claude-code/) posts metadata-only
   events from Claude Code hooks (prompts and tool I/O are never forwarded).
 
+![Claude Office live view — the Orchestra Office floor with an agent at each desk](assets/claude-office-live-view-20261021.png)
+
+*Live view of the reference deployment (v0.24.1, 2026-10-21): the office floor
+with the agent cast, session and git panels on the left, and the live
+agent-state and event panels on the right. The visualizer is a one-way,
+read-only observer — nothing in it commands work.*
+
 Office ships automatically with installation options 2 and 4; options 1 and 3 exclude it. Memory capture and recall work without it.
 
 ## Get the software
