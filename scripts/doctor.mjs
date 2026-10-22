@@ -186,7 +186,7 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       try {
         const r = await fetchImpl(`${base}/chat/completions`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
+          body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 24 }),
           signal: AbortSignal.timeout(15_000),
         });
         const j = await r.json().catch(() => null);

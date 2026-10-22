@@ -217,6 +217,12 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
     const evidence = {
       tag, factLabel: tag, factNumber: FACT_NUMBER,
       stages: [...stages],
+      memoryScope: {
+        serviceId: memoryConfig.serviceId || "default",
+        teamId: memoryConfig.identity.team_id,
+        agentId: memoryConfig.identity.agent_id || "claude-code",
+        userId: memoryConfig.identity.user_id,
+      },
       sessions: [
         { id: sA.sessionId || "unknown", role: "capture", workspace: w1 },
         { id: sB.sessionId || "unknown", role: "recall", workspace: w2 },
@@ -367,7 +373,7 @@ export function evidenceVerdict(e, { clockSkewMs = 10 * 60 * 1000, expectRuntime
 export async function verifyEvidenceLive(e, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (!e || !e.tag) return { ok: false, state: "INCOMPLETE", detail: "no tag to re-verify" };
   const cfg = loadGhostMemoryConfig(env);
-  if (e.runtime === "openchamber" && e.memoryScope) {
+  if (e.memoryScope && (e.runtime === "openchamber" || e.runtime === "claude-code")) {
     // SCOPE-BOUND corroboration: the tag must be found by searching EXACTLY the
     // evidence's recorded scope through the real service with the target's own
     // credentials — a fabricator without the real stack cannot produce that,
