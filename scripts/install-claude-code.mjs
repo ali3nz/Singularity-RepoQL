@@ -156,7 +156,7 @@ export function detectRql(home, env = process.env) {
 // second installer is created.
 export const VARIANTS = Object.freeze({
   1: { name: "Claude Code + MemoryCore", ghost: false, office: false },
-  2: { name: "Claude Code Complete", ghost: true, office: true, ghostBackend: "claude-code" },
+  2: { name: "Ghost + Office Complete", ghost: true, office: true, ghostBackend: "claude-code" },
   3: { name: "Existing OpenChamber + MemoryCore", ghost: false, office: false, openchamber: true },
   4: { name: "OpenChamber Complete", ghost: true, office: true, ghostBackend: "openchamber", openchamber: true },
 });
