@@ -14,13 +14,20 @@
 //
 // No probe prints, returns or logs key material.
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 
 const ADMIN_USER_TYPES = new Set(["system_admin", "admin", "root", "superadmin", "super_admin", "owner"]);
+/** The memory core's published user taxonomy is exactly
+ * "normal" | "system_admin" (memory-core src/metadata/types.ts:16) and the
+ * synthetic scoped user built from the configured key carries
+ * user_type: "normal" (system-user.ts). "business_user" is kept as a legacy
+ * alias accepted by older core builds. Anything else is fail-closed
+ * UNVERIFIED — never a silent pass for an unrecognized type. */
+const SCOPED_USER_TYPES = new Set(["normal", "business_user"]);
 /** The memory stack's ADMINISTRATIVE key (memory/upstream/.admin-key), read in-process. Never printed. */
 export function readAdministrativeKey(root) {
   try { return readFileSync(join(root, "memory", "upstream", ".admin-key"), "utf8").trim(); } catch { return ""; }
@@ -68,13 +75,14 @@ export function runCommand(cmd, args, { env = process.env, cwd = undefined, time
  * an administrative type → the credential is administrative (never a scoped
  *                         runtime credential: it is refused, never downgraded)
  * an empty/unknown type → the semantics cannot be discriminated: UNVERIFIED
- * a known non-admin type → a scoped business identity
+ * a known non-admin type → a scoped identity ("normal" in the shipped core's
+ *                         taxonomy, "business_user" on older builds)
  */
 export function classifyMemoryScope({ valid, userType } = {}) {
   if (!valid) return { state: "AUTH_FAILED", scoped: false };
   const t = String(userType || "").trim().toLowerCase();
   if (ADMIN_USER_TYPES.has(t)) return { state: "ADMIN", scoped: false };
-  if (t !== "business_user") return { state: "UNVERIFIED", scoped: false };
+  if (!SCOPED_USER_TYPES.has(t)) return { state: "UNVERIFIED", scoped: false };
   return { state: "OK", scoped: true };
 }
 
@@ -130,7 +138,9 @@ export async function probeMemoryIdentity({ config, baseUrl, fetchImpl = globalT
   }
   if (cls.state === "UNVERIFIED") {
     return { ok: false, state: "UNVERIFIED", userType, userId,
-      detail: "the key authenticates but its scope cannot be discriminated (no user type) — UNVERIFIED, never relabelled as a scoped identity" };
+      detail: userType
+        ? `the key authenticates but reports an unrecognized user type ("${userType}") — UNVERIFIED, never relabelled as a scoped identity`
+        : "the key authenticates but its scope cannot be discriminated (no user type) — UNVERIFIED, never relabelled as a scoped identity" };
   }
   // A scoped key must also be able to act in the identity the plugin uses.
   const id = memoryIdentity(config);
@@ -442,10 +452,27 @@ export async function probeProviderFailover({ root, timeout = 60000, fetchImpl =
     return "";
   };
   const accounts = [];
-  for (const [name, base, model] of [
+  // Groq and Cohere are the built-in ladder entries; any additional OpenAI-
+  // compatible provider is onboarded with the SAME pair the router itself
+  // accepts (extraction-failover.mjs): <name>-api-key + <name>-api-provider.json
+  // ({ name, base, model }). A pair without a validating descriptor never
+  // becomes an account here, mirroring the router — a key file alone cannot
+  // serve as a hop.
+  const credentials = [
     ["groq", "https://api.groq.com/openai/v1", "openai/gpt-oss-20b"],
     ["cohere", "https://api.cohere.ai/compatibility/v1", "command-a-03-2025"],
-  ]) {
+  ];
+  try {
+    for (const f of readdirSync(secrets)) {
+      const m = /^([a-zA-Z0-9][a-zA-Z0-9._-]*)-api-key$/.exec(f);
+      if (!m || m[1] === "groq" || m[1] === "cohere") continue;
+      let spec = null;
+      try { spec = JSON.parse(readFileSync(join(secrets, `${m[1]}-api-provider.json`), "utf8")); } catch { continue; }
+      if (!spec || typeof spec.base !== "string" || !spec.base || typeof spec.model !== "string" || !spec.model) continue;
+      credentials.push([m[1], spec.base, spec.model]);
+    }
+  } catch { /* no secrets dir — the built-in scan below reports MISSING correctly */ }
+  for (const [name, base, model] of credentials) {
     const key = readSecret(join(secrets, `${name}-api-key`));
     if (key) accounts.push({ name, base, key, model });
   }

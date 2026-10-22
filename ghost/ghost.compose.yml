@@ -38,14 +38,24 @@ services:
     env_file:
       - ${GHOST_ENV_FILE:-../secrets/ghost.env}
     environment:
-      # The model lane is DERIVED (see ghost/setup-ghost.sh and
-      # scripts/provision-secrets.py): a lane the proxy does not register
-      # answers with a routing error, never with a model.
-      GATEWAY_URL: "${GHOST_DREAM_GATEWAY_URL:-http://proxy:8096/claude-code/default/v1}"
-      GHOST_UPSTREAM_BASE: "${GHOST_UPSTREAM_BASE:-http://proxy:8096/claude-code/default/v1}"
+      # The lane, its key and the dream model ladder come from the env_file
+      # (secrets/ghost.env — DERIVED by ghost/setup-ghost.sh, including the
+      # MEMORY_LLM_MODEL-derived DREAM_MODELS). They are deliberately NOT
+      # repeated here: Compose resolves ${...} interpolation from the host
+      # environment / compose .env only — it never reads env_file values, so an
+      # interpolated fallback would silently override the real configured lane
+      # (this shipped default /claude-code/default/v1 kept a provisioned
+      # openchamber-scoped key on a lane that rejects it).
       GHOST_BACKEND: "${GHOST_BACKEND:-openchamber}"
       GHOST_DATA_DIR: "/data/ghost"
       GHOST_TIMEZONE: "${GHOST_TIMEZONE:-UTC}"
+      # The memfs git repository is created host-side (often uid-mapped to the
+      # operator), so the container's root would hit "dubious ownership" and
+      # the dream commit step could never record provenance. Container-scoped
+      # safe.directory: this git config does not outlive the container.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: "safe.directory"
+      GIT_CONFIG_VALUE_0: "/data/ghost/memory"
     volumes:
       - ../ghost:/app/ghost:ro
       - ../data/ghost:/data/ghost

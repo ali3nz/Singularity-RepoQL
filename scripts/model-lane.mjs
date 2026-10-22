@@ -80,7 +80,10 @@ const snippet = (s, n = 120) => String(s || "").replace(/\s+/g, " ").slice(0, n)
  * A lane is only OK when a REAL completion round-trip succeeds: a listed
  * model, a reachable proxy or a valid key alone never proves the lane works.
  */
-export async function probeModelLane({ gatewayUrl, key, serviceId = "default", fetchImpl = globalThis.fetch, timeoutMs = 15000, model = null }) {
+export async function probeModelLane({ gatewayUrl, key, serviceId = "default", fetchImpl = globalThis.fetch, timeoutMs = 45000, model = null }) {
+  // 45 s default: the lane fronts upstream reasoning models (nemotron/deepseek)
+  // whose TTFT routinely exceeds 15 s under load — the probe timeout must not
+  // misreport a working lane as UNREACHABLE.
   if (!gatewayUrl) return { ok: false, state: "PATH_INVALID", detail: "no model lane configured" };
   if (!key) return { ok: false, state: "NO_CREDENTIALS", detail: "no scoped key available for the model lane" };
   const base = String(gatewayUrl).replace(/\/+$/, "");

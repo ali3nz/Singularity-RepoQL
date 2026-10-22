@@ -74,7 +74,11 @@ export function dreamRetryFits(nowMs, deadlineMs, sleepMs) {
 }
 
 export async function listModels({ gatewayUrl, key, fetchImpl = globalThis.fetch }) {
-  const headers = key ? { Authorization: `Bearer ${key}` } : {};
+  // The canonical lane contract (scripts/runtime-proofs.mjs probeModelLane)
+  // sends BOTH the bearer and the scoped user-key header: the memory proxy's
+  // auth layer verifies the user key and scopes it to ONE service id, so the
+  // single-header form 401s on a lane the dual-header form serves.
+  const headers = key ? { Authorization: `Bearer ${key}`, "x-tdai-user-key": key } : {};
   const res = await fetchImpl(`${gatewayUrl.replace(/\/+$/, "")}/models`, {
     headers,
     signal: AbortSignal.timeout(20000),
@@ -129,7 +133,11 @@ export async function callModel({
 }) {
   const url = `${gatewayUrl.replace(/\/+$/, "")}/chat/completions`;
   const headers = { "Content-Type": "application/json" };
-  if (key) headers.Authorization = `Bearer ${key}`;
+  if (key) {
+    // Same canonical lane contract as listModels (see above).
+    headers.Authorization = `Bearer ${key}`;
+    headers["x-tdai-user-key"] = key;
+  }
   let lastErr = null;
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {

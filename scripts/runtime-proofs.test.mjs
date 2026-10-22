@@ -44,6 +44,9 @@ test("the key type is classified: administrative, scoped and undiscriminable are
   assert.equal(classifyMemoryScope({ valid: true, userType: "system_admin" }).state, "ADMIN");
   assert.equal(classifyMemoryScope({ valid: true, userType: "admin" }).state, "ADMIN");
   assert.equal(classifyMemoryScope({ valid: true, userType: "business_user" }).state, "OK");
+  // The shipped memory core's own taxonomy is exactly "normal" | "system_admin"
+  // (memory-core src/metadata/types.ts:16); its synthetic scoped user is "normal".
+  assert.equal(classifyMemoryScope({ valid: true, userType: "normal" }).state, "OK");
   assert.equal(classifyMemoryScope({ valid: true, userType: "" }).state, "UNVERIFIED");
   assert.equal(classifyMemoryScope({ valid: true, userType: "unknown_role" }).state, "UNVERIFIED");
   assert.equal(classifyMemoryScope({ valid: true, userType: "service_admin" }).state, "UNVERIFIED");
@@ -302,6 +305,24 @@ test("the failover proof needs two provider credentials (MISSING otherwise)", as
   const r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1" });
   assert.equal(r.ok, false);
   assert.equal(r.state, "MISSING");
+});
+
+test("a generic <name>-api-key pair counts as the second credential — and a key file WITHOUT a validating provider descriptor never does", async () => {
+  const root = mkdtempSync(join(tmpdir(), "failover-root-"));
+  mkdirSync(join(root, "secrets"), { recursive: true });
+  writeFileSync(join(root, "secrets", "groq-api-key"), "placeholder\n");
+  // a key file alone (no -api-provider.json) must remain a single credential
+  writeFileSync(join(root, "secrets", "nvidia-api-key"), "placeholder\n");
+  let r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1" });
+  assert.equal(r.state, "MISSING", "a bare key file must not become a second account");
+  // the shipped pair form (name/base/model) qualifies, mirroring the router
+  writeFileSync(join(root, "secrets", "nvidia-api-provider.json"),
+    JSON.stringify({ name: "nvidia", base: "https://integrate.api.nvidia.com/v1", model: "z-ai/glm-5.3-flash" }));
+  r = await probeProviderFailover({ root, routerUrl: "http://127.0.0.1:1", fetchImpl: async () => ({ status: 200, json: async () => ({ choices: [{ message: { content: "pong" } }] }) }) });
+  // two credentials pass the live layer; the controlled fallback then fails on
+  // the unreachable router URL, never as MISSING
+  assert.notEqual(r.state, "MISSING", r.detail);
+  assert.match(r.detail || "", /controlled fallback|could not run|TEST injection/i);
 });
 
 test("a provider credential that cannot complete a minimal real request is INCOMPLETE — never a silent skip", async () => {

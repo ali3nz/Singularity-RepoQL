@@ -582,13 +582,24 @@ export function dreamOutcomeToday(agentDir = join(ROOT, "data/ghost")) {
   const todays = files.filter((f) => f.includes(today));
   if (!todays.length) return { complete: false, detail: "no dream journal dated today" };
   const read = (f) => { try { return readFileSync(join(dir, f), "utf8") || ""; } catch { return ""; } };
-  const complete = todays.find((f) => /^- outcome:\s*complete\b/m.test(read(f)));
-  if (!complete) {
+  const completed = todays
+    .filter((f) => /^- outcome:\s*complete\b/m.test(read(f)));
+  if (!completed.length) {
     const checkpointed = todays.some((f) => /^- outcome:\s*checkpointed\b/m.test(read(f)));
     return { complete: false, provenance: false, detail: checkpointed
       ? "today's journal is checkpointed — a checkpoint is not a completed consolidation"
       : "today's journal records no completed consolidation" };
   }
+  // A redone day (e.g. after a fixed provider) can hold SEVERAL complete
+  // journals; an earlier complete run without an applied memory commit must
+  // not mask a later one whose provenance verifies. Prefer a complete journal
+  // that records provenance; fall back to the first complete one (honestly
+  // reported as no-provenance) only when none does.
+  const withProvenance = (f) => {
+    const t = read(f);
+    return /^- commit:\s*(?!\(no memory commit this run\))\S/m.test(t) || /^- changed_files:\s*(?!none\b)\S/m.test(t);
+  };
+  const complete = completed.find(withProvenance) || completed[0];
   const text = read(complete);
   const hasCommit = /^- commit:\s*(?!\(no memory commit this run\))\S/m.test(text);
   const hasChanged = /^- changed_files:\s*(?!none\b)\S/m.test(text);
@@ -651,11 +662,14 @@ export async function probeOfficeFunctional(officeConfigPath = join(ROOT, "data/
             // Read-back is eventually consistent on the producer side (a
             // write can be visible after a short indexing delay — observed
             // directly: attempt N-1 found the session while attempt N did
-            // not). Instead of failing a REAL consume on a race, re-check a
-            // few times with a short delay; a session that never lands still
-            // fails closed after the final attempt.
+            // not, and a live probe at f99269a landed a session only inside
+            // a ~4.5s window while gate runs at the same code missed it).
+            // Instead of failing a REAL consume on a race, re-check up to
+            // 20 attempts (~30.5s): the consumer has been observed indexing
+            // slower under load than the earlier ~10.5s window allowed.
+            // A session that never lands still fails closed after the last attempt.
             let hit = null, sessions = null;
-            for (let attempt = 0; attempt < 4 && !hit; attempt++) {
+            for (let attempt = 0; attempt < 20 && !hit; attempt++) {
               if (attempt) await new Promise((d) => setTimeout(d, 1500));
               try {
                 const l = await fetch(`${base}/api/v1/sessions`, {

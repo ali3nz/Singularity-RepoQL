@@ -218,7 +218,14 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
       tag, factLabel: tag, factNumber: FACT_NUMBER,
       stages: [...stages],
       memoryScope: {
-        serviceId: memoryConfig.serviceId || "default",
+        // The claude lane captures under the proxy's URL-path client scope
+        // (service partition 'default', overridden by SINGULARITY_CC_SEARCH_SERVICE_ID
+        // — the partition searchTag verified against), which overrides the
+        // configured service id. Recording the config-file service id here makes
+        // scope-bound corroboration search a partition the capture never
+        // touched (observed: tag SING-ORD-66a71e1f found under 'default',
+        // absent under the config service id).
+        serviceId: env?.SINGULARITY_CC_SEARCH_SERVICE_ID || "default",
         teamId: memoryConfig.identity.team_id,
         agentId: memoryConfig.identity.agent_id || "claude-code",
         userId: memoryConfig.identity.user_id,
@@ -382,8 +389,14 @@ export async function verifyEvidenceLive(e, { env = process.env, fetchImpl = glo
     if (!ms.teamId || !ms.userId)
       return { ok: false, state: "INCOMPLETE", detail: "openchamber evidence lacks a bindable memory scope (teamId/userId)" };
     const body = { team_id: ms.teamId, user_id: ms.userId, agent_id: ms.agentId || "build", query: e.tag, limit: 4 };
-    const conv = await callMemoryCore("/v3/conversation/search", body, cfg, fetchImpl).catch(() => null);
-    const atom = await callMemoryCore("/v3/atomic/search", body, cfg, fetchImpl).catch(() => null);
+    // The recorded scope names the partition the capture was verified under —
+    // the search header must carry THAT service id, not the config-file one
+    // (observed: with the config header the corroboration searched the
+    // openchamber partition while the recorded identity lives under 'default'
+    // and the same tag was provably searchable there).
+    const msCfg = { ...cfg, serviceId: ms.serviceId || cfg.serviceId };
+    const conv = await callMemoryCore("/v3/conversation/search", body, msCfg, fetchImpl).catch(() => null);
+    const atom = await callMemoryCore("/v3/atomic/search", body, msCfg, fetchImpl).catch(() => null);
     const hit = [conv, atom].some((r) => r && !r.error && JSON.stringify(r.data ?? r).includes(e.tag));
     return hit
       ? { ok: true, state: "VERIFIED", detail: `tag ${e.tag} is STILL searchable under the recorded scope ${ms.serviceId}/${ms.teamId.slice(0, 16)}… through the live memory service` }

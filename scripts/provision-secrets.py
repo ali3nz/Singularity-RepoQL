@@ -75,15 +75,37 @@ def proxy_port(base: Path) -> int:
 
 def resolve_model_lane(base: Path) -> str:
     """The canonical model lane: <proxy>/<lane>/<space id>/v1 — the same
-    proxy, lane and space id as the main-agent memory."""
+    proxy, lane and space id as the main-agent memory.
+
+    The space id must be the service the scoped user key is provisioned under:
+    MemoryCore auth/verify scopes a key's validity to ONE service id, so a lane
+    derived from a different id answers 401 even with the correct key. Read the
+    configured serviceId from the attached plugin's memory.json (the same file
+    the product's live memory traffic already uses) before falling back to the
+    env overrides and the clean-slate default."""
     port = proxy_port(base)
     space = (
         os.environ.get("SINGULARITY_MODEL_SPACE_ID")
         or os.environ.get("MEMORY_SERVICE_ID")
-        or "default"
     )
+    if not space:
+        space = read_json_field(base / "openchamber" / "plugins" / "product-office" / "memory.json", "serviceId")
+    if not space:
+        space = read_json_field(base / "data" / "opencode" / "config" / "product-office" / "memory.json", "serviceId")
+    if not space:
+        space = read_json_field(base / "data" / "opencode" / "config" / "product-secrets" / "memory.json", "serviceId")
+    space = space or "default"
     lane = os.environ.get("SINGULARITY_MODEL_LANE") or "claude-code"
     return f"http://proxy:{port}/{lane}/{space}/v1"
+
+
+def read_json_field(path: Path, field: str):
+    """A single scalar from a JSON config file, or None — never a secret: the
+    serviceId/category names are configuration, not credentials."""
+    try:
+        return (json.loads(path.read_text()) or {}).get(field) or None
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def user_key_is_admin(base: Path, candidate: str) -> bool:
