@@ -4,7 +4,9 @@ Singularity-RepoQL gives your coding agents memory and code intelligence that su
 
 ![RepoQL provides source-linked technical knowledge; Tencent MemoryCore provides scoped experience and bounded recall. Rules, source and live evidence outrank recalled memory.](docs/assets/memory-architecture.png)
 
-Architecture illustration from the WikiJS Memory Architecture page.
+Claude Office visualizes agent activity in a live pixel-art office:
+
+![Agents working together inside the Claude Office visualizer](docs/assets/office-live.png)
 
 ## Choose exactly one installation option
 
