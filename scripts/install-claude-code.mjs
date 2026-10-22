@@ -654,15 +654,18 @@ export async function probeOfficeFunctional(officeConfigPath = join(ROOT, "data/
             // not). Instead of failing a REAL consume on a race, re-check a
             // few times with a short delay; a session that never lands still
             // fails closed after the final attempt.
-            let hit = null, list = null;
+            let hit = null, sessions = null;
             for (let attempt = 0; attempt < 4 && !hit; attempt++) {
               if (attempt) await new Promise((d) => setTimeout(d, 1500));
-              await fetch(`${base}/api/v1/sessions`, {
-                headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
-              }).then(async (l) => { if (!l.ok) return; sessions = await l.json().catch(() => null); list = sessions; hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id); }).catch(() => {});
+              try {
+                const l = await fetch(`${base}/api/v1/sessions`, {
+                  headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
+                });
+                if (l.ok) sessions = await l.json().catch(() => null);
+                hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id);
+              } catch { /* read-back races resolve on the next attempt */ }
             }
-            const sessions = list;
-              if (!hit) {
+            if (!hit) {
                 officeDetail = `ingest returned HTTP 200 but session ${payload.session_id} was not present on read-back`;
               } else if (hit.projectName !== payload.data.project_name) {
                 officeDetail = `consumed but project_name was not stored (read-back projectName=${JSON.stringify(hit.projectName)})`;
@@ -674,7 +677,6 @@ export async function probeOfficeFunctional(officeConfigPath = join(ROOT, "data/
                 officeOk = true;
                 officeDetail = `native event consumed and read back (HTTP 200; session ${payload.session_id}, project ${payload.data.project_name})`;
               }
-            }
           }
         }
       }
