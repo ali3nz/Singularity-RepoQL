@@ -34,6 +34,14 @@
 - `stop-all.sh` stops the trio (`--purge` also removes containers and volumes).
 - `verify.sh` re-checks the environment and endpoints (`--skip-llm` for an
   offline check).
+- An earlier change injected a `PROXY_PRICING_MODELS` block directly into
+  `start-proxy.sh`, which broke the byte-exact claim above. That is fixed:
+  the vendored copy of `start-proxy.sh` is byte-exact again (checksums in the
+  table are re-verified), and Singularity patches **a copy** of it instead —
+  run `scripts/start-proxy-product.sh` (same env and behavior as the upstream
+  script, plus the client-facing model catalog from
+  `scripts/proxy-pricing-block.sh`). The wrapper refuses to run if the
+  vendored file ever drifts from the checksum in this document.
 - Singularity's `scripts/start.sh` additionally attaches the
   `tdai-memory-core` container to the `singularity-product-net` network with
   the alias `memory-core` (the name the OpenChamber plugin resolves). This is

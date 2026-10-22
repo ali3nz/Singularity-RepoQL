@@ -29,6 +29,7 @@ jobs:
         run: |
           node --test openchamber/plugins/product-office/*.test.mjs
           node --test openchamber/plugins/runbook-nudge/*.test.mjs
+          node --test scripts/skill-gate.test.mjs
           node --test scripts/cohere-quota.test.mjs
           node --test scripts/extraction-failover.test.mjs
           node --test scripts/install-claude-code.profiles.test.mjs

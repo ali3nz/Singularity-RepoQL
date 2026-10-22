@@ -26,6 +26,7 @@ for f in scripts/*.mjs ghost/*.mjs adapters/claude-code/*.mjs scripts/doctor.mjs
          openchamber/plugins/runbook-nudge/*.js; do check node --check "$f"; done
 
 step "unit tests"
+check node --test scripts/skill-gate.test.mjs
 check node --test scripts/cohere-quota.test.mjs
 check node --test scripts/setup-agent-profiles.test.mjs
 check node --test scripts/extraction-failover.test.mjs

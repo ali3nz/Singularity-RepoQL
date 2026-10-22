@@ -16,7 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -168,18 +168,32 @@ test("the ADMIN key is never written into a target (B7)", async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// The package's own plugin credential (data/opencode/config/product-secrets/
+// memory.json) is UNTRACKED runtime state that a development checkout can
+// carry from an earlier attach. When present, the attach's fallback ("the
+// package's own plugin credential") satisfies the key search and this test's
+// premise — "no scoped key is available" — is false. Isolate the test from
+// that ambient state for its duration; restored in every path.
 test("without a scoped key the attach reports INCOMPLETE and writes no credential (B7)", async () => {
-  const dir = seededTarget();
-  const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", ""]);
-  assert.equal(rc, 5, "no scoped key means the memory capability is INCOMPLETE");
-  assert.match(out, /memory user key|INCOMPLETE/);
-  const memPath = join(dir, "product-secrets", "memory.json");
-  if (existsSync(memPath)) {
-    const mem = JSON.parse(readFileSync(memPath, "utf8"));
-    const admin = readAdminKey();
-    assert.ok(!mem.userKey || !isSameSecret(mem.userKey, admin), "no administrative credential is written");
+  const PKG_MEM = join(ROOT, "data", "opencode", "config", "product-secrets", "memory.json");
+  const PKG_MEM_BAK = PKG_MEM + ".test-absent-bak";
+  const had = existsSync(PKG_MEM);
+  if (had) renameSync(PKG_MEM, PKG_MEM_BAK);
+  try {
+    const dir = seededTarget();
+    const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", ""]);
+    assert.equal(rc, 5, "no scoped key means the memory capability is INCOMPLETE");
+    assert.match(out, /memory user key|INCOMPLETE/);
+    const memPath = join(dir, "product-secrets", "memory.json");
+    if (existsSync(memPath)) {
+      const mem = JSON.parse(readFileSync(memPath, "utf8"));
+      const admin = readAdminKey();
+      assert.ok(!mem.userKey || !isSameSecret(mem.userKey, admin), "no administrative credential is written");
+    }
+    rmSync(dir, { recursive: true, force: true });
+  } finally {
+    if (had) renameSync(PKG_MEM_BAK, PKG_MEM);
   }
-  rmSync(dir, { recursive: true, force: true });
 });
 
 // ── N-g: the supported rollback ───────────────────────────────────────────────

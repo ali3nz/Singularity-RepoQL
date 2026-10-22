@@ -73,25 +73,6 @@ fi
 
 bool() { [[ "$1" == "1" ]] && echo "true" || echo "false"; }
 
-# client-facing model catalog: the proxy serves GET /<lane>/<space>/v1/models
-# from its own local pricing table (NOT a passthrough), so without a
-# creditPricing.models section the catalog is EMPTY and the lane gate can
-# never discover a model. PROXY_PRICING_MODELS="a,b,c" registers ids with
-# zero prices (the catalog is discovery, not billing).
-CREDIT_PRICING_BLOCK=""
-if [[ -n "${PROXY_PRICING_MODELS:-}" ]]; then
-  MODELS_BLOCK=""
-  IFS=',' read -ra PRICING_IDS <<< "$PROXY_PRICING_MODELS"
-  for M in "${PRICING_IDS[@]}"; do
-    M="$(echo "$M" | xargs)"
-    [[ -z "$M" ]] && continue
-    MODELS_BLOCK+="    - name: \"$M\""$'\n'"      modelName: \"$M\""$'\n'"      input: 0"$'\n'"      output: 0"$'\n'
-  done
-  if [[ -n "$MODELS_BLOCK" ]]; then
-    CREDIT_PRICING_BLOCK="# 由 PROXY_PRICING_MODELS 生成 —— 本地模型目录（/models 由它服务，而非透传）。"$'\n'"creditPricing:"$'\n'"  models:"$'\n'"$MODELS_BLOCK"
-  fi
-fi
-
 info "生成 proxy config → $CONFIG_FILE  (auth=$(bool $PROXY_ENABLE_AUTH) session-init=$(bool $PROXY_ENABLE_SESSION_INIT) tdai=$(bool $PROXY_ENABLE_TDAI))"
 cat > "$CONFIG_FILE" <<YAML
 # 由 start-proxy.sh 自动生成 —— 每次启动覆盖，请不要手动改。
@@ -154,8 +135,6 @@ sessionInit:
 
 costGuard:
   enabled: false
-
-${CREDIT_PRICING_BLOCK}
 
 # 打开 skill + knowledge + tdai-memory 三个注入器；
 # knowledge 依赖 memory-hub 起来，否则 hook 内部会降级为空块。
