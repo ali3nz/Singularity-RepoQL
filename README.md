@@ -6,7 +6,7 @@ Singularity-RepoQL gives your coding agents memory and code intelligence that su
 
 Claude Office visualizes agent activity in a live pixel-art office:
 
-![Agents working together inside the Claude Office visualizer](docs/assets/office-live.png)
+![Agents working together inside the Claude Office visualizer](docs/assets/office-live.jpg)
 
 ## Choose exactly one installation option
 
