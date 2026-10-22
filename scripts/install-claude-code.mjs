@@ -648,14 +648,20 @@ export async function probeOfficeFunctional(officeConfigPath = join(ROOT, "data/
           if (!adminKey) {
             officeDetail = "read key unavailable — cannot verify the event was consumed (set CLAUDE_OFFICE_API_KEY)";
           } else {
-            const list = await fetch(`${base}/api/v1/sessions`, {
-              headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
-            });
-            if (!list.ok) {
-              officeDetail = `session read-back failed HTTP ${list.status}`;
-            } else {
-              const sessions = await list.json().catch(() => null);
-              const hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id);
+            // Read-back is eventually consistent on the producer side (a
+            // write can be visible after a short indexing delay — observed
+            // directly: attempt N-1 found the session while attempt N did
+            // not). Instead of failing a REAL consume on a race, re-check a
+            // few times with a short delay; a session that never lands still
+            // fails closed after the final attempt.
+            let hit = null, list = null;
+            for (let attempt = 0; attempt < 4 && !hit; attempt++) {
+              if (attempt) await new Promise((d) => setTimeout(d, 1500));
+              await fetch(`${base}/api/v1/sessions`, {
+                headers: { "X-API-Key": adminKey }, signal: AbortSignal.timeout(6000),
+              }).then(async (l) => { if (!l.ok) return; sessions = await l.json().catch(() => null); list = sessions; hit = Array.isArray(sessions) && sessions.find((s) => s && s.id === payload.session_id); }).catch(() => {});
+            }
+            const sessions = list;
               if (!hit) {
                 officeDetail = `ingest returned HTTP 200 but session ${payload.session_id} was not present on read-back`;
               } else if (hit.projectName !== payload.data.project_name) {
