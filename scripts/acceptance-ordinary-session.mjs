@@ -136,6 +136,7 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
       || `http://127.0.0.1:${(env.PROXY_PORT || "8096")}/claude-code/default`,
   };
   const stages = [];
+  const started = Date.now();
   const done = (detail, evidence = null, state = "INCOMPLETE") => {
     const base = {
       kind: EVKIND, version: EVVERSION, runtime: "claude-code",
@@ -225,13 +226,18 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
       note: env.SINGULARITY_ORDINARY_SESSION_NOTE || "",
     };
     const finalAnswersAllVerified = STAGES.every((s) => evidence.stages.some((x) => x.stage === s && x.state === "VERIFIED"));
+    // SAME envelope `done()` uses (kind/version/runtime at the top): the CLI
+    // writes res.evidence verbatim, so an unwrapped inner object would fail
+    // the gate it must satisfy (observed: verify --evidence -> kind mismatch).
+    const evidenceFull = { kind: EVKIND, version: EVVERSION, runtime: "claude-code", startedAt: new Date(started).toISOString(), completedAt: nowIso(), ...evidence };
+    const gate = completionVerdict(evidenceFull, { runtime: "claude-code" });
     const res = {
-      ok: finalAnswersAllVerified,
-      state: finalAnswersAllVerified ? "VERIFIED" : "INCOMPLETE",
-      evidence,
-      detail: finalAnswersAllVerified
+      ok: gate.ok,
+      state: gate.state,
+      evidence: evidenceFull,
+      detail: gate.ok
         ? "real ordinary-session capture and NEW-session recall verified end to end via the production proxy and memory service"
-        : "the ordinary-session acceptance did not fully verify — see per-stage details",
+        : `the ordinary-session acceptance did not fully verify — ${gate.detail}`,
     };
     if (!keep) for (const w of workspaces) rmSync(w, { recursive: true, force: true });
     return res;
@@ -246,7 +252,7 @@ async function searchTag(tag, cfg, fetchImpl, env = {}) {
   // (/{agent}/{spaceId}/… → service partition `default`), which overrides the
   // configured service id — so the search MUST use the same partition the
   // capture was written under.
-  const searchCfg = { ...cfg, serviceId: env.m?.SINGULARITY_CC_SEARCH_SERVICE_ID || "default" };
+  const searchCfg = { ...cfg, serviceId: env?.SINGULARITY_CC_SEARCH_SERVICE_ID || "default" };
   const identity = cfg.identity || loadGhostMemoryConfig(env.m).identity;
   // agent_id is part of the capture partition on this kernel: a tag written by
   // an auto-provisioned agent identity is only returned when the search body
