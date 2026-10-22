@@ -18,7 +18,7 @@ Upstream alone also works; the co-ordinates differ.
 ```bash
 git clone https://github.com/ali3nz/claude-office
 cd claude-office
-git checkout 4ce0d00        # optional: the validated revision
+git checkout f36007d        # optional: the validated revision
 docker build -t claude-office:local .
 ```
 
