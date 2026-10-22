@@ -186,7 +186,10 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       try {
         const r = await fetchImpl(`${base}/chat/completions`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 24 }),
+          // Reasoning-style upstream models spend the budget on thinking before
+          // any content; a tiny budget would turn a REAL completion into an
+          // empty-content false negative (observed on groq gpt-oss-120b).
+          body: JSON.stringify({ messages: [{ role: "user", content: "ping" }], max_tokens: 256 }),
           signal: AbortSignal.timeout(15_000),
         });
         const j = await r.json().catch(() => null);
