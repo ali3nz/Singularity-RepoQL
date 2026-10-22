@@ -87,7 +87,16 @@ export function runClaudeSession({ workspace, prompt, env, timeoutMs }) {
   // memory-tool loop well past 240 s; the budget is tunable without a code
   // change. Default stays 240s (paid upstreams answer in tens of seconds).
   timeoutMs = timeoutMs || Number(env?.SINGULARITY_CC_SESSION_TIMEOUT_MS) || 240_000;
-  const r = spawnSync("claude", ["-p", prompt, "--output-format", "json"], {
+  // Headless sessions have no approval prompt: the proxy's injected
+  // <tdai_memory_tools> instruct the model to fetch its memory-bridge over
+  // Bash+curl, and without an allow rule every such call is auto-denied
+  // ("This command requires approval"), so the recall loop can never see the
+  // store even though capture and search both work. SINGULARITY_CC_ALLOWED_TOOLS
+  // is a space/comma-separated allowlist (e.g. "Bash(curl:*) Bash(ls:*)");
+  // unset keeps stock behavior.
+  const args = ["-p", prompt, "--output-format", "json"];
+  for (const t of String(env?.SINGULARITY_CC_ALLOWED_TOOLS || "").split(/[\s,]+/).filter(Boolean)) args.push("--allowedTools", t);
+  const r = spawnSync("claude", args, {
     cwd: workspace,
     env,
     encoding: "utf8",
@@ -191,7 +200,11 @@ export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = glo
     //    the fact. Only the memory loop can answer it.
     const sB = runClaudeSession({
       workspace: w2,
-      prompt: `A previous session stored a labelled acceptance fact in this installation's persistent memory (team ${memoryConfig.identity.team_id}). Look it up with memory/search if a tool is available. Label: exactly "${tag}". Reply with only the number stored for that label, or ONLY "?" if you cannot find it.`,
+      // The injected memory tools expose TWO bridge endpoints; the freshly
+      // captured record lives in the CONVERSATION store (the atomic index is
+      // filled by the async extraction pipeline minutes later), so the prompt
+      // steers the loop to conversation/search first. It must NOT contain the fact.
+      prompt: `A previous session stored a labelled acceptance fact in this installation's persistent memory (team ${memoryConfig.identity.team_id}). Look it up with the memory tools described in your <tdai_memory_tools> instructions (Bash + curl against the proxy's memory-bridge). Search the CONVERSATION store first (/memory-bridge/v3/conversation/search), then the atomic store (/memory-bridge/v3/atomic/search). Label: exactly "${tag}". Reply with only the number stored for that label, or ONLY "?" if you cannot find it.`,
       env: envB,
     });
     const distinct = sB.ok && sB.sessionId && sA.sessionId && sB.sessionId !== sA.sessionId;
