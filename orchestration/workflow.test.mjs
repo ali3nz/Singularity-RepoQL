@@ -191,9 +191,15 @@ test("a transition replayed with the same key is a no-op, not a second history e
   const first = advance(run, { to: "implement", role: "coordinator", evidence: [PLAN()], idempotencyKey: "k1" });
   assert.equal(first.applied, true);
 
-  const replay = advance(first.run, { to: "validate", role: "coordinator", evidence: [DIFF()], idempotencyKey: "k1" });
-  assert.equal(replay.applied, false, "same key must not apply twice");
+  const replay = advance(first.run, { to: "implement", role: "coordinator", evidence: [DIFF()], idempotencyKey: "k1" });
+  assert.equal(replay.ok, true);
+  assert.equal(replay.applied, false, "the same operation must not apply twice");
   assert.equal(replay.run.stage, "implement", "state must be unchanged on replay");
+
+  // The same key for a different destination is a collision, not a replay.
+  const collision = advance(first.run, { to: "validate", role: "coordinator", evidence: [DIFF()], idempotencyKey: "k1" });
+  assert.equal(collision.ok, false, "a key must not authorise a different transition");
+  assert.equal(collision.run.stage, "implement");
 });
 
 test("retries are bounded per stage and exceeding the bound blocks the run", () => {
@@ -712,4 +718,48 @@ test("accept carries the owner token a begun stage requires", () => {
   const accepted = accept(store, run.id, { approver: reviewerSeat(run), owner: inflight.inflight.owner });
   assert.equal(accepted.ok, true, accepted.reason);
   assert.equal(accepted.run.stage, "done");
+});
+
+test("reusing an idempotency key for another transition is refused, not replayed", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "key collision", mode: "solo", revision: "rev-a" });
+  addEvidence(store, run.id, [PLAN()]);
+  const applied = transition(store, run.id, { to: "implement", role: "coordinator", idempotencyKey: "k1" });
+  assert.equal(applied.ok, true, applied.reason);
+  assert.equal(applied.applied, true);
+
+  // The run is now in implement; reusing k1 for a different destination must
+  // never report the requested operation as applied.
+  addEvidence(store, run.id, [DIFF()]);
+  const collision = transition(store, run.id, { to: "validate", role: "coordinator", idempotencyKey: "k1" });
+  assert.equal(collision.ok, false);
+  assert.match(collision.reason, /already recorded plan -> implement/);
+  assert.equal(getRun(store, run.id).stage, "implement");
+});
+
+test("replaying accept is a no-op for the original approver only", () => {
+  const seats = [
+    { role: "coordinator", id: "c1" },
+    { role: "worker", id: "w1", canImplement: true },
+    { role: "reviewer", id: "r1" },
+    { role: "reviewer", id: "r2" },
+  ];
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "accept replay", mode: "custom", seats, revision: "rev-a" });
+  walkToReview(store, run.id, [], "r1");
+  approve(store, run.id, { approver: "r1" });
+  const accepted = accept(store, run.id, { approver: "r1" });
+  assert.equal(accepted.ok, true, accepted.reason);
+  assert.equal(accepted.run.acceptedBy, "r1");
+
+  const replay = accept(store, run.id, { approver: "r1" });
+  assert.equal(replay.ok, true);
+  assert.equal(replay.applied, false, "a retried acceptance must not rewrite the run");
+  assert.match(replay.reason, /already recorded/);
+  assert.equal(getRun(store, run.id).status, "accepted");
+
+  const hijack = accept(store, run.id, { approver: "r2" });
+  assert.equal(hijack.ok, false);
+  assert.match(hijack.reason, /was accepted by r1/);
+  assert.equal(health(getRun(store, run.id)).state, "COMPLETE");
 });

@@ -256,6 +256,25 @@ export function accept(store, runId, { approver, actor = "coordinator", owner = 
   if (!approver) throw new RunError("accept needs --approver");
   return mutate(store, runId, (run) => {
     const seat = approvalSeat(run, approver, null);
+
+    // Retrying the documented acceptance is a successful no-op, but only for
+    // the approver who actually accepted: a different seat must not be able to
+    // claim credit for (or silently re-run) someone else's acceptance.
+    if (run.stage === "done" && run.status === "accepted") {
+      const acceptedBy =
+        run.acceptedBy ??
+        (run.evidence ?? []).filter((e) => e.kind === "approval").map((e) => e.meta?.approver).filter(Boolean).pop() ??
+        null;
+      if (acceptedBy !== seat.id) {
+        return {
+          ok: false,
+          run,
+          reason: `run was accepted by ${acceptedBy ?? "an unrecorded approver"}; '${seat.id}' cannot replay that acceptance`,
+        };
+      }
+      return { ok: true, run, applied: false, reason: "acceptance already recorded" };
+    }
+
     const stored = (run.approvals ?? []).slice().reverse().find((a) => a.approver === seat.id);
     if (!stored) return { ok: false, run, reason: `no approval recorded by '${seat.id}'` };
 
@@ -273,7 +292,9 @@ export function accept(store, runId, { approver, actor = "coordinator", owner = 
       if (!step.ok) return step;
     }
     step = advance(step.run, { to: "done", actor, role: "coordinator", evidence: [], now, owner, approverId: seat.id });
-    return step;
+    if (!step.ok || step.applied === false) return step;
+    // Attribute the acceptance so a later retry can be answered honestly.
+    return { ...step, run: { ...step.run, acceptedBy: seat.id } };
   });
 }
 

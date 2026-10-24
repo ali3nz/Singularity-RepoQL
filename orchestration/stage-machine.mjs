@@ -217,9 +217,19 @@ export function advance(run, {
 
   // Idempotency is decided before every other guard: replaying an applied
   // transition is a successful no-op even when the run has since gone terminal.
+  // A key identifies one operation: reusing it for a different destination is a
+  // collision, not a replay, and must never be reported as success.
   const attemptNo = (run.attempts?.[to] ?? 0) + 1;
   const key = idempotencyKey ?? `${run.id}:${run.stage}->${to}:${attemptNo}`;
-  if ((run.history ?? []).some((h) => h.idempotencyKey === key)) {
+  const prior = (run.history ?? []).find((h) => h.idempotencyKey === key);
+  if (prior) {
+    if (prior.to !== to) {
+      return {
+        ok: false,
+        run,
+        reason: `idempotency key '${key}' already recorded ${prior.from} -> ${prior.to}; it cannot authorise ${run.stage} -> ${to}`,
+      };
+    }
     return { ok: true, run, applied: false, reason: "transition already applied" };
   }
 

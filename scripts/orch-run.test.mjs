@@ -218,6 +218,12 @@ test("advance accepts an explicit idempotency key and replays as a no-op", () =>
   // A different key is a new attempt and is refused by the stage machine.
   const other = run(["advance", id, "--to", "implement", "--role", "coordinator", "--idempotency-key", "k2"], dir);
   assert.equal(other.rc, 3);
+
+  // A key may not be recycled for a different transition.
+  run(["evidence", id, "--kind", "diff", "--producer", "worker-1", "--text", "diff"], dir);
+  const collision = run(["advance", id, "--to", "validate", "--role", "coordinator", "--idempotency-key", "k1"], dir);
+  assert.equal(collision.rc, 3);
+  assert.match(collision.err, /cannot authorise implement -> validate/);
 });
 
 test("accept forwards --owner so a begun stage can be completed", () => {

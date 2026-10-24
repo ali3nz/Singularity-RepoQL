@@ -4,6 +4,29 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc13] - 2026-10-24
+
+Fifth review round. A review of rc12 confirmed the failure-status, provenance,
+revision, owner and named-approver fixes, and found two remaining idempotency
+defects: a key could be reused for a different transition and still report
+success, and repeating `accept` was not retry safe. rc12 is superseded.
+
+### Fixed
+- **A reused idempotency key reported a transition that never happened.**
+  `advance()` matched on the key alone, so a caller retrying `done` with a key
+  recorded for `accept` received success. A key now identifies one operation;
+  reuse for a different destination is refused as a collision, while an exact
+  replay stays a successful no-op.
+- **`accept` was not retry safe.** Repeating the documented acceptance with the
+  approver who accepted is now a no-op that writes nothing; a different seat
+  replaying that acceptance is refused. The run records `acceptedBy`, and legacy
+  runs without it are attributed from their approval evidence.
+
+### Added
+- Regression tests for key collision, exact keyed replay, acceptance replay by
+  the original approver and refusal by another seat. 66 Node subtests and the
+  messaging suite.
+
 ## [0.1.0-rc12] - 2026-10-24
 
 Fourth review round. A review of rc11 found that failed transitions still

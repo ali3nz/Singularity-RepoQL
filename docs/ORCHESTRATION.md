@@ -68,7 +68,10 @@ Retry limits are durable decisions: exhausting `maxAttemptsPerStage` or the
 supervision sees the blockage instead of a run that merely refused a call. A
 transition replayed with the same idempotency key is a successful no-op and
 writes nothing — including a replay against a run that has since gone terminal.
-Pass the key with `advance --idempotency-key <key>` when a caller may retry.
+Pass the key with `advance --idempotency-key <key>` when a caller may retry. A
+key names one operation: reusing it for a different destination is refused as a
+collision, never reported as success. Repeating `accept` with the approver who
+accepted is also a no-op; another seat replaying that acceptance is refused.
 
 A stage is never marked complete by a timer, a process exit or a retry. A run
 that was in flight when its process died is marked `interrupted` and blocks:
