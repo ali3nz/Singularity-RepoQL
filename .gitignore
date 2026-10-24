@@ -48,3 +48,6 @@ Thumbs.db
 # RepoQL workspace state (index cache is local; concepts may be committed
 # deliberately)
 .repoql/cache/
+
+# Private disclosure-guard overlay — release machine only, never committed
+tests/forbidden-refs.local.txt

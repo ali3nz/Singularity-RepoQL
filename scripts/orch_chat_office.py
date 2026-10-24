@@ -37,7 +37,7 @@ OFFICE_STATE_PATH = os.environ.get(
     "AGENTCHAT_OFFICE_STATE", "")  # resolved against STATE_DIR by callers
 OFFICE_DISABLED = os.environ.get("AGENTCHAT_OFFICE_DISABLED", "") == "1"
 
-# orch-chat identity -> pixel-agent display name (issue 097 convention).
+# orch-chat identity -> pixel-agent display name.
 NAMES = {
     "buffy": "Buffy",
     "claude": "Claude",
@@ -59,18 +59,19 @@ RUN_TOKEN_RE = re.compile(r"\s*#r(\d{1,6})\s*$")
 RUN_DIR_RE = re.compile(r"\brun[ _-](\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\b",
                         re.IGNORECASE)
 
-# Issue 120: thread starter names are "ac-<n> <topic>"; the number is the
+# Thread starter names are "ac-<n> <topic>"; the number is the
 # conversation's Discord thread id (the number the operator sees in Discord).
 THREAD_NAME_RE = re.compile(r"^ac-(\d{1,6})\b")
 
 _LEDGER_CACHE = {"path": None, "mtime": None, "map": {}}
 
-# ---- issue 118: persistent gateway characters + walks --------------------
+# ---- persistent gateway characters + walks --------------------------------
 # Persistent seats are OPTIONAL and configured via AGENTCHAT_OFFICE_SEATS
 # (JSON list of {"sid", "label", "host"}). Default is empty: the office is
 # presentational only and never blocks delivery. Each configured seat is
-# always on the floor; green (working) only while a svc-route occupancy lock
-# is HELD for its host, otherwise idle white. Every OTHER transient character
+# always on the floor; green (working) only while an occupancy lock for its
+# host is HELD in AGENTCHAT_SVC_LOCK_DIR, otherwise idle white. Every OTHER
+# transient character
 # (engine consult seats) is removed by the relay each poll.
 def _seat_config() -> list:
     """Parse AGENTCHAT_OFFICE_SEATS defensively (fail-open: malformed -> [])."""
@@ -95,9 +96,8 @@ KEEPALIVE_S = 240  # < office 300s auto-demote; persistent chars never vanish
 def sol_seat_status(host: str, now: float | None = None) -> str:
     """Green iff a gateway occupancy lock is CURRENTLY held for that host.
 
-    Issue 123 (reviewer-reviewed): returns (status, holder) — the holder is the
-    svc-route agent/task that owns the lock, used for the seat's context
-    detail. Bounded read; never raises.
+    Returns (status, holder): the holder is the agent/task that owns the lock,
+    used for the seat's context detail. Bounded read; never raises.
     """
     now = time.time() if now is None else now
     try:
@@ -130,7 +130,7 @@ def walk_to(from_agent: str, to_agent: str, run_number: int | None = None,
     try:
         now = time.time() if now is None else now
         feed = OFFICE_FEED
-        # Issue 119: a bare "sol" addressee maps to whichever persistent
+        # A bare "sol" addressee maps to whichever persistent
         # gateway seat currently holds the gateway lock (local seat if
         # neither/both), so @sol walks land on a real seat on the floor.
         if to_agent == "sol":
@@ -141,7 +141,7 @@ def walk_to(from_agent: str, to_agent: str, run_number: int | None = None,
                       else "sol-local")
         ev = {"session_id": "orch-chat-%s" % from_agent, "platform": "cli",
               "ts": now, "event": "walk_to", "walk_to": "orch-chat-%s" % to_agent,
-              "label": office_label(from_agent, run_number, "")}  # thread added issue 120
+              "label": office_label(from_agent, run_number, "")}  # carries thread metadata
         with open(feed, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(ev, separators=(",", ":")) + "\n")
         return True
@@ -183,7 +183,7 @@ def heartbeat_persistent_sols(state_dir: str | None = None,
                       "tool_name": "gateway",
                       "activity": "working" if status == "working" else "idle",
                       "label": seat["label"],
-                      # Issue 123: who is consulting this gateway right now
+                      # Who is consulting this gateway right now
                       # (surfaces in the office inspector/detail line).
                       "detail": ("in use by %s" % holder) if status == "working"
                                 else "available",
@@ -198,9 +198,9 @@ def heartbeat_persistent_sols(state_dir: str | None = None,
                 fh.write(json.dumps(ev, separators=(",", ":")) + "\n")
                 ps[seat["sid"]] = {"status": status, "ts": now}
                 written += 1
-        # NOTE: transient orchestra-sol seats are banned FOLD-SIDE (issue118
-        # visual patch: engine-aware session_start filter) — no polling race,
-        # works for every producer, and codex seats (engine=codex) survive.
+        # NOTE: transient consult seats are banned FOLD-SIDE (engine-aware
+        # session_start filter) — no polling race, works for every producer,
+        # and codex seats (engine=codex) survive.
         st["persistentSols"] = ps
         tmp = st_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -244,7 +244,7 @@ def extract_run(text: str) -> tuple[str, int | None]:
 
 
 def extract_thread(text: str) -> tuple[str, int | None]:
-    """Split a leading #t<NNN> thread token off message text (issue 120).
+    """Split a leading #t<NNN> thread token off message text.
 
     Emitters that already know the conversation thread prepend "#t<n> " to
     the delivered text; the relay/CLI strip it and carry it as metadata so
@@ -259,7 +259,7 @@ def office_label(name: str, run_number: int | None, topic: str,
                  thread_number: int | None = None) -> str:
     """Build the floor label. Identity+run prefix is never truncated.
 
-    Issue 120 precedence: explicit #r<NNN> run context wins ("Buffy R070"),
+    Precedence: explicit #r<NNN> run context wins ("Buffy R070"),
     else the conversation's Discord thread number ("Buffy T001"), else the
     honest CHAT fallback (thread creation failed / legacy messages)."""
     who = NAMES.get(name, name.capitalize())
@@ -366,7 +366,7 @@ def pulse(agent: str, topic: str, run_number: int | None = None,
         if now - float(a.get("lastPulse") or 0) < PULSE_THROTTLE_S:
             _save_office_state(st_path, st)
             return False
-        # Issue 118 (operator): idle ad-hoc chats do NOT get characters.
+        # Idle ad-hoc chats do NOT get characters.
         # Only pulse when there is real recent activity (the caller passes a
         # topic from a live delivery/turn); quiet chats stay off the floor.
         # (The fold sweeps untouched chars after 300s; no idle keepalive.)

@@ -14,7 +14,13 @@ append-only) under the configured state directory.
 
 Envelope format on Discord:  [from] @to1 @to2 text...  (re:#<id> prefix on
 replies is parsed back into replyTo by the relay). Message posting uses the
-existing openclaw bot token — no duplicate secrets.
+bot token and webhook configured in the environment — no duplicate secrets.
+
+`dispatch-sol` is opt-in and unconfigured by default: set
+AGENTCHAT_DISPATCH_CMD to a shell command template containing {case} and
+{id} (for example your own consult launcher) before those messages can be
+dispatched. Without it the command reports that dispatch is not configured
+and exits 4; every other command is unaffected.
 """
 from __future__ import annotations
 
@@ -22,19 +28,20 @@ import fcntl
 import json
 import os
 import re
+import shlex
 import sys
 import time
 import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import orch_chat_office as office  # issue 114/118: pixel-office pulses, walks, run token
-import orch_chat_sessions as acs  # P776 Phase C: per-session addressing
+import orch_chat_office as office  # optional pixel-office pulses, walks, run token
+import orch_chat_sessions as acs  # per-session addressing and mailboxes
 
 API = "https://discord.com/api/v10"
 GENERAL_CHAN_ID = "1551019049570541590"
-# issue 165: conversation THREADS must parent to #orchestration (1551149160760086579),
-# not #general — kit D11 convention: run/consult threads live in #orchestration.
+# Conversation THREADS parent to #orchestration, not #general: run and consult
+# threads live in the orchestration lane, never in the live chat lane.
 # The envelope starter post still lands in #general (the live chat lane); only the
 # thread PARENT moved. THREAD_CHAN_ID must be a type-0 text channel in the same guild.
 THREAD_CHAN_ID = "1551149160760086579"
@@ -212,7 +219,7 @@ def save_state(st: dict) -> None:
 
 OBSERVED_PATH = os.path.join(STATE_DIR, "presence-observed.jsonl")
 STATE_LOCK_PATH = STATE_DIR + "/state.lock"
-THREADS_PATH = os.path.join(STATE_DIR, "threads.json")  # issue 120
+THREADS_PATH = os.path.join(STATE_DIR, "threads.json")
 
 
 class state_lock:
@@ -279,7 +286,7 @@ def merge_save(st: dict) -> None:
 
 def find_message(st: dict, mid: int) -> dict | None:
     """Reconstruct a delivered message from any role or session inbox (the
-    id is global; P776 copies may land in session mailboxes)."""
+    id is global; copies may also land in session mailboxes)."""
     for a in AGENTS:
         p = os.path.join(INBOX_DIR, a + ".jsonl")
         if not os.path.exists(p):
@@ -322,7 +329,7 @@ def resolve_claim(claim_sid: str | None, frm: str) -> dict | None:
 def deliver_local(st: dict, frm: str, frm_sid: str | None, tos: list,
                   text: str, reply_to, origin: str, discord_id=None,
                   run_number=None, thread_number=None) -> dict:
-    """Issue 776: `tos` is a list of (role, sid|None). Explicit session
+    """`tos` is a list of (role, sid|None). Explicit session
     targets deliver to their session mailbox ONLY (correction #1);
     role-only targets keep the legacy role mailbox (+hints/ambiguous)."""
     rec = {
@@ -389,7 +396,7 @@ def deliver_local(st: dict, frm: str, frm_sid: str | None, tos: list,
     return rec
 
 
-# ---- issue 120: conversation threads ---------------------------------------
+# ---- conversation threads ---------------------------------------------------
 # Each conversation (sorted sender+recipients) gets a Discord thread
 # "ac-<n> <topic>" started from its first #general message; replies post
 # into the thread. threads.json is the durable registry, shared with the
@@ -414,16 +421,15 @@ def save_threads(t: dict) -> None:
 def conv_key(frm: str, tos: list) -> str:
     """Direction-independent conversation id: the sorted participant set.
     buffy->claude and claude->buffy are THE SAME conversation and share one
-    thread (live-learned issue 120: direction-keyed threads duplicated on
-    every reply)."""
+    thread (direction-keyed threads would duplicate on every reply)."""
     return ",".join(sorted(set([frm] + list(tos))))
 
 
 def ensure_thread(frm: str, frm_sid: str | None, tos: list, text: str) -> dict | None:
     """Return {num, channelId} for this conversation, creating the Discord
     thread on first use. Caller MUST hold state_lock(). Fail-open: any error
-    returns None and the caller keeps flat #general posting. Issue 776: tos
-    is [(role, sid|None)]; session identity makes a DISTINCT conversation key
+    returns None and the caller keeps flat #general posting. `tos` entries
+    are (role, sid|None); session identity makes a DISTINCT conversation key
     (correction #3) so concurrent same-role sessions never share threads."""
     try:
         t = load_threads()
@@ -432,7 +438,7 @@ def ensure_thread(frm: str, frm_sid: str | None, tos: list, text: str) -> dict |
         conv = t.get("convs", {}).get(key)
         if conv and conv.get("channelId"):
             t.setdefault("byChan", {})[str(conv["channelId"])] = conv["num"]
-            # Issue 123: thread-archive bookkeeping — every reuse is activity.
+            # Thread-archive bookkeeping — every reuse is activity.
             conv["lastUsed"] = time.strftime(
                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             save_threads(t)
@@ -445,7 +451,7 @@ def ensure_thread(frm: str, frm_sid: str | None, tos: list, text: str) -> dict |
         mid, topic = m.group(1), m.group(2)
         num = int(t.get("nextThread", 1))
         name = ("ac-%d %s" % (num, topic)).replace("\n", " ")[:90]
-        # issue 165: parent to #orchestration (THREAD_CHAN_ID), not #general.
+        # Parent to #orchestration (THREAD_CHAN_ID), not #general.
         # The starter message id (mid) still anchors the thread's origin —
         # Discord requires the source message to live in the parent channel,
         # so fall back to a plain thread in #orchestration when the starter is
@@ -469,7 +475,7 @@ def ensure_thread(frm: str, frm_sid: str | None, tos: list, text: str) -> dict |
 
 
 def _webhook_creds() -> tuple[str | None, str | None]:
-    """Issue 123 (reviewer-reviewed design): ONE shared orch-chat webhook in
+    """One shared orch-chat webhook in
     #general — username/avatar are overridden PER MESSAGE, so per-agent
     webhook objects are pointless. Credential lives in the Discord env file
     (same protection class as the bot token), never in conversational state.
@@ -492,7 +498,7 @@ def _webhook_creds() -> tuple[str | None, str | None]:
     return (wid, wtok) if wid and wtok else (None, None)
 
 
-WEBHOOK_UA = "orch-chat-webhook-identity (issue 123, openchamber)"
+WEBHOOK_UA = "orch-chat-webhook-identity (openchamber)"
 
 
 def webhook_post(agent: str, content: str, channel_id: str | None = None,
@@ -515,7 +521,7 @@ def webhook_post(agent: str, content: str, channel_id: str | None = None,
         "content": content[:2000],
         "allowed_mentions": {"parse": []},  # text-only mentions; no pings
     }
-    # Live-learned (issue 123): `wait` and `thread_id` are QUERY parameters of
+    # Live-learned: `wait` and `thread_id` are QUERY parameters of
     # webhook execution — putting them in the JSON body is silently ignored
     # (204 empty -> no message id -> the bot fallback double-posted; thread
     # copies landed in #general instead of the thread).
@@ -540,9 +546,9 @@ def post_discord(frm: str, frm_sid: str | None, tos: list,
                  text: str) -> tuple[str | None, int | None]:
     """Post to #general (the starter) and, for known/new conversations, into
     the conversation thread. Returns (message_id, thread_number).
-    Issue 123: prefers the agent-identity webhook path; bot-post is the
+    Prefers the agent-identity webhook path; bot-post is the
     fallback. Conversation/thread bookkeeping identical either way.
-    Issue 776: tos entries are (role, sid|None); the envelope carries the
+    `tos` entries are (role, sid|None); the envelope carries the
     sid suffix so the relay routes explicitly."""
     content = "[%s%s] %s %s" % (
         frm, ("#" + frm_sid) if frm_sid else "",
@@ -568,7 +574,7 @@ def post_discord(frm: str, frm_sid: str | None, tos: list,
         rc2, resp2 = api("POST", f"/channels/{conv['channelId']}/messages",
                          body={"content": tcontent[:2000]})
         tid = str(resp2.get("id")) if rc2 == 200 and resp2.get("id") else None
-        # Issue 123 (reviewer note: archive must mean DORMANT, not dead): a mapped
+        # Reviewer note: archive must mean DORMANT, not dead. A mapped
         # thread archived by the janitor rejects posts — unarchive once and
         # retry before giving up. threads.json entry is never deleted.
         if not tid and rc2 in (403, 404):
@@ -600,7 +606,7 @@ def check_rate(st: dict, frm: str) -> None:
 
 def cmd_send(args) -> int:
     frm: str | None = None
-    tos: list = []  # (role, sid|None) tuples, P776
+    tos: list = []  # (role, sid|None) tuples
     text_parts = []
     reply_to = None
     force = False
@@ -616,7 +622,7 @@ def cmd_send(args) -> int:
             force = True  # suppress the low-traffic nudge; delivery is unaffected
         elif a == "--run":
             i += 1
-            run_arg = int(args[i])  # issue 114: explicit run context for the label
+            run_arg = int(args[i])  # explicit run context for the label
         elif a == "--session":
             i += 1
             session_arg = args[i].strip()
@@ -641,7 +647,7 @@ def cmd_send(args) -> int:
         fail("unknown recipient(s): %s (known: %s)" % (",".join(bad), ",".join(AGENTS)), 2)
     if any(r == frm for (r, _s) in tos):
         fail("self-send rejected", 2)
-    # Issue 776 Phase C: session identity. The sender claim (--session/env) is
+    # Session identity. The sender claim (--session/env) is
     # fail-closed validated (correction #2); explicit session targets are
     # validated BEFORE the Discord post so a bad or closed target never burns
     # a delivery that would then need manual replay.
@@ -690,7 +696,7 @@ def cmd_send(args) -> int:
                             discord_id, run_number, thread_number=thread_number)
         merge_save(st)
     stamp_activity(frm, "send")
-    # Issue 114/118: office pulse + walk AFTER delivery commits — fail-open,
+    # Office pulse + walk AFTER delivery commits — fail-open,
     # never blocks the send. The sender lights up and walks to each addressee
     # (walks are event-driven; persistent seats are configured).
     office.pulse(frm, text, run_number=run_number,
@@ -712,7 +718,7 @@ def cmd_send(args) -> int:
 
 def _session_mail(label: str, agent: str, sid: str | None, show_all: bool,
                   advance: bool) -> int:
-    """Session-mail branch of `inbox --session` / `peek --session` (P776).
+    """Session-mail branch of `inbox --session` / `peek --session`.
     Reads the per-session mailbox with the PER-SESSION cursor (role cursors
     untouched). CLOSED sessions stay readable — delivery stops, mail is
     preserved (reviewer note: IDLE-but-resumable durable semantics)."""
@@ -884,7 +890,7 @@ def cmd_reply(args) -> int:
     frm = frm or os.environ.get("AGENTCHAT_AGENT", "").lower()
     if frm not in AGENTS:
         fail("set --from or AGENTCHAT_AGENT", 2)
-    # Issue 776 reply routing (correction #3, durable conversation ids):
+    # Reply routing for durable conversation ids (correction #3):
     # an original carrying fromSession routes back to THAT session explicitly
     # when it exists for the sender role and is ACTIVE; anything else keeps
     # the legacy role-to-role reply. The replier's own session claim
@@ -909,7 +915,7 @@ def cmd_reply(args) -> int:
 
 
 def cmd_register(args) -> int:
-    """Issue 776: create/renew a session binding for a role. Caller-supplied
+    """Create or renew a session binding for a role. Caller-supplied
     sids must match ses-[a-z0-9-]{4,48}; CLOSED sids are terminal (reviewer note:
     closed never resurrects — choose a new sid, or pass --resume to reopen it
     deliberately; P0 §4.7 makes reopening explicit and recorded)."""
@@ -1052,7 +1058,7 @@ def cmd_dispatch_sol(args) -> int:
     case_path = os.path.join(WS_TMP, "sol-chat-%d.md" % mid)
     with open(case_path, "w", encoding="utf-8") as fh:
         fh.write("# reviewer chat question #%d (from @%s via Discord #general)\n\n%s\n\n"
-                 "(Dispatched via orch-chat dispatch-sol issue 108. Answer must be "
+                 "(Dispatched via orch-chat dispatch-sol. Answer must be "
                  "relayed back to Discord #general as [sol] @%s <answer>.)\n"
                  % (mid, msg["from"], msg["text"], msg["from"]))
     st.setdefault("solDispatch", {})[str(mid)] = {
@@ -1064,18 +1070,19 @@ def cmd_dispatch_sol(args) -> int:
             "status": "launched", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "case": case_path}
         merge_save(st)
-    inner = ("cd /workspace/work/orchestration && setsid bash -c "
-             "'nohup bun orchestrate.mjs consult \"reviewer chat question #%d from @%s "
-             "via Discord #general (orch-chat dispatch-sol): answer inline, no tools "
-             "needed; full question in the attachment.\" --open tmp/sol-chat-%d.md "
-             "> tmp/sol-chat-%d.out 2>&1 &'"
-             % (mid, msg["from"], mid, mid))
-    container = os.environ.get("AGENTCHAT_SSH_CONTAINER", "orchestration")
-    cmd = "docker exec %s bash -c %s" % (container, json.dumps(inner))
+    template = os.environ.get("AGENTCHAT_DISPATCH_CMD", "").strip()
+    if not template:
+        fail("dispatch-sol is not configured on this installation: set "
+             "AGENTCHAT_DISPATCH_CMD to a shell command template containing "
+             "{case} and {id} (see the module docstring)", 4)
+    cmd = template.replace("{case}", shlex.quote(case_path)).replace(
+        "{id}", str(mid))
+    if "{case}" in template and case_path not in cmd:
+        fail("AGENTCHAT_DISPATCH_CMD did not substitute {case}", 4)
     if launch:
         rc = os.system(cmd + " >/dev/null 2>&1")
-        print("launched consult for #%d (docker exec rc=%d); poll "
-              "tmp/sol-chat-%d.out" % (mid, rc >> 8, mid))
+        print("launched consult for #%d (rc=%d); case file %s"
+              % (mid, rc >> 8, case_path))
     else:
         print("lane free (%s). Launch with:\n  %s" % (why, cmd))
     return 0

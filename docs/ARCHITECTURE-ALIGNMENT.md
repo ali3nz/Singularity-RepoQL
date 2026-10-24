@@ -5,7 +5,7 @@ authority for the memory lifecycle; this package ships the public,
 self-contained equivalents. This matrix records, per lifecycle mechanism:
 what the reference does today (with evidence), what this package does, the
 decision, and how correctness is demonstrated. Read the authority rules in
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first: RepoQL stays the primary
+[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) first: RepoQL stays the primary
 retrieval plane; MemoryCore is experiential memory and is advisory only.
 
 Inspection of the reference deployment was **read-only**: file reads, git

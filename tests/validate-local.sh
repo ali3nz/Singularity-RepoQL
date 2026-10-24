@@ -42,6 +42,7 @@ check node --test scripts/acceptance-ordinary-session.test.mjs
 check node --test scripts/provider-failover-proof.test.mjs
 check node --test scripts/doctor.test.mjs
 check bash tests/manifest-regression.test.sh
+check bash tests/scan-refs.test.sh
 check bash tests/start-selection.test.sh
 check node --test adapters/claude-code/integration.test.mjs
 check node --test adapters/claude-code/memory-hook.test.mjs

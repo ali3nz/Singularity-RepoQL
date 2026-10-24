@@ -26,7 +26,7 @@ the validated in-network endpoints:
 | `/home/openchamber/.config/opencode/product-secrets/memory.json` | `SINGULARITY_MEMORY_CONFIG` | `{"baseUrl":"http://memory-core:8420","authPrefix":"Bearer ","gatewayKey":"","serviceId":"openchamber","userKey":"sk-mem-…"}` |
 | `/home/openchamber/.config/opencode/product-secrets/office.json` | `SINGULARITY_OFFICE_CONFIG` | `{"endpoint":"http://product-office:8000/api/v1/events","ingestKey":"…"}` |
 
-Generate both with [`../../scripts/provision-secrets.py`](../../scripts/provision-secrets.py)
+Generate both with [`../../../scripts/provision-secrets.py`](../../../scripts/provision-secrets.py)
 and keep them mode 0600.
 
 ### Capture roots

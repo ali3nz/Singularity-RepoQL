@@ -4,9 +4,10 @@ Singularity-RepoQL gives your coding agents memory and code intelligence that su
 
 ![RepoQL provides source-linked technical knowledge; Tencent MemoryCore provides scoped experience and bounded recall. Rules, source and live evidence outrank recalled memory.](docs/assets/memory-architecture.png)
 
-Claude Office visualizes agent activity in a live pixel-art office:
-
-![Agents working together inside the Claude Office visualizer](docs/assets/office-live.jpg)
+Claude Office visualizes agent activity in a live pixel-art office: one desk per
+agent, presence driven by real events rather than a mock. See the
+[Claude Office fork](https://github.com/ali3nz/claude-office) for a preview of
+the floor and `docs/OFFICE-SETUP.md` for this repository's deployment.
 
 ## Choose exactly one installation option
 
@@ -129,13 +130,23 @@ The installer reports INCOMPLETE until every mandatory capability of the chosen 
 - Docker, to run the Tencent MemoryCore stack.
 - Claude Code (options 1 and 2) or an existing OpenChamber installation (options 3 and 4). Options 3 and 4 attach to that installation and never install a second one.
 - RepoQL, already installed and reachable.
-- Two LLM API provider accounts of your own, with keys you hold. Sign up directly with each provider; pricing, quotas and model availability are set by the provider:
-  - NVIDIA — https://build.nvidia.com/
-  - Groq — https://console.groq.com/     - Go sign up and get an API key, its free. The rest can be ignored for now. 
-  - Cerebras — https://cloud.cerebras.ai/ 
-  - OpenRouter — https://openrouter.ai/
-  - Cohere — https://dashboard.cohere.com/ - Go sign up and get an API key, its free. The rest can be ignored for now. 
-- The shipped extraction failover router supports Groq and Cohere out of the box (`secrets/groq-api-key`, `secrets/cohere-api-key`). Any additional OpenAI-compatible provider (NVIDIA, Cerebras, OpenRouter, …) can be onboarded with a PAIR in the secrets directory — `<name>-api-key` plus `<name>-api-provider.json` (`{ "name", "base" (https), "model" }`); a file that does not validate never becomes a hop. Verify both extraction providers and a controlled live fallback (`scripts/runtime-proofs.mjs`) before accepting failover.
+- Two LLM API provider accounts of your own, with keys you hold: **Groq**
+  (https://console.groq.com/) and **Cohere** (https://dashboard.cohere.com/).
+  The shipped extraction failover router carries routes for exactly these two —
+  `groq-120b`, then `cohere-a+`, then `groq-20b` — and that pair is the minimum
+  the installer accepts. Both providers offer free API keys; put them in the
+  secrets directory as `groq-api-key` and `cohere-api-key`. Pricing, quotas and
+  model availability are set by each provider, not by this repository.
+- Optional extra providers, no code change required: drop a pair of files in the
+  secrets directory — `<name>-api-key` and `<name>-api-provider.json` holding
+  `{ "name": "...", "base": "https://...", "model": "..." }` — and the router
+  appends it as an extra hop. Validation is strict: plain-HTTP bases, localhost,
+  duplicate names and incomplete files are refused, so an invalid file never
+  becomes a hop. Public OpenAI-compatible endpoints include NVIDIA
+  (https://build.nvidia.com/), Cerebras (https://cloud.cerebras.ai/) and
+  OpenRouter (https://openrouter.ai/).
+- Both extraction providers verified with a controlled live fallback
+  (`node scripts/runtime-proofs.mjs`) before you accept the installation.
 
 ## Technical documentation
 
