@@ -4,6 +4,17 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc6] - 2026-10-24
+
+### Added
+- `docs/RELEASE.md`: the two-layer release gate (public CI versus the operator
+  run with the private overlay), the image-review step, the checksum ordering
+  rule and the tag policy.
+
+### Fixed
+- The reference scanner pointed at `docs/RELEASE.md`, which did not exist; the
+  document now ships with the repository and is indexed in the README.
+
 ## [0.1.0-rc5] - 2026-10-24
 
 ### Fixed

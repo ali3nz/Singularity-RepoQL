@@ -155,7 +155,8 @@ OpenChamber — `docs/OPENCHAMBER-SETUP.md` · Ghost — `docs/GHOST-SETUP.md` �
 Claude Office — `docs/OFFICE-SETUP.md` · RepoQL — `docs/REPOQL-SETUP.md` ·
 documentation ingestion — `docs/DOC-INGESTION.md` ·
 memory capture and promotion — `docs/memory-capture-promotion.md` ·
-architecture — `docs/ARCHITECTURE.md` · troubleshooting — `docs/TROUBLESHOOTING.md`
+architecture — `docs/ARCHITECTURE.md` · troubleshooting — `docs/TROUBLESHOOTING.md` ·
+release gate — `docs/RELEASE.md`
 
 ## License
 
