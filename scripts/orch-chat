@@ -224,6 +224,81 @@ STATE_LOCK_PATH = STATE_DIR + "/state.lock"
 THREADS_PATH = os.path.join(STATE_DIR, "threads.json")
 
 
+class DispatchBusy(RuntimeError):
+    """Another process is already dispatching this message id."""
+
+
+class dispatch_lock:
+    """Per-message exclusive claim, created with O_CREAT|O_EXCL.
+
+    At-most-once dispatch is a property of the FILE, not of a state read: two
+    processes that both see `queued` still cannot both create this claim. A
+    claim is reclaimed only when its owner is gone or it is older than the stale
+    window, so a crashed dispatch does not wedge the message.
+    """
+
+    STALE_S = 900
+
+    def __init__(self, mid: int):
+        self.path = os.path.join(STATE_DIR, ".dispatch-%d.lock" % mid)
+        self.fd = None
+
+    def _owner_pid(self) -> int:
+        try:
+            with open(self.path, "r", encoding="utf-8") as fh:
+                return int(fh.read().strip() or 0)
+        except Exception:
+            return 0
+
+    def _stale(self) -> bool:
+        try:
+            age = time.time() - os.path.getmtime(self.path)
+        except OSError:
+            return True
+        if age > self.STALE_S:
+            return True
+        pid = self._owner_pid()
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        return False
+
+    def __enter__(self):
+        os.makedirs(STATE_DIR, exist_ok=True)
+        for attempt in (0, 1):
+            try:
+                self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                os.write(self.fd, ("%d\n" % os.getpid()).encode())
+                os.fsync(self.fd)
+                return self
+            except FileExistsError:
+                if attempt == 1 or not self._stale():
+                    raise DispatchBusy("message is already being dispatched")
+                try:
+                    os.unlink(self.path)
+                except FileNotFoundError:
+                    pass
+        raise DispatchBusy("message is already being dispatched")
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+        return False
+
+
 class state_lock:
     """Same exclusive lock the relay daemon takes (live-learned 2026-09-26:
     without it the daemon's stale nextId clobbered CLI allocations)."""
@@ -1062,6 +1137,22 @@ def cmd_dispatch_sol(args) -> int:
     msg = find_message(st, mid)
     if msg is None or "sol" not in msg.get("to", []):
         fail("message #%d is not an @sol message" % mid, 3)
+    try:
+        claim = dispatch_lock(mid)
+        claim.__enter__()
+    except DispatchBusy:
+        print("BUSY (dispatch of #%d already in progress elsewhere) — nothing sent" % mid)
+        return 23
+    try:
+        return _dispatch_sol_claimed(mid, msg, launch, template)
+    finally:
+        claim.__exit__(None, None, None)
+
+
+def _dispatch_sol_claimed(mid: int, msg: dict, launch: bool, template: str) -> int:
+    # Re-read inside the claim: the state seen before winning the claim may be
+    # stale, and the whole point of the claim is that this read is authoritative.
+    st = load_state()
     prev = st.get("solDispatch", {}).get(str(mid))
     if prev and prev.get("status") in ("launched", "done"):
         print("message #%d already %s" % (mid, prev["status"]))

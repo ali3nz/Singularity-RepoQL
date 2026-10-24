@@ -24,6 +24,7 @@ rm -rf scripts/__pycache__ 2>/dev/null || true
 
 step "node syntax"
 for f in scripts/*.mjs ghost/*.mjs adapters/claude-code/*.mjs scripts/doctor.mjs \
+         orchestration/*.mjs scripts/orch-run \
          openchamber/plugins/product-office/*.js \
          openchamber/plugins/runbook-nudge/*.js; do check node --check "$f"; done
 
@@ -50,6 +51,10 @@ check node --test adapters/claude-code/installer.test.mjs
 check node --test adapters/claude-code/main-memory.test.mjs
 check node --test adapters/claude-code/doc-hook.test.mjs
 check node --test tests/doc-policy.test.mjs
+check node --test orchestration/workflow.test.mjs
+check node --test orchestration/governance.test.mjs
+check node --test orchestration/routing.test.mjs
+check node --test scripts/orch-run.test.mjs
 check bash tests/memory-port-boundary.test.sh
 check node --test ghost/dream.test.mjs
 check node --test ghost/ghost-gateway.test.mjs

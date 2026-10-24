@@ -124,6 +124,23 @@ Verify each capability with the repository's acceptance procedure and report the
 
 The installer reports INCOMPLETE until every mandatory capability of the chosen option is verified by a real check. Nothing is reported as working on configuration alone.
 
+## Optional orchestration
+
+Orchestrated runs ship as an optional capability, separate from the installer's
+mandatory set and separate from any coordinator you already run:
+`node scripts/orch-run` keeps persistent run and case identity, an explicit
+six-stage workflow (`plan` -> `implement` -> `validate` -> `review` -> `accept`)
+whose transitions need recorded evidence, identity-bound approvals that a
+coordinator cannot grant itself, filesystem resource leases, role-based model
+routing with a `free_only` policy that has no paid fallback, and supervision
+queries (`health`, `history`, `verify`). State is local JSON under `./.orch` by
+default; nothing is emailed, uploaded or posted, and Discord is not involved.
+
+Execution modes are seat plans with authority, not agent aliases:
+`node scripts/orch-run modes`. The contract, authority rules and honest limits
+are in `docs/ORCHESTRATION.md`; the source-level comparison against the private
+reference implementation is in `docs/CAPABILITY-MATRIX.md`.
+
 ## Requirements
 
 - Git, and access to `https://github.com/ali3nz/Singularity-RepoQL`.
@@ -156,6 +173,8 @@ Claude Office — `docs/OFFICE-SETUP.md` · RepoQL — `docs/REPOQL-SETUP.md` ·
 documentation ingestion — `docs/DOC-INGESTION.md` ·
 memory capture and promotion — `docs/memory-capture-promotion.md` ·
 architecture — `docs/ARCHITECTURE.md` · troubleshooting — `docs/TROUBLESHOOTING.md` ·
+orchestration — `docs/ORCHESTRATION.md` ·
+capability matrix — `docs/CAPABILITY-MATRIX.md` ·
 release gate — `docs/RELEASE.md`
 
 ## License

@@ -1,0 +1,324 @@
+#!/usr/bin/env node
+// orch-run — operator interface for portable orchestrated runs.
+//
+// Every authoritative mutation is permission checked: transitions carry the
+// role that performed them, acceptance needs an approval recorded by an
+// independent reviewer, and a failed stage is never rendered as complete.
+//
+//   orch-run start "<task>" [--mode solo|duo|quad|super|custom|free_only]
+//                          [--free-only] [--revision <rev>] [--repo <name>]
+//   orch-run status [<run>] [--json]
+//   orch-run list
+//   orch-run history [<run>] [--json]
+//   orch-run evidence <run> --kind <k> --producer <id> (--file <path> | --text <s>)
+//                          [--revision <rev>] [--verdict approve|changes_requested]
+//   orch-run advance <run> --to <stage> [--role coordinator|reviewer|operator]
+//                          [--actor <id>] [--reason <text>] [--verdict approve|changes_requested]
+//   orch-run approve <run> --approver <id> [--role reviewer|operator]
+//                          [--revision <rev>] [--ttl-minutes <n>]
+//   orch-run accept <run> --approver <id> [--revision <rev>]
+//   orch-run pause|resume|stop|recover <run> [--reason <text>]
+//   orch-run verify <run>            integrity check of evidence on disk
+//   orch-run modes                   describe the execution modes
+//   orch-run health [<run>]          supervision classification
+//
+// State lives in $ORCH_STATE_DIR (default ./.orch).
+import fs from "node:fs";
+import path from "node:path";
+import { evidenceEntry, evidenceFromFile, packHash, verifyPack } from "../orchestration/evidence.mjs";
+import { MODE_NAMES, describeMode } from "../orchestration/modes.mjs";
+import {
+  accept,
+  addEvidence,
+  approve,
+  createRun,
+  getRun,
+  health,
+  latestRun,
+  openRunStore,
+  pauseRun,
+  recoverRun,
+  resumeRun,
+  stopRun,
+  transition,
+} from "../orchestration/runs.mjs";
+import { packHash as _packHash } from "../orchestration/evidence.mjs";
+import { STAGES } from "../orchestration/stage-machine.mjs";
+
+const RC_USAGE = 2;
+const RC_REFUSED = 3;
+const RC_STATE = 4;
+
+function fail(message, rc = 1) {
+  console.error(`orch-run: ${message}`);
+  process.exit(rc);
+}
+
+function parseArgs(argv) {
+  const positional = [];
+  const flags = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg.startsWith("--")) {
+      positional.push(arg);
+      continue;
+    }
+    const key = arg.slice(2);
+    if (key === "json" || key === "free-only") {
+      flags[key] = true;
+      continue;
+    }
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith("--")) fail(`--${key} needs a value`, RC_USAGE);
+    flags[key] = value;
+    i += 1;
+  }
+  return { positional, flags };
+}
+
+function storeFromEnv() {
+  const dir = process.env.ORCH_STATE_DIR ?? path.join(process.cwd(), ".orch");
+  return openRunStore(dir);
+}
+
+function resolveRun(store, id) {
+  if (id) {
+    try {
+      return getRun(store, id);
+    } catch (err) {
+      fail(err.message, RC_STATE);
+    }
+  }
+  const run = latestRun(store);
+  if (!run) fail("no runs recorded; start one first", RC_STATE);
+  return run;
+}
+
+function printRun(run, { json = false } = {}) {
+  if (json) {
+    console.log(JSON.stringify(run, null, 2));
+    return;
+  }
+  const pack = packHash(run.evidence ?? []);
+  console.log(`run      ${run.id}`);
+  console.log(`case     ${run.caseId}`);
+  console.log(`mode     ${run.mode} (provider policy: ${run.providerPolicy})`);
+  console.log(`stage    ${run.stage}   status ${run.status}`);
+  console.log(`task     ${run.task}`);
+  console.log(`revision ${run.revision ?? "unrecorded"}`);
+  console.log(`evidence ${(run.evidence ?? []).length} entries, pack ${pack.slice(0, 16)}`);
+  console.log(`approvals ${(run.approvals ?? []).length}`);
+  if (run.interrupted) console.log(`interrupted during ${run.interrupted.stage} (reconciliation required)`);
+  const h = health(run);
+  console.log(`health   ${h.state} — ${h.detail}`);
+}
+
+function cmdStart(store, { positional, flags }) {
+  const task = positional.join(" ").trim();
+  if (!task) fail('usage: orch-run start "<task>" [--mode <m>] [--free-only]', RC_USAGE);
+  const mode = flags.mode ?? "solo";
+  if (!MODE_NAMES.includes(mode)) fail(`unknown mode '${mode}' (one of: ${MODE_NAMES.join(", ")})`, RC_USAGE);
+  const seats = flags.seat ? [].concat(flags.seat) : null;
+  try {
+    const run = createRun(store, {
+      task,
+      mode,
+      seats,
+      freeOnly: Boolean(flags["free-only"]),
+      revision: flags.revision ?? null,
+      repository: flags.repo ?? "local",
+    });
+    printRun(run);
+  } catch (err) {
+    fail(err.message, RC_REFUSED);
+  }
+}
+
+function cmdEvidence(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const kind = flags.kind;
+  const producer = flags.producer;
+  if (!kind || !producer) fail("evidence needs --kind and --producer", RC_USAGE);
+  const meta = flags.verdict ? { verdict: flags.verdict } : {};
+  let entry;
+  try {
+    if (flags.file) {
+      const file = path.resolve(flags.file);
+      if (!fs.existsSync(file)) fail(`no such file: ${file}`, RC_USAGE);
+      entry = evidenceFromFile({ kind, producer, file, revision: flags.revision ?? run.revision, meta });
+    } else if (flags.text) {
+      entry = evidenceEntry({ kind, producer, content: flags.text, revision: flags.revision ?? run.revision, meta });
+    } else {
+      fail("evidence needs --file or --text", RC_USAGE);
+    }
+    addEvidence(store, run.id, [entry]);
+  } catch (err) {
+    fail(err.message, RC_REFUSED);
+  }
+  console.log(`recorded ${entry.kind} from ${entry.producer} sha256=${entry.sha256.slice(0, 16)} (${entry.bytes} bytes)`);
+}
+
+function cmdAdvance(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const to = flags.to;
+  if (!to) fail(`advance needs --to (one of: ${STAGES.join(", ")}, done)`, RC_USAGE);
+  const outcome = transition(store, run.id, {
+    to,
+    actor: flags.actor ?? flags.role ?? "operator",
+    role: flags.role ?? "operator",
+    reason: flags.reason ?? "",
+    verdict: flags.verdict ?? null,
+  });
+  if (!outcome.ok) fail(outcome.reason, RC_REFUSED);
+  console.log(`${outcome.applied ? "advanced" : "unchanged"} ${run.stage} -> ${to}`);
+  printRun(outcome.run);
+}
+
+function cmdApprove(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const approver = flags.approver;
+  if (!approver) fail("approve needs --approver <identity>", RC_USAGE);
+  try {
+    approve(store, run.id, {
+      approver,
+      role: flags.role ?? "reviewer",
+      revision: flags.revision ?? null,
+      ttlMs: flags["ttl-minutes"] ? Number(flags["ttl-minutes"]) * 60_000 : undefined,
+      note: flags.note ?? "",
+    });
+  } catch (err) {
+    fail(err.message, RC_REFUSED);
+  }
+  console.log(`approval recorded by ${approver} for evidence pack ${packHash(run.evidence ?? []).slice(0, 16)}`);
+}
+
+function cmdAccept(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const approver = flags.approver;
+  if (!approver) fail("accept needs --approver <identity>", RC_USAGE);
+  const outcome = accept(store, run.id, { approver, revision: flags.revision ?? null });
+  if (!outcome.ok) fail(outcome.reason, RC_REFUSED);
+  console.log("accepted");
+  printRun(outcome.run);
+}
+
+function cmdLifecycle(store, command, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const fn = { pause: pauseRun, resume: resumeRun, stop: stopRun, recover: recoverRun }[command];
+  const outcome = fn(store, run.id, { reason: flags.reason ?? "", actor: flags.actor ?? "operator" });
+  if (outcome.ok === false) fail(outcome.reason, RC_REFUSED);
+  console.log(`${command}${outcome.recovered ? "ed" : "d"} ${run.id}: ${outcome.reason ?? ""}`.trim());
+  printRun(outcome.run);
+}
+
+function cmdVerify(store, { positional }) {
+  const run = resolveRun(store, positional[0]);
+  const verification = verifyPack(run.evidence ?? []);
+  if (!verification.ok) {
+    console.error("evidence does NOT verify:");
+    for (const problem of verification.problems) console.error(`  - ${problem}`);
+    process.exit(RC_STATE);
+  }
+  console.log(`evidence verifies: ${(run.evidence ?? []).length} entries, pack ${_packHash(run.evidence ?? [])}`);
+}
+
+function cmdHistory(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const history = run.history ?? [];
+  if (flags.json) {
+    console.log(JSON.stringify(history, null, 2));
+    return;
+  }
+  for (const entry of history) {
+    const arrow = entry.from ? `${entry.from} -> ${entry.to}` : entry.to;
+    console.log(`${entry.at}  ${arrow.padEnd(22)} ${entry.role.padEnd(12)} ${entry.actor}  ${entry.reason ?? ""}`);
+  }
+}
+
+function cmdList(store, { flags }) {
+  const runs = store.listRuns();
+  if (flags.json) {
+    console.log(JSON.stringify(runs, null, 2));
+    return;
+  }
+  if (!runs.length) {
+    console.log("no runs recorded");
+    return;
+  }
+  for (const entry of runs) {
+    console.log(`${entry.id}  ${String(entry.stage).padEnd(10)} ${String(entry.status).padEnd(9)} ${entry.mode.padEnd(9)} ${entry.createdAt}`);
+  }
+}
+
+function cmdModes() {
+  for (const mode of MODE_NAMES) {
+    const d = describeMode(mode);
+    console.log(`${d.mode.padEnd(10)} workers=${d.workers}  reviewer=${d.reviewer ? "yes" : "no"}  policy=${d.providerPolicy}  coordinator-may-implement=${d.coordinatorMayImplement}`);
+  }
+}
+
+function cmdHealth(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  const h = health(run, { stuckAfterMs: flags["stuck-after-minutes"] ? Number(flags["stuck-after-minutes"]) * 60_000 : undefined });
+  if (flags.json) console.log(JSON.stringify(h, null, 2));
+  else console.log(`${h.state} — ${h.detail}`);
+  if (h.state === "STUCK" || h.state === "BLOCKED" || h.state === "FAILED") process.exitCode = RC_STATE;
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  const command = argv[0];
+  if (!command || command === "help" || command === "--help") {
+    console.error("usage: orch-run <start|status|list|history|evidence|advance|approve|accept|pause|resume|stop|recover|verify|modes|health> ...");
+    return RC_USAGE;
+  }
+  const parsed = parseArgs(argv.slice(1));
+  const store = storeFromEnv();
+
+  switch (command) {
+    case "start":
+      cmdStart(store, parsed);
+      return 0;
+    case "status":
+      printRun(resolveRun(store, parsed.positional[0]), { json: parsed.flags.json });
+      return 0;
+    case "evidence":
+      cmdEvidence(store, parsed);
+      return 0;
+    case "advance":
+      cmdAdvance(store, parsed);
+      return 0;
+    case "approve":
+      cmdApprove(store, parsed);
+      return 0;
+    case "accept":
+      cmdAccept(store, parsed);
+      return 0;
+    case "pause":
+    case "resume":
+    case "stop":
+    case "recover":
+      cmdLifecycle(store, command, parsed);
+      return 0;
+    case "verify":
+      cmdVerify(store, parsed);
+      return 0;
+    case "history":
+      cmdHistory(store, parsed);
+      return 0;
+    case "list":
+      cmdList(store, parsed);
+      return 0;
+    case "modes":
+      cmdModes();
+      return 0;
+    case "health":
+      cmdHealth(store, parsed);
+      return 0;
+    default:
+      fail(`unknown command '${command}'`, RC_USAGE);
+  }
+  return 0;
+}
+
+process.exit(main());

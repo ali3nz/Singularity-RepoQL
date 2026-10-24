@@ -4,6 +4,47 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc8] - 2026-10-24
+
+Optional portable orchestration. Nothing in the installer, the memory stack,
+RepoQL, Ghost, Office or the existing coordinator changed; rc5-rc7 tags are
+untouched.
+
+### Added
+- `scripts/orch-run`: operator CLI for orchestrated runs — `start`, `status`,
+  `list`, `history`, `evidence`, `advance`, `approve`, `accept`, `pause`,
+  `resume`, `stop`, `recover`, `verify`, `modes`, `health`. Every mutation is
+  role checked; read-only commands are separate.
+- `orchestration/state.mjs`, `runs.mjs`: durable run and case identity, one JSON
+  file per run, atomic writes, append-only transition history.
+- `orchestration/stage-machine.mjs`: six stages with an explicit transition
+  table, per-stage evidence requirements and bounded retries. A stage with
+  unknown result is marked `interrupted` and blocks; it is never completed.
+- `orchestration/evidence.mjs`: hashed evidence entries bound to a source
+  revision, a stable pack hash and an integrity check that re-reads the bytes.
+- `orchestration/approvals.mjs`: identity-bound approvals carrying stage, pack
+  hash, reviewed revision and TTL; stale packs and expired approvals are
+  refused, and a coordinator cannot approve its own run.
+- `orchestration/leases.mjs`: filesystem resource leases with owner, TTL,
+  conflict detection and idempotent release.
+- `orchestration/modes.mjs`: `solo`, `duo`, `quad`, `super`, `custom` and
+  `free_only` as seat plans with authority, enforcing reviewer independence and
+  a single coordinator when the plan is built.
+- `orchestration/routing.mjs`: role-based, provider-independent routing with
+  structured outcomes, retry classification, cost telemetry and a free-only
+  policy that has no paid fallback. Verified-free requires declared zero pricing
+  plus an explicit verification stamp.
+- `docs/ORCHESTRATION.md`, `docs/CAPABILITY-MATRIX.md`: the operator contract and
+  the source-level PRESENT/PARTIAL/MISSING/EXCLUDED comparison with the private
+  reference, including what is deliberately not ported.
+- 37 deterministic tests (`orchestration/*.test.mjs`, `scripts/orch-run.test.mjs`)
+  wired into `tests/validate-local.sh` and therefore CI.
+
+### Fixed
+- `orch-chat --launch` could dispatch the same message twice from two
+  processes. A per-message `O_EXCL` claim now makes at-most-once dispatch hold
+  under concurrency; the second dispatcher exits 23 without launching.
+
 ## [0.1.0-rc7] - 2026-10-24
 
 ### Fixed
