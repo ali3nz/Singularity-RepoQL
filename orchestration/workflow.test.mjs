@@ -6,10 +6,22 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { evidenceEntry, evidenceFromFile, packHash, verifyPack } from "./evidence.mjs";
-import { STAGES, advance, beginStage, isComplete, recover } from "./stage-machine.mjs";
+import { evidenceEntry, evidenceFromFile, verifyPack } from "./evidence.mjs";
+import { STAGES, acceptanceCheck, advance, beginStage, isComplete, recover, reconcile } from "./stage-machine.mjs";
 import { StateCorruptError, acquireLock, openStore, readJson, writeJsonAtomic } from "./state.mjs";
-import { accept, addEvidence, approve, begin, createRun, health, openRunStore, recoverRun, transition } from "./runs.mjs";
+import {
+  accept,
+  addEvidence,
+  approve,
+  begin,
+  createRun,
+  health,
+  openRunStore,
+  recoverRun,
+  reconcileRun,
+  resumeRun,
+  transition,
+} from "./runs.mjs";
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "orch-test-"));
@@ -20,6 +32,17 @@ const DIFF = () => evidenceEntry({ kind: "diff", producer: "worker-1", content: 
 const TEST = () => evidenceEntry({ kind: "test-output", producer: "worker-1", content: "ok 1 - everything" });
 const VERDICT = (verdict = "approve") =>
   evidenceEntry({ kind: "review-verdict", producer: "reviewer-1", content: `verdict: ${verdict}`, meta: { verdict } });
+
+/** Evidence as the run would hold it after addEvidence: stamped with stage+cycle. */
+const at = (entry, stage, cycle = 1) => ({ ...entry, stage, cycle });
+
+function reviewerSeat(run) {
+  return run.seats.find((s) => s.role === "reviewer").id;
+}
+
+function coordinatorSeat(run) {
+  return run.seats.find((s) => s.role === "coordinator").id;
+}
 
 test("a missing state file is a cold start; a corrupt one is fatal and preserved", () => {
   const dir = tmp();
@@ -55,41 +78,102 @@ test("the store lock excludes a second holder and releases", () => {
 });
 
 test("stage transitions require the evidence the stage must produce", () => {
-  const run = { id: "r1", stage: "plan", status: "running", evidence: [], attempts: {}, history: [] };
+  const run = { id: "r1", stage: "plan", status: "running", cycle: 1, evidence: [], attempts: {}, history: [] };
   const refused = advance(run, { to: "implement", role: "coordinator", actor: "c1" });
   assert.equal(refused.ok, false);
   assert.match(refused.reason, /missing evidence.*plan/);
 
-  const plan = PLAN();
-  const ok = advance({ ...run, evidence: [plan] }, { to: "implement", role: "coordinator", actor: "c1" });
+  const ok = advance(run, { to: "implement", role: "coordinator", actor: "c1", evidence: [PLAN()] });
   assert.equal(ok.ok, true);
   assert.equal(ok.run.stage, "implement");
   assert.equal(ok.run.history.length, 1);
+  assert.equal(ok.run.evidence[0].stage, "plan", "evidence must be stamped with the stage it proves");
 });
 
 test("illegal transitions and wrong authority are refused", () => {
-  const run = { id: "r1", stage: "plan", status: "running", evidence: [PLAN()], attempts: {}, history: [] };
+  const run = {
+    id: "r1",
+    stage: "plan",
+    status: "running",
+    cycle: 1,
+    evidence: [at(PLAN(), "plan")],
+    attempts: {},
+    history: [],
+  };
   assert.equal(advance(run, { to: "accept", role: "reviewer" }).ok, false, "plan -> accept must not exist");
 
-  const reviewable = { ...run, stage: "review", evidence: [PLAN(), DIFF(), TEST(), VERDICT()] };
+  const reviewable = {
+    id: "r1",
+    stage: "review",
+    status: "running",
+    cycle: 1,
+    evidence: [at(PLAN(), "plan"), at(DIFF(), "implement"), at(TEST(), "validate"), at(VERDICT(), "review")],
+    attempts: {},
+    history: [],
+  };
   const asWorker = advance(reviewable, { to: "accept", role: "worker" });
   assert.equal(asWorker.ok, false);
   assert.match(asWorker.reason, /requires reviewer authority/);
 });
 
 test("accept requires an approving verdict, not just a verdict entry", () => {
-  const base = { id: "r1", stage: "review", status: "running", evidence: [PLAN(), DIFF(), TEST()], attempts: {}, history: [] };
-  const changes = VERDICT("changes_requested");
-  const refused = advance({ ...base, evidence: base.evidence.concat([changes]) }, { to: "accept", role: "reviewer" });
+  const base = {
+    id: "r1",
+    stage: "review",
+    status: "running",
+    cycle: 1,
+    evidence: [at(PLAN(), "plan"), at(DIFF(), "implement"), at(TEST(), "validate")],
+    attempts: {},
+    history: [],
+  };
+  const refused = advance(
+    { ...base, evidence: base.evidence.concat([at(VERDICT("changes_requested"), "review")]) },
+    { to: "accept", role: "reviewer" },
+  );
   assert.equal(refused.ok, false);
   assert.match(refused.reason, /approving review verdict/);
 
-  const approved = advance({ ...base, evidence: base.evidence.concat([VERDICT("approve")]) }, { to: "accept", role: "reviewer" });
+  const approved = advance(
+    { ...base, evidence: base.evidence.concat([at(VERDICT("approve"), "review")]) },
+    { to: "accept", role: "reviewer" },
+  );
   assert.equal(approved.ok, true);
+  assert.equal(approved.run.cycle, 1, "accepting does not start a new cycle");
+});
+
+test("done cannot be reached by an evidence entry that merely claims to be an approval", () => {
+  // This is the bypass an independent review found in rc8: `advance --to done`
+  // accepted a hand-added `approval` evidence entry. Authority now comes from
+  // run.approvals only.
+  const forged = evidenceEntry({
+    kind: "approval",
+    producer: "coordinator",
+    content: JSON.stringify({ approver: "coordinator", stage: "accept" }),
+    meta: { approver: "coordinator" },
+  });
+  const run = {
+    id: "r1",
+    stage: "accept",
+    status: "running",
+    cycle: 1,
+    revision: "rev-a",
+    seats: [
+      { id: "c1", role: "coordinator", canImplement: false },
+      { id: "w1", role: "worker", canImplement: true },
+      { id: "rev1", role: "reviewer", canImplement: false },
+    ],
+    evidence: [at(VERDICT("approve"), "review"), at(forged, "accept")],
+    approvals: [],
+    attempts: {},
+    history: [],
+  };
+  const refused = advance(run, { to: "done", role: "coordinator" });
+  assert.equal(refused.ok, false);
+  assert.match(refused.reason, /acceptance refused.*no approval recorded/);
 });
 
 test("a transition replayed with the same key is a no-op, not a second history entry", () => {
-  const run = { id: "r1", stage: "plan", status: "running", evidence: [], attempts: {}, history: [] };
+  const run = { id: "r1", stage: "plan", status: "running", cycle: 1, evidence: [], attempts: {}, history: [] };
   const first = advance(run, { to: "implement", role: "coordinator", evidence: [PLAN()], idempotencyKey: "k1" });
   assert.equal(first.applied, true);
 
@@ -99,7 +183,7 @@ test("a transition replayed with the same key is a no-op, not a second history e
 });
 
 test("retries are bounded per stage and exceeding the bound blocks the run", () => {
-  let run = { id: "r1", stage: "implement", status: "running", evidence: [PLAN(), DIFF()], attempts: {}, history: [] };
+  let run = { id: "r1", stage: "implement", status: "running", cycle: 1, evidence: [at(DIFF(), "implement")], attempts: {}, history: [] };
   for (let i = 0; i < 3; i += 1) {
     const r = advance(run, { to: "validate", role: "coordinator" });
     assert.equal(r.ok, true, `attempt ${i + 1} should be allowed`);
@@ -109,20 +193,86 @@ test("retries are bounded per stage and exceeding the bound blocks the run", () 
   assert.equal(blocked.ok, false);
   assert.equal(blocked.run.status, "blocked");
   assert.match(blocked.reason, /exceeded 3 attempts/);
+
+  const afterBlock = advance({ ...blocked.run, stage: "implement" }, { to: "validate", role: "coordinator" });
+  assert.equal(afterBlock.ok, false, "a blocked run must not keep transitioning");
+  assert.match(afterBlock.reason, /blocked/);
 });
 
-test("an interrupted stage is never completed by recovery", () => {
-  const run = { id: "r1", stage: "implement", status: "running", evidence: [PLAN()], attempts: {}, history: [] };
-  const inflight = beginStage(run, { actor: "worker-1" });
-  assert.equal(inflight.inflight.stage, "implement");
+test("an interrupted stage is never completed by recovery, and blocks until reconciled", () => {
+  const run = { id: "r1", stage: "implement", status: "running", cycle: 1, evidence: [at(PLAN(), "plan")], attempts: {}, history: [] };
+  const begun = beginStage(run, { actor: "worker-1", pid: 4242 });
+  assert.equal(begun.ok, true);
+  assert.equal(begun.run.inflight.stage, "implement");
 
-  const { run: recovered, recovered: didRecover } = recover(inflight);
+  const { run: recovered, recovered: didRecover } = recover(begun.run);
   assert.equal(didRecover, true);
   assert.equal(recovered.status, "blocked");
   assert.equal(recovered.stage, "implement", "the stage must not advance");
   assert.equal(recovered.interrupted.stage, "implement");
   assert.equal(isComplete(recovered), false);
   assert.match(recovered.history.at(-1).reason, /NOT completed/);
+
+  // The rc8 defect: advancing cleared the interruption and resumed as if the
+  // stage had finished. It must be refused until a human reconciles.
+  const blocked = advance(recovered, { to: "validate", role: "coordinator", evidence: [DIFF()] });
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.reason, /interrupted/);
+
+  const reconciled = reconcile(recovered, { actor: "operator", note: "worker died before writing the diff" });
+  assert.equal(reconciled.ok, true);
+  assert.equal(reconciled.run.status, "running");
+  assert.equal(reconciled.run.stage, "implement", "reconciliation changes no stage");
+  assert.match(reconciled.run.history.at(-1).reason, /still requires its evidence/);
+
+  const stillNoEvidence = advance(reconciled.run, { to: "validate", role: "coordinator" });
+  assert.equal(stillNoEvidence.ok, false, "reconciliation must not substitute for evidence");
+  assert.match(stillNoEvidence.reason, /missing evidence/);
+
+  assert.equal(advance(reconciled.run, { to: "validate", role: "coordinator", evidence: [DIFF()] }).ok, true);
+});
+
+test("a different process cannot advance past another process's in-flight stage", () => {
+  const run = { id: "r1", stage: "implement", status: "running", cycle: 1, evidence: [at(DIFF(), "implement")], attempts: {}, history: [] };
+  const foreign = beginStage(run, { actor: "worker-1", pid: 1111 }).run;
+  const stolen = advance(foreign, { to: "validate", role: "coordinator", callerPid: 2222 });
+  assert.equal(stolen.ok, false);
+  assert.match(stolen.reason, /in flight in pid 1111/);
+  assert.equal(advance(foreign, { to: "validate", role: "coordinator", callerPid: 1111 }).ok, true);
+});
+
+test("evidence from an earlier cycle does not satisfy a later one", () => {
+  // The rc8 defect: after a correction, the previous cycle's diff and test
+  // output still counted. Cycle scoping closes it.
+  const run = {
+    id: "r1",
+    stage: "validate",
+    status: "running",
+    cycle: 1,
+    evidence: [at(PLAN(), "plan"), at(DIFF(), "implement"), at(TEST(), "validate")],
+    attempts: {},
+    history: [],
+  };
+  const toCorrect = advance(run, { to: "correct", role: "coordinator" });
+  assert.equal(toCorrect.ok, true);
+  assert.equal(toCorrect.run.cycle, 2, "entering correction starts a new cycle");
+
+  const staleImpl = advance(toCorrect.run, { to: "implement", role: "coordinator" });
+  assert.equal(staleImpl.ok, false);
+  assert.match(staleImpl.reason, /cycle 2: diff/);
+
+  const corrected = advance(toCorrect.run, { to: "implement", role: "coordinator", evidence: [DIFF()] });
+  assert.equal(corrected.ok, true);
+  const backToValidate = advance(corrected.run, { to: "validate", role: "coordinator" });
+  assert.equal(backToValidate.ok, true);
+
+  const staleTests = advance(backToValidate.run, { to: "review", role: "coordinator" });
+  assert.equal(staleTests.ok, false, "cycle 1 test output must not prove cycle 2");
+  assert.match(staleTests.reason, /cycle 2: test-output/);
+  assert.equal(
+    advance(backToValidate.run, { to: "review", role: "coordinator", evidence: [TEST()] }).ok,
+    true,
+  );
 });
 
 test("evidence verification detects content that changed after capture", () => {
@@ -138,10 +288,11 @@ test("evidence verification detects content that changed after capture", () => {
   assert.ok(after.problems.some((p) => /content changed/.test(p)));
 });
 
-test("full lifecycle: acceptance needs an independent approval bound to the evidence", () => {
+test("full lifecycle: acceptance needs an independent seat approval bound to the evidence", () => {
   const store = openRunStore(tmp());
   const run = createRun(store, { task: "port the coordinator", mode: "solo", revision: "abc123" });
   assert.equal(run.stage, "plan");
+  const reviewer = reviewerSeat(run);
 
   addEvidence(store, run.id, [PLAN()]);
   assert.equal(transition(store, run.id, { to: "implement", role: "coordinator" }).ok, true);
@@ -150,35 +301,61 @@ test("full lifecycle: acceptance needs an independent approval bound to the evid
   addEvidence(store, run.id, [TEST()]);
   assert.equal(transition(store, run.id, { to: "review", role: "coordinator" }).ok, true);
 
-  const beforeVerdict = accept(store, run.id, { approver: "reviewer-1" });
+  const beforeVerdict = accept(store, run.id, { approver: reviewer });
   assert.equal(beforeVerdict.ok, false, "accept must fail before a review verdict exists");
 
   addEvidence(store, run.id, [VERDICT("approve")]);
-  const noApproval = accept(store, run.id, { approver: "reviewer-1" });
+  const noApproval = accept(store, run.id, { approver: reviewer });
   assert.equal(noApproval.ok, false, "accept must fail without a recorded approval");
 
-  approve(store, run.id, { approver: "reviewer-1", role: "reviewer", revision: "abc123" });
-  const accepted = accept(store, run.id, { approver: "reviewer-1", revision: "abc123" });
+  approve(store, run.id, { approver: reviewer });
+  const accepted = accept(store, run.id, { approver: reviewer });
   assert.equal(accepted.ok, true, accepted.reason);
   assert.equal(accepted.run.stage, "done");
   assert.equal(isComplete(accepted.run), true);
+  assert.equal(health(accepted.run).state, "COMPLETE");
+
+  assert.throws(() => addEvidence(store, run.id, [TEST()]), /evidence can no longer be added/);
 });
 
-test("an approval tied to a different revision cannot accept the run", () => {
+test("approvals must name a declared seat, and the coordinator cannot use the reviewer's", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "identity binding", mode: "duo", revision: "rev-a" });
+  addEvidence(store, run.id, [PLAN(), DIFF(), TEST(), VERDICT("approve")]);
+  transition(store, run.id, { to: "implement", role: "coordinator" });
+  transition(store, run.id, { to: "validate", role: "coordinator" });
+  transition(store, run.id, { to: "review", role: "coordinator" });
+
+  assert.throws(() => approve(store, run.id, { approver: "reviewer-1" }), /not a seat in this run/);
+  assert.throws(
+    () => approve(store, run.id, { approver: coordinatorSeat(run), role: "reviewer" }),
+    /holds the coordinator seat and may not approve/,
+  );
+  assert.throws(
+    () => approve(store, run.id, { approver: coordinatorSeat(run) }),
+    /may not approve/,
+  );
+
+  const approval = approve(store, run.id, { approver: reviewerSeat(run) });
+  assert.equal(approval.approvals.length, 1);
+  assert.equal(approval.approvals[0].revision, "rev-a", "the approval is bound to the run's revision");
+});
+
+test("an approval cannot cover a revision the run was not reviewed at", () => {
   const store = openRunStore(tmp());
   const run = createRun(store, { task: "bind revisions", mode: "solo", revision: "rev-a" });
   addEvidence(store, run.id, [PLAN(), DIFF(), TEST(), VERDICT("approve")]);
   transition(store, run.id, { to: "implement", role: "coordinator" });
   transition(store, run.id, { to: "validate", role: "coordinator" });
   transition(store, run.id, { to: "review", role: "coordinator" });
-  approve(store, run.id, { approver: "reviewer-1", revision: "rev-a" });
+  const approved = approve(store, run.id, { approver: reviewerSeat(run) });
 
-  const stale = accept(store, run.id, { approver: "reviewer-1", revision: "rev-b" });
-  assert.equal(stale.ok, false);
-  assert.match(stale.reason, /invalid: .*revision/);
+  const gate = acceptanceCheck({ ...approved, revision: "rev-b" });
+  assert.equal(gate.ok, false);
+  assert.ok(gate.reasons.some((r) => /revision rev-a, not rev-b/.test(r)), gate.reasons.join("; "));
 });
 
-test("recovery of a persisted interrupted run blocks instead of pretending success", () => {
+test("recovery of a persisted interrupted run blocks until reconciled and re-proven", () => {
   const store = openRunStore(tmp());
   const run = createRun(store, { task: "crash recovery", mode: "solo" });
   addEvidence(store, run.id, [PLAN()]);
@@ -189,14 +366,40 @@ test("recovery of a persisted interrupted run blocks instead of pretending succe
   assert.equal(recovered.run.status, "blocked");
   assert.equal(recovered.run.stage, "implement");
   assert.equal(health(recovered.run).state, "BLOCKED");
+
+  assert.equal(resumeRun(store, run.id, {}).ok, false, "resume must not clear an interruption");
+  assert.equal(transition(store, run.id, { to: "validate", role: "coordinator" }).ok, false);
+
+  const reconciled = reconcileRun(store, run.id, { note: "diff was lost with the process" });
+  assert.equal(reconciled.run.status, "running");
+  assert.equal(transition(store, run.id, { to: "validate", role: "coordinator" }).ok, false, "still needs a diff");
+  addEvidence(store, run.id, [DIFF()]);
+  assert.equal(transition(store, run.id, { to: "validate", role: "coordinator" }).ok, true);
 });
 
-test("health distinguishes stuck from complete", () => {
+test("health distinguishes stuck from complete and flags accepted evidence that no longer verifies", () => {
   const run = { id: "r", stage: "implement", status: "running", updatedAt: new Date(Date.now() - 5_000).toISOString(), evidence: [], history: [] };
   assert.equal(health(run, { stuckAfterMs: 60_000 }).state, "RUNNING");
   assert.equal(health(run, { stuckAfterMs: 1_000 }).state, "STUCK");
-  const done = { ...run, stage: "done", status: "accepted", evidence: [VERDICT("approve"), evidenceEntry({ kind: "approval", producer: "reviewer-1", content: "approved" })] };
-  assert.equal(health(done).state, "COMPLETE");
+
+  const dir = tmp();
+  const file = path.join(dir, "proof.txt");
+  fs.writeFileSync(file, "proof\n");
+  const store = openRunStore(tmp());
+  const created = createRun(store, { task: "tamper detection", mode: "solo" });
+  const reviewer = reviewerSeat(created);
+  addEvidence(store, created.id, [PLAN(), DIFF(), TEST(), VERDICT("approve"), evidenceFromFile({ kind: "log", producer: "worker-1", file })]);
+  transition(store, created.id, { to: "implement", role: "coordinator" });
+  transition(store, created.id, { to: "validate", role: "coordinator" });
+  transition(store, created.id, { to: "review", role: "coordinator" });
+  approve(store, created.id, { approver: reviewer });
+  const done = accept(store, created.id, { approver: reviewer });
+  assert.equal(done.ok, true, done.reason);
+  assert.equal(health(done.run).state, "COMPLETE");
+
+  fs.writeFileSync(file, "proof changed\n");
+  assert.equal(health(done.run).state, "INVALID_EVIDENCE", "a changed evidence file must not read as COMPLETE");
+  assert.equal(isComplete(done.run), false);
 });
 
 test("stage list is exactly the documented workflow", () => {

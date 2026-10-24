@@ -9,7 +9,7 @@ append-only) under the configured state directory.
   orch-chat send @sol "are you consulting the migration right now?"
   orch-chat inbox [--agent buffy] [--all]
   orch-chat reply 1842 "yes, lane was free, dispatched at 12:40Z"
-  orch-chat dispatch-sol 1842 [--launch]
+  orch-chat dispatch-sol 1842 [--launch] [--reconcile-unknown]
   orch-chat status
 
 Envelope format on Discord:  [from] @to1 @to2 text...  (re:#<id> prefix on
@@ -232,12 +232,14 @@ class dispatch_lock:
     """Per-message exclusive claim, created with O_CREAT|O_EXCL.
 
     At-most-once dispatch is a property of the FILE, not of a state read: two
-    processes that both see `queued` still cannot both create this claim. A
-    claim is reclaimed only when its owner is gone or it is older than the stale
-    window, so a crashed dispatch does not wedge the message.
-    """
+    processes that both see `queued` still cannot both create this claim.
 
-    STALE_S = 900
+    A claim is reclaimed only when its owner PROCESS IS GONE — never because of
+    age alone. An age-based reclaim could steal a claim from a launcher that is
+    still running, which is exactly the double launch this exists to prevent.
+    A crash leaves a dead-owner claim that the next dispatch reclaims at once.
+    Across machines this is out of scope: the store is local by definition.
+    """
 
     def __init__(self, mid: int):
         self.path = os.path.join(STATE_DIR, ".dispatch-%d.lock" % mid)
@@ -251,15 +253,12 @@ class dispatch_lock:
             return 0
 
     def _stale(self) -> bool:
-        try:
-            age = time.time() - os.path.getmtime(self.path)
-        except OSError:
-            return True
-        if age > self.STALE_S:
-            return True
+        # Liveness, not age: a live launcher keeps its claim however long the
+        # launch takes. A claim with no readable pid was created by a process
+        # that died between create and write, so it is reclaimable.
         pid = self._owner_pid()
         if pid <= 0:
-            return False
+            return True
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -1113,11 +1112,29 @@ def consult_lane_busy() -> tuple[bool, str]:
     return True, "live coordinator pid %d" % pid
 
 
+def clear_dispatch(mid: int) -> None:
+    """Delete one dispatch record.
+
+    merge_save() only merges keys, and a merge cannot express absence — a
+    record cleared through it would survive. The retry and reconciliation paths
+    therefore write the deletion explicitly, under the state lock.
+    """
+    with state_lock():
+        disk = load_state()
+        records = disk.get("solDispatch") or {}
+        if str(mid) in records:
+            records.pop(str(mid), None)
+            disk["solDispatch"] = records
+            save_state(disk)
+
+
 def cmd_dispatch_sol(args) -> int:
     launch = "--launch" in args
+    reconcile_unknown = "--reconcile-unknown" in args
     ids = [int(a) for a in args if a.isdigit()]
     if not ids:
-        fail("usage: orch-chat dispatch-sol <message-id> [--launch]", 2)
+        fail("usage: orch-chat dispatch-sol <message-id> [--launch] "
+             "[--reconcile-unknown]", 2)
     mid = ids[0]
 
     # Configuration is resolved BEFORE anything is written or recorded. An
@@ -1144,12 +1161,13 @@ def cmd_dispatch_sol(args) -> int:
         print("BUSY (dispatch of #%d already in progress elsewhere) — nothing sent" % mid)
         return 23
     try:
-        return _dispatch_sol_claimed(mid, msg, launch, template)
+        return _dispatch_sol_claimed(mid, msg, launch, template, reconcile_unknown)
     finally:
         claim.__exit__(None, None, None)
 
 
-def _dispatch_sol_claimed(mid: int, msg: dict, launch: bool, template: str) -> int:
+def _dispatch_sol_claimed(mid: int, msg: dict, launch: bool, template: str,
+                          reconcile_unknown: bool = False) -> int:
     # Re-read inside the claim: the state seen before winning the claim may be
     # stale, and the whole point of the claim is that this read is authoritative.
     st = load_state()
@@ -1157,6 +1175,18 @@ def _dispatch_sol_claimed(mid: int, msg: dict, launch: bool, template: str) -> i
     if prev and prev.get("status") in ("launched", "done"):
         print("message #%d already %s" % (mid, prev["status"]))
         return 0
+    if prev and prev.get("status") == "launching":
+        # The previous launcher recorded intent and never recorded an outcome:
+        # it may have died after starting the work. Repeating the side effect on
+        # a guess is exactly what must not happen, so this waits for a human.
+        if not reconcile_unknown:
+            print("UNKNOWN outcome for #%d: a dispatch recorded 'launching' at %s "
+                  "and never confirmed. The launcher may or may not have started. "
+                  "Check the case file and the consult lane, then re-run with "
+                  "--reconcile-unknown to authorise a new launch."
+                  % (mid, prev.get("at")))
+            return 24
+        clear_dispatch(mid)
     busy, why = consult_lane_busy()
     if busy:
         print("BUSY (%s) — message #%d left queued; retry dispatch-sol later" % (why, mid))
@@ -1174,9 +1204,22 @@ def _dispatch_sol_claimed(mid: int, msg: dict, launch: bool, template: str) -> i
         # later --launch is still possible.
         print("lane free (%s). Launch with:\n  %s" % (why, cmd))
         return 0
+    # Record intent BEFORE the side effect. If this process dies during the
+    # launch, the record says "launching" and the next dispatch holds for
+    # reconciliation instead of launching the same message a second time.
+    with state_lock():
+        st = load_state()
+        st.setdefault("solDispatch", {})[str(mid)] = {
+            "status": "launching",
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "case": case_path,
+            "pid": os.getpid()}
+        merge_save(st)
     rc = os.system(cmd + " >/dev/null 2>&1")
     if rc != 0:
-        # A failed launcher leaves the message retryable: record nothing.
+        # A nonzero exit means the launcher did not start the work: drop the
+        # intent record so the message stays retryable.
+        clear_dispatch(mid)
         fail("launch failed for #%d (rc=%d); message left queued and retryable"
              % (mid, rc >> 8), 5)
     with state_lock():

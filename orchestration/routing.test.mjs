@@ -9,6 +9,7 @@ import {
   assertFreeOnlySafe,
   classifyError,
   eligibleRoutes,
+  freeVerificationProblems,
   invokeRole,
   normaliseRoute,
   selectRoute,
@@ -21,6 +22,7 @@ const freeRoute = {
   cost: "free",
   verifiedFree: true,
   verifiedAt: "2026-10-24T00:00:00Z",
+  evidence: "provider pricing table read 2026-10-24: input $0, output $0",
   pricing: { input: 0, output: 0 },
   order: 1,
 };
@@ -34,16 +36,43 @@ const paidRoute = {
   order: 0,
 };
 
-test("a free claim without zero pricing and verification is not free", () => {
+test("a free claim without zero pricing is not free", () => {
   const lying = normaliseRoute({ id: "x", provider: "p", model: "m", cost: "free", verifiedFree: true });
   assert.equal(lying.verifiedFree, false, "no pricing evidence means not verified free");
 
   const real = normaliseRoute(freeRoute);
   assert.equal(real.verifiedFree, true);
+  assert.equal(real.usableFree, true);
 
   const paid = normaliseRoute(paidRoute);
   assert.equal(paid.verifiedFree, false);
   assert.equal(paid.cost, "paid");
+});
+
+test("a declared-free route without a verification record is unusable, not assumed", () => {
+  // The rc8 defect: verifiedAt and evidence were optional, so a route could
+  // declare itself free with no source and still be selected.
+  const noStamp = normaliseRoute({ ...freeRoute, verifiedAt: null });
+  assert.equal(noStamp.usableFree, false);
+  assert.ok(noStamp.verificationProblems.some((p) => /verification timestamp/.test(p)));
+
+  const noEvidence = normaliseRoute({ ...freeRoute, evidence: "  " });
+  assert.equal(noEvidence.usableFree, false);
+  assert.ok(noEvidence.verificationProblems.some((p) => /verification evidence/.test(p)));
+
+  const future = normaliseRoute({ ...freeRoute, verifiedAt: "2099-01-01T00:00:00Z" });
+  assert.equal(future.usableFree, false);
+  assert.ok(future.verificationProblems.some((p) => /future/.test(p)));
+
+  const nonsense = normaliseRoute({ ...freeRoute, verifiedAt: "last tuesday" });
+  assert.equal(nonsense.usableFree, false);
+  assert.deepEqual(freeVerificationProblems({ ...freeRoute, verifiedFree: false }), ["not declared verifiedFree"]);
+
+  assert.deepEqual(
+    eligibleRoutes({ role: "worker", policy: "free", registry: [noStamp, noEvidence] }),
+    [],
+    "an unverifiable free claim must not be eligible",
+  );
 });
 
 test("free-only eligibility excludes paid routes entirely", () => {
@@ -63,7 +92,14 @@ test("a pinned route that is not verified free is refused, not downgraded", () =
 
 test("no eligible route fails closed instead of falling back to paid", () => {
   assert.throws(() => selectRoute({ role: "worker", policy: "free", registry: [paidRoute] }), FreeRouteUnavailable);
-  assert.throws(() => assertFreeOnlySafe({ registry: [paidRoute], roles: ["coordinator", "worker", "reviewer"] }), FreeRouteUnavailable);
+  assert.throws(
+    () => assertFreeOnlySafe({ registry: [paidRoute], roles: ["coordinator", "worker", "reviewer"] }),
+    FreeRouteUnavailable,
+  );
+  assert.throws(
+    () => assertFreeOnlySafe({ registry: [{ ...freeRoute, verifiedAt: null }], roles: ["worker"] }),
+    FreeRouteUnavailable,
+  );
 });
 
 test("error classification separates retryable from terminal", () => {
@@ -126,15 +162,20 @@ test("a terminal failure is not retried", async () => {
 });
 
 test("no route yields a structured, zero-cost failure rather than an exception", async () => {
+  let called = false;
   const outcome = await invokeRole({
     role: "coordinator",
     policy: "free",
     registry: [paidRoute],
-    transport: async () => ({ text: "should never run" }),
+    transport: async () => {
+      called = true;
+      return { text: "should never run" };
+    },
   });
   assert.equal(outcome.ok, false);
   assert.equal(outcome.error.kind, "no_route");
   assert.equal(outcome.telemetry.costUsd, 0);
+  assert.equal(called, false, "no transport call may happen without an allowed route");
 });
 
 test("exhausted retries surface the last classification and stay on the free route", async () => {

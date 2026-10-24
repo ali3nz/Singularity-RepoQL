@@ -4,7 +4,63 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc9] - 2026-10-24
+
+Hardens the orchestration gates. An independent review of rc8 found bypasses in
+the gates themselves, so rc8 is superseded: do not treat its orchestration layer
+as a control boundary.
+
+### Fixed
+- **Acceptance could be forged.** `advance --to done` accepted a hand-added
+  `approval` evidence entry and never consulted `run.approvals`. Authority now
+  comes from the stored approval only: the evidence kind is reserved (the CLI
+  refuses it), and the transition validates pack hash, revision, expiry,
+  independence and seat identity itself.
+- **Interrupted and blocked runs could advance.** A transition cleared
+  `interrupted` and resumed as if the stage had completed. `advance` now refuses
+  while a run is interrupted, paused, blocked or has another process's stage in
+  flight; `orch-run reconcile` clears an interruption explicitly, changes no
+  stage, and the step still needs its evidence. `resume` no longer clears one.
+- **Approval identity was caller-asserted.** Any string was accepted as an
+  approver, and `--revision` was used as both the claimed and expected revision,
+  so a caller could satisfy the comparison. An approver must now be a declared
+  reviewer or operator seat; the coordinator and implementers are refused; the
+  revision comes from the run, and `approve --revision` is rejected.
+- **Evidence was reusable across attempts.** After a correction, the previous
+  cycle's diff and test output still satisfied the next attempt. Evidence is now
+  stamped with its stage and cycle, and only the current cycle counts.
+- **A free route could be declared, not verified.** `verifiedAt` and `evidence`
+  were optional, so a route claiming zero pricing with no source was eligible.
+  All four conditions are now required, and an incomplete declaration fails
+  closed instead of being downgraded.
+- **A live dispatch claim could be stolen by age.** The 900-second stale rule
+  reclaimed a claim whose owner was still running, and a crash between launching
+  and recording the outcome left the message launchable again. Reclaiming is now
+  liveness-only, intent is recorded before the side effect, and an unconfirmed
+  launch holds at exit 24 until an operator passes `--reconcile-unknown`.
+- **`health` returned 0 for bad states.** `process.exit()` discarded the
+  `exitCode` it set, so `STUCK`, `BLOCKED`, `FAILED` and `INVALID_EVIDENCE` all
+  exited 0. `health` now returns the code directly, and accepted evidence that
+  no longer verifies is reported as `INVALID_EVIDENCE`, not `COMPLETE`.
+
+### Added
+- `orch-run begin` (mark the current stage in flight) and `orch-run reconcile`
+  (clear an interruption, changing no stage), so crash recovery is exercisable
+  from the CLI instead of only from module tests.
+- Regression tests for every finding above: forged acceptance, blocked and
+  interrupted transitions, cross-process in-flight advance, cycle reuse,
+  seat-identity approval, revision binding, unverified free routes, claim
+  liveness, unknown dispatch outcome and `health` exit codes.
+
+### Documentation
+- `docs/ORCHESTRATION.md` corrected: the quick start no longer shows an invalid
+  transition, verification is described as file-backed only, and the approval,
+  cycle and interruption rules match the implementation.
+
 ## [0.1.0-rc8] - 2026-10-24
+
+> Superseded by rc9. An independent review found that several gates described
+> below could be bypassed; the release is kept only as history.
 
 Optional portable orchestration. Nothing in the installer, the memory stack,
 RepoQL, Ghost, Office or the existing coordinator changed; rc5-rc7 tags are

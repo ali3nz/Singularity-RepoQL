@@ -1,6 +1,6 @@
 {
   "name": "Singularity-RepoQL",
-  "version": "0.1.0-rc8",
+  "version": "0.1.0-rc9",
   "description": "Persistent memory and self-learning for existing Claude Code or OpenChamber + RepoQL setups: Tencent MemoryCore stack, seven specialist agents, automatic documentation lifecycle and knowledge promotion, extraction provider ladder, Ghost companion (claude-code or openchamber backend) and Claude Office. Includes an optional, independently installable portable orchestration engine (scripts/orch-run): evidence-backed runs, explicit stages, execution modes, identity-bound approvals, resource leases and free-only model routing. Exactly four installation options (--variant 1-4); Ghost and Claude Office are bundled into options 2 and 4.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
   "components": {

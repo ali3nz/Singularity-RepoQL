@@ -43,6 +43,7 @@ second dispatcher exits 23 without launching.
 | Durable per-stage records | `case-state.mjs` | append-only `history` per run | **ADDED** |
 | Evidence-backed transitions | `evidence-pack.mjs`, `gate-parser.mjs` | `orchestration/evidence.mjs` + stage requirements | **ADDED** |
 | Idempotent recovery of completed work | `run-registry.mjs` | per-attempt idempotency keys | **ADDED** |
+| Attempt-scoped evidence | `phase-driver.mjs` attempt scoping | evidence stamped with stage + cycle; only the current cycle counts | **ADDED** |
 | Stage execution (spawning agents) | `orchestrate.mjs` spawns workers | — | **EXCLUDED** — the portable layer owns identity, gating and routing but does not bundle an agent runtime, so the operator's coordinator performs the stage and records evidence |
 
 ## Phase 3 — execution modes
@@ -65,10 +66,10 @@ second dispatcher exits 23 without launching.
 
 | Capability | Reference (basename) | This repo | State |
 | --- | --- | --- | --- |
-| Identity-bound approvals | `approval-artifact.mjs` | `orchestration/approvals.mjs` | **ADDED** |
+| Identity-bound approvals | `approval-artifact.mjs` | `orchestration/approvals.mjs`; approver must be a declared reviewer/operator seat | **ADDED** |
 | Approval scope verification | `approval-artifact.mjs` | stage + run + role checks | **ADDED** |
 | Evidence identity | `evidence-manifest.mjs` | `evidenceHash` bound to the pack | **ADDED** |
-| Reviewed source revision binding | `gate-parser.mjs` | `revision` binding; stale revision refused | **ADDED** |
+| Reviewed source revision binding | `gate-parser.mjs` | approval takes the run's revision; a caller-supplied revision is refused | **ADDED** |
 | Stale approval rejection | TTL in `approval-artifact.mjs` | `expiresAt`, future-issue check | **ADDED** |
 | Independent reviewer authority | `review-evidence.mjs` | implementer/coordinator cannot approve | **ADDED** |
 | Worker ownership | `worker-lease.mjs` | seat identity on every history entry | PARTIAL — no per-seat liveness registry |
@@ -76,7 +77,7 @@ second dispatcher exits 23 without launching.
 | Collision prevention | `resource-lease.mjs` | conflicting acquire throws `LeaseConflict` | **ADDED** |
 | Mutation authorization | `policy-identity.mjs` | role checks on transitions and approvals | **ADDED** |
 | Explicit deploy intent | `deployment-intent.mjs` | — | **EXCLUDED** — this workflow does not manage deployments; adding deploy machinery would be speculative |
-| Safe interruption / restart | `start-guard.mjs`, `recovery/` | interrupted stage blocks, never completes | **ADDED** |
+| Safe interruption / restart | `start-guard.mjs`, `recovery/` | interrupted stage blocks; `reconcile` clears it without advancing, and the step still needs its evidence | **ADDED** |
 
 ## Phase 5 — model and worker routing
 

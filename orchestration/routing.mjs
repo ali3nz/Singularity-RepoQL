@@ -27,9 +27,33 @@ export const RETRYABLE = new Set(["rate_limit", "timeout", "transient", "overloa
 export const TERMINAL = new Set(["auth", "invalid_request", "configuration", "content_policy", "not_found"]);
 
 /**
+ * Why a route does not qualify as verified-free. A free-sounding model name is
+ * not evidence: the route must declare zero input AND output pricing, record
+ * when that was observed, and name the source that observed it. Without all
+ * four, the route is unusable under a free policy — it is not downgraded to a
+ * paid route and it is not silently accepted either.
+ */
+export function freeVerificationProblems(route) {
+  const problems = [];
+  const pricing = route.pricing ?? null;
+  if (route.verifiedFree !== true) problems.push("not declared verifiedFree");
+  if (route.cost !== "free") problems.push(`cost is '${route.cost ?? "unknown"}', not free`);
+  if (!pricing || pricing.input !== 0 || pricing.output !== 0) {
+    problems.push("pricing is not zero for both input and output");
+  }
+  const verifiedAt = route.verifiedAt ?? null;
+  const stamp = verifiedAt ? Date.parse(verifiedAt) : Number.NaN;
+  if (!verifiedAt) problems.push("no verification timestamp (verifiedAt)");
+  else if (Number.isNaN(stamp)) problems.push(`verifiedAt is not a date: ${verifiedAt}`);
+  else if (stamp > Date.now() + 60_000) problems.push("verifiedAt is in the future");
+  if (!route.evidence || !String(route.evidence).trim()) problems.push("no verification evidence (evidence)");
+  return problems;
+}
+
+/**
  * Normalise a route declaration. `pricing` records the observed input/output
  * cost per million tokens; a free route must carry zeroes and a verification
- * timestamp, because "the name says free" is not evidence.
+ * record, because "the name says free" is not evidence.
  */
 export function normaliseRoute(route) {
   if (!route.id || !route.provider || !route.model) {
@@ -37,25 +61,32 @@ export function normaliseRoute(route) {
   }
   const pricing = route.pricing ?? null;
   const cost = route.cost ?? (pricing && pricing.input === 0 && pricing.output === 0 ? "free" : "paid");
-  const verifiedFree = Boolean(route.verifiedFree) && cost === "free" && pricing?.input === 0 && pricing?.output === 0;
-  return {
+  const declaredFree = Boolean(route.verifiedFree) && cost === "free" && pricing?.input === 0 && pricing?.output === 0;
+  const normalised = {
     id: route.id,
     provider: route.provider,
     model: route.model,
     roles: Array.isArray(route.roles) && route.roles.length ? route.roles : ["coordinator", "worker", "reviewer"],
     cost,
     pricing,
-    verifiedFree,
+    verifiedFree: declaredFree,
     verifiedAt: route.verifiedAt ?? null,
     evidence: route.evidence ?? null,
     order: Number.isFinite(route.order) ? route.order : 100,
   };
+  normalised.verificationProblems = declaredFree ? [] : ["not declared free"];
+  if (declaredFree) {
+    const explicit = { ...normalised, verifiedFree: true, cost: "free" };
+    normalised.verificationProblems = freeVerificationProblems(explicit);
+  }
+  normalised.usableFree = declaredFree && normalised.verificationProblems.length === 0;
+  return normalised;
 }
 
 /** Routes usable for a role under a provider policy, best first. */
 export function eligibleRoutes({ role, policy = "any", registry = [], pinnedId = null }) {
   const routes = registry.map(normaliseRoute).filter((r) => r.roles.includes(role));
-  const allowed = policy === "free" ? routes.filter((r) => r.verifiedFree) : routes;
+  const allowed = policy === "free" ? routes.filter((r) => r.usableFree) : routes;
   if (pinnedId) {
     const pinned = allowed.find((r) => r.id === pinnedId);
     if (!pinned) {

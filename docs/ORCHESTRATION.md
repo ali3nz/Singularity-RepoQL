@@ -19,15 +19,22 @@ connection. State is local JSON under `$ORCH_STATE_DIR` (default `./.orch`).
 ```bash
 node scripts/orch-run modes
 node scripts/orch-run start "add retry to the ingest worker" --mode duo --revision HEAD
-node scripts/orch-run status
-node scripts/orch-run evidence plan --kind plan --producer duo-coordinator-1-9f3a21 --text "..."
-node scripts/orch-run advance --to plan --role coordinator --actor duo-coordinator-1-9f3a21
-node scripts/orch-run accept --approver duo-reviewer-1-4c81dd
+node scripts/orch-run status            # prints the run id, stage, cycle and seat plan
+
+node scripts/orch-run evidence <run> --kind plan --producer <coordinator-seat> --text "..."
+node scripts/orch-run advance <run> --to implement --role coordinator
+
+node scripts/orch-run begin <run>       # optional: mark the stage in flight
+node scripts/orch-run evidence <run> --kind diff --producer <worker-seat> --file out.patch
+
+# ... validate, review, then acceptance by the reviewer seat:
+node scripts/orch-run approve <run> --approver <reviewer-seat>
+node scripts/orch-run accept  <run> --approver <reviewer-seat>
 ```
 
-`status`, `list`, `history` and `health` are read-only. `advance`, `approve`,
-`accept`, `pause`, `resume`, `stop` and `recover` are mutations and are role
-checked.
+`status`, `list`, `history`, `health`, `modes` and `verify` are read-only.
+`advance`, `begin`, `reconcile`, `approve`, `accept`, `pause`, `resume`, `stop`
+and `recover` are mutations, and every one is role checked.
 
 ## Workflow
 
@@ -36,22 +43,32 @@ Six stages, one direction, with two back-edges:
 ```
 plan -> implement -> validate -> review -> accept -> done
                         ^          |
-                        +----------+   (changes_requested -> correct -> validate)
+                        +----------+   (review -> correct -> implement -> validate)
 ```
 
-| Transition | Who may perform it | Required evidence |
+| Transition | Who may perform it | Evidence required in the current cycle |
 | --- | --- | --- |
-| `plan` | coordinator | a `plan` entry |
-| `implement` | coordinator | a `diff` or `implementation` entry |
-| `validate` | coordinator | a `test` entry, and its `verdict` may not be `fail` |
-| `review` | coordinator | any evidence plus a reviewer verdict |
-| `correct` | coordinator | a review verdict of `changes_requested` |
-| back to `validate` | coordinator | the corrective `diff` |
-| `accept` | **reviewer or operator only** | a matching approval, bound to the pack |
+| `plan -> implement` | coordinator | `plan` |
+| `implement -> validate` | coordinator | `diff` |
+| `validate -> review` | coordinator | `test-output` |
+| `validate -> correct` | coordinator | `test-output` |
+| `review -> accept` | reviewer | an approving `review-verdict` |
+| `review -> correct` | reviewer | `review-verdict` |
+| `correct -> implement` | coordinator | `diff` |
+| `accept -> done` | coordinator | `review-verdict` + a valid recorded approval |
 
-A stage is never marked complete by a timer, a process exit or a retry. It moves
-only on a recorded transition whose evidence requirements are satisfied, so an
-interrupted stage stays `interrupted` until `orch-run recover` reconciles it.
+A stage is never marked complete by a timer, a process exit or a retry. A run
+that was in flight when its process died is marked `interrupted` and blocks:
+`advance` refuses until an operator runs `orch-run reconcile <run> --note ...`.
+Reconciliation clears the interruption but changes no stage, so the next
+transition still needs that stage's evidence.
+
+### Cycles
+
+Entering `correct` starts a new cycle. Evidence is stamped with the stage and
+cycle it was produced in, and a transition only counts evidence from the current
+cycle — after a correction, the previous diff and test output are history, not
+proof of the corrected work.
 
 ## Execution modes
 
@@ -73,20 +90,29 @@ empty team; every other mode refuses a seat list, so a typo cannot silently
 produce a one-person run.
 
 `--free-only` can be passed to any mode. It is not a preference: with
-`providerPolicy: free` the router has no paid fallback at all, and an
-unverified route is refused rather than downgraded.
+`providerPolicy: free` the router has no paid fallback at all.
+
+Seat ids look like `duo-reviewer-1-4c81dd` and are printed by `status`.
 
 ## Approvals and authority
 
-An approval records the approver identity, the role, the stage, the evidence
-pack hash and a TTL. Acceptance requires all of:
+An approval records the approver **seat id**, its role, the stage, the evidence
+pack hash, the run's revision and a TTL. Acceptance requires all of:
 
-- the approver holds `reviewer` or `operator` authority (a coordinator cannot
-  approve its own run);
-- the approval's pack hash equals the pack being accepted, so evidence added
-  after review invalidates it;
-- the approval is bound to the reviewed revision, when the run has one;
-- the approval has not expired.
+- the approver is a declared `reviewer` or `operator` seat — a coordinator seat,
+  a worker seat or an invented identity is refused;
+- the approver did not implement the work;
+- the approval's pack hash equals the current pack, so evidence added after
+  review invalidates it;
+- the approval's revision equals the run's own revision; a caller cannot choose
+  the revision (`approve --revision` is refused, not ignored);
+- the approval has not expired and was not issued in the future.
+
+Authority comes from `run.approvals`, never from an evidence entry. The
+`approval` evidence kind is reserved: `orch-run evidence --kind approval` exits
+2, and `advance --to done` validates the stored approval itself. This is
+identity de-confliction within a local trust boundary, not authentication:
+whoever can write the state directory can edit the seats.
 
 Adding evidence after an approval therefore requires a fresh review. That is
 intentional: a green run with a stale pack is not a pass.
@@ -105,15 +131,19 @@ directory, a mutable fixture database, a deployment target.
 
 `orchestration/routing.mjs` selects a route by role from a provider-independent
 table. A route carries `provider`, `model`, `roles`, `cost` and `pricing`.
-Selection is filtered by the run's provider policy before any call is made, and
-`verifiedFree` requires **both** declared zero pricing and an explicit
-verification stamp — a free-sounding name is not evidence.
+Selection is filtered by the run's provider policy before any call is made.
+
+A route is usable under `free` only when **all** of these hold: it is declared
+`verifiedFree`, `cost` is `free`, input **and** output pricing are both zero,
+`verifiedAt` is a real date that is not in the future, and `evidence` names the
+source that was read. A missing verification record is a refusal, not a
+downgrade: a free-sounding model name is not evidence.
 
 Invocation outcomes are structured: `{ ok, status, error, retryable, attempts,
 telemetry }`. `classifyError` separates retryable (timeout, 429, 5xx) from
 terminal (auth, 400, unknown model) failures, so a retry loop cannot spin on a
-configuration error. Telemetry pins zero cost on free routes and refuses to
-report a cost for a route it cannot price.
+configuration error. Telemetry pins zero cost on verified-free routes and
+refuses to report a cost for a route it cannot price.
 
 This router is deliberately separate from `scripts/extraction-failover.mjs`,
 which routes MemoryCore extraction. They are not connected and do not share
@@ -121,25 +151,28 @@ state.
 
 ## Supervision
 
-`orch-run health` classifies a run as `OK`, `STUCK`, `BLOCKED`, `FAILED`,
-`PAUSED` or `DONE`:
+`orch-run health` classifies a run as `RUNNING`, `STUCK`, `BLOCKED`, `PAUSED`,
+`FAILED`, `COMPLETE` or `INVALID_EVIDENCE`:
 
 - `STUCK` — the current stage has not moved within the stuck window
   (`--stuck-after-minutes`, default 30);
-- `BLOCKED` — an interrupted stage, an exhausted retry budget, or a missing
-  approval;
-- `FAILED` — stopped by an operator.
+- `BLOCKED` — an unresolved interruption, or an exhausted retry budget;
+- `FAILED` — stopped by an operator;
+- `INVALID_EVIDENCE` — accepted, but a file-backed evidence entry no longer
+  matches its digest, or the acceptance gate no longer holds.
 
-Health returns a non-zero exit status for `STUCK`, `BLOCKED` and `FAILED`, so a
-monitor can use it directly. Classification is on demand; there is no background
-watchdog process.
+Health returns a non-zero exit status for `STUCK`, `BLOCKED`, `FAILED` and
+`INVALID_EVIDENCE`, so a monitor can use it directly. Classification is on
+demand; there is no background watchdog process.
 
 ## Evidence
 
-Every entry records `kind`, `producer`, `revision`, `sha256`, `bytes` and a
-timestamp, and pack content is hashed in a stable order. `orch-run verify`
-re-reads the recorded material from disk and reports any entry whose bytes no
-longer match, so a hand-edited log cannot masquerade as evidence.
+Every entry records `kind`, `producer`, `stage`, `cycle`, `revision`, `sha256`,
+`bytes` and a timestamp, and pack content is hashed in a stable order.
+`orch-run verify` re-reads **file-backed** entries from disk and reports any
+entry whose bytes no longer match. Inline (`--text`) evidence is recorded and
+structurally checked; it cannot be re-derived from a file, so "verifies" means
+the file-backed entries are unchanged.
 
 ## What is intentionally not included
 
@@ -156,7 +189,10 @@ longer match, so a hand-edited log cannot masquerade as evidence.
 ## Testing
 
 ```bash
-node --test tests/        # all deterministic suites, no network, no model calls
+node --test orchestration/workflow.test.mjs orchestration/governance.test.mjs \
+               orchestration/routing.test.mjs scripts/orch-run.test.mjs
+python3 tests/test-orch-chat.py
+bash tests/validate-local.sh     # everything above plus the repository gates
 ```
 
 The orchestration suites use temp directories and fake clocks. They prove the
@@ -174,5 +210,5 @@ verified, the live-execution acceptance items are recorded as **BLOCKED**, not
 PASS. Deterministic coverage is unaffected.
 
 To unblock, supply a verified free route in `orchestration/routing.mjs` (zero
-input and output pricing, plus a verification stamp and the date it was
-observed), then re-run the acceptance suite with `--free-only`.
+input and output pricing, a verification timestamp, and the source read), then
+re-run the acceptance suite with `--free-only`.

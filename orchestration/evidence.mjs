@@ -61,9 +61,19 @@ export function packHash(entries) {
 }
 
 /**
+ * The hash an approval is bound to. Approval entries are excluded, otherwise
+ * recording an approval would change the hash it claims to cover and no
+ * approval could ever validate against its own pack.
+ */
+export function reviewedPackHash(entries) {
+  return packHash((entries ?? []).filter((e) => e.kind !== "approval"));
+}
+
+/**
  * Verify a pack against a live filesystem. An entry with a `file` must still
  * hash to the recorded digest; entries without one are self-attesting and only
- * checked structurally.
+ * checked structurally. Inline evidence is not re-derivable by definition, so
+ * "verifies" here means "the file-backed entries are unchanged".
  */
 export function verifyPack(entries) {
   const problems = [];

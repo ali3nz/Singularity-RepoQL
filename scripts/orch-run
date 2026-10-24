@@ -14,9 +14,10 @@
 //                          [--revision <rev>] [--verdict approve|changes_requested]
 //   orch-run advance <run> --to <stage> [--role coordinator|reviewer|operator]
 //                          [--actor <id>] [--reason <text>] [--verdict approve|changes_requested]
-//   orch-run approve <run> --approver <id> [--role reviewer|operator]
-//                          [--revision <rev>] [--ttl-minutes <n>]
-//   orch-run accept <run> --approver <id> [--revision <rev>]
+//   orch-run begin <run> [--actor <id>]        mark the current stage in flight
+//   orch-run reconcile <run> --note <text>     clear an interruption, change no stage
+//   orch-run approve <run> --approver <seat-id> [--ttl-minutes <n>]
+//   orch-run accept <run> --approver <seat-id>
 //   orch-run pause|resume|stop|recover <run> [--reason <text>]
 //   orch-run verify <run>            integrity check of evidence on disk
 //   orch-run modes                   describe the execution modes
@@ -31,12 +32,14 @@ import {
   accept,
   addEvidence,
   approve,
+  begin,
   createRun,
   getRun,
   health,
   latestRun,
   openRunStore,
   pauseRun,
+  reconcileRun,
   recoverRun,
   resumeRun,
   stopRun,
@@ -105,10 +108,12 @@ function printRun(run, { json = false } = {}) {
   console.log(`mode     ${run.mode} (provider policy: ${run.providerPolicy})`);
   console.log(`stage    ${run.stage}   status ${run.status}`);
   console.log(`task     ${run.task}`);
+  console.log(`cycle    ${run.cycle ?? 1}`);
   console.log(`revision ${run.revision ?? "unrecorded"}`);
   console.log(`evidence ${(run.evidence ?? []).length} entries, pack ${pack.slice(0, 16)}`);
   console.log(`approvals ${(run.approvals ?? []).length}`);
   if (run.interrupted) console.log(`interrupted during ${run.interrupted.stage} (reconciliation required)`);
+  if (run.inflight) console.log(`inflight ${run.inflight.stage} since ${run.inflight.startedAt} (pid ${run.inflight.pid ?? "unknown"})`);
   const h = health(run);
   console.log(`health   ${h.state} — ${h.detail}`);
 }
@@ -139,6 +144,10 @@ function cmdEvidence(store, { positional, flags }) {
   const kind = flags.kind;
   const producer = flags.producer;
   if (!kind || !producer) fail("evidence needs --kind and --producer", RC_USAGE);
+  if (kind === "approval") {
+    fail("evidence kind 'approval' is reserved: acceptance authority is minted only by `orch-run approve`, and an evidence entry is a record, not a grant", RC_USAGE);
+  }
+  if (run.status === "accepted" || run.status === "failed") fail(`run is ${run.status}; evidence can no longer be added`, RC_REFUSED);
   const meta = flags.verdict ? { verdict: flags.verdict } : {};
   let entry;
   try {
@@ -177,12 +186,12 @@ function cmdAdvance(store, { positional, flags }) {
 function cmdApprove(store, { positional, flags }) {
   const run = resolveRun(store, positional[0]);
   const approver = flags.approver;
-  if (!approver) fail("approve needs --approver <identity>", RC_USAGE);
+  if (!approver) fail("approve needs --approver <seat-id>", RC_USAGE);
+  if (flags.revision) fail("an approval is bound to the run's own revision; --revision is not accepted", RC_USAGE);
   try {
     approve(store, run.id, {
       approver,
-      role: flags.role ?? "reviewer",
-      revision: flags.revision ?? null,
+      role: flags.role ?? null,
       ttlMs: flags["ttl-minutes"] ? Number(flags["ttl-minutes"]) * 60_000 : undefined,
       note: flags.note ?? "",
     });
@@ -190,15 +199,37 @@ function cmdApprove(store, { positional, flags }) {
     fail(err.message, RC_REFUSED);
   }
   console.log(`approval recorded by ${approver} for evidence pack ${packHash(run.evidence ?? []).slice(0, 16)}`);
+  console.log("accept with: orch-run accept <run> --approver " + approver);
 }
 
 function cmdAccept(store, { positional, flags }) {
   const run = resolveRun(store, positional[0]);
   const approver = flags.approver;
-  if (!approver) fail("accept needs --approver <identity>", RC_USAGE);
-  const outcome = accept(store, run.id, { approver, revision: flags.revision ?? null });
+  if (!approver) fail("accept needs --approver <seat-id>", RC_USAGE);
+  if (flags.revision) fail("acceptance is bound to the run's own revision; --revision is not accepted", RC_USAGE);
+  const outcome = accept(store, run.id, { approver });
   if (!outcome.ok) fail(outcome.reason, RC_REFUSED);
   console.log("accepted");
+  printRun(outcome.run);
+}
+
+function cmdBegin(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  try {
+    const next = begin(store, run.id, { actor: flags.actor ?? "coordinator", note: flags.note ?? "" });
+    console.log(`inflight ${next.inflight.stage} (pid ${next.inflight.pid})`);
+    printRun(next);
+  } catch (err) {
+    fail(err.message, RC_REFUSED);
+  }
+}
+
+function cmdReconcile(store, { positional, flags }) {
+  const run = resolveRun(store, positional[0]);
+  if (!flags.note) fail("reconcile needs --note describing what actually happened", RC_USAGE);
+  const outcome = reconcileRun(store, run.id, { actor: flags.actor ?? "operator", note: flags.note });
+  if (outcome.ok === false) fail(outcome.reason, RC_REFUSED);
+  console.log(`reconciled ${run.id}: ${flags.note}`);
   printRun(outcome.run);
 }
 
@@ -262,14 +293,14 @@ function cmdHealth(store, { positional, flags }) {
   const h = health(run, { stuckAfterMs: flags["stuck-after-minutes"] ? Number(flags["stuck-after-minutes"]) * 60_000 : undefined });
   if (flags.json) console.log(JSON.stringify(h, null, 2));
   else console.log(`${h.state} — ${h.detail}`);
-  if (h.state === "STUCK" || h.state === "BLOCKED" || h.state === "FAILED") process.exitCode = RC_STATE;
+  return ["STUCK", "BLOCKED", "FAILED", "INVALID_EVIDENCE"].includes(h.state) ? RC_STATE : 0;
 }
 
 function main() {
   const argv = process.argv.slice(2);
   const command = argv[0];
   if (!command || command === "help" || command === "--help") {
-    console.error("usage: orch-run <start|status|list|history|evidence|advance|approve|accept|pause|resume|stop|recover|verify|modes|health> ...");
+    console.error("usage: orch-run <start|status|list|history|evidence|advance|begin|reconcile|approve|accept|pause|resume|stop|recover|verify|modes|health> ...");
     return RC_USAGE;
   }
   const parsed = parseArgs(argv.slice(1));
@@ -287,6 +318,12 @@ function main() {
       return 0;
     case "advance":
       cmdAdvance(store, parsed);
+      return 0;
+    case "begin":
+      cmdBegin(store, parsed);
+      return 0;
+    case "reconcile":
+      cmdReconcile(store, parsed);
       return 0;
     case "approve":
       cmdApprove(store, parsed);
@@ -313,8 +350,7 @@ function main() {
       cmdModes();
       return 0;
     case "health":
-      cmdHealth(store, parsed);
-      return 0;
+      return cmdHealth(store, parsed);
     default:
       fail(`unknown command '${command}'`, RC_USAGE);
   }

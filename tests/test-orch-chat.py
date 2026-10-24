@@ -17,6 +17,10 @@ Five scenarios:
      launch, and stays retryable in every failure path.
   7. At-most-once dispatch: concurrent `dispatch-sol --launch` processes for the
      same message launch it exactly once.
+  8. Unknown outcome: a launch that recorded intent and never confirmed holds
+     for reconciliation instead of repeating a side effect on a guess.
+  9. Claim liveness: an old claim held by a LIVE process is not stolen, and a
+     claim whose owner died is reclaimed.
 
 Run from the repository root:  python3 tests/test-orch-chat.py
 """
@@ -30,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.abspath(os.path.join(_HERE, "..", "scripts"))
@@ -330,6 +335,90 @@ def test_dispatch_is_at_most_once():
     print("  at-most-once dispatch: OK")
 
 
+def _seed_dispatch_state(state_dir: str, mid: int, record: dict) -> None:
+    path = os.path.join(state_dir, "state.json")
+    with open(path, "r", encoding="utf-8") as fh:
+        st = json.load(fh)
+    st.setdefault("solDispatch", {})[str(mid)] = record
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(st, fh)
+
+
+def test_dispatch_unknown_outcome_holds():
+    """A launch with an unconfirmed outcome must not be repeated on a guess."""
+    state_dir = os.path.join(_TMP, "unknown-outcome")
+    os.makedirs(state_dir, exist_ok=True)
+    sent = _run_cli(["send", "--from", "buffy", "@sol", "did the launch happen?"], state_dir)
+    assert sent.returncode == 0, sent.stderr
+    mid = _newest_id(state_dir)
+
+    marker = os.path.join(state_dir, "launches.txt")
+    template = "sh -c 'echo launched >> %s' {case} {id}" % marker
+    _seed_dispatch_state(state_dir, mid, {
+        "status": "launching",
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "case": os.path.join(state_dir, "case.md"),
+        "pid": 999999,
+    })
+
+    held = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                    {"AGENTCHAT_DISPATCH_CMD": template})
+    assert held.returncode == 24, \
+        "an unconfirmed launch must be held, got rc %d" % held.returncode
+    assert "UNKNOWN outcome" in held.stdout, held.stdout
+    assert not os.path.exists(marker), \
+        "an unconfirmed launch must not be repeated"
+    assert _dispatch_status(state_dir, mid) == "launching", \
+        "the record must stay unconfirmed until an operator decides"
+
+    released = _run_cli(["dispatch-sol", str(mid), "--launch", "--reconcile-unknown"],
+                        state_dir, {"AGENTCHAT_DISPATCH_CMD": template})
+    assert released.returncode == 0, released.stderr
+    assert _dispatch_status(state_dir, mid) == "launched"
+    launches = [line for line in open(marker).read().splitlines() if line.strip()] \
+        if os.path.exists(marker) else []
+    assert len(launches) == 1, "an explicit reconciliation launches exactly once"
+    print("  unknown dispatch outcome: OK")
+
+
+def test_dispatch_claim_is_not_stolen_from_a_live_owner():
+    """Age alone must never reclaim a claim: only a dead owner may be replaced."""
+    state_dir = os.path.join(_TMP, "claim-liveness")
+    os.makedirs(state_dir, exist_ok=True)
+    sent = _run_cli(["send", "--from", "buffy", "@sol", "who is dispatching?"], state_dir)
+    assert sent.returncode == 0, sent.stderr
+    mid = _newest_id(state_dir)
+
+    marker = os.path.join(state_dir, "launches.txt")
+    template = "sh -c 'echo launched >> %s' {case} {id}" % marker
+    lock = os.path.join(state_dir, ".dispatch-%d.lock" % mid)
+    old = time.time() - 3600
+
+    # A LIVE owner with an hour-old claim: the old 900s rule would steal this.
+    with open(lock, "w", encoding="utf-8") as fh:
+        fh.write("%d\n" % os.getpid())
+    os.utime(lock, (old, old))
+    busy = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                    {"AGENTCHAT_DISPATCH_CMD": template})
+    assert busy.returncode == 23, \
+        "a live owner's claim must not be stolen, got rc %d" % busy.returncode
+    assert "BUSY" in busy.stdout, busy.stdout
+    assert not os.path.exists(marker), "a stolen claim would have launched the message"
+
+    # A DEAD owner is reclaimable immediately, whatever the age.
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    with open(lock, "w", encoding="utf-8") as fh:
+        fh.write("%d\n" % dead.pid)
+    os.utime(lock, (old, old))
+    ok = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                  {"AGENTCHAT_DISPATCH_CMD": template})
+    assert ok.returncode == 0, ok.stderr
+    launches = [line for line in open(marker).read().splitlines() if line.strip()] \
+        if os.path.exists(marker) else []
+    assert len(launches) == 1, "a dead owner's claim must be reclaimed"
+    print("  dispatch claim liveness: OK")
+
 def main() -> int:
     tests = [test_discord_is_opt_in,
              test_cold_start_and_local_delivery,
@@ -337,7 +426,9 @@ def main() -> int:
              test_corrupt_state_is_fatal,
              test_concurrent_senders,
              test_dispatch_gating,
-             test_dispatch_is_at_most_once]
+             test_dispatch_is_at_most_once,
+             test_dispatch_unknown_outcome_holds,
+             test_dispatch_claim_is_not_stolen_from_a_live_owner]
     failures = 0
     try:
         for test in tests:
