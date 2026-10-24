@@ -103,10 +103,12 @@ function mutate(store, runId, fn) {
     if (!run) throw new RunError(`no such run: ${runId}`);
     const result = fn(run);
     if (!result?.run) throw new RunError("internal: mutation produced no run");
-    // A refused mutation must leave persisted state untouched. This is also what
-    // makes `accept()` atomic across its two transitions: a failure on the last
-    // step writes neither step.
-    if (result.ok === false) return result;
+    // A refused mutation leaves persisted state untouched — unless the refusal
+    // IS a state change (an exhausted retry budget must read as blocked). A
+    // replayed transition is a successful no-op and writes nothing either. This
+    // is also what makes accept() atomic across its two transitions.
+    if (result.applied === false) return result;
+    if (result.ok === false && result.persist !== true) return result;
     const next = { ...result.run, updatedAt: nowIso() };
     store.writeRun(next);
     const registry = store.readRegistry();
@@ -307,13 +309,12 @@ export function latestRun(store) {
 export function health(run, { now = Date.now(), stuckAfterMs = 30 * 60 * 1000 } = {}) {
   if (!run) return { state: "NONE", detail: "no runs recorded" };
   if (run.stage === "done" && run.status === "accepted") {
-    const verification = verifyPack(run.evidence ?? []);
-    if (!verification.ok) {
-      return { state: "INVALID_EVIDENCE", detail: `accepted evidence does not verify: ${verification.problems.join("; ")}` };
-    }
+    // Completion has exactly one definition; health reports it or says why not.
+    if (isComplete(run)) return { state: "COMPLETE", detail: "accepted with verified evidence and a valid approval" };
     const gate = acceptanceCheck(run, { now: () => now, enforceExpiry: false });
-    if (!gate.ok) return { state: "INVALID_EVIDENCE", detail: `acceptance does not hold: ${gate.reasons.join("; ")}` };
-    return { state: "COMPLETE", detail: "accepted with required evidence" };
+    const verification = verifyPack(run.evidence ?? []);
+    const problems = gate.reasons.concat(verification.ok ? [] : verification.problems);
+    return { state: "INVALID_EVIDENCE", detail: problems.join("; ") || "acceptance does not hold" };
   }
   if (run.status === "failed") return { state: "FAILED", detail: run.stopped?.reason ?? "stopped" };
   if (run.interrupted) {

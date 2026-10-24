@@ -34,6 +34,7 @@ node scripts/orch-run accept  <run> --approver <reviewer-seat>
 ```
 
 `status`, `list`, `history`, `health`, `modes` and `verify` are read-only.
+`status` masks the in-flight owner token; only `begin` prints it in full.
 `advance`, `begin`, `reconcile`, `approve`, `accept`, `pause`, `resume`, `stop`
 and `recover` are mutations, and every one is role checked.
 
@@ -62,17 +63,23 @@ The "captured in" column is enforced: a `test-output` recorded while the run was
 implementing is not validation proof, and an earlier cycle's proof does not
 carry into the next.
 
+Retry limits are durable decisions: exhausting `maxAttemptsPerStage` or the
+`maxCorrections` budget **persists** the run as `blocked` with a reason, so
+supervision sees the blockage instead of a run that merely refused a call. A
+transition replayed with the same idempotency key is a successful no-op and
+writes nothing.
+
 A stage is never marked complete by a timer, a process exit or a retry. A run
 that was in flight when its process died is marked `interrupted` and blocks:
 `advance` refuses until an operator runs `orch-run reconcile <run> --note ...`.
 Reconciliation clears the interruption but changes no stage, so the next
 transition still needs that stage's evidence.
 
-`begin` claims the stage with an **owner token** and prints it; the process that
-finishes the stage presents the same token with `advance --owner <token>`. A
-token rather than a pid, because each CLI call is a new process. A second
-`begin` on a run that already has work in flight is refused, and recovery clears
-the claim.
+`begin` claims the stage with an **owner token** and prints it once; the process
+that finishes the stage presents the same token with `advance --owner <token>`. A
+token rather than a pid, because each CLI call is a new process. `status` shows
+only a prefix of the token. A second `begin` on a run that already has work in
+flight is refused, and recovery clears the claim.
 
 ### Cycles
 
@@ -112,6 +119,9 @@ pack hash, the run's revision and a TTL. Acceptance requires all of:
 
 - the approver is a declared `reviewer` or `operator` seat — a coordinator seat,
   a worker seat or an invented identity is refused;
+- the authorising verdict was produced by the run's reviewer seat (or by
+  `operator`): a `review-verdict` recorded by any other producer is refused, and
+  an approval record must exist in the pack;
 - the approver did not implement the work;
 - the approval's pack hash equals the current pack, so evidence added after
   review invalidates it;

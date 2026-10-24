@@ -6,12 +6,11 @@
 //   * A stage that was in flight when its process died is INTERRUPTED, never
 //     completed. Recovery requires an explicit reconciliation, not a guess.
 //   * Acceptance is authorised by a stored approval artifact bound to the exact
-//     evidence pack and source revision — never by an evidence entry that merely
-//     claims to be one, and never by a verdict the caller asserts.
-//   * Retries are bounded per stage; exceeding the bound blocks the run instead
-//     of looping.
-//   * A transition is idempotent: replaying the same stage change (same
-//     idempotency key) does not append a second history entry.
+//     evidence pack and source revision, and by a verdict recorded by the run's
+//     reviewer seat. Neither can be asserted by the caller.
+//   * Retries are bounded per stage and per correction budget; exhausting either
+//     PERSISTS a blocked run rather than silently refusing.
+//   * A transition replayed with the same idempotency key is a successful no-op.
 import { validateApproval } from "./approvals.mjs";
 import { reviewedPackHash, verifyPack } from "./evidence.mjs";
 
@@ -29,14 +28,9 @@ export const STAGE_EVIDENCE = Object.freeze({
 });
 
 /**
- * Allowed transitions.
- *
- * `needs` lists the evidence each transition requires, as
- * `{ kind, stages }`: the kind must have been captured in one of those stages,
- * in the run's current cycle. The stage check matters — a `test-output` entry
- * captured while the run was implementing must not serve as validation proof.
- *
- * `role` is the authority required for the transition.
+ * Allowed transitions. `needs` lists `{ kind, stages }`: the kind must have been
+ * captured in one of those stages, in the run's current cycle. The stage check
+ * matters — a `test-output` captured while implementing is not validation proof.
  */
 export const TRANSITIONS = Object.freeze([
   { from: "plan", to: "implement", needs: [{ kind: "plan", stages: ["plan"] }], role: "coordinator" },
@@ -71,9 +65,7 @@ export function evidenceKinds(entries) {
 
 /**
  * Requirements still missing for `cycle`. An entry only counts when its kind
- * matches AND it was captured in one of the stages that may produce it: an
- * earlier cycle's proof, or a same-named artifact captured somewhere else, is
- * not evidence for this transition.
+ * matches AND it was captured in one of the stages that may produce it.
  */
 export function missingKinds(needs, entries, cycle = 1) {
   const usable = (entries ?? []).filter((e) => (e.cycle ?? 1) === cycle);
@@ -98,6 +90,24 @@ export function latestVerdict(entries, cycle, stages = ["review"]) {
   return verdicts.length ? verdicts[verdicts.length - 1] : null;
 }
 
+/**
+ * A verdict speaks for the run only when it was produced by the reviewer seat
+ * (or by an operator). Otherwise a coordinator could record a `review-verdict`
+ * with `--producer coordinator` and approve its own work.
+ */
+export function verdictAuthority(run, verdict) {
+  const reviewer = (run.seats ?? []).find((s) => s.role === "reviewer");
+  if (!reviewer) return { ok: false, reason: "run has no reviewer seat; a verdict cannot be authorised" };
+  if (!verdict) return { ok: false, reason: "no review verdict recorded" };
+  if (verdict.producer !== reviewer.id && verdict.producer !== "operator") {
+    return {
+      ok: false,
+      reason: `verdict was recorded by '${verdict.producer}', not by the reviewer seat '${reviewer.id}'`,
+    };
+  }
+  return { ok: true, reason: "" };
+}
+
 function appendHistory(run, entry) {
   const history = Array.isArray(run.history) ? run.history : [];
   return history.concat([{ at: new Date().toISOString(), ...entry }]);
@@ -106,12 +116,12 @@ function appendHistory(run, entry) {
 /**
  * The authoritative acceptance gate. `run.approvals` is the only source of
  * acceptance authority: an evidence entry of kind `approval` is a record, not a
- * grant, so a caller cannot mint authority by appending one. The verdict is the
- * most recently recorded review decision — a caller cannot assert one.
+ * grant. The verdict must be the latest recorded review decision, produced by
+ * the reviewer seat, and an approval record must exist in the pack.
  *
  * `enforceExpiry` is true while acceptance is happening and false when the
- * question is historical: approval expiry is a condition of accepting, not a
- * property that later un-accepts a completed run.
+ * question is historical: expiry is a condition of accepting, not a property
+ * that later un-accepts a completed run.
  */
 export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = true } = {}) {
   const reasons = [];
@@ -122,11 +132,16 @@ export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = t
   const implementers = (run.seats ?? []).filter((s) => s.canImplement).map((s) => s.id);
 
   const verdict = latestVerdict(run.evidence, cycle);
-  if (!verdict) {
-    reasons.push(`no review verdict recorded in cycle ${cycle}`);
-  } else if (!["approve", "approved"].includes(verdict.meta?.verdict)) {
+  const authority = verdictAuthority(run, verdict);
+  if (!authority.ok) reasons.push(authority.reason);
+  else if (!["approve", "approved"].includes(verdict.meta?.verdict)) {
     reasons.push(`latest review verdict in cycle ${cycle} is '${verdict.meta?.verdict ?? "none"}', not approve`);
   }
+
+  const hasApprovalRecord = (run.evidence ?? []).some(
+    (e) => e.kind === "approval" && (e.cycle ?? 1) === cycle && e.stage === "accept",
+  );
+  if (!hasApprovalRecord) reasons.push(`no approval record in the cycle ${cycle} evidence pack`);
 
   const verification = verifyPack(run.evidence ?? []);
   if (!verification.ok) reasons.push(`evidence no longer verifies: ${verification.problems.join("; ")}`);
@@ -156,9 +171,17 @@ export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = t
   return { ok: reasons.length === 0, reasons, pack, revision };
 }
 
+/** Mark a run blocked, keeping the decision in state (not just in a return value). */
+function blocked(run, reason) {
+  return { ok: false, persist: true, run: { ...run, status: "blocked", blockedReason: reason }, reason };
+}
+
 /**
- * Attempt a stage transition. Returns `{ ok, run, reason, applied }`.
- * A refused transition never mutates the input run.
+ * Attempt a stage transition. Returns `{ ok, run, reason, applied, persist }`.
+ *
+ * `persist: true` on a refusal means the refusal itself changed durable state
+ * (a retry budget was exhausted and the run must now read as blocked). Every
+ * other refusal leaves the run untouched.
  */
 export function advance(run, {
   to,
@@ -193,6 +216,14 @@ export function advance(run, {
     };
   }
 
+  // Idempotency is decided BEFORE legality: replaying an applied transition is a
+  // successful no-op even though `run.stage` has already moved on.
+  const attemptNo = (run.attempts?.[to] ?? 0) + 1;
+  const key = idempotencyKey ?? `${run.id}:${run.stage}->${to}:${attemptNo}`;
+  if ((run.history ?? []).some((h) => h.idempotencyKey === key)) {
+    return { ok: true, run, applied: false, reason: "transition already applied" };
+  }
+
   const rule = transitionFor(run.stage, to);
   if (!rule) return { ok: false, run, reason: `illegal transition ${run.stage} -> ${to}` };
   if (rule.role === "reviewer" && role !== "reviewer" && role !== "operator") {
@@ -201,13 +232,6 @@ export function advance(run, {
   if (rule.role === "coordinator" && !["coordinator", "operator"].includes(role)) {
     return { ok: false, run, reason: `transition ${run.stage} -> ${to} requires coordinator authority, not ${role ?? "none"}` };
   }
-
-  // A stage that may repeat gets one key per attempt, so a genuine retry is a
-  // new transition while a duplicate of the SAME attempt stays a no-op.
-  const attemptNo = (run.attempts?.[to] ?? 0) + 1;
-  const key = idempotencyKey ?? `${run.id}:${run.stage}->${to}:${attemptNo}`;
-  const already = (run.history ?? []).some((h) => h.idempotencyKey === key);
-  if (already) return { ok: true, run, applied: false, reason: "transition already applied" };
 
   const cycle = run.cycle ?? 1;
   const stamped = evidence.map((entry) => ({ ...entry, stage: run.stage, cycle }));
@@ -219,7 +243,9 @@ export function advance(run, {
 
   if (to === "accept") {
     const verdict = latestVerdict(combined, cycle);
-    if (!verdict || !["approve", "approved"].includes(verdict.meta?.verdict)) {
+    const authority = verdictAuthority(run, verdict);
+    if (!authority.ok) return { ok: false, run, reason: `accept refused: ${authority.reason}` };
+    if (!["approve", "approved"].includes(verdict.meta?.verdict)) {
       return {
         ok: false,
         run,
@@ -239,12 +265,11 @@ export function advance(run, {
   if (to === "implement" || to === "validate" || to === "correct") {
     attempts[to] = (attempts[to] ?? 0) + 1;
     if (attempts[to] > limits.maxAttemptsPerStage) {
-      return {
-        ok: false,
-        run: { ...run, status: "blocked" },
-        reason: `${to} exceeded ${limits.maxAttemptsPerStage} attempts; run blocked for operator review`,
-      };
+      return blocked(run, `${to} exceeded ${limits.maxAttemptsPerStage} attempts; run blocked for operator review`);
     }
+  }
+  if (to === "correct" && (attempts.correct ?? 0) > limits.maxCorrections) {
+    return blocked(run, `correction ${attempts.correct} exceeded the budget of ${limits.maxCorrections}; run blocked`);
   }
 
   const next = {
@@ -256,6 +281,7 @@ export function advance(run, {
     evidence: combined,
     updatedAt: new Date().toISOString(),
     inflight: null,
+    blockedReason: null,
   };
   if (to === "done") next.acceptedAt = new Date().toISOString();
   next.history = appendHistory(run, {
@@ -272,10 +298,7 @@ export function advance(run, {
 
 /**
  * Mark a stage as in flight, recording the owner token that may complete it.
- *
- * The owner is a token, not a pid, because each CLI invocation is a new process:
- * `begin` prints the token and `advance --owner <token>` presents it. A second
- * `begin` on the same run is refused rather than replacing the current owner.
+ * The owner is a token, not a pid, because each CLI invocation is a new process.
  */
 export function beginStage(run, { actor = "coordinator", note = "", owner = null, now = new Date().toISOString() } = {}) {
   if (run.status !== "running") return { ok: false, run, reason: `cannot begin a stage while the run is ${run.status}` };
@@ -301,7 +324,7 @@ export function beginStage(run, { actor = "coordinator", note = "", owner = null
  */
 export function recover(run, { now = new Date().toISOString() } = {}) {
   if (!run.inflight) {
-    return { run, recovered: false, reason: "nothing was in flight" };
+    return { ok: false, run, recovered: false, reason: "nothing was in flight" };
   }
   const stage = run.inflight.stage;
   const next = {
@@ -319,13 +342,12 @@ export function recover(run, { now = new Date().toISOString() } = {}) {
     reason: `interrupted during ${stage}; reconciliation required, stage NOT completed`,
     idempotencyKey: `${run.id}:recover:${stage}:${run.inflight.startedAt}`,
   });
-  return { run: next, recovered: true, reason: `interrupted during ${stage}` };
+  return { ok: true, run: next, recovered: true, reason: `interrupted during ${stage}` };
 }
 
 /**
  * Clear an interruption after a human decided what actually happened. This
- * changes no stage: the next transition still needs that stage's evidence, so
- * reconciliation cannot launder an unknown result into a completion.
+ * changes no stage: the next transition still needs that stage's evidence.
  */
 export function reconcile(run, { actor = "operator", note = "", now = new Date().toISOString() } = {}) {
   if (!run.interrupted) return { ok: false, run, reason: "run is not interrupted" };
@@ -376,15 +398,13 @@ export function stop(run, { actor = "operator", reason = "" } = {}) {
 }
 
 /**
- * A run is complete when it reached "done" and the acceptance that happened
- * then still holds: required kinds present, evidence still verifies, approval
- * bound to the pack and revision. Expiry is deliberately NOT re-applied — an
- * hour-old valid acceptance is still an acceptance.
+ * Completion is one definition: done + required kinds + acceptance still holding
+ * (evidence verifies, approval covers the pack, verdict authorised). Expiry is
+ * not re-applied — an accepted run stays accepted.
  */
 export function isComplete(run) {
   if (run.stage !== "done" || run.status !== "accepted") return false;
   const have = new Set(evidenceKinds(run.evidence));
   if (!STAGE_EVIDENCE.accept.every((k) => have.has(k))) return false;
-  if (!verifyPack(run.evidence ?? []).ok) return false;
   return acceptanceCheck(run, { enforceExpiry: false }).ok;
 }

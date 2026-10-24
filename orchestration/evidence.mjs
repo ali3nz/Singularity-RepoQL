@@ -70,7 +70,16 @@ export function canonicalJson(value) {
 export function packHash(entries) {
   const canonical = entries
     .map((e) =>
-      [e.kind, e.producer, e.revision ?? "", e.sha256, String(e.bytes), canonicalJson(e.meta ?? {})].join("\u0000"),
+      [
+        e.kind,
+        e.producer,
+        e.revision ?? "",
+        e.stage ?? "",
+        String(e.cycle ?? 1),
+        e.sha256,
+        String(e.bytes),
+        canonicalJson(e.meta ?? {}),
+      ].join("\u0000"),
     )
     .sort()
     .join("\u0001");

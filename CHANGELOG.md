@@ -4,7 +4,51 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc11] - 2026-10-24
+
+Third review round. A review of rc10 found that the new no-write-on-refusal rule
+had dropped the persisted blocked state, and that idempotency, correction limits
+and verdict identity were still incomplete. rc10 is superseded.
+
+### Fixed
+- **Exhausted retries no longer persisted the block.** `advance()` returned a
+  blocked run with `ok: false`, and the no-write rule discarded it, so a run that
+  had spent its retry budget still read as healthy. A refusal can now carry
+  `persist: true`, and the blocked status and reason are written. `health`
+  reports `BLOCKED`.
+- **`maxCorrections` was declared, not enforced.** A third correction was
+  admitted under the default budget of two. Exceeding it now persists a blocked
+  run.
+- **A replayed transition was refused as illegal.** Idempotency was checked after
+  the legality lookup, so replaying an applied `plan -> implement` saw
+  `implement -> implement`. The key is checked first, and a replay is a successful
+  no-op that writes nothing.
+- **A recovery no-op wrote state.** `recover()` returned no `ok` field, so a
+  "nothing was in flight" call still rewrote `updatedAt`. It now refuses without
+  writing.
+- **A verdict could come from any producer.** Acceptance now requires the
+  authorising `review-verdict` to be produced by the run's reviewer seat (or
+  `operator`); a coordinator-recorded verdict is refused. The approval record
+  must also be present in the pack that is being accepted.
+- **Pack identity ignored stage and cycle.** `packHash()` now covers the stage
+  and cycle as well as kind, producer, revision, bytes and metadata.
+- **`health` and `isComplete` used slightly different rules.** Both now use the
+  single `isComplete()` definition, and health explains why a completed run is
+  not complete.
+- **`status` published the owner token.** It now shows a prefix; only `begin`
+  prints the token in full.
+
+### Added
+- Regression tests for each: persisted retry blocking, correction budget,
+  replay no-op, recovery no-op, non-reviewer verdict, missing approval record,
+  and pack identity by stage and cycle. 54 Node subtests, 10 messaging
+  scenarios.
+
 ## [0.1.0-rc10] - 2026-10-24
+
+> Superseded by rc11: a refused transition lost its persisted blocked state,
+> correction limits and idempotent replay were incomplete, and a verdict could
+> be recorded by a producer other than the reviewer seat.
 
 Second review round. A review of rc9 found that the acceptance path was still
 partial and that the new owner check could not work from the CLI, so rc9 is

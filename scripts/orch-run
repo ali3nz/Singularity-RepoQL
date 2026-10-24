@@ -113,7 +113,11 @@ function printRun(run, { json = false } = {}) {
   console.log(`evidence ${(run.evidence ?? []).length} entries, pack ${pack.slice(0, 16)}`);
   console.log(`approvals ${(run.approvals ?? []).length}`);
   if (run.interrupted) console.log(`interrupted during ${run.interrupted.stage} (reconciliation required)`);
-  if (run.inflight) console.log(`inflight ${run.inflight.stage} since ${run.inflight.startedAt} (owner ${run.inflight.owner ?? "unknown"})`);
+  if (run.inflight) {
+    const owner = String(run.inflight.owner ?? "");
+    const shown = owner ? `${owner.slice(0, 6)}…` : "unknown";
+    console.log(`inflight ${run.inflight.stage} since ${run.inflight.startedAt} (owner ${shown}; pass the token printed by begin)`);
+  }
   const h = health(run);
   console.log(`health   ${h.state} — ${h.detail}`);
 }
