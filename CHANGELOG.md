@@ -4,7 +4,59 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc10] - 2026-10-24
+
+Second review round. A review of rc9 found that the acceptance path was still
+partial and that the new owner check could not work from the CLI, so rc9 is
+superseded.
+
+### Fixed
+- **Acceptance could persist halfway.** `accept()` advances review -> accept ->
+  done inside one mutation, and a failure on the second step still wrote the
+  first. A refused mutation now writes nothing: stage, status, history, evidence
+  and `updatedAt` are byte-identical after a refusal, which also makes `accept`
+  atomic.
+- **`advance` accepted without checking the evidence files.** Only `accept()`
+  called `verifyPack()`, so a direct reviewer/coordinator pair could complete a
+  run whose file-backed evidence had changed. The integrity check is now part of
+  `acceptanceCheck()`, so every path to `done` performs it.
+- **A caller could assert the verdict.** `advance()` took a `verdict` option,
+  and `accept()` always passed `"approve"`, so a recorded `changes_requested`
+  could be overruled. The option is gone: the verdict is the last
+  `review-verdict` recorded in the cycle, and it must be approving.
+- **Pack identity ignored decision metadata.** `packHash()` hashed bytes,
+  kind, producer and revision, so two reviews of identical text with different
+  verdicts hashed the same. Metadata is now canonicalised into the hash.
+- **`begin`/`advance` could not be used from the CLI.** The in-flight claim was
+  a pid, and every CLI invocation is a new process, so a normal
+  `begin` then `advance` pair always failed. The claim is now an owner token:
+  `begin` prints it and `advance --owner <token>` presents it. A second `begin`
+  while work is in flight is refused.
+- **Stage scoping was incomplete.** Evidence was scoped by cycle but not by the
+  stage that produced it, so a `test-output` captured while implementing could
+  prove validation. Each requirement now names the stage(s) that may produce it.
+- **Acceptance expiry was re-applied to history.** `health()` reran the approval
+  check with the current time, so an accepted run flipped to `INVALID_EVIDENCE`
+  an hour later, while `isComplete()` disagreed. Expiry now gates the act of
+  accepting only; a completed run is judged on evidence integrity and approval
+  scope. Both functions use the same definition, and `acceptedAt` is recorded.
+
+### Added
+- Regression tests for each item: refused mutations leave persisted state
+  untouched, `advance --to done` verifies files, a verdict cannot be asserted,
+  decisions are part of the pack hash, the owner token works across processes,
+  evidence from another stage is not stage proof, and expiry does not
+  un-accept a completed run. 47 Node subtests and 9 messaging scenarios.
+
+### Documentation
+- `docs/ORCHESTRATION.md` documents the owner token, stage-origin evidence,
+  historical acceptance and metadata in the pack hash.
+
 ## [0.1.0-rc9] - 2026-10-24
+
+> Superseded by rc10: acceptance could persist a partial transition, the
+> direct `advance` path skipped evidence verification, a caller could assert
+> the verdict, and the in-flight owner check could not work from the CLI.
 
 Hardens the orchestration gates. An independent review of rc8 found bypasses in
 the gates themselves, so rc8 is superseded: do not treat its orchestration layer

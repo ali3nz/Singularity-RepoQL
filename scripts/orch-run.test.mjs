@@ -128,8 +128,16 @@ test("an interrupted run cannot advance until reconciled, then still needs evide
   const id = runId(run(["start", "crash recovery", "--mode", "solo"], dir).out);
   assert.equal(run(["evidence", id, "--kind", "plan", "--producer", "coordinator", "--text", "plan"], dir).rc, 0);
   assert.equal(run(["advance", id, "--to", "implement", "--role", "coordinator"], dir).rc, 0);
-  assert.equal(run(["begin", id], dir).rc, 0);
+  const begun = run(["begin", id], dir);
+  assert.equal(begun.rc, 0, begun.err);
+  const owner = (begun.out.match(/owner (\S+)/) || [])[1];
+  assert.ok(owner, `begin must print its owner token:\n${begun.out}`);
   assert.match(run(["status", id], dir).out, /inflight implement/);
+
+  // A separate CLI process must present the token; a bare advance is refused.
+  const noOwner = run(["advance", id, "--to", "validate", "--role", "coordinator"], dir);
+  assert.equal(noOwner.rc, 3);
+  assert.match(noOwner.err, /in flight for owner/);
 
   assert.equal(run(["recover", id], dir).rc, 0);
   assert.match(run(["status", id], dir).out, /interrupted during implement/);

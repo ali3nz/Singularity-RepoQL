@@ -61,6 +61,7 @@ export function validateApproval(
     evidenceHash,
     revision,
     now = () => Date.now(),
+    enforceExpiry = true,
     implementerIds = [],
     coordinatorId = null,
   } = {},
@@ -86,7 +87,11 @@ export function validateApproval(
     reasons.push(`approval covers revision ${approval.revision}, not ${revision}`);
   }
   const at = now();
-  if (!approval.expiresAt || approval.expiresAt <= at) {
+  // Expiry authorises the act of accepting; it is checked while acceptance is
+  // happening (enforceExpiry) and not re-applied to a run that already
+  // completed. A stale acceptance is still an acceptance, and later evidence
+  // changes are caught by the pack hash and the file verification instead.
+  if (enforceExpiry && (!approval.expiresAt || approval.expiresAt <= at)) {
     reasons.push("approval has expired");
   }
   if (!approval.issuedAt || Date.parse(approval.issuedAt) > at + 60_000) {

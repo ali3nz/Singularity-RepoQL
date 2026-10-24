@@ -43,7 +43,7 @@ second dispatcher exits 23 without launching.
 | Durable per-stage records | `case-state.mjs` | append-only `history` per run | **ADDED** |
 | Evidence-backed transitions | `evidence-pack.mjs`, `gate-parser.mjs` | `orchestration/evidence.mjs` + stage requirements | **ADDED** |
 | Idempotent recovery of completed work | `run-registry.mjs` | per-attempt idempotency keys | **ADDED** |
-| Attempt-scoped evidence | `phase-driver.mjs` attempt scoping | evidence stamped with stage + cycle; only the current cycle counts | **ADDED** |
+| Attempt-scoped evidence | `phase-driver.mjs` attempt scoping | evidence stamped with stage + cycle; only the current stage and cycle count | **ADDED** |
 | Stage execution (spawning agents) | `orchestrate.mjs` spawns workers | — | **EXCLUDED** — the portable layer owns identity, gating and routing but does not bundle an agent runtime, so the operator's coordinator performs the stage and records evidence |
 
 ## Phase 3 — execution modes

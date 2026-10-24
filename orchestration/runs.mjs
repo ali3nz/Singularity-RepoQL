@@ -103,6 +103,10 @@ function mutate(store, runId, fn) {
     if (!run) throw new RunError(`no such run: ${runId}`);
     const result = fn(run);
     if (!result?.run) throw new RunError("internal: mutation produced no run");
+    // A refused mutation must leave persisted state untouched. This is also what
+    // makes `accept()` atomic across its two transitions: a failure on the last
+    // step writes neither step.
+    if (result.ok === false) return result;
     const next = { ...result.run, updatedAt: nowIso() };
     store.writeRun(next);
     const registry = store.readRegistry();
@@ -130,9 +134,9 @@ export function addEvidence(store, runId, entries) {
   }).run;
 }
 
-export function begin(store, runId, { actor = "coordinator", note = "", pid = process.pid } = {}) {
+export function begin(store, runId, { actor = "coordinator", note = "", owner = newId("owner") } = {}) {
   return mutate(store, runId, (run) => {
-    const outcome = beginStage(run, { actor, note, pid });
+    const outcome = beginStage(run, { actor, note, owner });
     if (!outcome.ok) throw new RunError(outcome.reason);
     return { ok: true, run: outcome.run };
   }).run;
@@ -148,7 +152,7 @@ export function reconcileRun(store, runId, options) {
 
 export function transition(store, runId, options) {
   return mutate(store, runId, (run) => {
-    const outcome = advance(run, { ...options, callerPid: process.pid });
+    const outcome = advance(run, options);
     return { ...outcome, run: outcome.run };
   });
 }
@@ -248,14 +252,20 @@ export function accept(store, runId, { approver, actor = "coordinator", now = ()
     const stored = (run.approvals ?? []).slice().reverse().find((a) => a.approver === seat.id);
     if (!stored) return { ok: false, run, reason: `no approval recorded by '${seat.id}'` };
 
-    const verification = verifyPack(run.evidence ?? []);
-    if (!verification.ok) {
-      return { ok: false, run, reason: `evidence no longer verifies: ${verification.problems.join("; ")}` };
+    // The authoritative checks (verdict, approval scope, evidence integrity,
+    // expiry) happen inside advance(). This pre-check only produces a clearer
+    // error; it is not the gate.
+    const gate = acceptanceCheck(run, { now });
+    if (!gate.ok && run.stage === "review") {
+      return { ok: false, run, reason: `acceptance refused: ${gate.reasons.join("; ")}` };
     }
 
-    let step = advance(run, { to: "accept", actor, role: "reviewer", evidence: [], verdict: "approve", now, callerPid: process.pid });
-    if (!step.ok) return step;
-    step = advance(step.run, { to: "done", actor, role: "coordinator", evidence: [], now, callerPid: process.pid });
+    let step = { ok: true, run };
+    if (run.stage === "review") {
+      step = advance(run, { to: "accept", actor, role: "reviewer", evidence: [], now });
+      if (!step.ok) return step;
+    }
+    step = advance(step.run, { to: "done", actor, role: "coordinator", evidence: [], now });
     return step;
   });
 }
@@ -301,7 +311,7 @@ export function health(run, { now = Date.now(), stuckAfterMs = 30 * 60 * 1000 } 
     if (!verification.ok) {
       return { state: "INVALID_EVIDENCE", detail: `accepted evidence does not verify: ${verification.problems.join("; ")}` };
     }
-    const gate = acceptanceCheck(run, { now: () => now });
+    const gate = acceptanceCheck(run, { now: () => now, enforceExpiry: false });
     if (!gate.ok) return { state: "INVALID_EVIDENCE", detail: `acceptance does not hold: ${gate.reasons.join("; ")}` };
     return { state: "COMPLETE", detail: "accepted with required evidence" };
   }

@@ -24,7 +24,8 @@ node scripts/orch-run status            # prints the run id, stage, cycle and se
 node scripts/orch-run evidence <run> --kind plan --producer <coordinator-seat> --text "..."
 node scripts/orch-run advance <run> --to implement --role coordinator
 
-node scripts/orch-run begin <run>       # optional: mark the stage in flight
+node scripts/orch-run begin <run>       # optional: claim the stage, prints an owner token
+node scripts/orch-run advance <run> --to validate --role coordinator --owner <token>
 node scripts/orch-run evidence <run> --kind diff --producer <worker-seat> --file out.patch
 
 # ... validate, review, then acceptance by the reviewer seat:
@@ -46,22 +47,32 @@ plan -> implement -> validate -> review -> accept -> done
                         +----------+   (review -> correct -> implement -> validate)
 ```
 
-| Transition | Who may perform it | Evidence required in the current cycle |
+| Transition | Who may perform it | Evidence required (kind, captured in) |
 | --- | --- | --- |
-| `plan -> implement` | coordinator | `plan` |
-| `implement -> validate` | coordinator | `diff` |
-| `validate -> review` | coordinator | `test-output` |
-| `validate -> correct` | coordinator | `test-output` |
-| `review -> accept` | reviewer | an approving `review-verdict` |
-| `review -> correct` | reviewer | `review-verdict` |
-| `correct -> implement` | coordinator | `diff` |
-| `accept -> done` | coordinator | `review-verdict` + a valid recorded approval |
+| `plan -> implement` | coordinator | `plan` in `plan` |
+| `implement -> validate` | coordinator | `diff` in `implement` or `correct` |
+| `validate -> review` | coordinator | `test-output` in `validate` |
+| `validate -> correct` | coordinator | `test-output` in `validate` |
+| `review -> accept` | reviewer | an approving `review-verdict` in `review` |
+| `review -> correct` | reviewer | `review-verdict` in `review` |
+| `correct -> implement` | coordinator | `diff` in `correct` |
+| `accept -> done` | coordinator | `review-verdict` in `review` + a valid recorded approval in `accept` |
+
+The "captured in" column is enforced: a `test-output` recorded while the run was
+implementing is not validation proof, and an earlier cycle's proof does not
+carry into the next.
 
 A stage is never marked complete by a timer, a process exit or a retry. A run
 that was in flight when its process died is marked `interrupted` and blocks:
 `advance` refuses until an operator runs `orch-run reconcile <run> --note ...`.
 Reconciliation clears the interruption but changes no stage, so the next
 transition still needs that stage's evidence.
+
+`begin` claims the stage with an **owner token** and prints it; the process that
+finishes the stage presents the same token with `advance --owner <token>`. A
+token rather than a pid, because each CLI call is a new process. A second
+`begin` on a run that already has work in flight is refused, and recovery clears
+the claim.
 
 ### Cycles
 
@@ -106,11 +117,19 @@ pack hash, the run's revision and a TTL. Acceptance requires all of:
   review invalidates it;
 - the approval's revision equals the run's own revision; a caller cannot choose
   the revision (`approve --revision` is refused, not ignored);
-- the approval has not expired and was not issued in the future.
+- the approval has not expired when acceptance happens, and was not issued in
+  the future.
+
+Acceptance is a **historical event**: expiry is checked while accepting, and a
+run that completed stays completed after its approval would have expired. What
+still invalidates a completed run is evidence that no longer matches its digest,
+or an approval that no longer covers the pack.
 
 Authority comes from `run.approvals`, never from an evidence entry. The
 `approval` evidence kind is reserved: `orch-run evidence --kind approval` exits
-2, and `advance --to done` validates the stored approval itself. This is
+2, and `advance --to done` validates the stored approval itself. The verdict is
+the last `review-verdict` recorded in the cycle; a caller cannot pass a verdict,
+so a coordinator cannot overrule a recorded `changes_requested`. This is
 identity de-confliction within a local trust boundary, not authentication:
 whoever can write the state directory can edit the seats.
 
@@ -168,7 +187,9 @@ demand; there is no background watchdog process.
 ## Evidence
 
 Every entry records `kind`, `producer`, `stage`, `cycle`, `revision`, `sha256`,
-`bytes` and a timestamp, and pack content is hashed in a stable order.
+`bytes`, its decision metadata (a verdict, for example) and a timestamp. The pack
+hash covers all of it in a stable order, so two entries with identical bytes but
+different decisions are different evidence.
 `orch-run verify` re-reads **file-backed** entries from disk and reports any
 entry whose bytes no longer match. Inline (`--text`) evidence is recorded and
 structurally checked; it cannot be re-derived from a file, so "verifies" means
@@ -196,8 +217,9 @@ bash tests/validate-local.sh     # everything above plus the repository gates
 ```
 
 The orchestration suites use temp directories and fake clocks. They prove the
-state machine, mode invariants, approval binding, lease collisions, routing
-policy and the CLI contract. **They prove nothing about live model behaviour** —
+state machine, stage and cycle scoping, mode invariants, approval binding,
+refusals that leave persisted state untouched, lease collisions, routing policy
+and the CLI contract. **They prove nothing about live model behaviour** —
 no model-backed test was run for this release (see below).
 
 ### Model-backed testing status: BLOCKED

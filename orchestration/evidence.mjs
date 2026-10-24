@@ -51,10 +51,27 @@ export function evidenceFromFile({ kind, producer, file, revision = null, meta =
   return evidenceEntry({ kind, producer, content: body, file, revision, meta });
 }
 
+/**
+ * Deterministic JSON for metadata. Decision-relevant metadata (a verdict, an
+ * approval's approver) must be part of the pack identity: two entries with the
+ * same bytes but different decisions are not the same evidence.
+ */
+export function canonicalJson(value) {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 /** Stable pack hash: independent of ordering and capture timestamps. */
 export function packHash(entries) {
   const canonical = entries
-    .map((e) => [e.kind, e.producer, e.revision ?? "", e.sha256, String(e.bytes)].join("\u0000"))
+    .map((e) =>
+      [e.kind, e.producer, e.revision ?? "", e.sha256, String(e.bytes), canonicalJson(e.meta ?? {})].join("\u0000"),
+    )
     .sort()
     .join("\u0001");
   return sha256Text(canonical);

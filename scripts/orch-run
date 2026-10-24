@@ -13,8 +13,8 @@
 //   orch-run evidence <run> --kind <k> --producer <id> (--file <path> | --text <s>)
 //                          [--revision <rev>] [--verdict approve|changes_requested]
 //   orch-run advance <run> --to <stage> [--role coordinator|reviewer|operator]
-//                          [--actor <id>] [--reason <text>] [--verdict approve|changes_requested]
-//   orch-run begin <run> [--actor <id>]        mark the current stage in flight
+//                          [--actor <id>] [--owner <token>] [--reason <text>]
+//   orch-run begin <run> [--actor <id>]        mark the stage in flight, print its owner token
 //   orch-run reconcile <run> --note <text>     clear an interruption, change no stage
 //   orch-run approve <run> --approver <seat-id> [--ttl-minutes <n>]
 //   orch-run accept <run> --approver <seat-id>
@@ -113,7 +113,7 @@ function printRun(run, { json = false } = {}) {
   console.log(`evidence ${(run.evidence ?? []).length} entries, pack ${pack.slice(0, 16)}`);
   console.log(`approvals ${(run.approvals ?? []).length}`);
   if (run.interrupted) console.log(`interrupted during ${run.interrupted.stage} (reconciliation required)`);
-  if (run.inflight) console.log(`inflight ${run.inflight.stage} since ${run.inflight.startedAt} (pid ${run.inflight.pid ?? "unknown"})`);
+  if (run.inflight) console.log(`inflight ${run.inflight.stage} since ${run.inflight.startedAt} (owner ${run.inflight.owner ?? "unknown"})`);
   const h = health(run);
   console.log(`health   ${h.state} — ${h.detail}`);
 }
@@ -175,8 +175,8 @@ function cmdAdvance(store, { positional, flags }) {
     to,
     actor: flags.actor ?? flags.role ?? "operator",
     role: flags.role ?? "operator",
+    owner: flags.owner ?? null,
     reason: flags.reason ?? "",
-    verdict: flags.verdict ?? null,
   });
   if (!outcome.ok) fail(outcome.reason, RC_REFUSED);
   console.log(`${outcome.applied ? "advanced" : "unchanged"} ${run.stage} -> ${to}`);
@@ -217,7 +217,8 @@ function cmdBegin(store, { positional, flags }) {
   const run = resolveRun(store, positional[0]);
   try {
     const next = begin(store, run.id, { actor: flags.actor ?? "coordinator", note: flags.note ?? "" });
-    console.log(`inflight ${next.inflight.stage} (pid ${next.inflight.pid})`);
+    console.log(`inflight ${next.inflight.stage} owner ${next.inflight.owner}`);
+    console.log(`complete it with: orch-run advance ${next.id} --to <stage> --role coordinator --owner ${next.inflight.owner}`);
     printRun(next);
   } catch (err) {
     fail(err.message, RC_REFUSED);
