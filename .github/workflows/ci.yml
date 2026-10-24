@@ -48,6 +48,8 @@ jobs:
           python3 tests/test-memory-security.py
           python3 tests/test-memory-promote.py
           python3 tests/test-memory-doc-ingest.py
+          python3 tests/test-orch-chat-sessions.py
+          python3 tests/test-orch-chat.py
 
       - name: Manifest drift gate
         run: bash tests/validate-manifest.sh

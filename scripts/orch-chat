@@ -1,0 +1,1249 @@
+#!/usr/bin/env python3
+"""orch-chat — openchamber agent chat CLI.
+
+Opt-in Discord delivery CLI. Inboxes live on local disk (durable,
+append-only) under the configured state directory.
+
+  orch-chat send @claude "are you editing engine-router.mjs?"
+  orch-chat send --from claude @buffy "no, tests only"
+  orch-chat send @sol "are you consulting the migration right now?"
+  orch-chat inbox [--agent buffy] [--all]
+  orch-chat reply 1842 "yes, lane was free, dispatched at 12:40Z"
+  orch-chat dispatch-sol 1842 [--launch]
+  orch-chat status
+
+Envelope format on Discord:  [from] @to1 @to2 text...  (re:#<id> prefix on
+replies is parsed back into replyTo by the relay). Message posting uses the
+existing openclaw bot token — no duplicate secrets.
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import orch_chat_office as office  # issue 114/118: pixel-office pulses, walks, run token
+import orch_chat_sessions as acs  # P776 Phase C: per-session addressing
+
+API = "https://discord.com/api/v10"
+GENERAL_CHAN_ID = "1551019049570541590"
+# issue 165: conversation THREADS must parent to #orchestration (1551149160760086579),
+# not #general — kit D11 convention: run/consult threads live in #orchestration.
+# The envelope starter post still lands in #general (the live chat lane); only the
+# thread PARENT moved. THREAD_CHAN_ID must be a type-0 text channel in the same guild.
+THREAD_CHAN_ID = "1551149160760086579"
+DISCORD_ENV = os.environ.get("AGENTCHAT_DISCORD_ENV", "")
+STATE_DIR = os.environ.get("AGENTCHAT_STATE_DIR",
+    os.path.join(os.path.expanduser("~"), ".local", "state", "orch-chat"))
+INBOX_DIR = os.path.join(STATE_DIR, "inbox")
+STATE_PATH = os.path.join(STATE_DIR, "state.json")
+LOCK_PATH = os.environ.get("AGENTCHAT_LOCK_PATH", "")
+WS_TMP = os.environ.get("AGENTCHAT_WS_TMP", "")
+UA = "orch-chat/1.0"
+# Roster — MUST stay identical to orch-chat-relay.py (see its comment).
+# claude is first-class (the operator lives in Claude); codex is LOW-TRAFFIC:
+# used sometimes but rarely polled, so it is never a default target and never
+# a doc example — but sends to it work normally.
+AGENTS = ["buffy", "claude", "sol", "openchamber", "openchamber-ws", "codex",
+          # OpenChamber agent-identity inboxes (operator directive 2026-10-19):
+          # every OpenChamber agent role gets its own addressable inbox; the
+          # runtime-level identity stays "openchamber". MUST stay identical to
+          # orch-chat-relay.py.
+          "standalone", "super", "duo", "ghost",
+          "solo-coordinator", "duel-coordinator", "quad-coordinator", "orchestrator",
+          "free-mode", "pentest", "eso-live-debug",
+          "board", "thinker", "general", "explore", "researcher-web",
+          "code-reviewer", "quality-fixer", "reviewer",
+          ]
+# NOT-DEFAULT, still fully usable. The operator uses codex sometimes, just not
+# often (2026-09-26), so this demotes it out of defaults and examples WITHOUT
+# blocking it: sends go through, with a one-line nudge toward @claude in case
+# the sender reached for codex out of habit rather than intent.
+LOW_TRAFFIC = {"codex": "note: codex is low-traffic and rarely polled — "
+                        "if you wanted the usual coding peer, that is @claude."}
+MAX_TEXT = 1500
+RATE_LIMIT_PER_MIN = 10  # mirrors the relay; enforced here too (see cmd_send)
+
+ROLE_RE = r"[a-z0-9_-]{1,32}"
+SID_RE = acs.SID_RE
+TO_TOKEN_RE = re.compile(r"^(?P<role>%s)(?:#(?P<sid>%s))?$" % (ROLE_RE, SID_RE))
+
+
+def stamp_activity(agent: str, op: str) -> None:
+    """Record that `agent` used orch-chat just now (presence evidence).
+
+    Append-only JSONL folded by orch-chat-presence.py; separate from
+    state.json so the CLI/relay field-ownership merge never drops it.
+    Fail-open: presence is a convenience, never a sender-side roadblock."""
+    try:
+        with open(OBSERVED_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": time.time(), "agent": agent, "op": op}) + "\n")
+    except Exception:
+        pass
+
+
+def fail(msg: str, rc: int = 1):
+    print("orch-chat: " + msg, file=sys.stderr)
+    sys.exit(rc)
+
+
+
+def discord_enabled() -> bool:
+    """Return True iff Discord bot credentials are configured.
+
+    Discord delivery is strictly OPT-IN: when no bot token env file is
+    configured (AGENTCHAT_DISCORD_ENV is empty or unreadable), all
+    Discord API calls fail open (no network, local-only delivery).
+    """
+    if not DISCORD_ENV:
+        return False
+    try:
+        with open(DISCORD_ENV, "r", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("DISCORD_BOT_TOKEN="):
+                    return bool(line.split("=", 1)[1].strip())
+    except Exception:
+        pass
+    return False
+
+
+
+def token() -> str | None:
+    """Read the Discord bot token from the configured env file, if any.
+
+    Returns None when Discord is not configured (fail-open). The caller
+    (api) checks discord_enabled() before needing a token."""
+    if not DISCORD_ENV:
+        return None
+    try:
+        with open(DISCORD_ENV, "r", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("DISCORD_BOT_TOKEN="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return None
+
+
+def api(method: str, path: str, body=None, timeout=15):
+    """Discord API call — fails open (returns 0, {}) when Discord is not configured."""
+    if not discord_enabled():
+        return 0, {}
+    tok = token()
+    if not tok:
+        return 0, {}
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(API + path, data=data, method=method, headers={
+        "Authorization": "Bot " + tok, "Content-Type": "application/json",
+        "User-Agent": UA, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            return resp.status, (json.loads(raw) if raw else {})
+    except urllib.error.HTTPError as e:
+        return e.code, {}
+    except Exception:
+        return 0, {}
+
+
+class StateCorruptError(RuntimeError):
+    """An EXISTING state file cannot be read or parsed.
+
+    A missing state file is a legitimate cold start and is initialised. An
+    existing-but-unreadable one is NOT: silently substituting a default would
+    let the next write replace recoverable history with an empty shell. The
+    original bytes are never touched on this path; recovery is an explicit
+    operator action (inspect, repair, or move the file aside).
+    """
+
+
+def default_state() -> dict:
+    """Cold-start state for a fresh install.
+
+    Discord delivery is opt-in and the relay is optional, so NOTHING may be
+    assumed to have created state.json before the first CLI command. Every
+    command must work from an empty state directory."""
+    return {"nextId": 1, "agents": {a: {} for a in AGENTS}}
+
+
+def load_state() -> dict:
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as fh:
+            raw = fh.read()
+    except FileNotFoundError:
+        return default_state()
+    except OSError as exc:
+        raise StateCorruptError(
+            "cannot read %s (%s) - refusing to continue or overwrite; "
+            "inspect the file, then repair it or move it aside" % (STATE_PATH, exc))
+    try:
+        st = json.loads(raw)
+    except ValueError as exc:
+        raise StateCorruptError(
+            "%s is not valid JSON (%s) - refusing to overwrite it; "
+            "inspect the file, then repair it or move it aside" % (STATE_PATH, exc))
+    if not isinstance(st, dict):
+        raise StateCorruptError(
+            "%s does not contain a JSON object - refusing to overwrite it" % STATE_PATH)
+    st.setdefault("nextId", 1)
+    st.setdefault("agents", {})
+    return st
+
+
+def _ensure_state_dir() -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+
+
+def save_state(st: dict) -> None:
+    _ensure_state_dir()
+    tmp = STATE_PATH + ".tmp.cli"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, indent=1, sort_keys=True)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, STATE_PATH)
+
+
+OBSERVED_PATH = os.path.join(STATE_DIR, "presence-observed.jsonl")
+STATE_LOCK_PATH = STATE_DIR + "/state.lock"
+THREADS_PATH = os.path.join(STATE_DIR, "threads.json")  # issue 120
+
+
+class state_lock:
+    """Same exclusive lock the relay daemon takes (live-learned 2026-09-26:
+    without it the daemon's stale nextId clobbered CLI allocations)."""
+
+    def __enter__(self):
+        self._fd = open(STATE_LOCK_PATH, "w")
+        fcntl.flock(self._fd.fileno(), fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self._fd.fileno(), fcntl.LOCK_UN)
+        self._fd.close()
+        return False
+
+
+def max_inbox_id() -> int:
+    hi = 0
+    for a in AGENTS:
+        p = os.path.join(INBOX_DIR, a + ".jsonl")
+        if not os.path.exists(p):
+            continue
+        for line in open(p, "r", encoding="utf-8"):
+            try:
+                i = int(json.loads(line).get("id", 0))
+            except Exception:
+                continue
+            if i > hi:
+                hi = i
+    return hi
+
+
+def merge_save(st: dict) -> None:
+    """Write CLI-owned fields over the CURRENT disk state (never clobber
+    relay-owned cursor/sendWindow/solDispatch with stale values)."""
+    # A corrupt state file raises StateCorruptError here: the merge must never
+    # paper over unreadable state with a default and then write it back.
+    disk = load_state()
+    merged = dict(disk)
+    merged["nextId"] = max(st.get("nextId", 1), disk.get("nextId", 1),
+                           max_inbox_id() + 1)
+    agents = dict(disk.get("agents") or {})
+    for a in AGENTS:
+        entry = dict(agents.get(a) or {})
+        s = st["agents"].get(a) or {}
+        entry["lastReadId"] = max(entry.get("lastReadId", 0), s.get("lastReadId", 0))
+        entry["lastDeliveredId"] = max(entry.get("lastDeliveredId", 0),
+                                       s.get("lastDeliveredId", 0))
+        # In-memory window wins: cmd_send appends to it under the same lock.
+        entry["sendWindow"] = s.get("sendWindow") or entry.get("sendWindow") or []
+        agents[a] = entry
+    merged["agents"] = agents
+    if st.get("solDispatch"):
+        sd = dict(disk.get("solDispatch") or {})
+        sd.update(st["solDispatch"])
+        merged["solDispatch"] = sd
+    if st.get("botId"):
+        merged.setdefault("botId", st["botId"])
+    merged.setdefault("lastDiscordId", disk.get("lastDiscordId"))
+    merged.setdefault("startedAt", st.get("startedAt"))
+    save_state(merged)
+
+
+def find_message(st: dict, mid: int) -> dict | None:
+    """Reconstruct a delivered message from any role or session inbox (the
+    id is global; P776 copies may land in session mailboxes)."""
+    for a in AGENTS:
+        p = os.path.join(INBOX_DIR, a + ".jsonl")
+        if not os.path.exists(p):
+            continue
+        for line in open(p, "r", encoding="utf-8"):
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("id") == mid:
+                return rec
+    try:
+        for sid in acs.load_sessions().get("sessions", {}):
+            for rec in acs.session_records(sid):
+                if int(rec.get("id") or 0) == mid:
+                    return rec
+    except Exception:
+        pass
+    return None
+
+
+def resolve_claim(claim_sid: str | None, frm: str) -> dict | None:
+    """Validate a --session/AGENTCHAT_SESSION claim (fail-closed, reviewer
+    correction #2): the registry entry must exist, belong to the sending
+    role, and be ACTIVE. Returns the registry record (renews nothing here)."""
+    if not claim_sid:
+        return None
+    data = acs.load_sessions()
+    rec = acs.get(data.get("sessions") or {}, claim_sid)
+    if rec is None:
+        fail("unknown session '%s' (run: orch-chat register --from %s)" % (claim_sid, frm), 2)
+    if rec.get("role") != frm:
+        fail("session '%s' does not belong to role '%s' (owned by '%s')"
+             % (claim_sid, frm, rec.get("role")), 2)
+    if rec.get("state") == "CLOSED":
+        fail("session '%s' is CLOSED — open a new one" % claim_sid, 2)
+    return rec
+
+
+def deliver_local(st: dict, frm: str, frm_sid: str | None, tos: list,
+                  text: str, reply_to, origin: str, discord_id=None,
+                  run_number=None, thread_number=None) -> dict:
+    """Issue 776: `tos` is a list of (role, sid|None). Explicit session
+    targets deliver to their session mailbox ONLY (correction #1);
+    role-only targets keep the legacy role mailbox (+hints/ambiguous)."""
+    rec = {
+        "id": max(st.get("nextId", 1), max_inbox_id() + 1),
+        "discordMessageId": discord_id,
+        "from": frm,
+        "fromSession": frm_sid,
+        "text": text,
+        "replyTo": reply_to,
+        "origin": origin,
+        "runNumber": run_number,
+        "threadNumber": thread_number,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    st["nextId"] = rec["id"] + 1
+    sessions_data = acs.load_sessions()
+    ses_data_dirty = False
+    if frm_sid:
+        acs.touch(sessions_data, frm_sid)
+        ses_data_dirty = True
+    role_only = [(r, s) for (r, s) in tos if not s]
+    notes = []
+    if role_only:
+        roles = sorted({r for (r, _s) in role_only})
+        rolerec = dict(rec)
+        rolerec["to"] = roles
+        hints, multi = [], False
+        for r in roles:
+            act = acs.active_sessions_for_role(sessions_data, r)
+            if act:
+                hints.extend("%s#%s" % (r, s) for s in act)
+                if len(act) > 1:
+                    multi = True
+        if hints:
+            rolerec["sessionHints"] = sorted(set(hints))
+            if multi:
+                rolerec["ambiguous"] = "AMBIGUOUS_TARGET"
+            notes.append("hints=" + ",".join(sorted(set(hints)))
+                         + (" ambiguous=AMBIGUOUS_TARGET" if multi else ""))
+        for role in roles:
+            with open(os.path.join(INBOX_DIR, role + ".jsonl"), "a",
+                      encoding="utf-8") as fh:
+                fh.write(json.dumps(rolerec) + "\n")
+            st["agents"].setdefault(role, {})["lastDeliveredId"] = rec["id"]
+    for role, sid in tos:
+        if not sid:
+            continue
+        t_rec = acs.get(sessions_data.get("sessions") or {}, sid)
+        if t_rec is None or t_rec.get("role") != role:
+            fail("session '%s' not registered for role '%s'" % (sid, role), 2)
+        if t_rec.get("state") == "CLOSED":
+            fail("session '%s' is CLOSED — open a new session" % sid, 2)
+        srec = dict(rec)
+        srec["to"] = [role]
+        srec["toSession"] = sid
+        acs.deliver_to_session(sid, srec)
+        acs.touch(sessions_data, sid)  # inbound mail proves the session lived
+        ses_data_dirty = True
+        notes.append("session=%s" % sid)
+    if ses_data_dirty:
+        acs.save_sessions(sessions_data)
+    if notes:
+        print("orch-chat: " + "; ".join(notes), file=sys.stderr)
+    return rec
+
+
+# ---- issue 120: conversation threads ---------------------------------------
+# Each conversation (sorted sender+recipients) gets a Discord thread
+# "ac-<n> <topic>" started from its first #general message; replies post
+# into the thread. threads.json is the durable registry, shared with the
+# relay under the same state.lock flock.
+
+def load_threads() -> dict:
+    try:
+        with open(THREADS_PATH, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {"nextThread": 1, "convs": {}, "byChan": {}}
+
+
+def save_threads(t: dict) -> None:
+    _ensure_state_dir()
+    tmp = THREADS_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(t, fh, indent=1, sort_keys=True)
+    os.replace(tmp, THREADS_PATH)
+
+
+def conv_key(frm: str, tos: list) -> str:
+    """Direction-independent conversation id: the sorted participant set.
+    buffy->claude and claude->buffy are THE SAME conversation and share one
+    thread (live-learned issue 120: direction-keyed threads duplicated on
+    every reply)."""
+    return ",".join(sorted(set([frm] + list(tos))))
+
+
+def ensure_thread(frm: str, frm_sid: str | None, tos: list, text: str) -> dict | None:
+    """Return {num, channelId} for this conversation, creating the Discord
+    thread on first use. Caller MUST hold state_lock(). Fail-open: any error
+    returns None and the caller keeps flat #general posting. Issue 776: tos
+    is [(role, sid|None)]; session identity makes a DISTINCT conversation key
+    (correction #3) so concurrent same-role sessions never share threads."""
+    try:
+        t = load_threads()
+        key = acs.conv_key(frm, [r for (r, _s) in tos], frm_sid,
+                           {r: s for (r, s) in tos if s})
+        conv = t.get("convs", {}).get(key)
+        if conv and conv.get("channelId"):
+            t.setdefault("byChan", {})[str(conv["channelId"])] = conv["num"]
+            # Issue 123: thread-archive bookkeeping — every reuse is activity.
+            conv["lastUsed"] = time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            save_threads(t)
+            return {"num": conv["num"], "channelId": conv["channelId"]}
+        # New conversation: the thread must start from a #general message —
+        # the caller passes that message id via the "@mid:<id> " marker.
+        m = re.match(r"^@mid:(\d{5,25})\s+(.*)$", text, re.DOTALL)
+        if not m:
+            return None
+        mid, topic = m.group(1), m.group(2)
+        num = int(t.get("nextThread", 1))
+        name = ("ac-%d %s" % (num, topic)).replace("\n", " ")[:90]
+        # issue 165: parent to #orchestration (THREAD_CHAN_ID), not #general.
+        # The starter message id (mid) still anchors the thread's origin —
+        # Discord requires the source message to live in the parent channel,
+        # so fall back to a plain thread in #orchestration when the starter is
+        # in #general (no message-with-thread creation possible cross-channel).
+        rc, resp = api("POST", f"/channels/{THREAD_CHAN_ID}/threads",
+                       body={"name": name, "auto_archive_duration": 60,
+                             "type": 11})
+        if rc not in (200, 201) or not resp.get("id"):
+            return None
+        conv = {"num": num, "channelId": str(resp["id"]), "name": name,
+                "topic": topic, "createdAt": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "lastUsed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        t.setdefault("convs", {})[key] = conv
+        t["byChan"][str(resp["id"])] = num
+        t["nextThread"] = num + 1
+        save_threads(t)
+        return {"num": num, "channelId": conv["channelId"]}
+    except Exception:
+        return None
+
+
+def _webhook_creds() -> tuple[str | None, str | None]:
+    """Issue 123 (reviewer-reviewed design): ONE shared orch-chat webhook in
+    #general — username/avatar are overridden PER MESSAGE, so per-agent
+    webhook objects are pointless. Credential lives in the Discord env file
+    (same protection class as the bot token), never in conversational state.
+    AGENTCHAT_WEBHOOK_ID / AGENTCHAT_WEBHOOK_TOKEN override for tests.
+    Returns (webhook_id, webhook_token) or (None, None) when not configured.
+    """
+    wid = os.environ.get("AGENTCHAT_WEBHOOK_ID", "")
+    wtok = os.environ.get("AGENTCHAT_WEBHOOK_TOKEN", "")
+    if wid and wtok:
+        return wid, wtok
+    try:
+        with open(DISCORD_ENV, "r", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("AGENTCHAT_WEBHOOK_ID="):
+                    wid = line.split("=", 1)[1].strip().strip('"').strip("'")
+                elif line.startswith("AGENTCHAT_WEBHOOK_TOKEN="):
+                    wtok = line.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return (wid, wtok) if wid and wtok else (None, None)
+
+
+WEBHOOK_UA = "orch-chat-webhook-identity (issue 123, openchamber)"
+
+
+def webhook_post(agent: str, content: str, channel_id: str | None = None,
+                 timeout: int = 15) -> str | None:
+    """Post `content` as the agent's display identity via the shared webhook.
+    Returns the message id, or None on ANY failure (caller falls back to the
+    bot-post path — delivery never depends on webhooks). allowed_mentions is
+    applied explicitly here (webhook payloads bypass the bot-path Mention
+    hygiene); the envelope text is UNCHANGED so relay parsing/dedupe/rate
+    logic is untouched."""
+    if not discord_enabled():
+        return None
+    wid, wtok = _webhook_creds()
+    if not wid or not wtok:
+        return None
+    body = {
+        # Discord display name: capitalized roster name (Buffy, Claude, reviewer,
+        # Openchamber, Codex) — cosmetic; the [from] envelope stays canonical.
+        "username": agent.capitalize(),
+        "content": content[:2000],
+        "allowed_mentions": {"parse": []},  # text-only mentions; no pings
+    }
+    # Live-learned (issue 123): `wait` and `thread_id` are QUERY parameters of
+    # webhook execution — putting them in the JSON body is silently ignored
+    # (204 empty -> no message id -> the bot fallback double-posted; thread
+    # copies landed in #general instead of the thread).
+    url = API + "/webhooks/%s/%s?wait=true" % (wid, wtok)
+    if channel_id:
+        url += "&thread_id=%s" % channel_id
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json",
+                     "User-Agent": WEBHOOK_UA, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            data = json.loads(raw) if raw else {}
+            return str(data.get("id")) if resp.status in (200, 201) and data.get("id") else None
+    except Exception:
+        return None
+
+
+def post_discord(frm: str, frm_sid: str | None, tos: list,
+                 text: str) -> tuple[str | None, int | None]:
+    """Post to #general (the starter) and, for known/new conversations, into
+    the conversation thread. Returns (message_id, thread_number).
+    Issue 123: prefers the agent-identity webhook path; bot-post is the
+    fallback. Conversation/thread bookkeeping identical either way.
+    Issue 776: tos entries are (role, sid|None); the envelope carries the
+    sid suffix so the relay routes explicitly."""
+    content = "[%s%s] %s %s" % (
+        frm, ("#" + frm_sid) if frm_sid else "",
+        " ".join("@%s%s" % (r, ("#" + s) if s else "") for (r, s) in tos), text)
+    # Fast path: identity webhook straight into #general (starter message).
+    mid = webhook_post(frm, content)
+    if not mid:
+        rc, resp = api("POST", f"/channels/{GENERAL_CHAN_ID}/messages",
+                       body={"content": content[:2000]})
+        mid = str(resp.get("id")) if rc == 200 and resp.get("id") else None
+    if not mid:
+        return None, None
+    with state_lock():
+        conv = ensure_thread(frm, frm_sid, tos, "@mid:%s %s" % (mid, text))
+    if not conv:
+        return mid, None
+    tcontent = "[%s%s] %s #t%d %s" % (
+        frm, ("#" + frm_sid) if frm_sid else "",
+        " ".join("@%s%s" % (r, ("#" + s) if s else "") for (r, s) in tos),
+        conv["num"], text)
+    tid = webhook_post(frm, tcontent, channel_id=conv["channelId"])
+    if not tid:
+        rc2, resp2 = api("POST", f"/channels/{conv['channelId']}/messages",
+                         body={"content": tcontent[:2000]})
+        tid = str(resp2.get("id")) if rc2 == 200 and resp2.get("id") else None
+        # Issue 123 (reviewer note: archive must mean DORMANT, not dead): a mapped
+        # thread archived by the janitor rejects posts — unarchive once and
+        # retry before giving up. threads.json entry is never deleted.
+        if not tid and rc2 in (403, 404):
+            api("PATCH", f"/channels/{conv['channelId']}",
+                body={"archived": False})
+            rc2, resp2 = api("POST", f"/channels/{conv['channelId']}/messages",
+                             body={"content": tcontent[:2000]})
+            tid = str(resp2.get("id")) if rc2 == 200 and resp2.get("id") else None
+    return (tid or mid), conv["num"]
+
+
+def check_rate(st: dict, frm: str) -> None:
+    """Enforce the 10/min send budget HERE.
+
+    The relay's limiter only sees inbound Discord traffic, and every CLI send
+    is bot-authored and therefore echo-skipped — so agent sends were entirely
+    unthrottled until this check. Caller must hold state_lock()."""
+    now = time.time()
+    entry = st.setdefault("agents", {}).setdefault(frm, {})
+    window = [t for t in (entry.get("sendWindow") or []) if now - t <= 60]
+    if len(window) >= RATE_LIMIT_PER_MIN:
+        entry["sendWindow"] = window
+        merge_save(st)
+        fail("rate limited: %s already sent %d messages in the last minute"
+             % (frm, len(window)), 4)
+    window.append(now)
+    entry["sendWindow"] = window
+
+
+def cmd_send(args) -> int:
+    frm: str | None = None
+    tos: list = []  # (role, sid|None) tuples, P776
+    text_parts = []
+    reply_to = None
+    force = False
+    run_arg = None
+    session_arg: str | None = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--from":
+            i += 1
+            frm = args[i].lower()
+        elif a == "--force":
+            force = True  # suppress the low-traffic nudge; delivery is unaffected
+        elif a == "--run":
+            i += 1
+            run_arg = int(args[i])  # issue 114: explicit run context for the label
+        elif a == "--session":
+            i += 1
+            session_arg = args[i].strip()
+        elif a.startswith("@"):
+            m = TO_TOKEN_RE.match(a[1:])
+            if not m:
+                fail("bad recipient token '%s' (want @role or @role#ses-...)" % a, 2)
+            tos.append((m.group("role"), m.group("sid")))
+        elif a == "--reply":
+            i += 1
+            reply_to = int(args[i])
+        else:
+            text_parts.append(a)
+        i += 1
+    frm = frm or os.environ.get("AGENTCHAT_AGENT", "").lower()
+    if not frm or frm not in AGENTS:
+        fail("unknown/missing sender '%s' (use --from <agent>)" % frm, 2)
+    if not tos:
+        fail("no recipient (@agent ...)", 2)
+    bad = sorted({r for (r, _s) in tos} - set(AGENTS))
+    if bad:
+        fail("unknown recipient(s): %s (known: %s)" % (",".join(bad), ",".join(AGENTS)), 2)
+    if any(r == frm for (r, _s) in tos):
+        fail("self-send rejected", 2)
+    # Issue 776 Phase C: session identity. The sender claim (--session/env) is
+    # fail-closed validated (correction #2); explicit session targets are
+    # validated BEFORE the Discord post so a bad or closed target never burns
+    # a delivery that would then need manual replay.
+    claim_sid = session_arg or os.environ.get("AGENTCHAT_SESSION", "").strip() or None
+    if claim_sid:
+        resolve_claim(claim_sid, frm)
+    ses_data = acs.load_sessions()
+    for r, sid in tos:
+        if not sid:
+            continue
+        trec = acs.get(ses_data.get("sessions") or {}, sid)
+        if trec is None or trec.get("role") != r:
+            fail("session '%s' is not registered for role '%s' (check @%s#ses-...)" % (sid, r, r), 2)
+        if trec.get("state") == "CLOSED":
+            fail("session '%s' is CLOSED — mail there deadletters; open a new session" % sid, 2)
+    for r in sorted({r for (r, _s) in tos}):
+        if r in LOW_TRAFFIC and not force:
+            print("orch-chat: " + LOW_TRAFFIC[r], file=sys.stderr)
+    text = " ".join(text_parts).strip()
+    if not text:
+        fail("empty text", 2)
+    if len(text) > MAX_TEXT:
+        fail("text too long (>%d)" % MAX_TEXT, 2)
+    if "@everyone" in text or "@here" in text:
+        fail("mass mentions rejected (relay deadletters them anyway)", 2)
+    run_number = None
+    if run_arg is not None:
+        run_number = run_arg          # explicit --run flag
+    else:
+        text, run_number = office.extract_run(text)  # trailing #r<NNN> token
+    if reply_to is not None:
+        text = "(re:#%d) %s" % (reply_to, text)
+    with state_lock():
+        st = load_state()
+        check_rate(st, frm)  # budget is spent BEFORE the network call
+        merge_save(st)
+    if claim_sid:
+        with state_lock():
+            data = acs.load_sessions()
+            acs.touch(data, claim_sid)
+            acs.save_sessions(data)
+    discord_id, thread_number = post_discord(frm, claim_sid, tos, text)
+    with state_lock():
+        st = load_state()
+        rec = deliver_local(st, frm, claim_sid, tos, text, reply_to, "agent",
+                            discord_id, run_number, thread_number=thread_number)
+        merge_save(st)
+    stamp_activity(frm, "send")
+    # Issue 114/118: office pulse + walk AFTER delivery commits — fail-open,
+    # never blocks the send. The sender lights up and walks to each addressee
+    # (walks are event-driven; persistent seats are configured).
+    office.pulse(frm, text, run_number=run_number,
+                 dedupe_id=("cli-%d" % rec["id"]), state_dir=STATE_DIR,
+                 thread_number=thread_number)
+    for r in sorted({r for (r, _s) in tos}):
+        office.walk_to(frm, r, run_number=run_number)
+    if discord_id:
+        note = ""
+    elif discord_enabled():
+        note = " (WARNING: discord post failed; delivered to inboxes only)"
+    else:
+        note = " (local only; Discord delivery not configured)"
+    print("sent id=%d [%s%s] -> %s%s" % (
+        rec["id"], frm, ("#" + claim_sid) if claim_sid else "",
+        ",".join("@%s%s" % (r, ("#" + s) if s else "") for (r, s) in tos), note))
+    return 0
+
+
+def _session_mail(label: str, agent: str, sid: str | None, show_all: bool,
+                  advance: bool) -> int:
+    """Session-mail branch of `inbox --session` / `peek --session` (P776).
+    Reads the per-session mailbox with the PER-SESSION cursor (role cursors
+    untouched). CLOSED sessions stay readable — delivery stops, mail is
+    preserved (reviewer note: IDLE-but-resumable durable semantics)."""
+    sdata = acs.load_sessions()
+    rec = acs.get(sdata.get("sessions") or {}, sid) if sid else None
+    if sid and rec is None:
+        fail("unknown session '%s' (run: orch-chat register --from %s)" % (sid, agent), 2)
+    if sid and rec.get("role") != agent:
+        fail("session '%s' does not belong to role '%s' (owned by '%s')"
+             % (sid, agent, rec.get("role")), 2)
+    recs = acs.session_records(sid)
+    cur = sdata.get("cursors", {}).get(sid) or 0
+    shown = [m for m in recs if show_all or int(m.get("id") or 0) > cur]
+    if not shown:
+        print("%s session %s: 0 unread" % (label, sid))
+        if not advance:
+            print("peek session %s: 0 unread (unread state unchanged)" % sid)
+        return 0
+    for m in shown:
+        print("#%d [%s%s -> %s] %s" % (
+            m["id"], m.get("from", "?"),
+            ("#" + m["fromSession"]) if m.get("fromSession") else "",
+            agent, m.get("text", "")))
+        print("   to=%s%s origin=%s at=%s discord=%s" % (
+            ",".join(m.get("to") or []),
+            ("#" + m["toSession"]) if m.get("toSession") else "",
+            m.get("origin"), m.get("createdAt"),
+            m.get("discordMessageId") or "-"))
+    stamp_activity(agent, "inbox")
+    if advance and not show_all:
+        with state_lock():
+            sdata = acs.load_sessions()
+            acs.advance_cursor(sdata, sid, shown[-1]["id"])
+            acs.touch(sdata, sid)
+            acs.save_sessions(sdata)
+    if not advance:
+        print("peek session %s: %d unread (unread state unchanged)"
+              % (sid, len(shown)))
+    return 0
+
+
+def cmd_inbox(args) -> int:
+    agent = None
+    show_all = False
+    session_id: str | None = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--agent":
+            i += 1
+            agent = args[i].lower()
+        elif args[i] == "--session":
+            i += 1
+            session_id = args[i].strip()
+        elif args[i] == "--all":
+            show_all = True
+        i += 1
+    agent = agent or os.environ.get("AGENTCHAT_AGENT", "").lower()
+    if agent not in AGENTS:
+        fail("unknown agent '%s'" % agent, 2)
+    # AGENTCHAT_SESSION env auto-binds when the named session belongs to the
+    # resolved role; a foreign env claim is IGNORED with a note (fail-open for
+    # legacy plain `inbox --agent <role>` workflows — recovery doesn't break).
+    if session_id is None:
+        env_sid = os.environ.get("AGENTCHAT_SESSION", "").strip()
+        if env_sid:
+            env_rec = acs.get(acs.load_sessions().get("sessions") or {}, env_sid)
+            if env_rec and env_rec.get("role") == agent:
+                session_id = env_sid
+            elif env_rec:
+                print("orch-chat: AGENTCHAT_SESSION=%s does not belong to %s; ignoring"
+                      % (env_sid, agent), file=sys.stderr)
+    if session_id:
+        return _session_mail("inbox", agent, session_id, show_all, True)
+    path = os.path.join(INBOX_DIR, agent + ".jsonl")
+    st = load_state()
+    last_read = st["agents"].get(agent, {}).get("lastReadId", 0)
+    msgs = []
+    if os.path.exists(path):
+        for line in open(path, "r", encoding="utf-8"):
+            try:
+                msgs.append(json.loads(line))
+            except Exception:
+                pass
+    shown = [m for m in msgs if show_all or m["id"] > last_read]
+    if not shown:
+        print("inbox %s: 0 unread" % agent)
+        return 0
+    for m in shown:
+        print("#%d [%s -> you] %s" % (m["id"], m["from"], m["text"]))
+        print("   to=%s origin=%s at=%s discord=%s" %
+              (",".join(m["to"]), m.get("origin"), m.get("createdAt"),
+               m.get("discordMessageId") or "-"))
+    stamp_activity(agent, "inbox")
+    if not show_all:
+        with state_lock():
+            st = load_state()
+            st["agents"].setdefault(agent, {})
+            st["agents"][agent]["lastReadId"] = shown[-1]["id"]
+            merge_save(st)
+    return 0
+
+
+def cmd_peek(args) -> int:
+    """Read-only view of unread messages. Never advances lastReadId."""
+    agent = None
+    session_id: str | None = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--agent":
+            i += 1
+            agent = args[i].lower()
+        elif args[i] == "--session":
+            i += 1
+            session_id = args[i].strip()
+        i += 1
+    agent = agent or os.environ.get("AGENTCHAT_AGENT", "").lower()
+    if agent not in AGENTS:
+        fail("unknown agent '%s'" % agent, 2)
+    if session_id:
+        return _session_mail("peek", agent, session_id, False, False)
+    path = os.path.join(INBOX_DIR, agent + ".jsonl")
+    st = load_state()
+    last_read = st["agents"].get(agent, {}).get("lastReadId", 0)
+    msgs = []
+    if os.path.exists(path):
+        for line in open(path, "r", encoding="utf-8"):
+            try:
+                msgs.append(json.loads(line))
+            except Exception:
+                pass
+    shown = [m for m in msgs if m["id"] > last_read]
+    if not shown:
+        print("peek %s: 0 unread" % agent)
+        return 0
+    for m in shown:
+        print("#%d [%s -> you] %s" % (m["id"], m["from"], m["text"]))
+        print("   to=%s origin=%s at=%s discord=%s" %
+              (",".join(m["to"]), m.get("origin"), m.get("createdAt"),
+               m.get("discordMessageId") or "-"))
+    stamp_activity(agent, "peek")
+    print("peek %s: %d unread (unread state unchanged)" % (agent, len(shown)))
+    return 0
+
+
+def cmd_reply(args) -> int:
+    if len(args) < 2:
+        fail("usage: orch-chat reply [--from role] [--session ses-x] <id> <text...>", 2)
+    frm = None
+    claim: str | None = None
+    rest = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--from":
+            i += 1
+            frm = args[i].lower()
+        elif a == "--session":
+            i += 1
+            claim = args[i].strip()
+        else:
+            rest.append(a)
+        i += 1
+    if not rest or not rest[0].isdigit():
+        fail("usage: orch-chat reply [--from role] [--session ses-x] <id> <text...>", 2)
+    mid = int(rest[0])
+    orig = find_message(load_state(), mid)
+    if orig is None:
+        fail("no message #%d" % mid, 3)
+    frm = frm or os.environ.get("AGENTCHAT_AGENT", "").lower()
+    if frm not in AGENTS:
+        fail("set --from or AGENTCHAT_AGENT", 2)
+    # Issue 776 reply routing (correction #3, durable conversation ids):
+    # an original carrying fromSession routes back to THAT session explicitly
+    # when it exists for the sender role and is ACTIVE; anything else keeps
+    # the legacy role-to-role reply. The replier's own session claim
+    # (--session/env) gives the reply its from#sid identity.
+    sessions_data = acs.load_sessions()
+    f_ses = orig.get("fromSession")
+    f_rec = acs.get(sessions_data.get("sessions") or {}, f_ses) if f_ses else None
+    if f_ses and acs.is_active(f_rec) and f_rec.get("role") == orig.get("from"):
+        tos = [(orig["from"], f_ses)]
+    else:
+        tos = [((orig.get("from") or ""), None)] \
+            if orig.get("from") != frm else \
+            [(t, None) for t in orig.get("to") or [] if t != frm]
+    if not tos or not all(t[0] for t in tos):
+        fail("cannot derive reply target", 2)
+    if claim is None:
+        claim = os.environ.get("AGENTCHAT_SESSION", "").strip() or None
+    argv = ["--from", frm, "--reply", str(mid)] + (["--session", claim] if claim else [])
+    return cmd_send(argv +
+                    ["@%s%s" % (r, ("#" + s) if s else "") for (r, s) in tos] +
+                    rest[1:])
+
+
+def cmd_register(args) -> int:
+    """Issue 776: create/renew a session binding for a role. Caller-supplied
+    sids must match ses-[a-z0-9-]{4,48}; CLOSED sids are terminal (reviewer note:
+    closed never resurrects — choose a new sid, or pass --resume to reopen it
+    deliberately; P0 §4.7 makes reopening explicit and recorded)."""
+    frm = None
+    sid = None
+    parent_run = None
+    surface = None
+    resume = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--from":
+            i += 1
+            frm = args[i].lower()
+        elif a == "--session":
+            i += 1
+            sid = args[i].strip()
+        elif a == "--parent-run":
+            i += 1
+            parent_run = str(args[i])
+        elif a == "--surface":
+            i += 1
+            surface = str(args[i])
+        elif a == "--resume":
+            resume = True
+        else:
+            fail("unknown register flag '%s'" % a, 2)
+        i += 1
+    frm = frm or os.environ.get("AGENTCHAT_AGENT", "").lower()
+    if frm not in AGENTS:
+        fail("unknown role '%s' (use --from <agent>)" % frm, 2)
+    with state_lock():
+        data = acs.load_sessions()
+        if sid:
+            prev = acs.get(data.get("sessions") or {}, sid)
+            if prev and prev.get("role") != frm:
+                fail("session '%s' belongs to role '%s'" % (sid, prev.get("role")), 2)
+            if prev and prev.get("state") == "CLOSED" and not resume:
+                fail("session '%s' is CLOSED (terminal) — choose a new sid, or "
+                     "pass --resume to reopen it deliberately" % sid, 2)
+        try:
+            rec = acs.register(data, frm, sid, parent_run, surface, resume=resume)
+        except ValueError as e:
+            fail(str(e), 2)
+        if resume and rec.get("resumeCount"):
+            print("session %s REOPENED (resume #%d)" % (rec["sid"], rec["resumeCount"]))
+        acs.save_sessions(data)
+    stamp_activity(frm, "register")
+    print("session %s registered/renewed for %s (state=%s)"
+          % (rec["sid"], frm, rec["state"]))
+    print("export AGENTCHAT_SESSION=%s   # binds session identity on send/reply/inbox/peek"
+          % rec["sid"])
+    return 0
+
+
+def cmd_sessions(args) -> int:
+    """List session bindings with per-session unread counts (--role filter,
+    --json for callers, --all includes CLOSED/terminal rows)."""
+    role_filter = None
+    as_json = False
+    show_all = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--role":
+            i += 1
+            role_filter = args[i].lower()
+        elif a == "--json":
+            as_json = True
+        elif a == "--all":
+            show_all = True
+        else:
+            fail("unknown sessions flag '%s'" % a, 2)
+        i += 1
+    if role_filter and role_filter not in AGENTS:
+        fail("unknown role '%s'" % role_filter, 2)
+    data = acs.load_sessions()
+    out = []
+    for sid in sorted(data.get("sessions") or {}):
+        rec = dict(data["sessions"][sid])
+        if role_filter and rec.get("role") != role_filter:
+            continue
+        if not show_all and rec.get("state") == "CLOSED":
+            continue
+        rec["unread"] = len(acs.session_unread(data, sid))
+        out.append(rec)
+    if as_json:
+        print(json.dumps(out, sort_keys=True))
+        return 0
+    if not out:
+        print("sessions: none%s" % ((" for %s" % role_filter) if role_filter else ""))
+        return 0
+    print("sid                     role        state    unread  lastSeen            surface")
+    for rec in out:
+        print("%-23s %-11s %-8s %6d  %-19s %s" % (
+            rec.get("sid"), rec.get("role"), rec.get("state"),
+            rec.get("unread", 0), rec.get("lastSeenAt"),
+            rec.get("surface") or "-"))
+    return 0
+
+
+def consult_lane_busy() -> tuple[bool, str]:
+    if not os.path.exists(LOCK_PATH):
+        return False, "no lock"
+    try:
+        pid = int(open(LOCK_PATH).read().strip())
+    except Exception:
+        return True, "unparseable lock (treat busy)"
+    try:
+        with open("/proc/%d/stat" % pid) as fh:
+            state = fh.read().rsplit(")", 1)[1].split()[0]
+        with open("/proc/%d/cmdline" % pid, "rb") as fh:
+            cmdline = fh.read().decode("utf-8", "replace").strip("\0")
+    except FileNotFoundError:
+        return False, "lock pid %d gone" % pid
+    if state in ("Z",) or "X" in state or not cmdline:
+        return False, "lock pid %d zombie/empty (not live)" % pid
+    return True, "live coordinator pid %d" % pid
+
+
+def cmd_dispatch_sol(args) -> int:
+    launch = "--launch" in args
+    ids = [int(a) for a in args if a.isdigit()]
+    if not ids:
+        fail("usage: orch-chat dispatch-sol <message-id> [--launch]", 2)
+    mid = ids[0]
+    st = load_state()
+    msg = find_message(st, mid)
+    if msg is None or "sol" not in msg.get("to", []):
+        fail("message #%d is not an @sol message" % mid, 3)
+    prev = st.get("solDispatch", {}).get(str(mid))
+    if prev and prev.get("status") in ("launched", "done"):
+        print("message #%d already %s" % (mid, prev["status"]))
+        return 0
+    busy, why = consult_lane_busy()
+    if busy:
+        print("BUSY (%s) — message #%d left queued; retry dispatch-sol later" % (why, mid))
+        return 23
+    os.makedirs(WS_TMP, exist_ok=True)
+    case_path = os.path.join(WS_TMP, "sol-chat-%d.md" % mid)
+    with open(case_path, "w", encoding="utf-8") as fh:
+        fh.write("# reviewer chat question #%d (from @%s via Discord #general)\n\n%s\n\n"
+                 "(Dispatched via orch-chat dispatch-sol issue 108. Answer must be "
+                 "relayed back to Discord #general as [sol] @%s <answer>.)\n"
+                 % (mid, msg["from"], msg["text"], msg["from"]))
+    st.setdefault("solDispatch", {})[str(mid)] = {
+        "status": "launched", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "case": case_path}
+    with state_lock():
+        st = load_state()
+        st.setdefault("solDispatch", {})[str(mid)] = {
+            "status": "launched", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "case": case_path}
+        merge_save(st)
+    inner = ("cd /workspace/work/orchestration && setsid bash -c "
+             "'nohup bun orchestrate.mjs consult \"reviewer chat question #%d from @%s "
+             "via Discord #general (orch-chat dispatch-sol): answer inline, no tools "
+             "needed; full question in the attachment.\" --open tmp/sol-chat-%d.md "
+             "> tmp/sol-chat-%d.out 2>&1 &'"
+             % (mid, msg["from"], mid, mid))
+    container = os.environ.get("AGENTCHAT_SSH_CONTAINER", "orchestration")
+    cmd = "docker exec %s bash -c %s" % (container, json.dumps(inner))
+    if launch:
+        rc = os.system(cmd + " >/dev/null 2>&1")
+        print("launched consult for #%d (docker exec rc=%d); poll "
+              "tmp/sol-chat-%d.out" % (mid, rc >> 8, mid))
+    else:
+        print("lane free (%s). Launch with:\n  %s" % (why, cmd))
+    return 0
+
+
+def cmd_status(args) -> int:
+    st = load_state()
+    print("orch-chat state: nextId=%d cursor(lastDiscordId)=%s" %
+          (st["nextId"], st.get("lastDiscordId")))
+    for a in AGENTS:
+        info = st["agents"].get(a, {})
+        p = os.path.join(INBOX_DIR, a + ".jsonl")
+        # Count actual unread RECORDS. The old "lines - lastReadId" arithmetic
+        # mixed a count with a global id and reported nonsense on every inbox.
+        last_read = info.get("lastReadId") or 0
+        total = unread = 0
+        if os.path.exists(p):
+            for line in open(p, "r", encoding="utf-8"):
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                total += 1
+                if rec.get("id", 0) > last_read:
+                    unread += 1
+        tag = "  [low-traffic]" if a in LOW_TRAFFIC else ""
+        print("  %-12s delivered<=%d read<=%d total=%d unread=%d%s" %
+              (a, info.get("lastDeliveredId") or 0, last_read, total, unread, tag))
+    try:
+        with open(os.path.join(STATE_DIR, "presence.json")) as fh:
+            presence = json.load(fh)
+    except Exception:
+        presence = {}
+    for a in AGENTS:
+        p = presence.get(a) or {}
+        if p.get("lastSeen"):
+            try:
+                age = int(time.time() - float(p["lastSeen"]))
+            except Exception:
+                age = -1
+            print("      presence-part %s: %s age=%ss" % (a, p.get("status", "?"), age))
+    dl = os.path.join(STATE_DIR, "deadletter.jsonl")
+    n = sum(1 for _ in open(dl)) if os.path.exists(dl) else 0
+    print("  deadletter: %d" % n)
+    busy, why = consult_lane_busy()
+    print("  consult lane: %s (%s)" % ("BUSY" if busy else "FREE", why))
+    try:
+        sdata = acs.load_sessions()
+        ses = sdata.get("sessions") or {}
+    except Exception:
+        ses = {}
+    if ses:
+        print("  sessions:")
+        for sid in sorted(ses):
+            rec = ses[sid]
+            try:
+                un = len(acs.session_unread(sdata, sid))
+            except Exception:
+                un = -1
+            print("    %-23s %-11s %-8s unread=%d lastSeen=%s" % (
+                sid, rec.get("role"), rec.get("state"), un,
+                rec.get("lastSeenAt")))
+    return 0
+
+
+def load_observations(agent: str) -> float:
+    """Newest CLI-observed activity timestamp for `agent` (fail-open)."""
+    hi = 0.0
+    try:
+        with open(OBSERVED_PATH, "r", encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("agent") == agent:
+                    try:
+                        hi = max(hi, float(rec.get("ts") or 0))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return hi
+
+
+def cmd_presence(args) -> int:
+    """Who is active right now (operator directive 2026-10-19).
+
+    Merges activity the presence daemon folded (OpenChamber runtime/plugin
+    sessions, presence.json) with direct CLI usage evidence
+    (presence-observed.jsonl). working = evidence within 5 minutes,
+    idle = within 2 hours, off = older/never observed."""
+    as_json = "--json" in args
+    try:
+        with open(os.path.join(STATE_DIR, "presence.json")) as fh:
+            presence = dict(json.load(fh))
+    except Exception:
+        presence = {}
+    result = {}
+    for a in AGENTS:
+        cli_seen = load_observations(a)
+        entry = presence.get(a) or {}
+        try:
+            src_seen = float(entry.get("lastSeen") or 0)
+        except Exception:
+            src_seen = 0.0
+        seen = max(cli_seen, src_seen)
+        if not seen:
+            result[a] = {"status": "off", "lastSeen": 0, "age": None, "via": "-"}
+            continue
+        age = int(time.time() - seen)
+        status = "working" if age <= 300 else ("idle" if age <= 7200 else "off")
+        via = "chat-cli" if cli_seen >= src_seen else (entry.get("via") or "-")
+        result[a] = {"status": status, "lastSeen": seen, "age": age, "via": via}
+    if as_json:
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    print("orch-chat presence (working = active within 5 min):")
+    for label in ("working", "idle", "off"):
+        group = [a for a in AGENTS if result[a]["status"] == label]
+        if label == "off" and len(group) > 8:
+            print("  off (%d identities): %s ..." % (len(group), ", ".join(group[:8])))
+            continue
+        for a in group:
+            e = result[a]
+            age_s = ("%ds ago" % e["age"]) if e["age"] is not None else "-"
+            print("  %-7s %-14s last seen %s (via %s)" % (label, a, age_s, e["via"]))
+    if not any(result[a]["status"] != "off" for a in AGENTS):
+        print("  (no activity observed yet - evidence arrives from CLI usage, OpenChamber runtime runs and plugin heartbeats)")
+    return 0
+
+
+def main() -> int:
+    try:
+        return _dispatch(sys.argv[1:])
+    except (StateCorruptError, acs.SessionsCorruptError) as exc:
+        # Durable state or the session registry is unreadable. Refuse loudly
+        # instead of overwriting recoverable history with a fresh default.
+        print("orch-chat: " + str(exc), file=sys.stderr)
+        return 3
+
+
+def _dispatch(argv: list) -> int:
+    if not argv:
+        fail("usage: orch-chat <send|inbox|peek|reply|register|sessions|"
+             "dispatch-sol|presence|status> ...", 2)
+    cmd, args = argv[0], argv[1:]
+    os.makedirs(INBOX_DIR, exist_ok=True)
+    if cmd == "presence":
+        return cmd_presence(args)
+    if cmd == "send":
+        return cmd_send(args)
+    if cmd == "inbox":
+        return cmd_inbox(args)
+    if cmd == "peek":
+        return cmd_peek(args)
+    if cmd == "reply":
+        return cmd_reply(args)
+    if cmd == "register":
+        return cmd_register(args)
+    if cmd == "sessions":
+        return cmd_sessions(args)
+    if cmd == "dispatch-sol":
+        return cmd_dispatch_sol(args)
+    if cmd == "status":
+        return cmd_status(args)
+    fail("unknown command '%s' (try: send inbox peek reply register sessions dispatch-sol presence status)" % cmd, 2)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

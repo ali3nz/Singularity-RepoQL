@@ -18,6 +18,8 @@ for f in memory/upstream/*.sh scripts/*.sh ghost/*.sh tests/*.sh; do check bash 
 
 step "python syntax"
 for f in scripts/*.py; do check python3 -m py_compile "$f"; done
+# The CLI ships without a .py suffix, so the glob above never reaches it.
+check python3 -m py_compile scripts/orch-chat
 rm -rf scripts/__pycache__ 2>/dev/null || true
 
 step "node syntax"
@@ -54,6 +56,8 @@ check node --test ghost/gateway-backend.test.mjs
 check python3 tests/test-memory-security.py
 check python3 tests/test-memory-promote.py
 check python3 tests/test-memory-doc-ingest.py
+check python3 tests/test-orch-chat-sessions.py
+check python3 tests/test-orch-chat.py
 for f in openchamber/plugins/product-office/*.test.mjs \
          openchamber/plugins/runbook-nudge/*.test.mjs; do check node --test "$f"; done
 
