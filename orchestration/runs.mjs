@@ -261,15 +261,21 @@ export function accept(store, runId, { approver, actor = "coordinator", owner = 
     // the approver who actually accepted: a different seat must not be able to
     // claim credit for (or silently re-run) someone else's acceptance.
     if (run.stage === "done" && run.status === "accepted") {
-      const acceptedBy =
-        run.acceptedBy ??
-        (run.evidence ?? []).filter((e) => e.kind === "approval").map((e) => e.meta?.approver).filter(Boolean).pop() ??
-        null;
-      if (acceptedBy !== seat.id) {
+      // Only a recorded attribution counts. Older runs (pre-rc13) have no
+      // acceptedBy, and guessing the seat from the evidence pack would credit
+      // an approver who may never have run acceptance.
+      if (!run.acceptedBy) {
         return {
           ok: false,
           run,
-          reason: `run was accepted by ${acceptedBy ?? "an unrecorded approver"}; '${seat.id}' cannot replay that acceptance`,
+          reason: "run was accepted before acceptance attribution was recorded; the accepting seat cannot be verified",
+        };
+      }
+      if (run.acceptedBy !== seat.id) {
+        return {
+          ok: false,
+          run,
+          reason: `run was accepted by ${run.acceptedBy}; '${seat.id}' cannot replay that acceptance`,
         };
       }
       return { ok: true, run, applied: false, reason: "acceptance already recorded" };

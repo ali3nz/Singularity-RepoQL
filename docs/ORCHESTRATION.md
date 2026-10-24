@@ -71,7 +71,9 @@ writes nothing — including a replay against a run that has since gone terminal
 Pass the key with `advance --idempotency-key <key>` when a caller may retry. A
 key names one operation: reusing it for a different destination is refused as a
 collision, never reported as success. Repeating `accept` with the approver who
-accepted is also a no-op; another seat replaying that acceptance is refused.
+accepted is also a no-op; another seat replaying that acceptance is refused, and
+a run accepted before attribution was recorded is refused rather than credited
+to a guessed seat.
 
 A stage is never marked complete by a timer, a process exit or a retry. A run
 that was in flight when its process died is marked `interrupted` and blocks:

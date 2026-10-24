@@ -752,14 +752,34 @@ test("replaying accept is a no-op for the original approver only", () => {
   assert.equal(accepted.ok, true, accepted.reason);
   assert.equal(accepted.run.acceptedBy, "r1");
 
+  // The attribution is durable, not just on the returned object.
+  assert.equal(getRun(store, run.id).acceptedBy, "r1");
+  const beforeReplay = JSON.stringify(getRun(store, run.id));
   const replay = accept(store, run.id, { approver: "r1" });
   assert.equal(replay.ok, true);
   assert.equal(replay.applied, false, "a retried acceptance must not rewrite the run");
   assert.match(replay.reason, /already recorded/);
+  assert.equal(JSON.stringify(getRun(store, run.id)), beforeReplay, "a replay must not write state");
   assert.equal(getRun(store, run.id).status, "accepted");
 
   const hijack = accept(store, run.id, { approver: "r2" });
   assert.equal(hijack.ok, false);
   assert.match(hijack.reason, /was accepted by r1/);
   assert.equal(health(getRun(store, run.id)).state, "COMPLETE");
+});
+
+test("an acceptance without recorded attribution is not replayed by guesswork", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "legacy acceptance", mode: "solo", revision: "rev-a" });
+  const reviewer = reviewerSeat(run);
+  walkToReview(store, run.id, [], reviewer);
+  approve(store, run.id, { approver: reviewer });
+  // Reach done without accept(): no acceptedBy is recorded, as in rc11/rc12.
+  assert.equal(transition(store, run.id, { to: "accept", role: "reviewer" }).ok, true);
+  assert.equal(transition(store, run.id, { to: "done", role: "coordinator" }).ok, true);
+  assert.equal(getRun(store, run.id).acceptedBy, undefined);
+
+  const replay = accept(store, run.id, { approver: reviewer });
+  assert.equal(replay.ok, false);
+  assert.match(replay.reason, /cannot be verified/);
 });

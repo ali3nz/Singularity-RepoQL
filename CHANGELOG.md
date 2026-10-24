@@ -4,6 +4,25 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc14] - 2026-10-24
+
+Sixth review round. A review of rc13 confirmed both idempotency fixes and asked
+for durable attribution and write-free retries to be proved, and for the legacy
+fallback not to guess. rc13 is superseded.
+
+### Fixed
+- **Acceptance attribution was not proved durable.** The regression test now
+  reads `acceptedBy` back from the store and asserts the persisted run is
+  byte-identical across a same-seat retry.
+- **Legacy attribution guessed.** A run accepted before `acceptedBy` existed was
+  attributed from the newest approval evidence, which need not name the seat
+  that accepted. Such runs are now refused with an explicit "cannot be verified"
+  reason instead of being credited to a likely seat.
+
+### Added
+- Regression test for a run accepted without attribution; 67 Node subtests and
+  the messaging suite.
+
 ## [0.1.0-rc13] - 2026-10-24
 
 Fifth review round. A review of rc12 confirmed the failure-status, provenance,
