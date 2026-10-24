@@ -4,6 +4,43 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc12] - 2026-10-24
+
+Fourth review round. A review of rc11 found that failed transitions still
+persisted a running status, approval provenance was back-dated, revision
+binding was incomplete, owner tokens did not reach `accept`, and replay
+ordering still refused a terminal replay. rc11 is superseded.
+
+### Fixed
+- **A failed stage persisted `status: running`.** `implement -> failed` and
+  `correct -> failed` now record `status: failed`, so `health` reports `FAILED`
+  instead of treating a dead run as live work.
+- **Approval evidence was stamped with a stage it was not produced in.** An
+  approval minted during `review` was recorded as `accept` evidence. The
+  artifact now carries the stage it was actually minted in, and acceptance
+  accepts an approval from `review` or `accept` in the current cycle.
+- **A run could be accepted without a source revision.** `approve` now requires
+  the run's recorded revision, and acceptance refuses evidence labelled with a
+  different revision.
+- **The named approver was not the one checked.** `accept --approver A` could
+  slip through on another seat's still-valid approval after A's had expired.
+  Acceptance now validates only the named approver's records.
+- **`accept` could not complete a claimed stage.** It now accepts and forwards
+  `--owner`, and `status --json` redacts the owner token instead of publishing
+  the capability in machine-readable output.
+- **Replay against a terminal run was refused.** Idempotency is now decided
+  before every other guard, and `advance --idempotency-key <key>` exposes the
+  contract to callers.
+- **A corrupt lease file crashed the lease reader.** The reader now refuses a
+  non-object lease map with `StateCorruptError` and preserves the bytes instead
+  of attempting to rewrite it.
+
+### Added
+- Regression tests for both failure transitions, approval stage provenance,
+  missing and mixed revisions, named-approver expiry, owner propagation through
+  `accept`, owner redaction in JSON, explicit idempotency keys, and corrupt
+  lease handling. 64 Node subtests and the messaging suite.
+
 ## [0.1.0-rc11] - 2026-10-24
 
 Third review round. A review of rc10 found that the new no-write-on-refusal rule

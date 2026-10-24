@@ -480,7 +480,7 @@ test("health distinguishes stuck from complete and flags accepted evidence that 
   const file = path.join(dir, "proof.txt");
   fs.writeFileSync(file, "proof\n");
   const store = openRunStore(tmp());
-  const created = createRun(store, { task: "tamper detection", mode: "solo" });
+  const created = createRun(store, { task: "tamper detection", mode: "solo", revision: "rev-a" });
   const reviewer = reviewerSeat(created);
   walkToReview(store, created.id, [evidenceFromFile({ kind: "log", producer: "worker-1", file })], reviewer);
   approve(store, created.id, { approver: reviewer });
@@ -608,4 +608,108 @@ test("pack identity covers the stage and cycle the evidence belongs to", () => {
 
 test("stage list is exactly the documented workflow", () => {
   assert.deepEqual(STAGES, ["plan", "implement", "validate", "review", "correct", "accept"]);
+});
+
+test("a failed transition persists failed status, so health never reports it running", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "worker crashed", mode: "solo", revision: "rev-a" });
+  addEvidence(store, run.id, [PLAN()]);
+  transition(store, run.id, { to: "implement", role: "coordinator" });
+  addEvidence(store, run.id, [DIFF()]);
+  const failed = transition(store, run.id, { to: "failed", role: "coordinator", reason: "worker died" });
+  assert.equal(failed.ok, true, failed.reason);
+  const persisted = getRun(store, run.id);
+  assert.equal(persisted.stage, "failed");
+  assert.equal(persisted.status, "failed", "a failed stage is not a running run");
+  assert.equal(health(persisted).state, "FAILED");
+
+  // The correction path can fail too, and must record the same status.
+  const second = createRun(store, { task: "correction failed", mode: "solo", revision: "rev-a" });
+  walkToReview(store, second.id, [], reviewerSeat(second));
+  transition(store, second.id, { to: "correct", role: "reviewer" });
+  addEvidence(store, second.id, [DIFF()]);
+  addEvidence(store, second.id, [evidenceEntry({ kind: "test-output", producer: "worker-1", content: "still broken", meta: {} })]);
+  const corrected = getRun(store, second.id);
+  const failure = transition(store, corrected.id, { to: "failed", role: "coordinator", reason: "budget spent" });
+  assert.equal(failure.ok, true, failure.reason);
+  assert.equal(getRun(store, corrected.id).status, "failed");
+  assert.equal(health(getRun(store, corrected.id)).state, "FAILED");
+});
+
+test("an approval records the stage it was minted in, never a later one", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "provenance", mode: "solo", revision: "rev-a" });
+  walkToReview(store, run.id, [], reviewerSeat(run));
+  approve(store, run.id, { approver: reviewerSeat(run) });
+
+  const reviewApproval = getRun(store, run.id).evidence.filter((e) => e.kind === "approval");
+  assert.equal(reviewApproval.length, 1);
+  assert.equal(reviewApproval[0].stage, "review", "an approval minted during review is review evidence");
+
+  const accepted = accept(store, run.id, { approver: reviewerSeat(run) });
+  assert.equal(accepted.ok, true, accepted.reason);
+
+  // Minted during accept, the same artifact must say so.
+  const second = createRun(store, { task: "accept-stage approval", mode: "solo", revision: "rev-a" });
+  walkToReview(store, second.id, [], reviewerSeat(second));
+  assert.equal(transition(store, second.id, { to: "accept", role: "reviewer" }).ok, true);
+  approve(store, second.id, { approver: reviewerSeat(second) });
+  const acceptApproval = getRun(store, second.id).evidence.filter((e) => e.kind === "approval");
+  assert.equal(acceptApproval[0].stage, "accept");
+});
+
+test("a run without a source revision cannot be approved", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "unbound revision", mode: "solo" });
+  walkToReview(store, run.id, [], reviewerSeat(run));
+  assert.throws(() => approve(store, run.id, { approver: reviewerSeat(run) }), /no recorded source revision/);
+  const gate = acceptanceCheck(getRun(store, run.id));
+  assert.equal(gate.ok, false);
+  assert.ok(gate.reasons.some((r) => /cannot be bound/.test(r)), gate.reasons.join("; "));
+});
+
+test("evidence from another revision is not accepted as the reviewed tree", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "mixed revisions", mode: "solo", revision: "rev-a" });
+  walkToReview(store, run.id, [evidenceEntry({ kind: "note", producer: "worker-1", content: "from a different checkout", revision: "rev-b" })], reviewerSeat(run));
+  approve(store, run.id, { approver: reviewerSeat(run) });
+  const gate = acceptanceCheck(getRun(store, run.id));
+  assert.equal(gate.ok, false);
+  assert.ok(gate.reasons.some((r) => /evidence recorded at another revision: rev-b/.test(r)), gate.reasons.join("; "));
+});
+
+test("accepting names one approver; another seat's valid record cannot rescue it", () => {
+  const T = 1_700_000_000_000;
+  const store = openRunStore(tmp());
+  const seats = [
+    { role: "coordinator", id: "c1" },
+    { role: "worker", id: "w1", canImplement: true },
+    { role: "reviewer", id: "r1" },
+    { role: "reviewer", id: "r2" },
+  ];
+  const run = createRun(store, { task: "named approval", mode: "custom", seats, revision: "rev-a" });
+  walkToReview(store, run.id, [], "r1");
+  approve(store, run.id, { approver: "r1", ttlMs: 60_000, now: () => T });
+  approve(store, run.id, { approver: "r2", ttlMs: 60_000, now: () => T });
+  const refused = accept(store, run.id, { approver: "r1", now: () => T + 120_000 });
+  assert.equal(refused.ok, false, "r2's live approval must not accept r1's expired one");
+  assert.match(refused.reason, /expired/);
+});
+
+test("accept carries the owner token a begun stage requires", () => {
+  const store = openRunStore(tmp());
+  const run = createRun(store, { task: "owner through accept", mode: "solo", revision: "rev-a" });
+  walkToReview(store, run.id, [], reviewerSeat(run));
+  approve(store, run.id, { approver: reviewerSeat(run) });
+  const inflight = begin(store, run.id);
+  assert.equal(inflight.inflight.stage, "review");
+
+  const anonymous = accept(store, run.id, { approver: reviewerSeat(run) });
+  assert.equal(anonymous.ok, false, "accept without the token must not bypass the claim");
+  assert.match(anonymous.reason, /in flight for owner/);
+  assert.equal(getRun(store, run.id).stage, "review", "a refused accept writes nothing");
+
+  const accepted = accept(store, run.id, { approver: reviewerSeat(run), owner: inflight.inflight.owner });
+  assert.equal(accepted.ok, true, accepted.reason);
+  assert.equal(accepted.run.stage, "done");
 });

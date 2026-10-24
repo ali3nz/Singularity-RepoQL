@@ -195,9 +195,14 @@ export function approve(store, runId, { approver, role = null, ttlMs = 60 * 60 *
     }
     if (run.interrupted) throw new RunError("run is interrupted; reconcile before approving");
     const seat = approvalSeat(run, approver, role);
-    const stage = "accept";
+    // The stage recorded is the stage the approval was actually minted in.
+    // Back-dating it to 'accept' would claim provenance the artifact never had.
+    const stage = run.stage;
     const evidenceHash = reviewedPackHash(run.evidence);
-    const revision = run.revision ?? "unrecorded";
+    const revision = run.revision;
+    if (!revision) {
+      throw new RunError("run has no recorded source revision; an approval must bind the revision it reviewed");
+    }
     const coordinator = (run.seats ?? []).find((s) => s.role === "coordinator");
     const implementers = (run.seats ?? []).filter((s) => s.canImplement).map((s) => s.id);
     if (seat.id === coordinator?.id) throw new RunError("the coordinator cannot approve its own run");
@@ -247,7 +252,7 @@ export function approve(store, runId, { approver, role = null, ttlMs = 60 * 60 *
  * `advance()`: this only adds a clearer error and an evidence-integrity check
  * before the transition is attempted.
  */
-export function accept(store, runId, { approver, actor = "coordinator", now = () => Date.now() } = {}) {
+export function accept(store, runId, { approver, actor = "coordinator", owner = null, now = () => Date.now() } = {}) {
   if (!approver) throw new RunError("accept needs --approver");
   return mutate(store, runId, (run) => {
     const seat = approvalSeat(run, approver, null);
@@ -257,17 +262,17 @@ export function accept(store, runId, { approver, actor = "coordinator", now = ()
     // The authoritative checks (verdict, approval scope, evidence integrity,
     // expiry) happen inside advance(). This pre-check only produces a clearer
     // error; it is not the gate.
-    const gate = acceptanceCheck(run, { now });
+    const gate = acceptanceCheck(run, { now, approverId: seat.id });
     if (!gate.ok && run.stage === "review") {
       return { ok: false, run, reason: `acceptance refused: ${gate.reasons.join("; ")}` };
     }
 
     let step = { ok: true, run };
     if (run.stage === "review") {
-      step = advance(run, { to: "accept", actor, role: "reviewer", evidence: [], now });
+      step = advance(run, { to: "accept", actor, role: "reviewer", evidence: [], now, owner, approverId: seat.id });
       if (!step.ok) return step;
     }
-    step = advance(step.run, { to: "done", actor, role: "coordinator", evidence: [], now });
+    step = advance(step.run, { to: "done", actor, role: "coordinator", evidence: [], now, owner, approverId: seat.id });
     return step;
   });
 }

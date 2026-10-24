@@ -58,6 +58,7 @@ export function validateApproval(
   {
     runId,
     stage,
+    stages = null,
     evidenceHash,
     revision,
     now = () => Date.now(),
@@ -80,6 +81,9 @@ export function validateApproval(
   }
   if (runId && approval.runId !== runId) reasons.push(`approval is for run ${approval.runId}, not ${runId}`);
   if (stage && approval.stage !== stage) reasons.push(`approval covers stage '${approval.stage}', not '${stage}'`);
+  if (stages && !stages.includes(approval.stage)) {
+    reasons.push(`approval was minted in '${approval.stage}', not in ${stages.join(" or ")}`);
+  }
   if (evidenceHash && approval.evidenceHash !== evidenceHash) {
     reasons.push("approval does not cover the current evidence pack");
   }

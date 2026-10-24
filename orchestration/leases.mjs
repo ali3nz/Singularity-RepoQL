@@ -19,7 +19,7 @@ export function openLeases(store, { now = () => Date.now() } = {}) {
   const file = path.join(store.dir, LEASES_FILE);
 
   function read() {
-    const data = readJson(file) ?? {};
+    let data = readJson(file) ?? {};
     if (typeof data !== "object" || Array.isArray(data)) data = {};
     return data;
   }

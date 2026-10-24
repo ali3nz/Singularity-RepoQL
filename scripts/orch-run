@@ -14,10 +14,11 @@
 //                          [--revision <rev>] [--verdict approve|changes_requested]
 //   orch-run advance <run> --to <stage> [--role coordinator|reviewer|operator]
 //                          [--actor <id>] [--owner <token>] [--reason <text>]
+//                          [--approver <seat-id>] [--idempotency-key <key>]
 //   orch-run begin <run> [--actor <id>]        mark the stage in flight, print its owner token
 //   orch-run reconcile <run> --note <text>     clear an interruption, change no stage
 //   orch-run approve <run> --approver <seat-id> [--ttl-minutes <n>]
-//   orch-run accept <run> --approver <seat-id>
+//   orch-run accept <run> --approver <seat-id> [--owner <token>]
 //   orch-run pause|resume|stop|recover <run> [--reason <text>]
 //   orch-run verify <run>            integrity check of evidence on disk
 //   orch-run modes                   describe the execution modes
@@ -99,7 +100,12 @@ function resolveRun(store, id) {
 
 function printRun(run, { json = false } = {}) {
   if (json) {
-    console.log(JSON.stringify(run, null, 2));
+    // The owner token is a capability: masking it in text output but printing
+    // the whole run as JSON would leak it to every log scrape.
+    const redacted = run.inflight?.owner
+      ? { ...run, inflight: { ...run.inflight, owner: `${String(run.inflight.owner).slice(0, 6)}…` } }
+      : run;
+    console.log(JSON.stringify(redacted, null, 2));
     return;
   }
   const pack = packHash(run.evidence ?? []);
@@ -180,6 +186,8 @@ function cmdAdvance(store, { positional, flags }) {
     actor: flags.actor ?? flags.role ?? "operator",
     role: flags.role ?? "operator",
     owner: flags.owner ?? null,
+    approverId: flags.approver ?? null,
+    idempotencyKey: flags["idempotency-key"] ?? null,
     reason: flags.reason ?? "",
   });
   if (!outcome.ok) fail(outcome.reason, RC_REFUSED);
@@ -211,7 +219,7 @@ function cmdAccept(store, { positional, flags }) {
   const approver = flags.approver;
   if (!approver) fail("accept needs --approver <seat-id>", RC_USAGE);
   if (flags.revision) fail("acceptance is bound to the run's own revision; --revision is not accepted", RC_USAGE);
-  const outcome = accept(store, run.id, { approver });
+  const outcome = accept(store, run.id, { approver, owner: flags.owner ?? null });
   if (!outcome.ok) fail(outcome.reason, RC_REFUSED);
   console.log("accepted");
   printRun(outcome.run);

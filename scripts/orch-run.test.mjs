@@ -187,3 +187,61 @@ test("pause, resume and stop are reflected in status and refused when terminal",
   assert.match(run(["status", id], dir).out, /status failed/);
   assert.equal(run(["history", id], dir).rc, 0);
 });
+
+test("status --json redacts the owner token instead of leaking the capability", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orch-cli-"));
+  const id = runId(run(["start", "owner redaction", "--mode", "solo", "--revision", "rev-a"], dir).out);
+  run(["evidence", id, "--kind", "plan", "--producer", "coordinator", "--text", "plan"], dir);
+  assert.equal(run(["advance", id, "--to", "implement", "--role", "coordinator"], dir).rc, 0);
+  const begun = run(["begin", id], dir);
+  const token = (begun.out.match(/owner (\S+)/) || [])[1];
+  assert.ok(token);
+
+  const status = run(["status", id, "--json"], dir);
+  assert.equal(status.rc, 0, status.err);
+  const parsed = JSON.parse(status.out);
+  assert.notEqual(parsed.inflight.owner, token, "the JSON must not publish the token");
+  assert.ok(!status.out.includes(token), "the token must appear nowhere in the output");
+});
+
+test("advance accepts an explicit idempotency key and replays as a no-op", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orch-cli-"));
+  const id = runId(run(["start", "idempotent advance", "--mode", "solo", "--revision", "rev-a"], dir).out);
+  run(["evidence", id, "--kind", "plan", "--producer", "coordinator", "--text", "plan"], dir);
+
+  const first = run(["advance", id, "--to", "implement", "--role", "coordinator", "--idempotency-key", "k1"], dir);
+  assert.equal(first.rc, 0, first.err);
+  const replay = run(["advance", id, "--to", "implement", "--role", "coordinator", "--idempotency-key", "k1"], dir);
+  assert.equal(replay.rc, 0, replay.err);
+  assert.match(replay.out, /unchanged implement -> implement/);
+
+  // A different key is a new attempt and is refused by the stage machine.
+  const other = run(["advance", id, "--to", "implement", "--role", "coordinator", "--idempotency-key", "k2"], dir);
+  assert.equal(other.rc, 3);
+});
+
+test("accept forwards --owner so a begun stage can be completed", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orch-cli-"));
+  const id = runId(run(["start", "owner accept", "--mode", "solo", "--revision", "rev-a"], dir).out);
+  const { reviewer } = seats(id, dir);
+  run(["evidence", id, "--kind", "plan", "--producer", "coordinator", "--text", "plan"], dir);
+  assert.equal(run(["advance", id, "--to", "implement", "--role", "coordinator"], dir).rc, 0);
+  run(["evidence", id, "--kind", "diff", "--producer", "worker-1", "--text", "diff"], dir);
+  assert.equal(run(["advance", id, "--to", "validate", "--role", "coordinator"], dir).rc, 0);
+  run(["evidence", id, "--kind", "test-output", "--producer", "worker-1", "--text", "ok"], dir);
+  assert.equal(run(["advance", id, "--to", "review", "--role", "coordinator"], dir).rc, 0);
+  assert.equal(run(["evidence", id, "--kind", "review-verdict", "--producer", reviewer, "--text", "ok", "--verdict", "approve"], dir).rc, 0);
+  assert.equal(run(["approve", id, "--approver", reviewer], dir).rc, 0);
+
+  const begun = run(["begin", id], dir);
+  const token = (begun.out.match(/owner (\S+)/) || [])[1];
+  assert.ok(token, begun.out);
+
+  const anonymous = run(["accept", id, "--approver", reviewer], dir);
+  assert.equal(anonymous.rc, 3);
+  assert.match(anonymous.err, /in flight for owner/);
+
+  const accepted = run(["accept", id, "--approver", reviewer, "--owner", token], dir);
+  assert.equal(accepted.rc, 0, accepted.err);
+  assert.match(accepted.out, /stage\s+done/);
+});

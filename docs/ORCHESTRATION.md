@@ -57,7 +57,7 @@ plan -> implement -> validate -> review -> accept -> done
 | `review -> accept` | reviewer | an approving `review-verdict` in `review` |
 | `review -> correct` | reviewer | `review-verdict` in `review` |
 | `correct -> implement` | coordinator | `diff` in `correct` |
-| `accept -> done` | coordinator | `review-verdict` in `review` + a valid recorded approval in `accept` |
+| `accept -> done` | coordinator | `review-verdict` in `review` + a valid approval recorded in `review` or `accept` |
 
 The "captured in" column is enforced: a `test-output` recorded while the run was
 implementing is not validation proof, and an earlier cycle's proof does not
@@ -67,7 +67,8 @@ Retry limits are durable decisions: exhausting `maxAttemptsPerStage` or the
 `maxCorrections` budget **persists** the run as `blocked` with a reason, so
 supervision sees the blockage instead of a run that merely refused a call. A
 transition replayed with the same idempotency key is a successful no-op and
-writes nothing.
+writes nothing — including a replay against a run that has since gone terminal.
+Pass the key with `advance --idempotency-key <key>` when a caller may retry.
 
 A stage is never marked complete by a timer, a process exit or a retry. A run
 that was in flight when its process died is marked `interrupted` and blocks:
@@ -76,7 +77,8 @@ Reconciliation clears the interruption but changes no stage, so the next
 transition still needs that stage's evidence.
 
 `begin` claims the stage with an **owner token** and prints it once; the process
-that finishes the stage presents the same token with `advance --owner <token>`. A
+that finishes the stage presents the same token with `advance --owner <token>`
+(or `accept --owner <token>`, which forwards it to both of its transitions). A
 token rather than a pid, because each CLI call is a new process. `status` shows
 only a prefix of the token. A second `begin` on a run that already has work in
 flight is refused, and recovery clears the claim.
@@ -115,7 +117,12 @@ Seat ids look like `duo-reviewer-1-4c81dd` and are printed by `status`.
 ## Approvals and authority
 
 An approval records the approver **seat id**, its role, the stage, the evidence
-pack hash, the run's revision and a TTL. Acceptance requires all of:
+pack hash, the run's revision and a TTL. The recorded stage is the stage the
+approval was actually minted in — `review` or `accept`; it is never back-dated
+to a later stage. A run with no recorded source revision cannot be approved,
+and evidence labelled with a different revision invalidates acceptance.
+
+Acceptance requires all of:
 
 - the approver is a declared `reviewer` or `operator` seat — a coordinator seat,
   a worker seat or an invented identity is refused;
@@ -126,7 +133,9 @@ pack hash, the run's revision and a TTL. Acceptance requires all of:
 - the approval's pack hash equals the current pack, so evidence added after
   review invalidates it;
 - the approval's revision equals the run's own revision; a caller cannot choose
-  the revision (`approve --revision` is refused, not ignored);
+  the revision (`approve --revision` is refused, not ignored), and acceptance
+  names one approver, so another seat's live record cannot rescue an expired
+  approval by the seat that was asked;
 - the approval has not expired when acceptance happens, and was not issued in
   the future.
 

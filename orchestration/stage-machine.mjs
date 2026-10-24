@@ -47,7 +47,7 @@ export const TRANSITIONS = Object.freeze([
     to: "done",
     needs: [
       { kind: "review-verdict", stages: ["review"] },
-      { kind: "approval", stages: ["accept"] },
+      { kind: "approval", stages: ["review", "accept"] },
     ],
     role: "coordinator",
   },
@@ -123,13 +123,23 @@ function appendHistory(run, entry) {
  * question is historical: expiry is a condition of accepting, not a property
  * that later un-accepts a completed run.
  */
-export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = true } = {}) {
+export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = true, approverId = null } = {}) {
   const reasons = [];
   const cycle = run.cycle ?? 1;
   const pack = reviewedPackHash(run.evidence ?? []);
-  const revision = run.revision ?? "unrecorded";
+  const revision = run.revision ?? null;
   const coordinator = (run.seats ?? []).find((s) => s.role === "coordinator");
   const implementers = (run.seats ?? []).filter((s) => s.canImplement).map((s) => s.id);
+
+  // A review binds a source revision. Without one there is nothing to bind, and
+  // a pack whose entries claim a different revision is not the reviewed tree.
+  if (!revision) reasons.push("run has no recorded source revision; a review cannot be bound");
+  else {
+    const mismatched = (run.evidence ?? []).filter((e) => e.revision && e.revision !== revision);
+    if (mismatched.length) {
+      reasons.push(`evidence recorded at another revision: ${[...new Set(mismatched.map((e) => e.revision))].join(", ")}`);
+    }
+  }
 
   const verdict = latestVerdict(run.evidence, cycle);
   const authority = verdictAuthority(run, verdict);
@@ -139,14 +149,20 @@ export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = t
   }
 
   const hasApprovalRecord = (run.evidence ?? []).some(
-    (e) => e.kind === "approval" && (e.cycle ?? 1) === cycle && e.stage === "accept",
+    (e) =>
+      e.kind === "approval" &&
+      (e.cycle ?? 1) === cycle &&
+      ["review", "accept"].includes(e.stage) &&
+      (!approverId || e.meta?.approver === approverId),
   );
   if (!hasApprovalRecord) reasons.push(`no approval record in the cycle ${cycle} evidence pack`);
 
   const verification = verifyPack(run.evidence ?? []);
   if (!verification.ok) reasons.push(`evidence no longer verifies: ${verification.problems.join("; ")}`);
 
-  const approvals = run.approvals ?? [];
+  // Acceptance names one approver: another seat's still-valid record must not
+  // rescue an expired approval by the seat that was actually asked.
+  const approvals = (run.approvals ?? []).filter((a) => !approverId || a.approver === approverId);
   if (!approvals.length) {
     reasons.push("no approval recorded for this run");
   } else {
@@ -154,9 +170,11 @@ export function acceptanceCheck(run, { now = () => Date.now(), enforceExpiry = t
       approval,
       result: validateApproval(approval, {
         runId: run.id,
-        stage: "accept",
+        // An approval is bound to the stage it was actually minted in: the
+        // reviewer's decision in review, or a re-affirmation during accept.
+        stages: ["review", "accept"],
         evidenceHash: pack,
-        revision,
+        revision: revision ?? "unrecorded",
         now,
         enforceExpiry,
         implementerIds: implementers,
@@ -193,8 +211,18 @@ export function advance(run, {
   limits = DEFAULT_LIMITS,
   now = () => Date.now(),
   owner = null,
+  approverId = null,
 } = {}) {
   if (!to) return { ok: false, run, reason: "transition target is required" };
+
+  // Idempotency is decided before every other guard: replaying an applied
+  // transition is a successful no-op even when the run has since gone terminal.
+  const attemptNo = (run.attempts?.[to] ?? 0) + 1;
+  const key = idempotencyKey ?? `${run.id}:${run.stage}->${to}:${attemptNo}`;
+  if ((run.history ?? []).some((h) => h.idempotencyKey === key)) {
+    return { ok: true, run, applied: false, reason: "transition already applied" };
+  }
+
   if (run.status === "accepted" || run.stage === "done") {
     return { ok: false, run, reason: "run is already accepted" };
   }
@@ -214,14 +242,6 @@ export function advance(run, {
       run,
       reason: `stage ${run.inflight.stage} is in flight for owner ${run.inflight.owner ?? "unknown"}; pass --owner with that token (or recover the run)`,
     };
-  }
-
-  // Idempotency is decided BEFORE legality: replaying an applied transition is a
-  // successful no-op even though `run.stage` has already moved on.
-  const attemptNo = (run.attempts?.[to] ?? 0) + 1;
-  const key = idempotencyKey ?? `${run.id}:${run.stage}->${to}:${attemptNo}`;
-  if ((run.history ?? []).some((h) => h.idempotencyKey === key)) {
-    return { ok: true, run, applied: false, reason: "transition already applied" };
   }
 
   const rule = transitionFor(run.stage, to);
@@ -255,7 +275,7 @@ export function advance(run, {
   }
 
   if (to === "done") {
-    const gate = acceptanceCheck({ ...run, evidence: combined }, { now, enforceExpiry: true });
+    const gate = acceptanceCheck({ ...run, evidence: combined }, { now, enforceExpiry: true, approverId });
     if (!gate.ok) {
       return { ok: false, run, reason: `acceptance refused: ${gate.reasons.join("; ")}` };
     }
@@ -275,7 +295,7 @@ export function advance(run, {
   const next = {
     ...run,
     stage: to,
-    status: to === "done" ? "accepted" : "running",
+    status: to === "done" ? "accepted" : to === "failed" ? "failed" : "running",
     cycle: to === "correct" ? cycle + 1 : cycle,
     attempts,
     evidence: combined,

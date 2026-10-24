@@ -148,3 +148,14 @@ test("a lease excludes a second owner and can be renewed, released and reclaimed
   const reclaimed = leases.reclaimExpired();
   assert.deepEqual(reclaimed.dropped, []);
 });
+
+test("a corrupt lease file is fatal and preserved, never silently reset", () => {
+  const dir = tmp();
+  const store = openStore(dir);
+  const file = path.join(dir, "leases.json");
+  fs.writeFileSync(file, "[]");
+  const before = fs.readFileSync(file);
+  const leases = openLeases(store, { now: () => 1_000 });
+  assert.throws(() => leases.acquire({ resource: "repo:lock", owner: "w1", ttlMs: 500 }), /not usable/);
+  assert.deepEqual(fs.readFileSync(file), before, "refusing must not overwrite the evidence of corruption");
+});
