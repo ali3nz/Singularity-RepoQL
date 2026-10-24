@@ -51,7 +51,9 @@ STATE_DIR = os.environ.get("AGENTCHAT_STATE_DIR",
 INBOX_DIR = os.path.join(STATE_DIR, "inbox")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 LOCK_PATH = os.environ.get("AGENTCHAT_LOCK_PATH", "")
-WS_TMP = os.environ.get("AGENTCHAT_WS_TMP", "")
+# Default to a directory inside the state dir: an unset AGENTCHAT_WS_TMP
+# must not make `dispatch-sol` fail on a fresh install.
+WS_TMP = os.environ.get("AGENTCHAT_WS_TMP", "") or os.path.join(STATE_DIR, "tmp")
 UA = "orch-chat/1.0"
 # Roster — MUST stay identical to orch-chat-relay.py (see its comment).
 # claude is first-class (the operator lives in Claude); codex is LOW-TRAFFIC:
@@ -1042,6 +1044,20 @@ def cmd_dispatch_sol(args) -> int:
     if not ids:
         fail("usage: orch-chat dispatch-sol <message-id> [--launch]", 2)
     mid = ids[0]
+
+    # Configuration is resolved BEFORE anything is written or recorded. An
+    # unconfigured or mistyped template therefore cannot consume the message:
+    # the caller fixes the environment and retries the same id.
+    template = os.environ.get("AGENTCHAT_DISPATCH_CMD", "").strip()
+    if not template:
+        fail("dispatch-sol is not configured on this installation: set "
+             "AGENTCHAT_DISPATCH_CMD to a shell command template containing "
+             "{case} and {id} (see the module docstring)", 4)
+    missing = [p for p in ("{case}", "{id}") if p not in template]
+    if missing:
+        fail("AGENTCHAT_DISPATCH_CMD is missing %s; both {case} and {id} are "
+             "required (see the module docstring)" % " and ".join(missing), 4)
+
     st = load_state()
     msg = find_message(st, mid)
     if msg is None or "sol" not in msg.get("to", []):
@@ -1061,30 +1077,25 @@ def cmd_dispatch_sol(args) -> int:
                  "(Dispatched via orch-chat dispatch-sol. Answer must be "
                  "relayed back to Discord #general as [sol] @%s <answer>.)\n"
                  % (mid, msg["from"], msg["text"], msg["from"]))
-    st.setdefault("solDispatch", {})[str(mid)] = {
-        "status": "launched", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "case": case_path}
+    cmd = template.replace("{case}", shlex.quote(case_path)).replace("{id}", str(mid))
+    if not launch:
+        # Dry run: show the rendered command and change NO dispatch state, so a
+        # later --launch is still possible.
+        print("lane free (%s). Launch with:\n  %s" % (why, cmd))
+        return 0
+    rc = os.system(cmd + " >/dev/null 2>&1")
+    if rc != 0:
+        # A failed launcher leaves the message retryable: record nothing.
+        fail("launch failed for #%d (rc=%d); message left queued and retryable"
+             % (mid, rc >> 8), 5)
     with state_lock():
         st = load_state()
         st.setdefault("solDispatch", {})[str(mid)] = {
-            "status": "launched", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "status": "launched",
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "case": case_path}
         merge_save(st)
-    template = os.environ.get("AGENTCHAT_DISPATCH_CMD", "").strip()
-    if not template:
-        fail("dispatch-sol is not configured on this installation: set "
-             "AGENTCHAT_DISPATCH_CMD to a shell command template containing "
-             "{case} and {id} (see the module docstring)", 4)
-    cmd = template.replace("{case}", shlex.quote(case_path)).replace(
-        "{id}", str(mid))
-    if "{case}" in template and case_path not in cmd:
-        fail("AGENTCHAT_DISPATCH_CMD did not substitute {case}", 4)
-    if launch:
-        rc = os.system(cmd + " >/dev/null 2>&1")
-        print("launched consult for #%d (rc=%d); case file %s"
-              % (mid, rc >> 8, case_path))
-    else:
-        print("lane free (%s). Launch with:\n  %s" % (why, cmd))
+    print("launched consult for #%d; case file %s" % (mid, case_path))
     return 0
 
 

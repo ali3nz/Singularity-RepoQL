@@ -4,6 +4,22 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc7] - 2026-10-24
+
+### Fixed
+- `orch-chat dispatch-sol` recorded `status: launched` before it validated its
+  launcher, so an unconfigured command, a dry run or a failed launcher could
+  permanently consume a message. Configuration and template validation now run
+  first, a dry run changes no state, and `launched` is recorded only after the
+  launcher exits 0. Every failure path leaves the message retryable.
+- `AGENTCHAT_WS_TMP` defaulted to an empty string, so `dispatch-sol` raised
+  FileNotFoundError on a fresh install; it now defaults to `<state>/tmp`.
+
+### Added
+- `tests/test-orch-chat.py` scenario 6: unconfigured dispatch, incomplete
+  template, dry run followed by a real launch, failed launcher followed by a
+  retry, and duplicate-launch refusal.
+
 ## [0.1.0-rc6] - 2026-10-24
 
 ### Added

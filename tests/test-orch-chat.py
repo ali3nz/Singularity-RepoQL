@@ -12,6 +12,9 @@ Five scenarios:
      rather than silently replaced, and its bytes are never rewritten.
   5. Concurrent senders: parallel processes allocate unique ids, deliver every
      message and leave valid JSON behind.
+  6. Dispatch gating: `dispatch-sol` validates its launcher template before any
+     state is written, never marks a message launched on a dry run or a failed
+     launch, and stays retryable in every failure path.
 
 Run from the repository root:  python3 tests/test-orch-chat.py
 """
@@ -126,13 +129,16 @@ def test_roster_integrity():
     print("  roster integrity: OK")
 
 
-def _run_cli(args, state_dir: str):
+def _run_cli(args, state_dir: str, extra_env=None):
     """Run the CLI as a real subprocess against an isolated state dir."""
     env = dict(os.environ)
     env["AGENTCHAT_STATE_DIR"] = state_dir
     env["AGENTCHAT_OFFICE_DISABLED"] = "1"
     env.pop("AGENTCHAT_DISCORD_ENV", None)
     env.pop("AGENTCHAT_SESSION", None)
+    env.pop("AGENTCHAT_DISPATCH_CMD", None)
+    for k, v in (extra_env or {}).items():
+        env[k] = v
     return subprocess.run([sys.executable, _CLI_PATH] + list(args),
                           capture_output=True, text=True, env=env, timeout=60)
 
@@ -218,12 +224,80 @@ def test_concurrent_senders():
     print("  concurrent senders: OK")
 
 
+def _newest_id(state_dir: str, role: str = "sol") -> int:
+    path = os.path.join(state_dir, "inbox", role + ".jsonl")
+    with open(path, "r", encoding="utf-8") as fh:
+        lines = [line for line in fh if line.strip()]
+    return json.loads(lines[-1])["id"]
+
+
+def _dispatch_status(state_dir: str, mid: int):
+    with open(os.path.join(state_dir, "state.json"), "r", encoding="utf-8") as fh:
+        st = json.load(fh)
+    return (st.get("solDispatch") or {}).get(str(mid), {}).get("status")
+
+
+def test_dispatch_gating():
+    """dispatch-sol must not burn a message when it cannot launch it."""
+    state_dir = os.path.join(_TMP, "dispatch-state")
+    os.makedirs(state_dir, exist_ok=True)
+    sent = _run_cli(["send", "--from", "buffy", "@sol", "is the lane free?"], state_dir)
+    assert sent.returncode == 0, sent.stderr
+    mid = _newest_id(state_dir)
+
+    # 1. Unconfigured: exit 4, and the message is untouched.
+    off = _run_cli(["dispatch-sol", str(mid)], state_dir,
+                   {"AGENTCHAT_DISPATCH_CMD": ""})
+    assert off.returncode == 4, "unconfigured dispatch must exit 4, got %d" % off.returncode
+    assert "not configured" in off.stderr, off.stderr
+    assert _dispatch_status(state_dir, mid) is None, \
+        "an unconfigured dispatch must not record state"
+
+    # 2. Template missing a placeholder: exit 4, still untouched.
+    bad = _run_cli(["dispatch-sol", str(mid)], state_dir,
+                   {"AGENTCHAT_DISPATCH_CMD": "true {case}"})
+    assert bad.returncode == 4, "incomplete template must exit 4, got %d" % bad.returncode
+    assert "{id}" in bad.stderr, bad.stderr
+    assert _dispatch_status(state_dir, mid) is None, \
+        "an invalid template must not record state"
+
+    # 3. Dry run with a valid template: exit 0, prints the command, no mutation.
+    dry = _run_cli(["dispatch-sol", str(mid)], state_dir,
+                   {"AGENTCHAT_DISPATCH_CMD": "true {case} {id}"})
+    assert dry.returncode == 0, dry.stderr
+    assert "Launch with" in dry.stdout, dry.stdout
+    assert _dispatch_status(state_dir, mid) is None, \
+        "a dry run must not mark the message launched"
+
+    # 4. Failed launcher: nonzero, and the message stays retryable.
+    failed = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                      {"AGENTCHAT_DISPATCH_CMD": "false {case} {id}"})
+    assert failed.returncode != 0, "a failed launch must report failure"
+    assert _dispatch_status(state_dir, mid) is None, \
+        "a failed launch must leave the message retryable"
+
+    # 5. Retry with a working launcher succeeds and records the launch.
+    ok = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                  {"AGENTCHAT_DISPATCH_CMD": "true {case} {id}"})
+    assert ok.returncode == 0, ok.stderr
+    assert _dispatch_status(state_dir, mid) == "launched", \
+        "a successful launch must be recorded"
+
+    # 6. Second launch is a no-op, not a duplicate dispatch.
+    again = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                     {"AGENTCHAT_DISPATCH_CMD": "true {case} {id}"})
+    assert again.returncode == 0, again.stderr
+    assert "already launched" in again.stdout, again.stdout
+    print("  dispatch gating: OK")
+
+
 def main() -> int:
     tests = [test_discord_is_opt_in,
              test_cold_start_and_local_delivery,
              test_roster_integrity,
              test_corrupt_state_is_fatal,
-             test_concurrent_senders]
+             test_concurrent_senders,
+             test_dispatch_gating]
     failures = 0
     try:
         for test in tests:
