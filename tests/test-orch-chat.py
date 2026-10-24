@@ -21,6 +21,8 @@ Five scenarios:
      for reconciliation instead of repeating a side effect on a guess.
   9. Claim liveness: an old claim held by a LIVE process is not stolen, and a
      claim whose owner died is reclaimed.
+ 10. Claim write race: a claim that exists without content yet is given a grace
+     period instead of being stolen, which is how CI produced a double launch.
 
 Run from the repository root:  python3 tests/test-orch-chat.py
 """
@@ -419,6 +421,38 @@ def test_dispatch_claim_is_not_stolen_from_a_live_owner():
     assert len(launches) == 1, "a dead owner's claim must be reclaimed"
     print("  dispatch claim liveness: OK")
 
+def test_dispatch_claim_write_race():
+    """An empty claim must not be treated as a dead owner's claim."""
+    state_dir = os.path.join(_TMP, "claim-race")
+    os.makedirs(state_dir, exist_ok=True)
+    sent = _run_cli(["send", "--from", "buffy", "@sol", "race"], state_dir)
+    assert sent.returncode == 0, sent.stderr
+    mid = _newest_id(state_dir)
+
+    marker = os.path.join(state_dir, "launches.txt")
+    template = "sh -c 'echo launched >> %s' {case} {id}" % marker
+    lock = os.path.join(state_dir, ".dispatch-%d.lock" % mid)
+
+    # The window between creating the claim and writing its pid: fresh and empty.
+    with open(lock, "w", encoding="utf-8"):
+        pass
+    first = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                     {"AGENTCHAT_DISPATCH_CMD": template})
+    assert first.returncode == 23, \
+        "a fresh empty claim must be respected, got rc %d" % first.returncode
+    assert not os.path.exists(marker), "the claim was stolen during the write window"
+
+    # An old empty claim has no live owner left and may be reclaimed.
+    old = time.time() - 60
+    os.utime(lock, (old, old))
+    second = _run_cli(["dispatch-sol", str(mid), "--launch"], state_dir,
+                      {"AGENTCHAT_DISPATCH_CMD": template})
+    assert second.returncode == 0, second.stderr
+    launches = [line for line in open(marker).read().splitlines() if line.strip()] \
+        if os.path.exists(marker) else []
+    assert len(launches) == 1
+    print("  dispatch claim write race: OK")
+
 def main() -> int:
     tests = [test_discord_is_opt_in,
              test_cold_start_and_local_delivery,
@@ -428,7 +462,8 @@ def main() -> int:
              test_dispatch_gating,
              test_dispatch_is_at_most_once,
              test_dispatch_unknown_outcome_holds,
-             test_dispatch_claim_is_not_stolen_from_a_live_owner]
+             test_dispatch_claim_is_not_stolen_from_a_live_owner,
+             test_dispatch_claim_write_race]
     failures = 0
     try:
         for test in tests:

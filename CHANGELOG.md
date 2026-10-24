@@ -35,6 +35,12 @@ superseded.
 - **Stage scoping was incomplete.** Evidence was scoped by cycle but not by the
   stage that produced it, so a `test-output` captured while implementing could
   prove validation. Each requirement now names the stage(s) that may produce it.
+- **The claim itself had a write window.** The claim file was created with
+  O_EXCL and its pid written afterwards, so a competing dispatcher could read an
+  empty claim, conclude the owner was gone and reclaim it — CI produced a real
+  double launch this way. The claim is now created by linking a fully written
+  temporary file, so its content exists the instant the name does, and a
+  content-less claim gets a short grace before it is treated as dead.
 - **Acceptance expiry was re-applied to history.** `health()` reran the approval
   check with the current time, so an accepted run flipped to `INVALID_EVIDENCE`
   an hour later, while `isComplete()` disagreed. Expiry now gates the act of

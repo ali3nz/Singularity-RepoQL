@@ -254,11 +254,15 @@ class dispatch_lock:
 
     def _stale(self) -> bool:
         # Liveness, not age: a live launcher keeps its claim however long the
-        # launch takes. A claim with no readable pid was created by a process
-        # that died between create and write, so it is reclaimable.
+        # launch takes. A claim with no readable pid is either a half-written
+        # legacy claim or a file a competing writer created a moment ago, so it
+        # gets a short grace before it is treated as dead.
         pid = self._owner_pid()
         if pid <= 0:
-            return True
+            try:
+                return (time.time() - os.path.getmtime(self.path)) > 2.0
+            except OSError:
+                return True
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -268,21 +272,40 @@ class dispatch_lock:
         return False
 
     def __enter__(self):
+        """Claim the message.
+
+        The claim file is created by LINKING a fully written temporary file, so
+        its content exists the instant the name does. Creating with O_EXCL and
+        writing afterwards leaves a window in which a competing dispatcher reads
+        an empty claim, concludes the owner is gone, and steals it: that race
+        produced a real double launch in CI.
+        """
         os.makedirs(STATE_DIR, exist_ok=True)
-        for attempt in (0, 1):
-            try:
-                self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                os.write(self.fd, ("%d\n" % os.getpid()).encode())
-                os.fsync(self.fd)
-                return self
-            except FileExistsError:
-                if attempt == 1 or not self._stale():
-                    raise DispatchBusy("message is already being dispatched")
+        tmp = "%s.%d.tmp" % (self.path, os.getpid())
+        fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, ("%d\n" % os.getpid()).encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        try:
+            for attempt in (0, 1):
                 try:
-                    os.unlink(self.path)
-                except FileNotFoundError:
-                    pass
-        raise DispatchBusy("message is already being dispatched")
+                    os.link(tmp, self.path)
+                    return self
+                except FileExistsError:
+                    if attempt == 1 or not self._stale():
+                        raise DispatchBusy("message is already being dispatched")
+                    try:
+                        os.unlink(self.path)
+                    except FileNotFoundError:
+                        pass
+            raise DispatchBusy("message is already being dispatched")
+        finally:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
 
     def __exit__(self, *exc):
         if self.fd is not None:
