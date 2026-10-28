@@ -22,9 +22,9 @@ memory.
 When your task materially changes code, configuration, deployment or
 operational behaviour, create or update the relevant runbook/documentation and
 then ingest its current content into the installation's memory stack:
-`python3 scripts/memory-doc-ingest.py ingest --file <doc> --root <docs root>`,
+`node scripts/doc-ingest-node.mjs ingest --file <doc> --root <docs root>`,
 claiming success only with `DOC_INGEST_INDEXED` (retry `PENDING`/`FAILED` with
-`memory-doc-ingest.py retry --file <doc> --root <root>`). Record the outcome
+`node scripts/doc-ingest-node.mjs retry --file <doc> --root <root>`). Record the outcome
 with `python3 scripts/doc-policy.mjs assess --session <session-id> --files
 <changed files> --doc-status DOC_UPDATED|DOC_NOT_REQUIRED ...` and include the
 SINGDOC token in your reply — the Stop closeout check uses it to verify

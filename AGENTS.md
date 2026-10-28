@@ -13,13 +13,15 @@ bundle connects to
 the user's existing RepoQL installation (code intelligence through the
 `repoql` MCP server).
 
-- `openchamber/` — OpenChamber configuration bundle: runtime AGENTS.md, nine
-  agent definitions (including `ghost`), OpenCode config, the `product-office` plugin
+- `openchamber/` — OpenChamber configuration bundle: runtime AGENTS.md, seventeen
+  agent definitions (nine primary, eight subagent, including `ghost`), ten skills
+  under `openchamber/skills/`, OpenCode config, the `product-office` plugin
   (memory capture + Office event forwarding), the `runbook-nudge`
   plugin (context-time runbook/RepoQL-reminder nudges + documentation-closure
   instructions), and the RepoQL MCP
-  wiring.
-- `scripts/doc-policy.mjs` + `scripts/memory-doc-ingest.py` — the SHARED
+  wiring. `docs/AGENTS-SKILLS.md` is the shipped inventory: every agent, every
+  skill, and what is deliberately external.
+- `scripts/doc-policy.mjs` + `scripts/doc-ingest-node.mjs` — the SHARED
   documentation policy and automatic MemoryCore runbook ingestion used by both
   OpenChamber and the Claude Code integration
   (`adapters/claude-code/doc-hook.mjs`).
@@ -59,6 +61,25 @@ the user's existing RepoQL installation (code intelligence through the
   document under `docs/` in the same change.
 - Material tasks report a documentation outcome (`DOC_UPDATED` /
   `DOC_NOT_REQUIRED` with a reason / `DOC_BLOCKED`); updated runbooks are
-  ingested with `scripts/memory-doc-ingest.py` and verified searchable before
+  ingested with `scripts/doc-ingest-node.mjs` and verified searchable before
   completion is claimed. `node scripts/doc-policy.mjs check` verifies any
   task's closure deterministically (`docs/DOC-INGESTION.md`).
+
+## RepoQL feedback
+
+RepoQL is part of the product surface, so its defects are part of our work.
+
+Every RepoQL defect, limitation, or confusing behavior met while building,
+testing, or running anything here gets **one structured report** in
+`repoql-feedback/`, following `repoql-feedback/TEMPLATE.md`: the exact version
+and environment, the exact command or call, expected versus actual, a
+reproduction, redacted evidence, and an explicit attribution section.
+
+Attribution is not optional. A report earns a maintainer's time only when it
+argues, from observed behavior, that RepoQL itself is at fault. Harness, client,
+host, environment, and agent mistakes are not RepoQL reports — mislabeling them
+burns exactly the signal this directory exists to create.
+
+Never put a credential value, personal or customer data, or an identifying
+private hostname into a report — or into the chat, log, or commit that carries
+it. Report the shape and the location, never the value.

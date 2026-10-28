@@ -15,7 +15,7 @@ paths; there is no Windows-native build.
 
 | Piece | Where | What it does |
 |---|---|---|
-| 7 subagent definitions | `~/.claude/agents/` (user) or `<project>/.claude/agents/` (project) | the specialised agents below |
+| 17 agent definitions | `~/.claude/agents/` (user) or `<project>/.claude/agents/` (project) | eight delegation targets + nine main-session agents (below) |
 | `SubagentStart` / `SubagentStop` hooks | `~/.claude/settings.json` (merged — never replacing your settings; a timestamped backup is written first) | hook the agents into the memory loop |
 | MemoryCore profiles | your Singularity installation's memory stack | the agents' persistent identities |
 | `singularity-repoql` MCP server | Claude Code user-level MCP config | RepoQL code intelligence (when `rql` is installed) |
@@ -23,15 +23,17 @@ paths; there is no Windows-native build.
 The integration's state is recorded in `data/claude-code-integration.json` inside
 the Singularity checkout so **uninstall removes only these pieces**.
 
-## Agent roster (Claude Code name → MemoryCore identity)
+## Agent roster
 
-One logical agent owns exactly one MemoryCore identity (`team_id` / `user_id`
-/ `agent_id`). The Claude Code display names are namespaced to avoid collision
-with Claude Code's built-in subagents; the memory identity is the role name, so
-an OpenChamber agent and its Claude Code twin **share the same profile** — no
-duplicate identity is ever created.
+All seventeen portable non-pentest roles are installed, in two surfaces.
 
-| Claude Code subagent | MemoryCore `agent_id` | Role |
+**Delegation targets** — Claude Code spawns these through the Agent tool, and each
+one reuses the role's MemoryCore identity (`team_id` / `user_id` / `agent_id`).
+The display names are namespaced to avoid collision with Claude Code's built-in
+subagents; the memory identity is the role name, so an OpenChamber agent and its
+Claude Code twin **share the same profile** — no duplicate identity is created.
+
+| Claude Code agent | MemoryCore `agent_id` | Role |
 |---|---|---|
 | `singularity-code-reviewer` | `code-reviewer` | implementation critic; read-only checks; BLOCKING/NON-BLOCKING/APPROVE verdicts; RepoQL concept capture when connected |
 | `singularity-quality-fixer` | `quality-fixer` | staged-file fixer; edits only inside its staged context dir; no shell |
@@ -40,17 +42,34 @@ duplicate identity is ever created.
 | `singularity-explore` | `explore` | fast read-only codebase exploration |
 | `singularity-general` | `general` | full-surface execution worker |
 | `singularity-board` | `board` | Board of Advisors (8 seats, ruling with per-seat positions and dissent) |
+| `singularity-fleet-reviewer` | `fleet-reviewer` | read-only architecture planning and review; no shell, no edits |
 
-Deliberately **not** part of this integration:
+**Main-session agents** — launched as the session agent with
+`claude --agent singularity-<role>`. They carry the role's authority, so they are
+not delegation targets; they have no separate MemoryCore identity (the
+main-session proxy lane already captures the session, and a second profile would
+duplicate it).
 
-- **Ghost** keeps its own `ghost-companion` profile and its own setup
-  ([`GHOST-SETUP.md`](GHOST-SETUP.md)); no second Ghost identity is created and
-  Ghost is only enabled when the selected installation option includes it
-  (options 2 and 4).
-- **Standalone** is not a subagent. Its working rules belong to Claude Code's
-  main agent (Claude Code already behaves as the primary operator agent
-  without a delegation policy), so shipping it as a duplicate subagent would
-  add nothing; the integration therefore does not install one.
+| Claude Code agent | Launch | Role |
+|---|---|---|
+| `singularity-orchestrator` | `claude --agent singularity-orchestrator` | front door: risk classification, planning, delegation, verification; never implements |
+| `singularity-solo-coordinator` | `claude --agent singularity-solo-coordinator` | SOLO seat plan: one worker, one reviewer |
+| `singularity-duel-coordinator` | `claude --agent singularity-duel-coordinator` | DUO seat plan: two workers, one reviewer |
+| `singularity-quad-coordinator` | `claude --agent singularity-quad-coordinator` | QUAD seat plan: four workers, one reviewer |
+| `singularity-duo` | `claude --agent singularity-duo` | DUO implementer working against an independent reviewer |
+| `singularity-super` | `claude --agent singularity-super` | SUPER mode: full surface, may implement inside its own run |
+| `singularity-standalone` | `claude --agent singularity-standalone` | unrestricted operator-driven agent, no mandatory delegation |
+| `singularity-free-mode` | `claude --agent singularity-free-mode` | full surface restricted to free or zero-cost routes |
+| `singularity-ghost` | `claude --agent singularity-ghost` | persistent companion (options 2 and 4 only) |
+
+Ghost keeps its own `ghost-companion` memory profile and its own setup
+([`GHOST-SETUP.md`](GHOST-SETUP.md)); no second Ghost identity is created.
+
+Claude Code has no frontmatter field that hides a definition from the Agent tool,
+so the nine main-session definitions are also visible to delegation. Each body
+states its launch form and instructs a delegated instance to refuse session
+authority; the roster test (`adapters/claude-code/integration.test.mjs`) asserts
+that contract.
 
 ## Install
 
@@ -120,12 +139,12 @@ re-run the installer):
 - **SessionStart** — injects the same bounded start-of-work guidance the
   OpenChamber runbook-nudge uses: check tracking records, read the covering
   runbook, search RepoQL concepts, search the installation's indexed shared
-  documentation (`python3 scripts/memory-doc-ingest.py search "<topic>"`).
+  documentation (`node scripts/doc-ingest-node.mjs search "<topic>"`).
 - **SessionStart baseline** — the hook also records a per-session census of
   eligible documentation plus the git dirty set, so pre-existing dirty files
   are never attributed to your session.
 - **Stop** — the final-answer closeout: it (1) re-drives pending MemoryCore
-  documentation ingestion (`memory-doc-ingest.py retry --all`, event-driven;
+  documentation ingestion (`node scripts/doc-ingest-node.mjs retry --all`, event-driven;
   a no-op when the ledger is clean), (2) diff-checks the baseline and
   AUTO-INGESTS every new or changed eligible doc — tracked or newly created
   untracked, docs-only work included (content-hash dedup makes repeats a
@@ -146,8 +165,8 @@ boundaries and troubleshooting: [`docs/DOC-INGESTION.md`](DOC-INGESTION.md).
 
 ## Main-agent persistent memory (proxy routing for the NORMAL session)
 
-The seven `singularity-*` subagents each own a persistent MemoryCore identity
-through the hooks above. The **normal parent session** gets persistent memory
+The eight `singularity-*` delegation targets each own a persistent MemoryCore
+identity through the hooks above. The **normal parent session** gets persistent memory
 when Claude Code routes its model requests through the Singularity memory
 proxy — the proxy captures the parent conversation, injects relevant prior
 context in later sessions, and nothing about the ordinary Claude Code
@@ -240,7 +259,8 @@ node scripts/install-claude-code.mjs status
 
 Then in a live Claude Code session:
 
-1. run `/agents` — all seven `singularity-*` agents should be listed;
+1. run `/agents` — all seventeen `singularity-*` agents should be listed
+   (eight delegation targets, nine main-session agents);
 2. invoke `singularity-code-reviewer` on a small synthetic change and let it
    finish — the Panel should then show `claude-code-code-reviewer-*` sessions
    under `team openchamber-agents / agent code-reviewer`;
@@ -264,7 +284,7 @@ injection and verification (steps 2–3) shows which path is active in your vers
 node scripts/install-claude-code.mjs uninstall            # same --scope/--project-dir as install
 ```
 
-Removes: the seven agent files it installed, exactly its hook handlers and env
+Removes: the seventeen agent files it installed, exactly its hook handlers and env
 keys from settings (a timestamped backup is written first), and — only if this
 install recorded it — the `singularity-repoql` MCP server. It never removes
 unrelated user agents, hooks or MCP servers. Profiles, the ledger and all
@@ -285,6 +305,18 @@ surface:
 - **Option 2 — Claude Code Complete:** the same flow; Ghost and Claude Office
   are automatically included — Ghost's `GHOST_BACKEND=claude-code` keeps the
   complete Claude Code option independent of OpenChamber.
+  **Provisioning boundary:** this installer wires Claude Code only. It does not
+  start MemoryCore, Ghost or Claude Office. From the repository root:
+
+  ```bash
+  bash scripts/start-memory-stack.sh
+  python3 scripts/provision-secrets.py --variant 2 --with-ghost && bash ghost/setup-ghost.sh
+  python3 scripts/provision-secrets.py --variant 2
+  docker compose -f office/office.compose.yml up -d
+  ```
+
+  The install is INCOMPLETE until those have run and the gate verifies the two
+  capabilities. The same boundary is printed by `install --variant 2`.
 - **Options 3 and 4 — existing OpenChamber:** `scripts/start.sh` attaches to
   the running OpenChamber (compose-managed, your own managed container, or
   native `~/.config/opencode`) via `scripts/attach-openchamber.mjs` with

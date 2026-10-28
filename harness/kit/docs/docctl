@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""docctl — production CLI of the autonomous documentation programme
+(ticket 776 P1, directive 2026-10-23 §AUTONOMOUS DOCUMENTATION).
+
+Usage:
+  docctl assess  --receipt receipt.json               # assess only, no writes
+  docctl run     --receipt receipt.json [--apply]     # assess+apply+ingest+publish
+  docctl affected --paths a,b,c                       # skill->runbook back-refs
+
+Receipt fields (directive 1/4): summary, changeType, paths, evidenceRefs,
+verifiedResults, subject (optional override).
+
+Gates (fail-safe defaults):
+  * WITHOUT --apply nothing is ever written.
+  * Writes go to the hub docs root over ssh with atomic tmp+rename, lock,
+    sha precondition and .bak-<tag> preservation (doc_program.apply()).
+  * Governance carriers and generated derivatives are hard-refused.
+  * Ingest verification defaults to none => DOC_INGEST_PENDING (honest:
+    no status is claimed without destination confirmation). Pass
+    --search-cmd '<shell>' to verify searchability via an external command
+    whose stdout non-empty = indexed (e.g. an rql explore call).
+
+Environment: DOCSCTL_TARGET (default controller),
+DOCSCTL_ROOT (default /opt/harness-unset/documentation).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import doc_program as dp  # noqa: E402
+
+
+def ssh_search_cmd(cmd: str, subject: str) -> bool:
+    """External verification: run `cmd` (may use $SUBJECT) over ssh (locally
+    when running on the docs root itself); the destination CONFIRMS
+    searchability only if it exits 0 with output."""
+    resolved = cmd.replace("$SUBJECT", subject)
+    target = os.environ.get("DOCSCTL_TARGET", "controller")
+    if _is_self(target) or target in ("localhost", "127.0.0.1", ""):
+        r = subprocess.run(resolved, shell=True, capture_output=True,
+                           text=True, timeout=120)
+    else:
+        r = subprocess.run(["ssh", target, resolved], capture_output=True,
+                           text=True, timeout=120)
+    return r.returncode == 0 and bool(r.stdout.strip())
+
+
+def _is_self(target: str) -> bool:
+    """Running ON the docs-root host itself: use the local transport
+    (localhost self-ssh does not authenticate fleet-root to itself, and
+    pretending 'busy' would be dishonest).
+    """
+    if not target or target in ("localhost", "127.0.0.1", ""):
+        return True
+    try:
+        hn = subprocess.run(["hostname"], capture_output=True, text=True,
+                            timeout=5).stdout.strip()
+    except Exception:
+        hn = ""
+    return bool(hn) and hn == target.strip()
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="docctl")
+    ap.add_argument("action", choices=["assess", "run", "finish", "affected"])
+    ap.add_argument("--receipt")
+    ap.add_argument("--target-path", default=None,
+                    help="finish: already-committed doc to ingest/publish (resume)")
+    ap.add_argument("--subject", default=None,
+                    help="finish: subject used for ingest verification")
+    ap.add_argument("--paths", help="comma-separated paths (affected cmd)")
+    ap.add_argument("--apply", action="store_true",
+                    help="REQUIRED for writes; without it nothing changes")
+    ap.add_argument("--search-cmd", default=None,
+                    help="ssh verification command for ingest searchability")
+    ap.add_argument("--wiki", action="store_true",
+                    help="publish the committed doc to WikiJS and verify by "
+                         "readback (requires execution on the docs host)")
+    args = ap.parse_args(argv)
+
+    target = os.environ.get("DOCSCTL_TARGET", "controller")
+    root = os.environ.get("DOCSCTL_ROOT", "/opt/harness-unset/documentation")
+    if _is_self(target):
+        transport = dp.LocalTransport(root)
+    else:
+        transport = dp.SshTransport(target, root)
+
+    if args.action == "finish":
+        # Resume AFTER a committed write: only ingestion + publication run.
+        # Re-assessment/re-write is skipped so a retry can never duplicate or
+        # churn an already-committed document (P0 §3 recovery).
+        if not args.target_path:
+            print("docctl: --target-path is required for finish", file=sys.stderr)
+            return 2
+        if not args.apply:
+            print(json.dumps({"note": "finish requires --apply; nothing done",
+                              "targetPath": args.target_path}, indent=1))
+            return 0
+        search_fn = None
+        if args.search_cmd:
+            search_fn = (lambda s: ssh_search_cmd(args.search_cmd, s))
+        subj = args.subject or os.path.basename(args.target_path)
+        prop = {"verb": "UPDATE", "status": "DOC_CREATED", "subject": subj,
+                "changeType": "resume", "targetPath": args.target_path,
+                "reason": "resume: document already committed; ingest/publish only"}
+        prop = dp.ingest(prop, transport, search_fn)
+        if args.wiki and prop["status"] in ("DOC_INGEST_INDEXED", "DOC_INGEST_PENDING"):
+            prop = dp.wikijs_publish(prop, transport)
+            if prop["status"] == "DOC_PUBLISHED":
+                transport.append_journal(
+                    "doc-proposals.jsonl",
+                    {"kind": "published", **dp._compact(prop),
+                     "publishReceipt": prop.get("publishReceipt")})
+        print(json.dumps(prop, indent=1))
+        return 0
+
+    if args.action == "affected":
+        paths = [p for p in (args.paths or "").split(",") if p]
+        idx = dp.build_index(transport)
+        print(json.dumps({"affectedDocs": dp.affected_docs_for_skill(paths, idx)},
+                         indent=1))
+        return 0
+
+    if not args.receipt:
+        print("docctl: --receipt is required", file=sys.stderr)
+        return 2
+    with open(args.receipt, "r", encoding="utf-8") as fh:
+        receipt = json.load(fh)
+
+    idx = dp.build_index(transport)
+    prop = dp.assess(receipt, idx)
+
+    if args.action == "assess":
+        print(json.dumps(prop, indent=1))
+        return 0
+
+    if args.action == "run":
+        if not args.apply:
+            prop["note"] = "assess-only (no --apply): nothing written"
+            print(json.dumps(prop, indent=1))
+            transport.append_journal(
+                "doc-proposals.jsonl", {"kind": "dry-run", **dp._compact(prop)})
+            return 0
+        search_fn = None
+        if args.search_cmd:
+            search_fn = (lambda s: ssh_search_cmd(args.search_cmd, s))
+        prop = dp.apply(prop, transport)
+        if prop["verb"] in ("CREATE", "UPDATE", "CORRECT", "MERGE",
+                            "SUPERSEDE", "ARCHIVE"):
+            prop = dp.ingest(prop, transport, search_fn)
+            # P0 §5: real WikiJS publication (readback-verified). Ingest must
+            # be confirmed first unless the caller explicitly publishes an
+            # already-committed doc; otherwise the status stays honest
+            # (DOC_INGEST_PENDING), never DOC_PUBLISHED.
+            if args.wiki and prop["status"] in ("DOC_INGEST_INDEXED", "DOC_INGEST_PENDING"):
+                prop = dp.wikijs_publish(prop, transport)
+                if prop["status"] == "DOC_PUBLISHED":
+                    transport.append_journal(
+                        "doc-proposals.jsonl",
+                        {"kind": "published", **dp._compact(prop),
+                         "publishReceipt": prop.get("publishReceipt")})
+        print(json.dumps(prop, indent=1))
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,27 @@
+{
+  "lock": "/tmp/singularity-ghost-chain.lock",
+  "logDir": "wake",
+  "noteFile": "wake/chain-{{date}}.md",
+  "steps": [
+    {
+      "id": "sweep",
+      "cmd": "node",
+      "args": ["sweep/unified.mjs"],
+      "cwd": "..",
+      "timeoutSeconds": 1800,
+      "optional": false,
+      "okNote": "sweep completed",
+      "failNote": "sweep failed; nothing later in this chain was run"
+    },
+    {
+      "id": "dream",
+      "cmd": "node",
+      "args": ["dream.mjs"],
+      "cwd": "..",
+      "timeoutSeconds": 1800,
+      "optional": true,
+      "okNote": "dream completed",
+      "failNote": "dream failed (optional step; the chain continued)"
+    }
+  ]
+}

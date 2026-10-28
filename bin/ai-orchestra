@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+// bin/ai-orchestra — thin, verb-preserving launcher for the portable harness.
+//
+// It resolves the engine home, runs harness/kit/orchestrate.mjs with the caller's
+// argv untouched, inherits stdio and returns the engine's exit code. That is the
+// whole contract: the launcher adds no verbs, rewrites no arguments and owns no
+// state. The engine remains the single authority for runs.
+//
+// It deliberately does NOT set ORCHESTRA_RUST_AUTHORITY (or any authority
+// selector). The Rust authority ships dormant; selecting it is an operator
+// decision made in harness.config.json, never a side effect of the wrapper.
+"use strict";
+
+const { existsSync } = require("node:fs");
+const { dirname, isAbsolute, join, relative, resolve } = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+function fail(message) {
+  process.stderr.write(`ai-orchestra: ${message}\n`);
+  process.exit(2);
+}
+
+const launcherDir = resolve(__dirname, "..");
+const kitHome = resolve(process.env.ORCHESTRA_KIT_HOME || join(launcherDir, "harness", "kit"));
+
+if (!existsSync(kitHome)) fail(`engine home not found: ${kitHome} (set ORCHESTRA_KIT_HOME or run from the repository root)`);
+const entry = join(kitHome, "orchestrate.mjs");
+if (!existsSync(entry)) fail(`engine entry not found: ${entry} (ORCHESTRA_KIT_HOME must contain orchestrate.mjs)`);
+
+const engineRuns = join(kitHome, "runs"); // the engine's own state root (created on first run)
+const externalState = String(process.env.ORCH_STATE_DIR || "").trim();
+if (externalState) {
+  const abs = resolve(externalState);
+  // Containment must be path arithmetic, not a string prefix: on Windows
+  // resolve() returns backslashes (so `${kitHome}/` never matches), and a
+  // prefix check would also accept a sibling such as `<kitHome>-other`.
+  const rel = relative(kitHome, abs);
+  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  if (abs === kitHome || inside) {
+    fail(`ORCH_STATE_DIR (${abs}) is inside the engine home (${kitHome}); run ids from different harnesses must not overlap (engine state root: ${engineRuns})`);
+  }
+  process.stderr.write(`ai-orchestra: ORCH_STATE_DIR=${abs} is another harness lane; this engine keeps its state in ${engineRuns}\n`);
+}
+
+// Keep the engine's own directory importable and its package-relative reads intact.
+const result = spawnSync(process.execPath, [entry, ...process.argv.slice(2)], {
+  stdio: "inherit",
+  cwd: kitHome,
+  env: process.env,
+});
+
+if (result.error) fail(`failed to start the engine: ${result.error.message}`);
+process.exit(typeof result.status === "number" ? result.status : 1);

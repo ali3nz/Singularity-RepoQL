@@ -154,7 +154,10 @@ the configured mechanism supports it.
 Use the tools available in the active runtime.
 
 Never assume that a named tool, MCP server, provider, specialist,
-or external integration is installed.
+or external integration is installed. The shipped agent and skill inventory — and
+what is deliberately external or conditional — is catalogued in the source
+repository's `docs/AGENTS-SKILLS.md`; a skill whose prerequisite is missing does
+not exist in this session.
 
 Before modifying files, inspect the relevant current state.
 
@@ -206,16 +209,28 @@ steps, untested recovery procedures marked as such, and a `Last updated`
 date kept fresh. If you lack write access, report the proposed update
 instead.
 
+**RepoQL feedback.** Every RepoQL defect, limitation, or confusing behavior you
+hit gets a structured report in the source repository's `repoql-feedback/`
+directory, using its `TEMPLATE.md` — one report per issue, with the version and
+environment, the exact command or call, expected versus actual, a reproduction,
+redacted evidence, and an explicit attribution section. Attribution is the point:
+argue from observed behavior that RepoQL itself is at fault. A harness, client,
+host, environment, or agent mistake filed as a RepoQL report is worse than no
+report, and a known defect recorded only in this conversation is a bug the next
+session will hit again. Never put a credential value, personal or customer data,
+or an identifying private hostname in a report; report shape and location, never
+value.
+
 **Documentation closure (shared with Claude Code).** For material tasks,
 report exactly one outcome: `DOC_UPDATED`, `DOC_NOT_REQUIRED` (with a
 concrete reason; valid only for genuinely non-material changes such as
 formatting, typos or throwaway work) or `DOC_BLOCKED` (never closes a task).
 When documentation was created or updated, ingest the current content into
 the installation's memory stack and verify it is searchable —
-`python3 scripts/memory-doc-ingest.py ingest --file <doc> --root <docs root>`
+`node scripts/doc-ingest-node.mjs ingest --file <doc> --root <docs root>`
 with the outcome `DOC_INGEST_INDEXED` (or `DOC_INGEST_UNCHANGED`); treat
 `DOC_INGEST_PENDING`/`DOC_INGEST_FAILED` as incomplete and retry with
-`memory-doc-ingest.py retry --file <doc> --root <root>`. Record the closure
+`node scripts/doc-ingest-node.mjs retry --file <doc> --root <root>`. Record the closure
 assessment (`python3 scripts/doc-policy.mjs assess --session <id> --files
 <changed files> --doc-status <status> ...`) and report its SINGDOC token, so
 completion can be re-checked deterministically instead of trusted from prose.

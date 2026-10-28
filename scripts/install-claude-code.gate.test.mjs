@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -53,7 +53,12 @@ const nativeTarget = (memory) => {
   const configDir = join(root, ".config", "opencode");
   mkdirSync(join(configDir, "plugins", "product-office"), { recursive: true });
   writeFileSync(join(configDir, "plugins", "product-office", "package.json"), "{}\n");
-  writeFileSync(join(configDir, "AGENTS.md"), "# agents\n");
+  // the shared runtime closure every attach installs (the core bundle marker)
+  mkdirSync(join(configDir, "plugins", "singularity-runtime", "scripts"), { recursive: true });
+  writeFileSync(join(configDir, "plugins", "singularity-runtime", "scripts", "doc-policy.mjs"), "export {};\n");
+  // the target's own AGENTS.md with the managed block merged in
+  writeFileSync(join(configDir, "AGENTS.md"),
+    "# the user's own instructions\n\n<!-- singularity:managed:begin v1 -->\npolicy\n<!-- singularity:managed:end v1 -->\n");
   // a realistic target declares the RepoQL MCP in its OWN opencode.jsonc
   writeFileSync(join(configDir, "opencode.jsonc"),
     '{\n  "mcp": { "repoql": { "type": "local", "command": ["/usr/local/bin/rql", "mcp"] } }\n}\n');
@@ -90,6 +95,38 @@ const runCli = async (argv) => {
   }
   return { rc, out: out.join("\n") };
 };
+
+test("the bundle check is variant-aware: option 3 needs no Office plugin, option 4 does (job-3 finding 3)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "oc-variant-"));
+  try {
+    const configDir = join(root, ".config", "opencode");
+    mkdirSync(join(configDir, "plugins", "singularity-runtime", "scripts"), { recursive: true });
+    writeFileSync(join(configDir, "plugins", "singularity-runtime", "scripts", "doc-policy.mjs"), "export {};\n");
+    // the target's OWN AGENTS.md is merged, never compared byte-for-byte
+    writeFileSync(join(configDir, "AGENTS.md"),
+      "# my own rules\n\n<!-- singularity:managed:begin v1 -->\npolicy\n<!-- singularity:managed:end v1 -->\n");
+    writeFileSync(join(configDir, "opencode.jsonc"), '{\n  "mcp": { "repoql": { "type": "local", "command": ["/rql", "mcp"] } }\n}\n');
+    mkdirSync(join(configDir, "product-secrets"), { recursive: true });
+    writeFileSync(join(configDir, "product-secrets", "memory.json"), JSON.stringify({ baseUrl: "http://127.0.0.1:1", userKey: "sk-test" }));
+
+    const target = { kind: "native", configDir };
+    const r3 = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes: OK_PROBES }, target);
+    assert.match(lineFor(r3, "OpenChamber memory-plugin bundle present"), /^ok:/,
+      "option 3 must not be failed for the Office plugin it excludes");
+    assert.doesNotMatch(r3.checked.join("\n"), /Office plugin/);
+
+    const r4 = await verifyOptionTarget(VARIANTS[4], { variant: "4" }, { target, probes: OK_PROBES }, target);
+    assert.match(lineFor(r4, "OpenChamber memory-plugin bundle present"), /^MISSING:/,
+      "option 4 ships Office, so its bundle must include the plugin");
+    assert.match(lineFor(r4, "OpenChamber memory-plugin bundle present"), /Office plugin/);
+
+    // a bare AGENTS.md without the managed block is NOT an attached target
+    writeFileSync(join(configDir, "AGENTS.md"), "# my own rules\n");
+    const r3b = await verifyOptionTarget(VARIANTS[3], { variant: "3" }, { target, probes: OK_PROBES }, target);
+    assert.match(lineFor(r3b, "OpenChamber memory-plugin bundle present"), /^MISSING:/);
+    assert.match(lineFor(r3b, "OpenChamber memory-plugin bundle present"), /managed AGENTS\.md block/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test("targetConfigDir never falls back to the package config when the target has none", () => {
   assert.equal(targetConfigDir(null), null);

@@ -1,0 +1,29 @@
+[Unit]
+Description=Singularity MemoryCore capture-only consumer (one-shot)
+Documentation=file:/opt/singularity-memory/memory/portable/README.md
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Execution identity: root, because the runner invokes `docker run`. The consumer
+# itself is unprivileged inside the container (uid 1000, read-only rootfs,
+# cap_drop ALL, no-new-privileges).
+WorkingDirectory=/opt/singularity-memory/memory/portable
+# Capture is enabled ONLY by this file, never in the executable (CAPTURE_ENABLED
+# defaults to 0). The leading "-" makes the file OPTIONAL: without it systemd
+# FAILS the unit whenever it is absent, which would turn "capture not activated
+# yet" into a red failed unit on every tick. With "-" an absent file means the
+# runner exits 0 with capture off -- nothing read, nothing written.
+Environment=CAPTURE_ENV_FILE=/etc/singularity/capture.env
+EnvironmentFile=-/etc/singularity/capture.env
+ExecStart=/usr/local/bin/singularity-capture-run.sh
+TimeoutStartSec=1800
+# Out-of-process: a MemoryCore outage must never affect an agent turn.
+Nice=10
+IOSchedulingClass=idle
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

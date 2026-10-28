@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoQL Control</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23060910'/%3E%3Cg transform='translate%284 4%29 scale%281%29' fill='none' stroke='%2326e6ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z' opacity='.55'/%3E%3Cpath d='M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2'/%3E%3Ccircle cx='12' cy='7.3' r='1.9' fill='%2326e6ff'/%3E%3Ccircle cx='7.6' cy='15' r='1.9' fill='%2326e6ff'/%3E%3Ccircle cx='16.4' cy='15' r='1.9' fill='%2326e6ff'/%3E%3Ccircle cx='12' cy='12' r='1.1' fill='%2326e6ff'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<a class="skip-link" href="#app">Skip to main content</a>
+<header class="mobile-topbar" id="mobile-topbar">
+  <button id="nav-toggle" class="mobile-menu-button" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Open navigation menu">☰ <span>Menu</span></button>
+  <strong id="mobile-page-title" aria-live="polite">RepoQL Dashboard</strong>
+  <span class="mobile-brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></span>
+</header>
+<button class="nav-scrim" id="nav-scrim" type="button" aria-label="Close navigation" hidden></button>
+<div class="layout">
+  <aside class="sidebar" id="site-nav" aria-label="Main navigation">
+    <div class="nav-drawer-head"><span>Navigation</span><button type="button" id="nav-close" class="mobile-menu-button" aria-label="Close navigation">✕ Close</button></div>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></div>
+      <div class="brand-text">
+        <strong>REPOQL</strong>
+        <span>control plane</span>
+      </div>
+    </div>
+
+    <div class="sidebar-search">
+      <label for="nav-search">Find a page <kbd>/</kbd></label>
+      <input id="nav-search" type="search" placeholder="Search sections…" autocomplete="off" aria-describedby="nav-search-status">
+      <span id="nav-search-status" role="status" aria-live="polite"></span>
+    </div>
+    <nav class="nav-section" aria-label="Overview">
+      <h2>Overview</h2>
+      <a class="nav-link" href="#/" data-nav="/"><span class="dot"></span>Dashboard</a>
+    </nav>
+
+    <nav class="nav-section" aria-label="Operations">
+      <h2>Operations</h2>
+      <a class="nav-link" href="#/kanban" data-nav="/kanban"><span class="dot"></span>Kanban Board</a>
+      <a class="nav-link" href="#/agentchat" data-nav="/agentchat"><span class="dot"></span>Agent Chat</a>
+      <a class="nav-link" href="#/office" data-nav="/office"><span class="dot"></span>Office View</a>
+      <a class="nav-link" href="#/ghost" data-nav="/ghost"><span class="dot"></span>Ghost Operations</a>
+    </nav>
+
+    <nav class="nav-section" aria-label="Unified systems">
+      <h2>Unified Systems</h2>
+      <a class="nav-link" href="#/unified/graph" data-nav="/unified/graph"><span class="dot"></span>Live Memory Graph</a>
+      <a class="nav-link" href="#/repoql/control" data-nav="/repoql/control"><span class="dot"></span>RepoQL Control Panel</a>
+      <a class="nav-link" href="#/unified/tencent" data-nav="/unified/tencent"><span class="dot"></span>Tencent Control Panel</a>
+      <a class="nav-link" href="#/unified/usage" data-nav="/unified/usage"><span class="dot"></span>Fleet AI Usage</a>
+    </nav>
+
+    <nav class="nav-section" aria-label="Reference">
+      <h2>Reference</h2>
+      <a class="nav-link" href="#/architecture/memory" data-nav="/architecture/memory"><span class="dot"></span>Memory Workflow</a>
+      <a class="nav-link" href="#/architecture/orchestra" data-nav="/architecture/orchestra"><span class="dot"></span>Orchestration Architecture</a>
+      <a class="nav-link" href="#/repoql/cheat-sheet" data-nav="/repoql/cheat-sheet"><span class="dot"></span>RepoQL Cheat Sheet</a>
+    </nav>
+
+    <nav class="nav-section" aria-label="Knowledge">
+      <h2>Knowledge</h2>
+      <a class="nav-link k-concept" href="#/knowledge/all" data-nav="/knowledge/all"><span class="dot"></span>Concepts</a>
+      <a class="nav-link" href="#/links" data-nav="/links"><span class="dot"></span>Connections &amp; Links</a>
+      <a class="nav-link" href="#/knowledge/connectors" data-nav="/knowledge/connectors"><span class="dot"></span>Connectors</a>
+    </nav>
+
+    <nav class="nav-section" aria-label="Harness">
+      <h2>Harness</h2>
+      <a class="nav-link" href="#/harness" data-nav="/harness"><span class="dot"></span>Control Center</a>
+      <a class="nav-link" href="#/harness/agents" data-nav="/harness/agents"><span class="dot"></span>Live Agents</a>
+      <a class="nav-link" href="#/harness/runs" data-nav="/harness/runs"><span class="dot"></span>Execution History</a>
+      <a class="nav-link" href="#/harness/performance" data-nav="/harness/performance"><span class="dot"></span>Run Performance</a>
+      <a class="nav-link" href="#/harness/events" data-nav="/harness/events"><span class="dot"></span>Events</a>
+      <a class="nav-link" href="#/harness/settings" data-nav="/harness/settings"><span class="dot"></span>Nannies &amp; Settings</a>
+    </nav>
+
+    <nav class="nav-section" aria-label="System">
+      <h2>System</h2>
+      <a class="nav-link" href="#/indexing" data-nav="/indexing"><span class="dot"></span>Indexing</a>
+      <a class="nav-link" href="#/diagnostics" data-nav="/diagnostics"><span class="dot"></span>Diagnostics</a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="conn" id="conn" data-state="loading"><span class="pip"></span><span id="connLabel">connecting</span></div>
+      <div id="hostLine" class="mono" style="margin-top:8px"></div>
+      <div style="margin-top:10px">Data read from the configured RepoQL host. Nothing is re-indexed here.</div>
+    </div>
+  </aside>
+
+  <main class="main" id="app" tabindex="-1">
+    <div class="loading">Loading RepoQL state…</div>
+  </main>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

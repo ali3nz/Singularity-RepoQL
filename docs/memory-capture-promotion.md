@@ -10,7 +10,8 @@ below), `NO_LESSON` (nothing durable — acceptable and normal) or `DEFERRED` (e
 but held by a documented cap — never silently dropped). These token values are
 part of the shared documentation closure assessment (`scripts/doc-policy.mjs
 assess`); documentation ingestion for material runbook updates is a separate,
-verified path (`scripts/memory-doc-ingest.py`, see `docs/DOC-INGESTION.md`).
+verified path (`scripts/doc-ingest-node.mjs`; legacy `scripts/memory-doc-ingest.py`,
+see `docs/DOC-INGESTION.md`).
 
 ## What runs automatically, what does not
 

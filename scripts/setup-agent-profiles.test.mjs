@@ -4,7 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   agentDescription,
   charterFor,
@@ -323,4 +324,29 @@ test("a ledger entry under a different agent_id is re-verified, not reported pre
   });
   assert.notEqual(out.results[0].status, "present");
   assert.equal(calls[0].body.agent_id, "agt-board");
+});
+
+test("the shipped OpenChamber roster is fully provisionable, Ghost excepted", () => {
+  // Ghost owns its own companion profile, so it is the one role this seeder must
+  // skip. Every other shipped agent needs a profile of its own, or its memory scope
+  // silently falls back to somebody else's.
+  const agentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "openchamber", "agents");
+  assert.deepEqual(listAgents(agentsDir), [
+    "board",
+    "code-reviewer",
+    "duel-coordinator",
+    "duo",
+    "explore",
+    "fleet-reviewer",
+    "free-mode",
+    "general",
+    "orchestrator",
+    "quad-coordinator",
+    "quality-fixer",
+    "researcher-web",
+    "solo-coordinator",
+    "standalone",
+    "super",
+    "thinker",
+  ]);
 });

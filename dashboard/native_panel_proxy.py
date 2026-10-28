@@ -1,0 +1,323 @@
+"""Dashboard-session embeds for the existing Tencent and Office applications.
+
+Backend keys stay server-side. Each fixed upstream is reachable only after an
+authenticated handshake; cookie-authenticated writes and WS handshakes also
+require the dashboard Origin. No arbitrary upstream URLs are accepted.
+"""
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import select
+import socket
+from urllib.parse import parse_qs, urlencode, urlsplit
+
+from repoql_native_auth import COOKIE_NAME, create_launch_cookie, valid_launch_cookie
+
+
+def _upstream(kind, default_port):
+    """Fixed loopback upstream; only these three names exist, never a URL from a request."""
+    prefix = 'SINGULARITY_' + kind.upper() + '_HOST'
+    port_key = 'SINGULARITY_' + kind.upper() + '_PORT'
+    host = os.environ.get(prefix, '127.0.0.1').strip()
+    try:
+        port = int(os.environ.get(port_key, default_port))
+    except (TypeError, ValueError):
+        port = default_port
+    return (host, port)
+
+
+UPSTREAM = {'tencent': _upstream('tencent', 8125), 'office': _upstream('office', 8001),
+            'kanzo': _upstream('kanzo', 4242)}
+MAX_BODY = 8 * 1024 * 1024
+
+
+def prefix(kind):
+    if kind not in UPSTREAM:
+        raise FileNotFoundError('unknown panel')
+    return '/embed/' + kind
+
+
+def upstream_path(kind, path):
+    base = prefix(kind)
+    rest = path[len(base):] if path.startswith(base + '/') else ''
+    if not rest.startswith('/') or any(c in rest for c in ('..', '\\', '%', '\r', '\n')) or len(rest) > 4096:
+        raise PermissionError('invalid panel path')
+    return rest
+
+
+def backend_key(kind):
+    if kind == 'office':
+        # Existing private service setting, not delivered to this iframe.
+        key = parse_qs(urlsplit(os.environ.get('SINGULARITY_OFFICE_EMBED_URL',
+            os.environ.get('CLAUDE_OFFICE_EMBED_URL', ''))).query).get('token', [''])[0]
+    else:
+        key_file = os.environ.get('SINGULARITY_TENCENT_OWNER_KEY_FILE',
+                                  os.environ.get('TENCENT_OWNER_KEY_FILE', '')).strip()
+        if not key_file:
+            raise PermissionError('panel credential unavailable')
+        key = Path(key_file).read_text().strip()
+    if not key or len(key) > 4096 or '\r' in key or '\n' in key:
+        raise PermissionError('panel credential unavailable')
+    return key
+
+
+def authenticated(handler):
+    return handler.authorized() or valid_launch_cookie(handler.headers.get('Cookie', ''), handler.app.token, max_age=3600)
+
+
+def handshake(handler, kind):
+    prefix(kind)
+    if kind != 'kanzo':
+        try:
+            backend_key(kind)  # fail before issuing a cookie if configuration is absent
+        except (OSError, PermissionError):
+            handler.send_json(503, {'error': kind + '_panel_unconfigured'})
+            return
+    if kind == 'kanzo':
+        # Kanzo has no built-in user authentication. Prove it is the expected
+        # loopback service before granting a dashboard-scoped browser session.
+        try:
+            conn = http.client.HTTPConnection(*UPSTREAM['kanzo'], timeout=3)
+            try:
+                conn.request('GET', '/api/ping')
+                response = conn.getresponse()
+                ready = response.status == 200 and response.read(64) == b'kanzo'
+            finally:
+                conn.close()
+        except OSError:
+            ready = False
+        if not ready:
+            handler.send_json(503, {'error': 'local_kanzo_unavailable'})
+            return
+    cookie = create_launch_cookie(handler.app.token)
+    secure = '; Secure' if handler.access_identity() is not None or handler.request_is_https() else ''
+    body = b'{"ready":true}'
+    handler.send_response(200)
+    handler.send_header('Content-Type', 'application/json')
+    handler.send_header('Cache-Control', 'no-store')
+    handler.send_header('Set-Cookie', f'{COOKIE_NAME}={cookie}; HttpOnly; SameSite=Strict; Path={prefix(kind)}/; Max-Age=3600{secure}')
+    handler.send_header('Content-Length', str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def transport(kind):
+    # Fixed same-origin routing only. No credentials or auth material in JS.
+    return ("""(()=>{const prefix=PREFIX;
+      const remap=(raw)=>{const u=new URL(raw,location.href);
+        if(u.host===location.host&&['http:','https:','ws:','wss:'].includes(u.protocol)&&!u.pathname.startsWith(prefix+'/'))u.pathname=prefix+u.pathname;
+        return u.href;};
+      const original=window.fetch.bind(window);
+      window.fetch=(input,options)=>original(input instanceof Request?new Request(remap(input.url),input):remap(input),options);
+      const WS=window.WebSocket;window.WebSocket=class extends WS{constructor(url,protocols){super(remap(url),protocols)}};
+    })();""").replace('PREFIX', json.dumps(prefix(kind))).encode()
+
+
+def rewrite(kind, text, content_type):
+    base = prefix(kind)
+    text = re.sub(r'([\"\x27`(=])(/(?:assets/|_next/|logo\.png|app\.js|images/|favicon\.ico|downloads/))',
+                  lambda m: m[1] + base + m[2], text)
+    if 'text/html' in content_type:
+        text = text.replace('<head>', '<head><script src="' + base + '/_transport.js"></script>', 1)
+    return text
+
+
+def tencent_session():
+    """Verify the real configured user, returning only public session fields."""
+    conn = http.client.HTTPConnection(*UPSTREAM['tencent'], timeout=15)
+    try:
+        conn.request('POST', '/api/v1/meta/auth/verify',
+            body=json.dumps({'user_key': backend_key('tencent')}),
+            headers={'Content-Type': 'application/json', 'X-Tdai-Service-Id': 'default'})
+        response = conn.getresponse()
+        raw = response.read(1024 * 1024 + 1)
+        if response.status != 200 or len(raw) > 1024 * 1024:
+            raise PermissionError('Tencent verification failed')
+        data = json.loads(raw)
+        verified = data.get('data') or {}
+        if data.get('code') != 0 or verified.get('valid') is not True or not isinstance(verified.get('user'), dict):
+            raise PermissionError('Tencent credential invalid')
+        user = {k: v for k, v in verified['user'].items()
+                if k in ('user_id', 'username', 'display_name', 'user_type', 'created_at')}
+        return {'authenticated': True, 'instance_id': 'default', 'user': user}
+    finally:
+        conn.close()
+
+
+def serve(handler, kind, method, parsed, *, public_root=False):
+    if public_root:
+        # A dashboard bearer/cookie or a spoofed email cannot authorize this host.
+        if kind != 'office' or handler.office_access_identity() is None:
+            handler.send_json(401, {'error': 'office_access_required'})
+            return
+        path = upstream_path(kind, prefix(kind) + parsed.path)
+        if path == '/' and method in ('GET', 'HEAD'):
+            # Match the Homepage embed without putting the backend key in a URL.
+            params = parse_qs(parsed.query)
+            query = [('embed', '1')]
+            room = params.get('room', [''])[0]
+            if room in ('modern', 'dm'):
+                query.append(('room', room))
+            canonical = urlencode(query)
+            if parsed.query != canonical:
+                handler.send_response(302)
+                handler.send_header('Location', '/?' + canonical)
+                handler.send_header('Cache-Control', 'no-store')
+                handler.send_header('Content-Length', '0')
+                handler.end_headers()
+                return
+    else:
+        if not authenticated(handler):
+            handler.send_json(401, {'error': 'dashboard_session_required'})
+            return
+        path = upstream_path(kind, parsed.path)
+    if kind == 'kanzo' and (path == '/mcp' or path.startswith('/mcp/')):
+        # Agents use Kanzo's host-local MCP endpoint, not a cookie-authenticated
+        # browser proxy. Never publish the unauthenticated MCP surface here.
+        handler.send_json(403, {'error': 'kanzo_mcp_is_local_only'})
+        return
+    is_ws = handler.headers.get('Upgrade', '').lower() == 'websocket'
+    if is_ws or method not in ('GET', 'HEAD'):
+        if not handler.request_origin_allowed(require_origin=public_root or not handler.bearer_authorized()):
+            handler.send_json(403, {'error': 'cross_origin_refused'})
+            return
+    if is_ws:
+        if kind != 'office' or not path.startswith('/ws/'):
+            handler.send_json(403, {'error': 'websocket_path_refused'})
+            return
+        websocket(handler, kind, path)
+        return
+    if method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'):
+        raise PermissionError('unsupported panel method')
+    if path == '/_transport.js' and not public_root:
+        content, code, content_type = transport(kind), 200, 'text/javascript; charset=utf-8'
+    elif kind == 'tencent' and path == '/api/v1/auth/session' and method == 'GET':
+        content, code, content_type = json.dumps(tencent_session()).encode(), 200, 'application/json'
+    else:
+        length = int(handler.headers.get('Content-Length') or 0)
+        body_limit = 27 * 1024 * 1024 if kind == 'kanzo' else MAX_BODY
+        if length < 0 or length > body_limit:
+            raise ValueError('panel request too large')
+        body = handler.rfile.read(length) if length else None
+        headers = {'Accept-Encoding': 'identity', 'Content-Type': handler.headers.get('Content-Type', 'application/json')}
+        if kind == 'office':
+            headers['X-API-Key'] = backend_key(kind)
+        elif kind == 'kanzo':
+            # Kanzo's DNS rebinding/origin guard expects its own loopback host.
+            # Incoming browser writes were verified against the public dashboard
+            # origin above; only then is Origin rewritten for the fixed upstream.
+            if method not in ('GET', 'HEAD'):
+                headers['Origin'] = 'http://127.0.0.1:4242'
+        else:
+            headers['X-Tdai-Service-Id'] = 'default'
+            headers['X-Tdai-User-Key'] = backend_key(kind)
+            # The Panel's meta routes need a body identity as well as headers.
+            # Never let a supplied identity override the dashboard owner.
+            if path.startswith('/api/v1/meta/') and body:
+                data = json.loads(body)
+                if not isinstance(data, dict):
+                    raise ValueError('expected JSON object')
+                data.pop('user_id', None)
+                data['user_key'] = backend_key(kind)
+                body = json.dumps(data).encode()
+        conn = http.client.HTTPConnection(*UPSTREAM[kind], timeout=30)
+        try:
+            conn.request(method, path + ('?' + parsed.query if parsed.query else ''), body=body, headers=headers)
+            response = conn.getresponse()
+            limit = 27 * 1024 * 1024 if kind == 'kanzo' else MAX_BODY
+            content = response.read(limit + 1)
+            if len(content) > limit:
+                raise ValueError('panel response too large')
+            code = response.status
+            content_type = response.getheader('Content-Type') or 'application/octet-stream'
+            if not public_root and any(t in content_type for t in ('text/html', 'javascript', 'text/css')):
+                content = rewrite(kind, content.decode('utf-8', 'replace'), content_type).encode()
+        finally:
+            conn.close()
+    handler.send_response(code)
+    handler.send_header('Content-Type', content_type)
+    handler.send_header('Cache-Control', 'no-store')
+    handler.send_header('Referrer-Policy', 'no-referrer')
+    handler.send_header('X-Content-Type-Options', 'nosniff')
+    if kind == 'kanzo':
+        # Preserve Kanzo's restrictive CSP while allowing same-origin dashboard
+        # framing. Its upstream policy forbids all frames and cannot be copied.
+        handler.send_header('Content-Security-Policy',
+            "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; base-uri 'none'; "
+            "form-action 'none'; frame-ancestors 'self'")
+    handler.send_header('Content-Length', str(len(content)))
+    handler.end_headers()
+    if method != 'HEAD':
+        handler.wfile.write(content)
+
+
+def websocket(handler, kind, path):
+    upstream = None
+    try:
+        lines = [f'GET {path} HTTP/1.1', 'Host: %s:%d' % UPSTREAM[kind],
+                 'Connection: Upgrade', 'Upgrade: websocket', 'X-API-Key: ' + backend_key(kind)]
+        for key in ('Sec-WebSocket-Key', 'Sec-WebSocket-Version', 'Sec-WebSocket-Protocol', 'Sec-WebSocket-Extensions'):
+            value = handler.headers.get(key)
+            if value:
+                lines.append(key + ': ' + value)
+        upstream = socket.create_connection(UPSTREAM[kind], timeout=10)
+        upstream.sendall(('\r\n'.join(lines) + '\r\n\r\n').encode('latin-1'))
+        handler.connection.settimeout(None)
+        upstream.settimeout(None)
+        while True:
+            ready, _, _ = select.select([handler.connection, upstream], [], [], 300)
+            if not ready:
+                return
+            for source in ready:
+                data = source.recv(65536)
+                if not data:
+                    return
+                target = upstream if source is handler.connection else handler.connection
+                target.sendall(data)
+    finally:
+        if upstream is not None:
+            upstream.close()
+        handler.close_connection = True
+
+
+# Root-absolute art the Office client loads outside its embed base path.
+# The Pixi texture loader issues /sprites/... and /rooms/... directly; inside the
+# /embed/office/ iframe those resolve against the dashboard origin and hit its SPA
+# fallback (index.html), so every texture fails and the rendered agents vanish.
+# The Office already serves these images unauthenticated; proxy them unchanged.
+STATIC_PREFIXES = ('/sprites/', '/rooms/')
+MAX_ASSET = 8 * 1024 * 1024
+
+
+def static_asset(handler, method, parsed):
+    """Serve the Office art that escapes the /embed/office/ prefix."""
+    if method not in ('GET', 'HEAD'):
+        handler.send_json(405, {'error': 'method_not_allowed'})
+        return
+    path = parsed.path
+    if (not path.startswith(STATIC_PREFIXES) or len(path) > 4096
+            or any(c in path for c in ('..', '\\', '%', '\r', '\n'))):
+        raise PermissionError('invalid asset path')
+    conn = http.client.HTTPConnection(*UPSTREAM['office'], timeout=30)
+    try:
+        conn.request('GET', path + ('?' + parsed.query if parsed.query else ''),
+                     headers={'Accept-Encoding': 'identity'})
+        response = conn.getresponse()
+        content = response.read(MAX_ASSET + 1)
+        code = response.status
+        content_type = response.getheader('Content-Type') or 'application/octet-stream'
+    finally:
+        conn.close()
+    if len(content) > MAX_ASSET:
+        raise ValueError('asset too large')
+    handler.send_response(code)
+    handler.send_header('Content-Type', content_type)
+    handler.send_header('Cache-Control', 'private, max-age=300')
+    handler.send_header('X-Content-Type-Options', 'nosniff')
+    handler.send_header('Content-Length', str(len(content)))
+    handler.end_headers()
+    if method != 'HEAD':
+        handler.wfile.write(content)

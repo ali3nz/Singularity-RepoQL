@@ -1,0 +1,22 @@
+[
+  {
+    "task": "sweep",
+    "entry": "synthesis",
+    "text": "Summarise the verified work of this period. Cite the files and receipts that support each claim; omit anything you cannot support.\n"
+  },
+  {
+    "task": "sweep",
+    "entry": "review",
+    "text": "Review the summary above for unsupported claims, stale references and missing evidence. Say plainly what is unverified.\n"
+  },
+  {
+    "task": "dream",
+    "entry": "reflection",
+    "text": "Reflect on {{date}}. Keep what changed, what was verified, and what remains open.\n"
+  },
+  {
+    "task": "wake",
+    "entry": "instruction",
+    "text": "Scheduled wake for {{slot}} on {{date}}. Context: {{summary}}. Act only on what the context supports.\n"
+  }
+]

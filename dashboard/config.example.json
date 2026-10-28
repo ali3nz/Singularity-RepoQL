@@ -1,0 +1,15 @@
+{
+  "workspace": "/srv/singularity/workspace",
+  "rql": "/usr/local/bin/rql",
+  "state_dir": "/var/lib/singularity-dashboard",
+  "bind": "127.0.0.1",
+  "port": 18100,
+  "sample_interval_seconds": 30,
+  "cpu_retention_days": 30,
+  "allow_peers": ["127.0.0.1", "::1"],
+  "public_url": "",
+  "access": {
+    "team_domain": "",
+    "aud": ""
+  }
+}

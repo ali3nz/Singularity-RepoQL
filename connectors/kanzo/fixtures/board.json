@@ -1,0 +1,57 @@
+{
+  "changes": "fixture-1",
+  "done_hidden": 0,
+  "projects": [
+    {
+      "id": 1,
+      "slug": "demo",
+      "name": "Demo project",
+      "repos": [],
+      "color": null,
+      "created_at": "2026-01-02T03:04:05Z",
+      "open": 1,
+      "total": 2
+    }
+  ],
+  "statuses": [
+    "todo",
+    "doing",
+    "review",
+    "done"
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "project": 1,
+      "project_slug": "demo",
+      "project_name": "Demo project",
+      "title": "Seed the fixture board",
+      "description": "Synthetic card. Nothing here is a real record.",
+      "tags": [
+        "fixture"
+      ],
+      "human": false,
+      "status": "done",
+      "position": 1,
+      "created_at": "2026-01-02T03:04:05Z",
+      "updated_at": "2026-01-02T04:00:00Z",
+      "comments": 1
+    },
+    {
+      "id": 2,
+      "project": 1,
+      "project_slug": "demo",
+      "project_name": "Demo project",
+      "title": "Read the second synthetic card",
+      "description": "Synthetic card with no comments.",
+      "tags": [],
+      "human": false,
+      "status": "todo",
+      "position": 2,
+      "created_at": "2026-01-02T03:10:00Z",
+      "updated_at": "2026-01-02T03:10:00Z",
+      "comments": 0
+    }
+  ],
+  "version": "0.1.3"
+}

@@ -1,0 +1,38 @@
+AI ORCHESTRA — OPERATOR COMMANDS (full playbook: hub documentation/orchestra-commands.md)
+
+MODES (start): DUAL default = 2 managed Muse Spark subscription seats alpha/beta (opencode-go #xhigh, 0 freebucks) · --solo = 1 managed Muse seat
+              --dual explicit · --duo/--full = LEGACY aliases of dual · --quad = dual + 2 managed GPT-6 Luna (max) seats gamma/delta (opt-in, huge jobs, no failover, 0 freebucks)
+              Freebuff seats are OPT-IN only (--roster "N*freebuff"; ticket 230)
+              --free-only/--free = free-chain orchestrator + ONE Muse 1.3 free worker (0 freebucks)
+              ("duo" otherwise means the requester+Sol consult pairing — the 'consult' verb)
+
+ start "<task>" [--go] [--dry] [--solo|--dual|--quad|--free-only] [--plan-file <p>] [--skip-review]   plan→run→review→accept
+ resume [--go] [--accept] [run-id]     continue CURRENT (or given) run; --accept closes a held acceptance
+ stop                                  stop the current run's worker turns
+ status · jobs · engines · updates [--last=N] [--follow] [--json]        inspect run / ALL jobs board / engine chains+quota / live beats
+ nanny [--apply] [--loop] [--run <id>] babysitter: stuck-run remediation + Discord alert threads
+ salvage [--reuse "<task>"]            menu / one-shot reuse of leftover prepaid worker time
+session-state · session-reuse "<task>" --session <id> · session-consult "<q>"   OpenChamber bridge: pooled-session view (JSON, honest kit-reuse timer) / exact-identity reuse (no silent new-worker fallback) / coordinator-brokered Sol (PINNED catgpt GPT-5.6-sol, detached; no free-model fallback)
+start "<task>" --roster "<spec>" [--consultant sol|free|default] [--scope "<paths>"]      ticket 189: custom roster run — spec "N*freebuff,N*managed:openai/gpt-6-luna#max,N*<free provider/model>" (<=8 seats, <=2 freebuff; free models + managed Luna (max) + paid manual seats (Go/paid-OpenRouter, explicit only); max 2 concurrent runs
+worker-digest [--run <id>] [--json]                                                          ticket 189: per-worker progress + todo digest (read-only); 2 runs active => both
+status|updates|stop|resume|reset [--run <id>]                                                ticket 189: with 2 runs active, mutating verbs REQUIRE --run <id>
+session-launch "<task>" --mode solo|dual|quad|custom [--roster ...]                          OpenChamber bridge (ticket 133): operator worker-mode launch — detached kit run under kit authority; observe with status/jobs; NEVER implement in-chamber
+ reset [--yes]                         clear stuck CURRENT/lock/dead pool (refuses while coordinator alive)
+ ask "<q>" [--premium] [--confidential] [--file <p>]              one-off answer, 0 freebucks  consult "<issue>" [--open <f>] [--attach <f>] [--codex|--engine <e>] [--end "note"]   duo consultant
+ conv-review <file.md> | --run <id> | --consult <id> [--dry-run]   conversation-review self-learning loop (ticket 130): transcript to Sol + gated findings application
+ plan "<task>" · harvest <runDir> · skill-stale <id> [--off] · skill-publish [--all|<id>] [--dry] · debrief [runId]   planning gate only · distill an ACCEPTED run into a skill note · retire/un-retire a skill from retrieval · regenerate the end-of-run debrief (auto on every terminal state)
+ summary [runId] [--mode <m>]          visual HTML run summary (plain|accessible|artistic|animated) next to debrief.md
+ vision-smoke · seat-smoke · selftest · watch · supervise · quality   probes + run-side tooling (seat-smoke = one real free seat turn, 0 freebucks)
+
+DETACHED RUN: setsid bash -c 'nohup bun orchestrate.mjs start "<task>" --go > runs/<name>.log 2>&1 &'
+CHAT STREAM:  bash work/ai-orchestration/ps-updates.sh &    (2-min updates; --stop ends it)
+
+DISCORD (bot @openclaw — deterministic bridge, no LLM, operator-only):
+  status | updates | engines | nanny | help      mention optional
+  resume [run-id] | stop | quad <task>           REQUIRE an @openclaw mention
+  one thread per run under #orchestration; alerts + narrated updates land there
+
+BUDGET: managed seats bill the operator's subscriptions (0 freebucks). Opt-in Freebuff seats: 5 freebucks per worker
+        session (60 min, pooled/reused), 100/day hard cap. ask / consult / free seats cost 0.
+OTHER SURFACES: host wrapper 'ai-orchestra <cmd>' on controller · OpenCode /orchestra-commands
+                or just ask the agent "commands" · HA-alert playbook in the hub doc above.

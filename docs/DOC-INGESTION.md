@@ -4,7 +4,8 @@ Singularity treats documentation as part of the work. When an agent completes a
 material change, the runbook/documentation it produced must be *ingested* into
 the installation's Tencent memory stack, verified as genuinely searchable, and
 kept revision-controlled — so a later agent retrieves the CURRENT procedure,
-not a stale one. This page covers the shared engine (`scripts/memory-doc-ingest.py`),
+not a stale one. This page covers the shared engine (`scripts/doc-ingest-node.mjs`;
+the legacy `scripts/memory-doc-ingest.py` remains as a compatibility helper),
 the shared policy (`scripts/doc-policy.mjs`) and the per-client wiring
 (OpenChamber runbook-nudge; Claude Code doc-hook). The same two modules serve
 both clients; there is no second policy text and no second ingestion engine.
@@ -61,24 +62,24 @@ changing) files. See [`memory-capture-promotion.md`](memory-capture-promotion.md
 
 ```bash
 # ingest one document when it was just written/updated (the automatic path)
-python3 scripts/memory-doc-ingest.py ingest --file docs/runbooks/example.md \
+node scripts/doc-ingest-node.mjs ingest --file docs/runbooks/example.md \
   --root <project-root>/docs --session <session-id>
 
 # retry pending/failed (event-driven; the Claude Code Stop hook runs this)
-python3 scripts/memory-doc-ingest.py retry --all --root <project-root>/docs
+node scripts/doc-ingest-node.mjs retry --all --root <project-root>/docs
 
 # inspect the ledger against current sources (stale_source = disk ahead of memory)
-python3 scripts/memory-doc-ingest.py status --all --root <project-root>/docs
+node scripts/doc-ingest-node.mjs status --all --root <project-root>/docs
 
 # independent completion evidence for ONE document: the ledger decides, a
 # claimed status never counts (this is what the closure gate consumes)
-python3 scripts/memory-doc-ingest.py verify --file docs/runbooks/example.md --root <project-root>/docs
+node scripts/doc-ingest-node.mjs verify --file docs/runbooks/example.md --root <project-root>/docs
 
 # bounded search of shared documentation knowledge (agents use this)
-python3 scripts/memory-doc-ingest.py search "restart pump procedure"
+node scripts/doc-ingest-node.mjs search "restart pump procedure"
 
 # include superseded revisions for auditing only
-python3 scripts/memory-doc-ingest.py search "restart pump" --stale
+node scripts/doc-ingest-node.mjs search "restart pump" --stale
 ```
 
 Environment: `KNOWLEDGE_INDEX_BASE_URL`, `MEMORY_SECRETS` (same as
@@ -157,7 +158,7 @@ exactly one outcome and records it for deterministic verification:
   knowledge-capture step was reported (`CAPTURED` | `NO_LESSON` | `DEFERRED`).
   The gate never takes the caller's word for the ingestion status: on record
   and again at every re-check it independently re-derives the evidence with
-  `memory-doc-ingest.py verify` against the ledger and the current source
+  `doc-ingest-node.mjs verify` against the ledger and the current source
   hashes. A fabricated status, a hash mismatch, a pending/failed newer
   revision or a wrong workspace is refused with a precise finding.
 - `DOC_NOT_REQUIRED` — only for genuinely non-material changes (formatting,
@@ -189,7 +190,7 @@ prose claims.
 ## Client wiring
 
 - **OpenChamber** — the `runbook-nudge` plugin's start reminder adds the
-  shared-docs search (`memory-doc-ingest.py search`) and the closeout nudge
+  shared-docs search (`doc-ingest-node.mjs search`) and the closeout nudge
   requires the `DOC_*` outcome, the ingestion verification command and the
   recorded SINGDOC token. It remains a reminder plus instructions: OpenCode
   offers no documented stop-interception hook, so closure is enforced through
@@ -199,7 +200,7 @@ prose claims.
   `scripts/install-claude-code.mjs` alongside the memory hooks):
   - `SessionStart` → the same start-of-work guidance as OpenChamber's start
     reminder (bounded, advisory).
-  - `Stop` → event-driven `memory-doc-ingest.py retry` for pending work, then
+  - `Stop` → event-driven `doc-ingest-node.mjs retry` for pending work, then
     automatic discovery: the baseline census diff runs and every new/changed
     eligible doc (tracked or untracked) is ingested through the shared
     pipeline before the closeout check. A session that recorded an incomplete

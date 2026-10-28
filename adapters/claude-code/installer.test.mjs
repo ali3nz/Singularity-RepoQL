@@ -3,9 +3,11 @@
 //   node --test adapters/claude-code/installer.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, statSync, chmodSync, copyFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, statSync, chmodSync, copyFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import {
   ensureMemoryIntegration,
   removeMemoryIntegration,
@@ -28,6 +30,7 @@ import {
   applyMainMemory,
   usageText,
   installOptionLines,
+  option2BoundaryLines,
   runInstall,
   UsageError,
 } from "../../scripts/install-claude-code.mjs";
@@ -430,4 +433,72 @@ test("option refusal strings: mandated wording mentions installation option expl
   const res = resolveVariant({ variant: "7", skipProfiles: false, scope: "user" }, {});
   assert.equal(res.ok, false);
   assert.match(res.problems[0], /one of 1\.\.4/);
+});
+
+// ── regressions from the Windows WSL install acceptance (job 3) ─────────────
+
+test("a re-install MERGES the earlier replace proof: uninstall restores the user's file", () => {
+  // Regression: the second install used to rewrite the ledger entry for a file
+  // that is now "present", dropping the earlier replace/backup metadata. The
+  // uninstall then deleted the user's agent instead of restoring it.
+  const source = srcFixture();
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-merge-"));
+  const target = planAgentFiles(agentsDir, source).find((f) => f.target.endsWith("singularity-board.md")).target;
+  const original = "my own board notes — MUST come back at uninstall";
+  writeFileSync(target, original);
+
+  const first = applyAgentFiles(planAgentFiles(agentsDir, source), { dryRun: false });
+  const firstEntry = first.ledger.find((e) => e.target === target);
+  assert.equal(firstEntry.action, "replace");
+  assert.ok(firstEntry.backupPath && existsSync(firstEntry.backupPath));
+
+  // Re-install sees the packaged content ("present") and must keep the proof.
+  const second = applyAgentFiles(planAgentFiles(agentsDir, source), { dryRun: false, priorLedger: first.ledger });
+  const secondEntry = second.ledger.find((e) => e.target === target);
+  assert.equal(secondEntry.action, "replace", "the earlier replace proof survives the re-install");
+  assert.equal(secondEntry.backupPath, firstEntry.backupPath, "the original backup is still the one referenced");
+  assert.equal(secondEntry.installedSha, firstEntry.installedSha);
+
+  const removal = agentRemovalPlan({ agentsDir, agentLedger: second.ledger }, source);
+  const item = removal.find((x) => x.target === target);
+  assert.equal(item.action, "restore", "uninstall restores user-modified files, never deletes them");
+  copyFileSync(item.backupPath, item.target); // what runUninstall does for "restore"
+  assert.equal(readFileSync(target, "utf8"), original);
+});
+
+test("uninstall --dry-run PLANS the settings removal it would perform", () => {
+  // Regression: the dry run reported "settings: nothing to change" while the
+  // real uninstall removed the integration hooks.
+  const home = mkdtempSync(join(tmpdir(), "cc-uninstall-dry-"));
+  try {
+    const stateFile = join(home, "state.json");
+    const settingsPath = join(home, ".claude", "settings.json");
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    const scriptPath = "/srv/singularity/adapters/claude-code/memory-hook.mjs";
+    const env = integrationEnv("/srv/singularity");
+    const { settings } = ensureMemoryIntegration({}, { scriptPath, env });
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    const before = readFileSync(settingsPath, "utf8");
+    saveInstallRecord({ installedAt: "now", scope: "user", settingsPath, agentsDir: join(home, ".claude", "agents"),
+      hooksScript: scriptPath, envWritten: env, mcp: null }, stateFile);
+
+    const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+    const r = spawnSync(process.execPath, [join(repo, "scripts/install-claude-code.mjs"), "uninstall", "--dry-run"], {
+      encoding: "utf8", env: { ...process.env, HOME: home, SINGULARITY_CLAUDE_CODE_STATE: stateFile },
+    });
+    const out = `${r.stdout}${r.stderr}`;
+    assert.equal(r.status, 0, out);
+    assert.match(out, /settings: would remove/, "the dry run names the removal it would perform");
+    assert.doesNotMatch(out, /settings: nothing to change/, "the dry run must not contradict the real uninstall");
+    assert.equal(readFileSync(settingsPath, "utf8"), before, "a dry run writes nothing");
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test("option 2 states its provisioning boundary and the exact follow-up commands", () => {
+  const text = option2BoundaryLines().join("\n");
+  assert.match(text, /does NOT start MemoryCore, Ghost or Claude Office/);
+  assert.match(text, /scripts\/start-memory-stack\.sh/);
+  assert.match(text, /provision-secrets\.py --variant 2 --with-ghost && bash ghost\/setup-ghost\.sh/);
+  assert.match(text, /office\.compose\.yml up -d/);
+  assert.match(text, /INCOMPLETE/);
 });

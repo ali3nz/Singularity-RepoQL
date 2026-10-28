@@ -1,0 +1,449 @@
+{
+  "schemaVersion": 3,
+  "projectPath": "/workspace",
+  "workerModel": "",
+  "sessionReuseMinutes": 55,
+  "maxPairSessionsPerDay": 9,
+  "maxReviewRounds": 2,
+  "phaseTimeoutMinutes": 40,
+  "pollSeconds": 15,
+  "freebucks": {
+    "workerSessionCost": 5,
+    "softCapPerDay": 90,
+    "hardCapPerDay": 100,
+    "defaultWorkerCount": 2,
+    "fullWorkerCount": 2,
+    "reuseFirst": true,
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "quad": {
+    "enabled": true,
+    "requireExplicitFlag": true,
+    "maxTotalWorkers": 4,
+    "freebuffSeats": 2,
+    "freeSeats": [
+      {
+        "id": "gamma",
+        "engine": "opencode",
+        "transport": "openchamber-managed",
+        "model": "",
+        "billingClass": "subscription"
+      },
+      {
+        "id": "delta",
+        "engine": "opencode",
+        "transport": "openchamber-managed",
+        "model": "",
+        "billingClass": "subscription"
+      }
+    ],
+    "seatFailover": "none-managed-explicit",
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "freeOnly": {
+    "enabled": true,
+    "orchestratorEngine": "opencode-space-bunny",
+    "worker": {
+      "id": "alpha",
+      "engine": "opencode",
+      "model": "",
+      "billingClass": "free"
+    },
+    "aliases": [
+      "--free",
+      "--free-only"
+    ],
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "fccGhost": {
+    "sshHost": "",
+    "baseUrl": "http://127.0.0.1:8084/v1",
+    "visionModel": "",
+    "maxTokens": 1500,
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "routing": {
+    "bridgeTimeoutSec": 900,
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "roleChains": {
+      "NORMAL": [
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ],
+      "IMPLEMENTATION": [
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ],
+      "VISION": [
+        "fcc-ghost-vision",
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny"
+      ],
+      "PREMIUM_REASONING": [
+        "openai-sol",
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ],
+      "PLANNER": [
+        "openai-sol",
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ],
+      "REVIEW": [
+        "openai-sol",
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ],
+      "FINAL_ACCEPTANCE": [
+        "openai-sol",
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ],
+      "CONSULT": [
+        "openai-sol",
+        "opencode-muse-free",
+        "opencode-longcat",
+        "opencode-space-bunny",
+        "opencode-ling31",
+        "openrouter-laguna-free",
+        "openrouter-sante-free"
+      ]
+    },
+    "askNonConfidential": [
+      "opencode-managed-muse",
+      "opencode-space-bunny",
+      "opencode-ling31",
+      "opencode-longcat"
+    ],
+    "askConfidential": [],
+    "stickyPremiumOwner": true,
+    "transientRetries": 1,
+    "formatRepairRetries": 1,
+    "modelUnavailableCooldownMinutes": 30,
+    "transientCircuitBreakerMinutes": 10,
+    "transientFailuresBeforeCircuitBreaker": 2,
+    "policyNote": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "risk": {
+    "normalEffort": "medium",
+    "highEffort": "high",
+    "highRiskTerms": [
+      "network",
+      "routing",
+      "firewall",
+      "authentication",
+      "storage",
+      "database schema",
+      "production",
+      "customer",
+      "destructive",
+      "migration"
+    ]
+  },
+  "freeModels": {
+    "normalAsk": [
+      "",
+      "opencode/ling-3.1-flash-free",
+      "opencode/longcat-2.5-preview-free"
+    ],
+    "banned": [
+      "opencode/nemotron-3.5-lightning-free"
+    ],
+    "bannedReason": "V3.3.25 operator hard-deny 2026-09-22: hallucination evidence. Enforced in lib/free-model-registry.mjs (DENY_FREE_MODELS) + opencode-bridge.sh + hermes-kit-bridge.mjs + openchamber-remediate.mjs.",
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "lastVerified": "2026-10-03"
+  },
+  "claude": {
+    "sshHost": "",
+    "container": "claude-ui",
+    "model": "sonnet",
+    "effort": "medium",
+    "askEffort": "low",
+    "consultEffort": "medium",
+    "normalEffort": "medium",
+    "highRiskEffort": "high",
+    "timeoutSec": 420,
+    "note": "RETIRED 2026-09-20 (operator: subscription NOT being renewed; no Claude model will be used fleet-wide; claude-ui container + HA Services entry deferred teardown, not part of orchestration). Engine permanently excluded from ALL default routing; --claude short-circuits fail-closed for the general consult/plan/review/final-acceptance/ask paths."
+  },
+  "consult": {
+    "transcriptChars": 40000,
+    "timeoutSec": 900,
+    "gateSchema": "orchestration-gate-v2",
+    "requirePlanSignoff": true,
+    "requireFinalSignoff": true,
+    "requireFixSignoff": true,
+    "maxReviewRounds": 2,
+    "lanePriority": {
+      "comment": "Portable export: see harness.config.json for the path/capability mapping.",
+      "order": [
+        "correctness-gate",
+        "operator-run-request",
+        "implementation-consult",
+        "queued-operator-consult",
+        "background-review",
+        "digest-maintenance"
+      ],
+      "backgroundMustYieldToGate": true
+    },
+    "note": "V2 two-gate workflow: plan+signoff ONE call, review+signed-fixplan ONE call. case.json canonical; transcript audit-only."
+  },
+  "codex": {
+    "sshHost": "",
+    "model": "gpt-5.6-sol",
+    "effort": "high",
+    "normalEffort": "medium",
+    "highRiskEffort": "high",
+    "codexHome": "",
+    "scratchDir": "",
+    "note": "PIN-ONLY (operator 2026-09-26): reachable via --codex / --engine codex explicitly; removed from every default chain. Weekly cap still applies. rc=42 live-verified.",
+    "disabled": true,
+    "disabledReason": "operator_pause_2026-09-23_codex_quota_drain",
+    "automatic_routing": false,
+    "automatic_probe": false,
+    "billing_allowed": false
+  },
+  "cursor": {
+    "sshHost": "",
+    "binary": "",
+    "model": "auto",
+    "contextDir": "",
+    "timeoutSec": 900,
+    "force": false,
+    "automatic_implementation": false,
+    "roles": [
+      "premium_reasoning"
+    ],
+    "note": "Premium fallback. Runs in disposable context dir, NO --force ever (print mode cannot modify without it). --trust for the one-time directory trust. JSON output with defensive extraction. V3: premium reasoning fallback ONLY; automatic_implementation=false."
+  },
+  "opencode": {
+    "sshHost": "",
+    "binary": "",
+    "agent": "fleet-reviewer",
+    "textModel": "",
+    "textModelFallback": "",
+    "lingModel": "opencode/ling-3.1-flash-free",
+    "longcatModel": "opencode/longcat-2.5-preview-free",
+    "museModel": "",
+    "visionModel": "",
+    "contextDir": "",
+    "timeoutSec": 900,
+    "promotionalModelsAllowedForConfidential": false,
+    "persistentServer": {
+      "enabled": false,
+      "hostname": "127.0.0.1",
+      "port": 4096
+    },
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "managedMuseModel": "",
+    "managedMuseNote": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "openrouter": {
+    "sshHost": "",
+    "model": "",
+    "maxTokens": 1500,
+    "timeoutSec": 900,
+    "sort": "throughput",
+    "allowFallbacks": true,
+    "denyDataCollection": true,
+    "zdrForConfidential": true,
+    "freeVision": {
+      "model": "openrouter/free",
+      "billingClass": "free",
+      "role": "vision",
+      "automatic_implementation": false,
+      "automatic_vision": false
+    },
+    "paidReasoning": {
+      "model": "openai/gpt-5.6-luna",
+      "billingClass": "metered",
+      "role": "premium_reasoning",
+      "automatic_implementation": false,
+      "automatic_vision": false,
+      "note": "PIN-ONLY (operator 2026-09-26): openai/gpt-5.6-luna reachable ONLY via explicit --engine openrouter-paid-reasoning; paid openrouter models are forbidden in all default routing. Last-resort operator override only."
+    },
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "disabled": true,
+    "disabledReason": "operator_pause_2026-09-23_openrouter_pause",
+    "automatic_routing": false,
+    "automatic_probe": false,
+    "billing_allowed": false
+  },
+  "claudeDisabled": {
+    "enabled": false,
+    "disabledReason": "subscription_retired_2026-09-20",
+    "billingClass": "disabled",
+    "automaticRouting": false,
+    "automaticProbe": false,
+    "billingAllowed": false,
+    "note": "Operator retirement 2026-09-20 (was Phase-1 disable 2026-09-18). Authoritative disable flags; re-enabling requires explicit operator action AND a new subscription (none planned)."
+  },
+  "projectionCoverage": {
+    "enabled": false,
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "generator": "",
+    "baseline": "",
+    "battery": "work/ai-orchestration/v40-projection-coverage-test.mjs"
+  },
+  "cache": {
+    "approvedPlans": true,
+    "requireStateFingerprintMatch": true,
+    "hashAlgorithm": "sha256"
+  },
+  "context": {
+    "plannerTargetChars": 32000,
+    "highRiskPlannerTargetChars": 60000,
+    "reviewerTargetChars": 24000,
+    "highRiskReviewerTargetChars": 48000,
+    "recentTranscriptChars": 4000,
+    "sendFullTranscript": false,
+    "note": "Evidence packs replace 40k transcript replay. transcript.md is audit-only."
+  },
+  "workers": [
+    {
+      "id": "alpha",
+      "role": "worker-alpha"
+    },
+    {
+      "id": "beta",
+      "role": "worker-beta"
+    }
+  ],
+  "openaiSol": {
+    "sshHost": "",
+    "baseUrl": "http://127.0.0.1:8300/v1",
+    "model": "",
+    "bridgeTimeoutSec": 5400,
+    "reasoningEffort": "high",
+    "billingClass": "subscription_included",
+    "paid": false,
+    "billingNote": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "automatic_implementation": false,
+    "automatic_vision": false,
+    "roles": [
+      "PLANNER",
+      "REVIEW",
+      "FINAL_ACCEPTANCE",
+      "CONSULT"
+    ],
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "primarySshHost": "",
+    "fallbackSshHost": "",
+    "rateLimitHost": ""
+  },
+  "phaseDriver": {
+    "maxExtensions": 3,
+    "wallCeilingFactor": 4
+  },
+  "deployGate": {
+    "enabled": false,
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "idleTimeoutMs": 7200000,
+    "idlePollMs": 2000
+  },
+  "v34": {
+    "runIdentity": true,
+    "structuredHandoff": true,
+    "discordQueries": true,
+    "qmdRetrieval": false,
+    "contextPacks": true,
+    "memoryHarvest": true,
+    "mexStaging": true,
+    "memoryImpact": true,
+    "observerEvents": true,
+    "agentHome": true,
+    "repoqlPrimary": false,
+    "repoqlPrimaryNote": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "repoql": {
+      "comment": "Portable export: see harness.config.json for the path/capability mapping.",
+      "bin": null
+    }
+  },
+  "githubSync": {
+    "enabled": false,
+    "owner": "",
+    "repo": "",
+    "projectNumber": 1,
+    "tunnelPort": 18081,
+    "syncTimeoutMs": 8000,
+    "archiveAfterDays": 14,
+    "note": "ticket 129: GitHub Issues+Projects passive projection; enable ONLY after Stage-3 validation (operator plan)",
+    "fieldMap": {}
+  },
+  "concurrency": {
+    "maxRuns": 2,
+    "maxFreeSeatProcesses": 8,
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "custom": {
+    "maxSeats": 8,
+    "maxConcurrentFreeSeats": 4,
+    "extraFreeModels": [],
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "effort": {
+    "enforce": true,
+    "exempt": [
+      "claude-pro/claude-sonnet-*",
+      "claude-pro/claude-opus-*"
+    ],
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "workerTransport": "openchamber-managed",
+  "managedWorker": {
+    "transport": "openchamber-managed",
+    "model": "",
+    "billingClass": "subscription",
+    "writeMode": "ssh-workspace"
+  },
+  "memoryProvenance": {
+    "lineageCapture": "ENABLED",
+    "lineageInvalidation": "ENABLED",
+    "structuredSynthesis": "ENABLED",
+    "retrievalFilter": "ENABLED",
+    "lineageDir": "",
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+  },
+  "memoryOrchestra": {
+    "stepsCapture": "ENABLED",
+    "planner": "ENABLED",
+    "fusion": "ENABLED",
+    "ledger": "ENABLED",
+    "attribution": "ENABLED",
+    "policyInduction": "ENABLED",
+    "worldModel": "ENABLED",
+    "decisionRepair": "ENABLED",
+    "l23Read": "ENABLED",
+    "l23Write": "ENABLED",
+    "portability": "ENABLED",
+    "budgets": {},
+    "note": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats.",
+    "l23Backend": "artifact",
+    "l23BackendNote": "Sol ruling 2026-10-24 (consult 2026-10-23T21-16-32-857-79355, CONFIRMED/conditional): the deployed MemoryCore v2.0.2 generates L2 scene blocks and L3 persona but exposes NO retrieval route, so L2/L3 read the generated Markdown artifacts read-only (undocumented v2.0.2 layout, NOT a vendor API). read-only + scope-mapped + traversal/symlink/size rejected + provenance (mtime/sha256) + freshness UNVERIFIED + authority ADVISORY. Values: artifact | auto | routes. Rollback = routes (typed L2L3_ROUTE_NOT_SUPPORTED)."
+  },
+  "workerModelNote": "Fleet-specific entitlement note removed in the portable export; configure your own providers and seats."
+}

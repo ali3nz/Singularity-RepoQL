@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 // doc-hook.mjs — Claude Code documentation-policy hooks ↔ the shared Singularity
-// documentation system (scripts/doc-policy.mjs + scripts/memory-doc-ingest.py).
+// documentation system (scripts/doc-policy.mjs + scripts/doc-ingest-node.mjs).
+//
+// Pure Node: no Python runtime is required. The ingestion engine it drives
+// (scripts/doc-ingest-node.mjs) maintains the SAME ledger and status contract as
+// scripts/memory-doc-ingest.py, which stays available for manual use and for
+// installs that explicitly inject the Python subprocess executor.
 //
 //   node doc-hook.mjs session-start   # inside SessionStart
 //   node doc-hook.mjs stop            # inside Stop
@@ -43,6 +48,7 @@ import {
   classifyFiles,
 } from "../../scripts/doc-policy.mjs";
 import { evaluateCandidates } from "../../scripts/selflearn-candidates.mjs";
+import { retryPendingIngestion } from "../../scripts/doc-ingest-node.mjs";
 
 const MAX_BLOCKS = 3;
 const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n) : s; };
@@ -69,21 +75,13 @@ function bumpCounter(session, root) {
   } catch { /* counting must never break the hook */ }
 }
 
-export function runPythonScript(args, cwd, timeoutMs = 120_000) {
-  try {
-    return { stdout: execFileSync("python3", args, { encoding: "utf8", cwd, timeout: timeoutMs }), stderr: "", failed: false };
-  } catch (e) {
-    return { stdout: String(e?.stdout || ""), stderr: String(e?.stderr || e?.message || ""), failed: true };
-  }
-}
-
-import { execFileSync } from "node:child_process";
-
+// Ingestion retry is performed in-process by the Node engine; there is
+// deliberately no subprocess runtime dependency here.
 const START_GUIDANCE =
   "[singularity docs start] Before substantial work: check the project's tracking records for active related work, " +
   "read the relevant existing runbook/documentation if one covers this task, search RepoQL concepts for the files " +
   "and decisions it touches, and search this installation's current indexed documentation when operational context " +
-  "helps (`python3 scripts/memory-doc-ingest.py search \"<topic>\"`; bounded result). Reuse and improve existing docs; do not " +
+  "helps (`node scripts/doc-ingest-node.mjs search \"<topic>\"`; bounded result). Reuse and improve existing docs; do not " +
   "create duplicates. For material changes, documentation is required (features, behaviour/API/deployment/config/security changes, bug fixes worth remembering, " +
   "troubleshooting and recovery procedures). Formatting-only, typo and throwaway edits may be reported with " +
   "DOC_NOT_REQUIRED and a concrete reason.";
@@ -92,10 +90,11 @@ function workspaceRootOf(input, optsEnv = {}) {
   return resolve(input.cwd || optsEnv.SINGULARITY_REPO_ROOT || process.env.SINGULARITY_REPO_ROOT || process.cwd());
 }
 
-function openDocIngestScript(env = {}) {
-  const root = env.SINGULARITY_REPO_ROOT || process.env.SINGULARITY_REPO_ROOT;
-  const candidate = root ? join(root, "scripts", "memory-doc-ingest.py") : "scripts/memory-doc-ingest.py";
-  return existsSync(candidate) ? resolve(candidate) : null;
+function openDocIngestScript() {
+  // The Node engine ships with the product, so it is always available; the
+  // previous Python-script probe existed only because that runtime could be
+  // absent. Kept as a named seam for tests that assert engine availability.
+  return true;
 }
 
 export async function runDocHook(argv, opts = {}) {
@@ -138,17 +137,18 @@ export async function runDocHook(argv, opts = {}) {
     if (!policyOn(opts.env)) return { exitCode: 0, stdout: null, stderr };
     const session = input.session_id;
 
-    // 1. event-driven retry of pending ingestion for this workspace ledger.
-    const docIngest = openDocIngestScript(opts.env || {});
-    if (docIngest) {
-      const retry = runPythonScript([docIngest, "retry", "--all", "--root", root], root);
-      if (retry.failed) stderr.push(`singularity doc hook: ingestion retry unavailable (${clip(retry.stderr.split("\n")[0], 120)})`);
-      else {
-        for (const r of parseJsonList(retry.stdout)) {
+    // 1. event-driven retry of pending ingestion for this workspace ledger
+    //    (in-process Node engine: same ledger, same statuses, no Python).
+    if (openDocIngestScript()) {
+      try {
+        const results = await retryPendingIngestion(root, { env: opts.env || process.env });
+        for (const r of results) {
           if (r && r.status && r.status !== "DOC_INGEST_UNCHANGED") {
             stderr.push(`singularity doc hook: ${r.file || ""} -> ${r.status}`);
           }
         }
+      } catch (e) {
+        stderr.push(`singularity doc hook: ingestion retry unavailable (${clip(String(e?.message || e).split("\n")[0], 120)})`);
       }
     }
 
@@ -252,15 +252,6 @@ export async function runDocHook(argv, opts = {}) {
   return { exitCode: 0, stdout: null, stderr };
 }
 
-function parseJsonList(out) {
-  try {
-    const parsed = JSON.parse(out || "{}");
-    return Array.isArray(parsed.results) ? parsed.results : [];
-  } catch {
-    return [];
-  }
-}
-
 function blockOnce(session, root, findings, stderr) {
   const soFar = readCounter(blockStatePath(session, root));
   if (soFar >= MAX_BLOCKS) {
@@ -274,7 +265,7 @@ function blockOnce(session, root, findings, stderr) {
     stdout: JSON.stringify({
       decision: "block",
       reason: findings.join("\n"),
-      systemMessage: "Documentation closeout incomplete. Fix the findings above (create/update the runbook, then verify ingestion with scripts/memory-doc-ingest.py verify, and re-run scripts/doc-policy.mjs assess with matching states), then finish again. Use DOC_NOT_REQUIRED ONLY for genuinely non-material changes with a concrete reason.",
+      systemMessage: "Documentation closeout incomplete. Fix the findings above (create/update the runbook, then verify ingestion with node scripts/doc-ingest-node.mjs verify --file <doc> --root <root>, and re-run scripts/doc-policy.mjs assess with matching states), then finish again. Use DOC_NOT_REQUIRED ONLY for genuinely non-material changes with a concrete reason.",
     }),
     stderr,
   };

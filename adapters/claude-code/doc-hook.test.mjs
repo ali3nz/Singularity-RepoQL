@@ -90,34 +90,26 @@ test("patient docs-only change does not demand a code assessment but still auto-
   try {
     writeFileSync(join(dir, "base.txt"), "base\n");
     git(dir, "add", "-A"); git(dir, "commit", "-qm", "base");
-    // Test tooling (stub python3) is created BEFORE the baseline so it is
-    // never mistattributed as session work.
-    const stubDir = join(dir, "stubbin");
-    mkdirSync(stubDir, { recursive: true });
-    writeFileSync(join(stubDir, "python3"), `#!/bin/sh
-echo "argv: $@" >> "${dir}/python-calls.log"
-echo '{"status": "DOC_INGEST_INDEXED", "file": "docs/runbook.md", "chunks": 1}'
-`);
     const start = await runDocHook(["session-start"], { env: {}, stdin: JSON.stringify({ session_id: "s-doc", cwd: dir }) });
     assert.equal(start.exitCode, 0);
     mkdirSync(join(dir, "docs"), { recursive: true });
     writeFileSync(join(dir, "docs", "runbook.md"), "# New runbook\nAuthor steps\n"); // docs-only, untracked
-    let chmodDone = true;
-    try { execFileSync("chmod", ["+x", join(stubDir, "python3")]); } catch { chmodDone = false; }
-    const oldPath = process.env.PATH;
-    process.env.PATH = `${stubDir}:${process.env.PATH}`; // runtime exec uses process PATH
-    const env = { PATH: process.env.PATH };
-    try {
-      const res = await runDocHook(["stop"], { env, stdin: JSON.stringify({ session_id: "s-doc", cwd: dir }) });
-      assert.equal(res.exitCode, 0, "docs-only change does not block for a code assessment");
-      if (chmodDone) {
-        const log = readFileSync(join(dir, "python-calls.log"), "utf8");
-        assert.match(log, /ingest/, "auto-ingestion ran for the new doc");
-        assert.match(log, /--root/, "auto-ingestion passed an explicit authorised root");
-      }
-    } finally {
-      if (chmodDone) process.env.PATH = oldPath;
-    }
+    // No memory config exists in this sandbox, so the Node engine must record an
+    // HONEST refusal (BLOCKED) — the point is that the ingestion path ran at all,
+    // in-process, with no Python runtime and no subprocess.
+    const res = await runDocHook(["stop"], { env: {}, stdin: JSON.stringify({ session_id: "s-doc", cwd: dir }) });
+    assert.equal(res.exitCode, 0, "docs-only change does not block for a code assessment");
+    assert.match(res.stderr.join(" "), /auto-ingest docs\/runbook\.md -> DOC_INGEST_BLOCKED/);
+    const ledgerPath = join(dir, "data", "doc-index", "ledger.json");
+    assert.ok(existsSync(ledgerPath), "the shared ledger was written by the Node engine");
+    const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+    const entry = Object.values(ledger.docs).find((d) => d.rel === "docs/runbook.md");
+    assert.ok(entry, "the document is recorded in the ledger");
+    assert.equal(entry.root, dir.replace(/\\/g, "/"), "root-scoped identity uses the authorised workspace root");
+    assert.equal(entry.revs[Object.keys(entry.revs)[0]].status, "DOC_INGEST_BLOCKED");
+    // An unresolved ingestion keeps its baseline slot: the next stop re-discovers it.
+    const baseline = JSON.parse(readFileSync(join(dir, "data", "doc-policy", "baseline-s-doc.json"), "utf8"));
+    assert.equal(Object.keys(baseline.files).some((p) => p.includes("runbook.md")), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

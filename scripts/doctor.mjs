@@ -20,7 +20,7 @@
 // Nothing prints, hashes or echoes key material, and nothing claims VERIFIED
 // for an untested capability.
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -33,6 +33,8 @@ import {
 import { callMemoryCore, loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
 import { isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
 import { candidateSummary } from "./selflearn-candidates.mjs";
+import { auditComponentSet, CREDENTIAL_COMPONENTS, VARIANT_COMPONENTS } from "./bundle-classification.mjs";
+import { MANAGED_BEGIN, MANAGED_END, parseJsonc } from "./attach-openchamber.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_STATE_FILE = join(ROOT, "data/claude-code-integration.json");
@@ -43,6 +45,127 @@ const section = (name, state, detail = "", extra = {}) => ({ name, state, detail
  *  NOT_CONFIGURED before any installation (docs/doctor semantics, §6). */
 const installedSection = (selectedOption) => Number.isInteger(Number(selectedOption)) && Number(selectedOption) >= 1 && Number(selectedOption) <= 4;
 
+/**
+ * The newest attach record written by scripts/attach-openchamber.mjs. Options
+ * 3/4 are attaches, not Claude Code installs, so their option id lives in the
+ * attach manifest — without it the doctor cannot choose variant-aware checks.
+ */
+export function readAttachRecord({ env = process.env, root = ROOT } = {}) {
+  const base = env.SINGULARITY_ATTACH_BACKUPS || join(root, "data", "attach-backups");
+  if (!existsSync(base)) return null;
+  let stamps = [];
+  try {
+    stamps = readdirSync(base, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort().reverse();
+  } catch { return null; }
+  for (const stamp of stamps) {
+    const dir = join(base, stamp);
+    let manifest = null;
+    try { manifest = JSON.parse(readFileSync(join(dir, "MANIFEST.json"), "utf8")); } catch { continue; }
+    if (!manifest || !["3", "4"].includes(String(manifest.variant))) continue;
+    const target = manifest.target || {};
+    return {
+      dir,
+      variant: String(manifest.variant),
+      kind: target.kind || null,
+      container: target.container || null,
+      configDir: target.configDir || null,
+    };
+  }
+  return null;
+}
+
+/**
+ * The capture single-writer contract, as facts on disk (issue 7).
+ * Exactly ONE automatic writer may be installed. A second scheduler unit is not
+ * "more capture": it is two writers racing the same ledger, so the doctor
+ * reports INCOMPLETE and names both instead of averaging them. The consumer must
+ * also take an exclusive lock (`wx`) — a lock-free consumer is a second writer
+ * waiting to happen.
+ */
+export function captureWriterCheck({ env = process.env } = {}) {
+  // NEVER the shipped package: memory/portable/systemd/ holds TEMPLATES, not an
+  // installed scheduler. The supported host install location is
+  // /opt/singularity-memory (the unit's WorkingDirectory) and the units
+  // themselves live in the host systemd unit directory.
+  const dir = env.SINGULARITY_CAPTURE_DIR || "/opt/singularity-memory/memory/portable";
+  if (!existsSync(dir)) return { state: "NOT_CONFIGURED", detail: `the portable capture runtime is not installed on this host (${dir}; capture is manual/dry-run only)` };
+  const sd = env.SINGULARITY_SYSTEMD_DIR || "/etc/systemd/system";
+  let entries;
+  try { entries = readdirSync(sd); } catch { return { state: "NOT_CONFIGURED", detail: `the host systemd unit directory is not readable (${sd}) — no automatic writer can be confirmed` }; }
+  const units = entries.filter((f) => /capture.*\.(service|timer)$/.test(f)).sort();
+  const timers = units.filter((f) => f.endsWith(".timer"));
+  const services = units.filter((f) => f.endsWith(".service"));
+  if (units.length === 0) return { state: "NOT_CONFIGURED", detail: `no automatic capture scheduler installed in ${sd} — capture stays manual` };
+  if (timers.length > 1) return { state: "INCOMPLETE", detail: `two automatic capture timers installed (${timers.join(", ")}) — exactly one writer is allowed; disable one` };
+  if (services.length > 1) return { state: "INCOMPLETE", detail: `two automatic capture services installed (${services.join(", ")}) — exactly one writer is allowed; disable one` };
+  const consumer = join(dir, "capture-consumer.mjs");
+  if (!existsSync(consumer)) return { state: "INCOMPLETE", detail: "the capture scheduler is installed but capture-consumer.mjs is missing" };
+  const src = readFileSync(consumer, "utf8");
+  if (!/openSync\(lockPath, ["']wx["']\)|flag: ["']wx["']/.test(src)) {
+    return { state: "INCOMPLETE", detail: "the capture consumer takes no exclusive lock — a second writer could run" };
+  }
+  const writer = timers[0] || services[0];
+  return { state: "VERIFIED", detail: `single automatic writer: ${writer}${timers[0] && services[0] ? ` → ${services[0]}` : ""}, consumer holds an exclusive lock` };
+}
+
+/**
+ * Enumerate the wiring an option REQUIRES, from the same classification table
+ * the installer and the attach flow use (no third list):
+ *   - the shipped component set is exactly the option's (no Ghost/Office leak
+ *     into options 1/3, nothing missing for 2/4);
+ *   - when a target config directory is known: the managed policy block, the
+ *     JSONC integration keys, and the credentials the option is allowed to carry.
+ * Every item is a fact on disk; nothing here claims a capability works.
+ */
+export function requiredWiring(variant, { env = process.env, root = ROOT } = {}) {
+  const v = String(variant ?? "");
+  const components = VARIANT_COMPONENTS[v];
+  if (!components) return null;
+  const checks = [];
+  const audit = auditComponentSet(root, v);
+  checks.push({
+    id: "component-set",
+    required: true,
+    ok: audit.ok,
+    detail: audit.ok
+      ? `ships exactly the option ${v} components (${audit.installedFiles.length} files; ghost ${audit.counts.ghost}, office ${audit.counts.office} in the package)`
+      : `component set invalid for option ${v}: ${audit.problems.join("; ")}`,
+  });
+  const cfgDir = env.SINGULARITY_OPENCHAMBER_CONFIG_DIR || "";
+  if (cfgDir && existsSync(cfgDir)) {
+    const agentsMd = join(cfgDir, "AGENTS.md");
+    if (existsSync(agentsMd)) {
+      const t = readFileSync(agentsMd, "utf8");
+      const has = t.includes(MANAGED_BEGIN) && t.includes(MANAGED_END);
+      checks.push({ id: "agents-managed-policy", required: true, ok: has, detail: has ? "managed policy block present in the target's AGENTS.md" : "the target's AGENTS.md has no managed policy block — re-run the attach (idempotent)" });
+    }
+    const oc = join(cfgDir, "opencode.jsonc");
+    if (existsSync(oc)) {
+      let ok = false, detail = "opencode.jsonc is not parseable JSONC";
+      try {
+        const cfg = parseJsonc(readFileSync(oc, "utf8"));
+        const hasRepoql = !!(cfg?.mcp?.repoql);
+        const hasPlugin = Array.isArray(cfg?.plugin) && cfg.plugin.length > 0;
+        ok = hasRepoql && hasPlugin;
+        detail = ok ? "mcp.repoql and the plugin list are wired (styles/comments left alone)"
+          : `missing integration key(s): ${[!hasRepoql && "mcp.repoql", !hasPlugin && "plugin"].filter(Boolean).join(", ")}`;
+      } catch { /* detail already set */ }
+      checks.push({ id: "jsonc-integration", required: true, ok, detail });
+    }
+    for (const [name, comp] of Object.entries(CREDENTIAL_COMPONENTS)) {
+      const p = join(cfgDir, "product-secrets", name);
+      const present = existsSync(p);
+      if (components.includes(comp)) {
+        checks.push({ id: `credential:${name}`, required: true, ok: present, detail: present ? `${name} present (${comp})` : `${name} missing — this option ships ${comp}` });
+      } else if (present) {
+        checks.push({ id: `credential-exclusion:${name}`, required: true, ok: false, detail: `${name} exists but option ${v} must not ship ${comp} credentials` });
+      }
+    }
+  }
+  const failed = checks.filter((c) => c.required && !c.ok);
+  return { variant: v, checks, failed, ok: failed.length === 0 };
+}
+
 export async function doctor({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
   const out = [];
   let selectedOption = null;
@@ -52,8 +175,46 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
     const stateFile = env.SINGULARITY_CLAUDE_CODE_STATE || DEFAULT_STATE_FILE;
     const state = readInstallerState(stateFile);
     const rec = (state.installs || []).at(-1);
+    // Variant-aware wiring, shared by the install-record and attach paths.
+    const pushWiring = (variant, configDir) => {
+      const w = requiredWiring(variant, { env: configDir ? { ...env, SINGULARITY_OPENCHAMBER_CONFIG_DIR: configDir } : env });
+      if (!w) {
+        out.push(section("wiring", "INCOMPLETE", `option ${variant ?? "?"} is not one of the four numbered options — wiring cannot be verified`));
+      } else if (!w.ok) {
+        out.push(section("wiring", "INCOMPLETE", `${w.failed.length} required wiring item(s) missing for option ${w.variant}: ${w.failed.map((c) => c.id).join(", ")}`,
+          { checks: w.checks }));
+      } else {
+        out.push(section("wiring", "VERIFIED", `option ${w.variant} wiring complete (${w.checks.length} checks)`, { checks: w.checks }));
+      }
+    };
     if (!rec) {
-      out.push(section("installation", "NOT_CONFIGURED", "no install record on this host — run the installer for one of the four README options"));
+      const attach = readAttachRecord({ env });
+      const cfgDir = attach?.configDir || env.SINGULARITY_OPENCHAMBER_CONFIG_DIR || null;
+      if (attach || cfgDir) {
+        if (attach) selectedOption = attach.variant;
+        const targetText = attach
+          ? `${attach.kind || "existing"}${attach.container ? `: ${attach.container}` : ""}${cfgDir ? `, config ${cfgDir}` : ""}`
+          : `config ${cfgDir}`;
+        if (attach) {
+          const gateCmd = `node scripts/install-claude-code.mjs gate --variant ${attach.variant}${attach.container ? ` --container ${attach.container}` : cfgDir ? ` --config-dir ${cfgDir}` : ""}`;
+          out.push(section("installation", "INCOMPLETE",
+            `option ${attach.variant} was ATTACHED to an existing OpenChamber (${targetText}) — attach record ${attach.dir}; the attach is file-level and does not persist a gate result, verify with: ${gateCmd}`,
+            { option: attach.variant, configDir: cfgDir, attachBackupDir: attach.dir }));
+        } else {
+          out.push(section("installation", "INCOMPLETE",
+            `an OpenChamber config dir is configured (${cfgDir}) but no attach record names the installation option — re-run scripts/attach-openchamber.mjs --variant 3|4 (it records the option)`,
+            { configDir: cfgDir }));
+        }
+        // The capture single-owner contract applies to attached hosts too.
+        {
+          const cw = captureWriterCheck({ env });
+          out.push(section("capture-writer", cw.state, cw.detail));
+        }
+        if (attach) pushWiring(attach.variant, cfgDir);
+        else out.push(section("wiring", "INCOMPLETE", "the installation option is unknown — re-run the attach (it records the option); Ghost/Office wiring cannot be decided"));
+      } else {
+        out.push(section("installation", "NOT_CONFIGURED", "no install record on this host — run the installer for one of the four README options"));
+      }
     } else {
       const v = rec.variant || {};
       selectedOption = v.id || null;
@@ -65,6 +226,23 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       out.push(section("capture-hooks",
         hooksOk ? "VERIFIED" : "DEGRADED",
         hooksOk ? `memory/doc hooks installed (${rec.hooksScript})` : "the installed hook script is missing from disk — re-run the installer (idempotent)"));
+      // ── capture single owner (exactly one automatic writer) ──
+      {
+        const cw = captureWriterCheck({ env });
+        out.push(section("capture-writer", cw.state, cw.detail));
+      }
+      // ── dashboard: OPT-IN adjunct; only reported when it is installed ──
+      // The package ships `dashboard/` as an opt-in component that no
+      // installation option installs, so a row here would imply a default
+      // capability. Report it only when the operator points at an installed copy.
+      if (env.SINGULARITY_DASHBOARD_DIR && existsSync(env.SINGULARITY_DASHBOARD_DIR)) {
+        out.push(section("dashboard", "VERIFIED",
+          `opt-in dashboard present at ${env.SINGULARITY_DASHBOARD_DIR} (not installed by any of the four options; doctor makes no capability claim beyond its presence)`));
+      }
+      // ── required wiring for the SELECTED option (classification-driven) ──
+      // Missing wiring is INCOMPLETE, never a pass; Ghost/Office wiring is only
+      // ever required for options 2/4.
+      pushWiring(v.id, null);
     }
   } catch (e) {
     out.push(section("installation", "DEGRADED", `install record unreadable: ${String(e?.message || e).slice(0, 120)}`));

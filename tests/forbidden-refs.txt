@@ -24,11 +24,14 @@
 /mnt/(backups|newdata|hub)(/|[[:space:]]|$)
 /mnt/[A-Za-z0-9._-]+/(backups|newdata|hub)
 
-# Unqualified ticket, programme and run identifiers. References to real
+# Unqualified ticket, programme and run identifiers. A citation needs a
+# separator ('ticket 118', 'issue#114'); a FILE name such as
+# issue712-ladder-regression.mjs is not a citation and is not matched.
+# References to real
 # upstream issues must be qualified — owner/repository#123, a full
 # https://github.com/owner/repository/issues/123 URL, or a markdown link whose
 # target is validated — so an ambiguous bare number can never ship.
-\b[Ii]ssues?[[:space:]]*#?[[:space:]]*[0-9]{2,4}(/[0-9]{2,4})?\b
+\b[Ii]ssues?([[:space:]]*#|[[:space:]]+)[0-9]{2,4}(/[0-9]{2,4})?\b
 \bP[0-9]{3,4}\b
 \brun[0-9]{2,4}\b
 \bkit[[:space:]]+D[0-9]{2}\b

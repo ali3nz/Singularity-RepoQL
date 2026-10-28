@@ -24,6 +24,7 @@ Runs on every push to `main` and on every pull request:
 ```bash
 bash tests/validate-manifest.sh   # SHA256SUMS covers every tracked file
 bash tests/validate-local.sh      # syntax, unit suites, JSON, compose, ref scan
+FORBIDDEN_REFS_REQUIRE_LOCAL=1 bash tests/scan-refs.sh  # release host: the gitignored overlay is REQUIRED
 ```
 
 The internal-reference scan here uses the committed generic guard only. It must
@@ -72,6 +73,10 @@ and the drift gate fails on the next clone. That is the gate doing its job.
 ## Before the tag
 
 - [ ] `bash tests/validate-local.sh` prints `VALIDATION OK` on a clean clone.
+- [ ] `bash tests/validate-local.sh` includes the compose config check; a host
+      without `docker compose` FAILS the gate instead of skipping it.
+- [ ] `node bin/ai-orchestra selftest` exits 0 (one labelled `SKIP` is the
+      fleet-only bridge pin; a `FAIL` is always a failure).
 - [ ] `FORBIDDEN_REFS_REQUIRE_LOCAL=1 bash tests/scan-refs.sh` is clean.
 - [ ] CI passed for the exact commit being tagged.
 - [ ] `MANIFEST.json` and `CHANGELOG.md` describe that commit.

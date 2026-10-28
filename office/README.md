@@ -23,15 +23,23 @@ Office ships automatically with installation options 2 and 4; options 1 and 3 ex
 The reference deployment builds from the public fork
 [`ali3nz/claude-office`](https://github.com/ali3nz/claude-office) — a fork of
 [`paulrobello/claude-office`](https://github.com/paulrobello/claude-office)
-(MIT) that carries the Focus/seating and idle-sweep updates used here.
+(MIT) that carries the Focus/seating, idle-sweep and layout-timestamp-guard
+updates used here.
 
 ```bash
 git clone https://github.com/ali3nz/claude-office
 cd claude-office
-# optional: pin the validated revision
-# git checkout 4ce0d00
-docker build -t claude-office:local .
+# pin the revision the live deployment runs (see office/PROVENANCE.md)
+git checkout 95d8bdc5728b23bcf0fee4c371b35e071c44f642
+docker build -t local/claude-office:layout-clock-20261027 .
 ```
+
+The pin is not optional in a parity build: `95d8bdc` carries the Focus/seating
+and idle-sweep work *and* the layout-timestamp guard (#807) that the older
+revision the previous text named. Reproducing the live floor means building
+that commit, not
+a later tip. `office/PROVENANCE.md` records the fork, the licence and the exact
+deployed override.
 
 ## Configure and run
 

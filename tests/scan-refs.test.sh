@@ -76,7 +76,7 @@ done
 f="$tmp/qualified"
 new_fixture "$f"
 cat >"$f/NOTES.md" <<'EOF'
-See ali3nz/Singularity-RepoQL#123 for the original report.
+See https://github.com/ali3nz/Singularity-RepoQL/issues/123 for the original report.
 Upstream detail: https://github.com/openchamber/openchamber/issues/4567
 EOF
 expect clean "qualified github references are accepted" "$f"

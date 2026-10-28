@@ -42,11 +42,12 @@ import {
   probeMainProxy,
 } from "../adapters/claude-code/main-memory.mjs";
 import { loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
+import { auditComponentSet, COMPONENT, VARIANT_COMPONENTS } from "./bundle-classification.mjs";
 import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs";
 // Shared OpenChamber discovery: the installer and the attach flow must resolve
 // the SAME target config dir (a native data dir with no OpenCode config must
 // never silently fall back to the package's own data/opencode/config).
-import { discoverOpenchamber, resolveConfigDir } from "./attach-openchamber.mjs";
+import { discoverOpenchamber, resolveConfigDir, MANAGED_BEGIN, MANAGED_END } from "./attach-openchamber.mjs";
 // Native Office payload contract: the gate ingests an event produced by the
 // SHIPPED plugin mapper, not a hand-written shape.
 import { mapOfficeEvent } from "../openchamber/plugins/product-office/office-events.js";
@@ -168,6 +169,18 @@ export const VARIANTS = Object.freeze({
  * rather than claiming success.
  */
 /** The user-facing option surface: exactly four numbered installation options. */
+/** What installation option 2 does NOT provision by itself, and the exact follow-ups. */
+export function option2BoundaryLines() {
+  return [
+    "boundary: option 2 wires Claude Code only — it does NOT start MemoryCore, Ghost or Claude Office",
+    "boundary: follow-up, from the repository root:",
+    "boundary:   MemoryCore   bash scripts/start-memory-stack.sh",
+    "boundary:   Ghost        python3 scripts/provision-secrets.py --variant 2 --with-ghost && bash ghost/setup-ghost.sh",
+    "boundary:   Office       python3 scripts/provision-secrets.py --variant 2 && docker compose -f office/office.compose.yml up -d",
+    "boundary: until those run, the Ghost and Claude Office capability checks stay INCOMPLETE",
+  ];
+}
+
 export function installOptionLines() {
   return ["1", "2", "3", "4"].map((n) => {
     const v = VARIANTS[n];
@@ -241,6 +254,10 @@ export function resolveVariant(flags, deps = {}) {
   const notes = [];
   if (flags.skipProfiles) problems.push("specialist-agent profile provisioning is mandatory in every installation option — --skip-profiles cannot be combined with an installation option");
   if (flags.scope !== "user") notes.push(`option runs written at user scope; project scope (${flags.scope}) still works for the integration itself`);
+  // ONE classification table decides what each option ships: Ghost and Office
+  // are IN options 2/4 only, and an unclassified package file is a hard error
+  // (it could silently ship with the wrong option).
+  const components = VARIANT_COMPONENTS[String(flags.variant)] || [];
   if (v.ghost) {
     // Ghost + Claude Office are automatically IN the complete options: no
     // selector exists; the package must still carry the parts.
@@ -252,6 +269,15 @@ export function resolveVariant(flags, deps = {}) {
   if (v.office) {
     const officeOk = deps.officeComposeExists ? deps.officeComposeExists(join(ROOT, "office", "office.compose.yml")) : existsSync(join(ROOT, "office", "office.compose.yml"));
     if (!officeOk) problems.push("Claude Office is mandatory for this installation option but office/office.compose.yml is missing from the package");
+  }
+  {
+    const audit = deps.auditComponentSet ? deps.auditComponentSet(flags.variant) : auditComponentSet(ROOT, flags.variant);
+    if (!audit.ok) {
+      problems.push(`the package's component set does not match option ${flags.variant}: ${audit.problems.join("; ")}`);
+    } else {
+      const shipped = components.includes(COMPONENT.GHOST) ? "core + Ghost + Office" : "core only (no Ghost, no Office)";
+      notes.push(`component set verified for option ${flags.variant}: ${shipped} — ${audit.installedFiles.length} classified files`);
+    }
   }
   if (v.openchamber) {
     // Never install a duplicate OpenChamber: detect the EXISTING instance
@@ -350,14 +376,22 @@ function require_ok_basename(p) {
   return p.split(/[\\/]/).pop() || "agent.md";
 }
 
-export function applyAgentFiles(plan, { dryRun }) {
+export function applyAgentFiles(plan, { dryRun, priorLedger = [] }) {
   const changed = [];
   const ledger = [];
+  const prior = Array.isArray(priorLedger) ? priorLedger : [];
   for (const f of plan) {
     if (f.status === "present") {
-      // Already the exact packaged content: record ownership so uninstall can
-      // prove it later (repeated installs stay idempotent: no new backups).
-      ledger.push({ target: f.target, action: "present", installedSha: shaFile(f.target) });
+      // Already the exact packaged content. A re-install must MERGE the earlier
+      // ownership proof instead of dropping it: when an earlier install
+      // replaced a user file, that entry holds the backup of the user's
+      // original. Downgrading it to plain "present" would make uninstall
+      // DELETE the file instead of restoring the user's version.
+      const prev = prior.find((e) => e.target === f.target);
+      const keepReplace = prev && prev.action === "replace" && prev.backupPath && existsSync(prev.backupPath);
+      ledger.push(keepReplace
+        ? { target: f.target, action: "replace", prevSha: prev.prevSha, prevMode: prev.prevMode ?? null, backupPath: prev.backupPath, installedSha: shaFile(f.target) }
+        : { target: f.target, action: "present", installedSha: shaFile(f.target) });
       continue;
     }
     if (!dryRun) {
@@ -938,9 +972,20 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
       note(Boolean(cfgDir), "OpenChamber config directory resolved",
         cfgDir || (cfgErr || `no config dir for ${inst.kind} — pass an explicit target (--config-dir/--container) or fix the OpenChamber install`));
       if (cfgDir) {
-        const bundleOk = existsSync(join(cfgDir, "plugins", "product-office", "package.json")) && existsSync(join(cfgDir, "AGENTS.md"));
+        // Variant-aware: the Office plugin belongs to options 2/4 only, so an
+        // option-3 target must not fail for the component that option must
+        // EXCLUDE. A core attach proves the bundle by the shared runtime it
+        // always installs. AGENTS.md is accepted as the managed-block MERGE
+        // (user content plus the delimited block), never byte equality.
+        const agentsMd = join(cfgDir, "AGENTS.md");
+        const agentsText = existsSync(agentsMd) ? readFileSync(agentsMd, "utf8") : "";
+        const policyOk = agentsText.includes(MANAGED_BEGIN) && agentsText.includes(MANAGED_END);
+        const pluginOk = v.office
+          ? existsSync(join(cfgDir, "plugins", "product-office", "package.json"))
+          : existsSync(join(cfgDir, "plugins", "singularity-runtime", "scripts", "doc-policy.mjs"));
+        const bundleOk = pluginOk && policyOk;
         note(bundleOk, "OpenChamber memory-plugin bundle present",
-          bundleOk ? cfgDir : `bundle incomplete in ${cfgDir} — run scripts/attach-openchamber.mjs --variant ${flags.variant}`);
+          bundleOk ? cfgDir : `bundle incomplete in ${cfgDir} — missing ${[!pluginOk && (v.office ? "the Office plugin" : "the shared runtime"), !policyOk && "the managed AGENTS.md block"].filter(Boolean).join(" and ")}; run scripts/attach-openchamber.mjs --variant ${flags.variant}`);
         // The target's OWN MCP wiring must declare the RepoQL MCP: the attach
         // never overwrites a target's opencode.jsonc, so a pre-existing
         // RepoQL identity survives — and this check proves the code
@@ -1236,6 +1281,10 @@ export async function runInstall(flags) {
     warn("  option:   installation stopped unmodified; resolve the mandatory capabilities above, then re-run");
     return 4; // option requirement refusal: the on-disk state was not touched
   }
+  // Option 2 selects Ghost and Claude Office, but THIS installer only wires
+  // Claude Code. State exactly what it leaves to follow-up commands instead of
+  // implying that the services were provisioned.
+  if (String(flags.variant) === "2") for (const line of option2BoundaryLines()) log(`  ${line}`);
 
   // Main-agent memory decision: explicit flags win; otherwise offer interactively
   // and default OFF for non-interactive runs (the guided experience still OFFERS,
@@ -1264,7 +1313,8 @@ export async function runInstall(flags) {
   // 1. agent definition files
   const agentPlan = planAgentFiles(flags.agentsTarget);
   for (const f of agentPlan) log(`  agents:   ${f.status.padEnd(7)} ${f.target}${f.prevSha ? " (backed up before replace)" : ""}`);
-  const { changed: agentChanges, ledger: agentLedger } = applyAgentFiles(agentPlan, { dryRun: flags.dryRun });
+  const priorRecord = readState().installs.find((r) => r.settingsPath === flags.settingsPath);
+  const { changed: agentChanges, ledger: agentLedger } = applyAgentFiles(agentPlan, { dryRun: flags.dryRun, priorLedger: priorRecord?.agentLedger || [] });
 
   // 2. settings hooks + env (memory + documentation hooks; merge, never replace)
   const settings = applySettings(flags.settingsPath, HOOK_SCRIPT, envForSettings, { dryRun: flags.dryRun });
@@ -1456,11 +1506,17 @@ export function runUninstall(flags) {
   }
   const existing = readJson(flags.settingsPath) || {};
   const { settings: cleaned, changed, removedEnvKeys } = removeMemoryIntegration(existing, { scriptPath: record.hooksScript, env: envRestore });
-  if (changed && !flags.dryRun) {
-    const backup = backupSettingsFile(flags.settingsPath);
-    writeSettingsFile(flags.settingsPath, cleaned);
-    if (removedEnvKeys.length) log(`  settings: integration hooks+env removed (${removedEnvKeys.join(", ")})${backup ? ` — backup: ${backup}` : ""}`);
-    else log(`  settings: integration hooks removed${backup ? ` — backup: ${backup}` : ""}`);
+  if (changed) {
+    if (!flags.dryRun) {
+      const backup = backupSettingsFile(flags.settingsPath);
+      writeSettingsFile(flags.settingsPath, cleaned);
+      if (removedEnvKeys.length) log(`  settings: integration hooks+env removed (${removedEnvKeys.join(", ")})${backup ? ` — backup: ${backup}` : ""}`);
+      else log(`  settings: integration hooks removed${backup ? ` — backup: ${backup}` : ""}`);
+    } else {
+      // A dry run must PLAN the same removal the real run performs; reporting
+      // "nothing to change" here contradicted the real run.
+      log(`  settings: would remove ${removedEnvKeys.length ? `integration hooks+env (${removedEnvKeys.join(", ")})` : "integration hooks"} — dry run, nothing written`);
+    }
   } else {
     log("  settings: nothing to change");
   }
@@ -1471,7 +1527,7 @@ export function runUninstall(flags) {
   if (record.mainMemory?.enabled) {
     const eu = removeMainMemoryIntegration(readJson(flags.settingsPath) || existing, record, record.mainMemory.previousEnv || {});
     if (eu.changedKeys.length) {
-      log(`  main: removed/restored ${eu.changedKeys.join(", ")}`);
+      log(`  main: ${flags.dryRun ? "would remove/restore" : "removed/restored"} ${eu.changedKeys.join(", ")}${flags.dryRun ? " — dry run, nothing written" : ""}`);
       if (!flags.dryRun) writeSettingsFile(flags.settingsPath, eu.settings);
     } else {
       log("  main: no main-agent proxy values to remove (unchanged since install or user-modified)");

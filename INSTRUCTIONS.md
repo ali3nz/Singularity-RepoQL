@@ -232,7 +232,7 @@ Option 1 is done after step 5. Skip to "Report".
 4. **Build the local images before starting the UI services.** Option 3 needs
    only `openchamber:local` (`docs/OPENCHAMBER-SETUP.md`); option 4
    additionally builds `claude-office:local` (`docs/OFFICE-SETUP.md`, the
-   validated `f36007d` revision). `scripts/start.sh` starts existing images;
+   validated `95d8bdc` revision). `scripts/start.sh` starts existing images;
    it does not build them.
 
 5. **Preflight the ports, then start the stack.** Check for listeners on
@@ -282,6 +282,34 @@ Option 1 is done after step 5. Skip to "Report".
 
    `validate-repoql.sh` must print `REPOQL VALIDATION OK`.
 
+### Option 2 — Claude Code Complete (Ghost + Claude Office)
+
+Option 2 is Option 1 with `--variant 2`, plus the two bundled components. The
+Claude Code installer does **not** provision them: it wires agents, hooks,
+settings and profiles only, prints this boundary, and the option stays
+INCOMPLETE until the components are up.
+
+1. **Memory stack + Claude Code wiring** — execute §2 (Option 1) steps 1–4,
+   using `--variant 2` in step 3.
+2. **Ghost and Claude Office** — from the repository root, before the gate:
+
+   ```bash
+   python3 scripts/provision-secrets.py --variant 2 --with-ghost
+   bash ghost/setup-ghost.sh
+   python3 scripts/provision-secrets.py --variant 2
+   docker compose -f office/office.compose.yml up -d   # image: docs/OFFICE-SETUP.md
+   ```
+
+   `ghost/setup-ghost.sh` seeds Ghost's own memory, installs
+   `openchamber/agents/ghost.md` when an OpenChamber config exists, and writes
+   `secrets/ghost.env`; the second provisioning call writes the Office keys and
+   plugin config. Neither command starts the OpenChamber UI (Option 2 does not
+   install it).
+3. **Verify** — re-run
+   `node scripts/install-claude-code.mjs install --variant 2`; the option gate
+   must verify Ghost (`GHOST_BACKEND=claude-code`) and Claude Office before it
+   reports INSTALL COMPLETE. A missing component is INCOMPLETE, never a pass.
+
 ### Option 4 — Ghost and Claude Office are added automatically
 
 Option 4 is option 3 plus the two bundled components. They cannot be
@@ -289,7 +317,7 @@ deselected, and nothing may be added to option 3: selecting option 4 is the
 only way the walkthrough installs them.
 
 1. **Office**: build `claude-office:local` (`docs/OFFICE-SETUP.md`, validated
-   revision `f36007d`), include port `3128` in the preflight (step 5), and
+   revision `95d8bdc`), include port `3128` in the preflight (step 5), and
    include `http://127.0.0.1:3128` in the endpoint check (step 6).
 2. **Ghost**: run `bash ghost/setup-ghost.sh` (clean-slate seed templates;
    `docs/GHOST-SETUP.md`) before `scripts/start.sh`, and confirm the dream

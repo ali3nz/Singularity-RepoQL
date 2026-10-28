@@ -44,11 +44,11 @@ Environment:
     DOC_INDEX_TEAM / DOC_INDEX_USER   shared documentation scope
 """
 import argparse
-import fcntl
 import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -64,7 +64,9 @@ def _ledger():
 
 
 def _lock():
-    return Path(os.environ.get("SINGULARITY_DOC_DATA", "./data")) / "doc-index" / ".ledger.lock"
+    # A lock DIRECTORY (not a flocked file) so the Node engine, which has no
+    # fcntl, can serialise against this helper on the SAME ledger.
+    return Path(os.environ.get("SINGULARITY_DOC_DATA", "./data")) / "doc-index" / ".ledger.lock.d"
 
 
 def _base():
@@ -123,12 +125,49 @@ def load_cfg():
 
 # ── ledger (the revision manifest; atomic + flock) ───────────────────────────
 
+LOCK_TIMEOUT_S = 10
+LOCK_STALE_S = 120
+
+
+def acquire_ledger_lock(lock_dir, timeout=LOCK_TIMEOUT_S, stale=LOCK_STALE_S):
+    """Atomic lock directory shared with scripts/doc-ingest-node.mjs.
+
+    mkdir is atomic on POSIX and Windows, so both runtimes serialise on the
+    same primitive. A crashed holder leaves a directory behind; it is reaped
+    once its mtime is older than `stale` seconds. The caller must release it.
+    """
+    lock_dir.parent.mkdir(parents=True, exist_ok=True)
+    start = time.monotonic()
+    while True:
+        try:
+            os.mkdir(lock_dir)
+            return
+        except FileExistsError:
+            try:
+                if time.time() - os.stat(lock_dir).st_mtime > stale:
+                    shutil.rmtree(lock_dir, ignore_errors=True)
+                    continue
+            except FileNotFoundError:
+                continue  # holder released between mkdir and stat
+            if time.monotonic() - start > timeout:
+                raise RuntimeError(f"ledger lock busy: {lock_dir}")
+            time.sleep(0.05)
+
+
+def release_ledger_lock(lock_dir):
+    try:
+        shutil.rmtree(lock_dir)
+    except FileNotFoundError:
+        pass
+
+
 def with_ledger(fn):
     """Run fn(ledger) under the ledger lock and persist with atomic replace."""
     lp = _ledger()
     lp.parent.mkdir(parents=True, exist_ok=True)
-    with _lock().open("w+") as lockf:
-        fcntl.flock(lockf, fcntl.LOCK_EX)
+    lock_dir = _lock()
+    acquire_ledger_lock(lock_dir)
+    try:
         try:
             ledger = json.loads(lp.read_text()) if lp.exists() else {"version": 1, "docs": {}}
         except ValueError:
@@ -138,6 +177,8 @@ def with_ledger(fn):
         tmp.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
         os.replace(tmp, lp)  # atomic: no torn ledger on crash
         return result
+    finally:
+        release_ledger_lock(lock_dir)
 
 
 # ── eligibility and safety ───────────────────────────────────────────────────

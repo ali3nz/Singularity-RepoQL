@@ -1,0 +1,98 @@
+# Runtime parity — pinned memory stack for the product network.
+#
+# This file is additive and profile-gated: nothing here starts unless the
+# profile is requested, so `docker compose -f compose/compose.yml up -d` behaves
+# exactly as before.
+#
+#   docker compose -f compose/compose.yml -f compose/runtime-parity.override.yml \
+#     --profile runtime-parity up -d memory-core memory-hub
+#
+# It exists because the vendored upstream quickstart (memory/upstream/) is
+# interactive and names its containers and network for itself. This override is
+# the non-interactive, reviewable way to run the *same* images the live host
+# runs, on the product network, with the curated overlays from memory/patches/.
+#
+# Choose ONE memory stack per host: either the upstream quickstart scripts
+# (tdai-memory-core/tdai-memory-hub on tdai-memory-stack) or this override
+# (singularity-memory-core/hub on the product network). Running both gives you
+# two MemoryCores on one host and two capture writers - the exact condition the
+# single-writer contract forbids.
+#
+# Build the two images first (see memory/patches/README.md):
+#   docker build -t tencent-memorycore:v2.0.2-99a1a2c-l1recordids1 <extracted MemoryCore>
+#   docker build -t tencent-memory-hub:751-parser-fix memory/patches/hub-751
+services:
+  memory-core:
+    profiles: ["runtime-parity"]
+    image: ${MEMORY_CORE_IMAGE:-tencent-memorycore:v2.0.2-99a1a2c-l1recordids1}
+    container_name: singularity-memory-core
+    env_file:
+      - ${MEMORY_CORE_ENV_FILE:-../memory/upstream/.env}
+    environment:
+      # Loopback-only publication: the gateway is reached by the product network
+      # alias, never from off-host.
+      MEMORY_CORE_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:${MEMORY_CORE_PORT:-8420}:8420"
+    volumes:
+      - ../data/memory/core:/app/data
+    networks:
+      product:
+        aliases: [memory-core]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  memory-hub:
+    profiles: ["runtime-parity"]
+    image: ${MEMORY_HUB_IMAGE:-tencent-memory-hub:751-parser-fix}
+    container_name: singularity-memory-hub
+    env_file:
+      - ${MEMORY_HUB_ENV_FILE:-../memory/upstream/.env}
+    ports:
+      - "127.0.0.1:${MEMORY_HUB_PANEL_PORT:-8125}:8125"
+      - "127.0.0.1:${MEMORY_HUB_KNOWLEDGE_PORT:-8424}:8424"
+    volumes:
+      - ../data/memory/hub:/app/data
+    depends_on:
+      - memory-core
+    networks:
+      product:
+        aliases: [memory-hub]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # One-shot capture. The host timer (memory/portable/systemd/) is the supported
+  # owner; this service exists so a host without systemd can run the same
+  # consumer by hand, with the same read-only source mount. It never starts
+  # itself: `--profile runtime-parity run --rm capture`.
+  capture:
+    profiles: ["runtime-parity"]
+    image: ${CAPTURE_IMAGE:-tencent-memorycore:v2.0.2-99a1a2c-l1recordids1}
+    container_name: singularity-capture
+    entrypoint: ["node", "/app/capture-consumer.mjs"]
+    env_file:
+      - ${CAPTURE_ENV_FILE:-../secrets/capture.env}
+    environment:
+      SRC_DB: /src/opencode.db
+      LEDGER_PATH: /ledger/capture-ledger.json
+      CAPTURE_ENABLED: ${CAPTURE_ENABLED:-0}
+    volumes:
+      - ${OPENCHAMBER_DB_DIR:-../data/opencode/share}:/src:ro
+      - ../data/capture-ledger:/ledger
+      - ../memory/portable:/app:ro
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    user: "1000:1000"
+    networks: [product]
+    restart: "no"
+
+networks:
+  product:
+    external: true
+    name: ${SINGULARITY_NETWORK:-singularity-product-net}

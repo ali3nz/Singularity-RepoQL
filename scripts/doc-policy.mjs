@@ -14,7 +14,7 @@
 //
 // A material task closes ONLY when its recorded assessment has:
 //   DOC_UPDATED        -> each documented file is independently verified against
-//                         the INGESTION LEDGER via scripts/memory-doc-ingest.py
+//                         the INGESTION LEDGER via scripts/doc-ingest-node.mjs
 //                         verify (caller-claimed --ingest-status text is never
 //                         accepted as proof) AND knowledge capture reported
 //   DOC_NOT_REQUIRED   -> non-material change set + explicit reason
@@ -86,6 +86,8 @@ export function isDocsOnlyChange(files) {
 // proof. `verify` re-derives every fact: record exists for the workspace/scope,
 // source exists inside its authorised root, current hash == active revision,
 // revision verified, chunks accounted for, no newer unresolved revision.
+import { ingestFile as ingestFileInNode, verifyFile as verifyFileInNode } from "./doc-ingest-node.mjs";
+
 const DEFAULT_EXEC = (file, args, opts, cb) => execFile(file, args, { encoding: "utf8", ...(opts || {}) }, cb);
 
 function runPython(args, cwd, execImpl, timeoutMs = 60_000) {
@@ -101,6 +103,17 @@ export async function collectEvidence(docs, projectRoot = process.env.SINGULARIT
   const evidence = {};
   const root = resolve(projectRoot);
   for (const d of docs || []) {
+    // Default path is the in-process Node engine (no Python runtime needed).
+    // An injected execImpl explicitly selects the legacy Python subprocess, which
+    // is kept for compatibility and for operators who run it deliberately.
+    if (!execImpl) {
+      try {
+        evidence[d] = verifyFileInNode(d, { root, env: process.env });
+      } catch (e) {
+        evidence[d] = { status: "DOC_INGEST_NOT_VERIFIED", reason: `verification unavailable: ${clip(e?.message || e, 120)}` };
+      }
+      continue;
+    }
     if (!DOC_INGEST_SCRIPT) { evidence[d] = { status: "DOC_INGEST_NOT_VERIFIED", reason: "ingestion verifier not found" }; continue; }
     const r = await runPython([DOC_INGEST_SCRIPT, "verify", "--file", d, "--root", root], root, execImpl);
     try {
@@ -146,7 +159,7 @@ export function evaluateAssessment(assess, opts = {}) {
     // Ledger evidence is the source of truth — claimed status text is not.
     const evidence = opts.evidence || null;
     if (!evidence) {
-      findings.push("FINDING: ingestion evidence was not checked — completion requires the ledger verification (scripts/memory-doc-ingest.py verify) for each documented file.");
+      findings.push("FINDING: ingestion evidence was not checked — completion requires the ledger verification (scripts/doc-ingest-node.mjs verify) for each documented file.");
     } else {
       for (const d of docs) {
         const v = evidence[d];
@@ -163,7 +176,7 @@ export function evaluateAssessment(assess, opts = {}) {
       if (s !== "DOC_INGEST_INDEXED" && s !== "DOC_INGEST_UNCHANGED") {
         findings.push(allVerified
           ? `FINDING: claimed ingestion status "${s}" contradicts the verified ledger evidence — correct the assessment.`
-          : `FINDING: documentation ingestion is claimed as ${s} — pending/failed/blocked does not close the task; retry (scripts/memory-doc-ingest.py retry --file <doc> --root <root>).`);
+          : `FINDING: documentation ingestion is claimed as ${s} — pending/failed/blocked does not close the task; retry (node scripts/doc-ingest-node.mjs retry --file <doc> --root <root>).`);
       }
     }
     if (docs.length && claimed.length && docs.length !== claimed.length) {
@@ -409,6 +422,19 @@ export async function saveSessionBaseline(session, dir, { execImpl = null, env =
 }
 
 export async function ingestDocChange(absDoc, docRoot, session, { execImpl = null, env = process.env } = {}) {
+  // Default path: the in-process Node engine (same ledger, same statuses, no
+  // Python runtime). An injected execImpl selects the legacy Python subprocess.
+  if (!execImpl) {
+    try {
+      return await ingestFileInNode(resolve(absDoc), {
+        root: resolve(docRoot),
+        session: session || "auto-discovery",
+        env,
+      });
+    } catch (e) {
+      return { status: "DOC_INGEST_FAILED", reason: `ingestion unavailable: ${clip(e?.message || e, 140)}` };
+    }
+  }
   const workspaceRoot = resolve(env?.SINGULARITY_REPO_ROOT || process.cwd());
   const cwd = workspaceRoot;
   const args = [DOC_INGEST_SCRIPT, "ingest", "--file", resolve(absDoc), "--root", resolve(docRoot), "--session", session || "auto-discovery"];

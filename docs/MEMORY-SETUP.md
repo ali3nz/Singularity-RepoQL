@@ -167,7 +167,7 @@ node scripts/setup-agent-profiles.mjs             # seed missing profiles
 - Documentation knowledge is intentionally SEPARATE from agent profiles: it
   lives under a dedicated shared scope (`agent: docs-keeper`, team
   `singularity-docs`/user `shared` by default) maintained by
-  `scripts/memory-doc-ingest.py`, so runbooks can be retrieved by any agent
+  `scripts/doc-ingest-node.mjs` (legacy: `scripts/memory-doc-ingest.py`), so runbooks can be retrieved by any agent
   without exposing one agent's private experience to another. See
   [`DOC-INGESTION.md`](DOC-INGESTION.md).
 - Defaults: team `openchamber-agents`, user from the memory config

@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll OpenChamber sessions every minute for Discord narration (ticket 162)
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=60
+AccuracySec=10
+
+[Install]
+WantedBy=timers.target

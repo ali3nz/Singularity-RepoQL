@@ -9,6 +9,8 @@ import { AGENT_MAP, resolveSingularityAgent } from "./agent-map.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const AGENT_FILES = readdirSync(join(HERE, "agents")).filter((f) => f.endsWith(".md")).sort();
+const OPENCHAMBER_AGENTS = join(HERE, "..", "..", "openchamber", "agents");
+const read = (name) => readFileSync(join(HERE, "agents", `${name}.md`), "utf8");
 
 function parseFrontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
@@ -23,12 +25,23 @@ function parseFrontmatter(text) {
   return fm;
 }
 
+function openchamberMode(file) {
+  return parseFrontmatter(readFileSync(join(OPENCHAMBER_AGENTS, file), "utf8")).mode;
+}
+
+function openchamberFilesByMode(mode) {
+  return readdirSync(OPENCHAMBER_AGENTS)
+    .filter((f) => f.endsWith(".md") && openchamberMode(f) === mode)
+    .map((f) => f.replace(/\.md$/, ""))
+    .sort();
+}
+
 test("every mapped agent has a definition file, and every file is mapped", () => {
   assert.deepEqual(AGENT_FILES, Object.keys(AGENT_MAP).map((n) => `${n}.md`).sort());
 });
 
 test("definitions use valid Claude Code frontmatter: namespaced name, description, known tools", () => {
-  const VALID_TOOLS = new Set(["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebSearch", "WebFetch"]);
+  const VALID_TOOLS = new Set(["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebSearch", "WebFetch", "Agent"]);
   for (const file of AGENT_FILES) {
     const text = readFileSync(join(HERE, "agents", file), "utf8");
     const fm = parseFrontmatter(text);
@@ -49,12 +62,24 @@ test("read/write boundaries are preserved per agent", () => {
   const toolsFor = (file) => parseFrontmatter(readFileSync(join(HERE, "agents", file), "utf8")).tools || "";
   // reviewer: read-only during the review (no Edit/Write)
   assert.equal(/Edit|Write/.test(toolsFor("singularity-code-reviewer.md")), false);
+  // fleet-reviewer: read-only and command-free by contract
+  assert.equal(/Edit|Write|Bash/.test(toolsFor("singularity-fleet-reviewer.md")), false);
   // quality-fixer: file-scoped fixer, no shell at all
   assert.equal(/Bash/.test(toolsFor("singularity-quality-fixer.md")), false);
   assert.ok(law(readFileSync(join(HERE, "agents", "singularity-quality-fixer.md")), "ONLY inside your current working directory"));
   // explorer and researcher are read-only
   for (const f of ["singularity-explore.md", "singularity-researcher-web.md"]) {
     assert.equal(/Edit|Write|Bash/.test(toolsFor(f)), false, f);
+  }
+  // non-implementing main surfaces cannot write files through their own tools
+  for (const name of ["singularity-orchestrator", "singularity-solo-coordinator", "singularity-duel-coordinator", "singularity-quad-coordinator"]) {
+    assert.equal(/Edit|Write/.test(toolsFor(`${name}.md`)), false, `${name}: coordinator may not write`);
+    assert.match(toolsFor(`${name}.md`), /Agent/, `${name}: must be able to dispatch`);
+  }
+  // full-surface roles can implement directly and can delegate
+  for (const name of ["singularity-super", "singularity-standalone", "singularity-free-mode", "singularity-duo", "singularity-ghost"]) {
+    assert.match(toolsFor(`${name}.md`), /Edit, Write/, `${name}: full execution surface`);
+    assert.match(toolsFor(`${name}.md`), /Agent/, `${name}: delegation available`);
   }
 });
 
@@ -79,24 +104,76 @@ test("quality-fixer keeps its staged-file JSON reply contract", () => {
   assert.ok(text.includes("JSON"));
 });
 
-test("identity map: every claude name maps to the role's MemoryCore identity (no duplicates, no ghost)", () => {
-  const memoryIds = Object.values(AGENT_MAP).map((e) => e.memoryAgentId);
-  assert.equal(new Set(memoryIds).size, memoryIds.length, "no two claude agents share one memory identity");
+test("identity map: every delegation target maps to one unique MemoryCore identity; main surfaces map to none", () => {
+  const ids = Object.values(AGENT_MAP).map((e) => e.memoryAgentId).filter((x) => x !== null);
+  assert.equal(new Set(ids).size, ids.length, "no two claude agents share one memory identity");
   for (const [claudeName, entry] of Object.entries(AGENT_MAP)) {
-    assert.ok(existsSync(join(HERE, "../..", entry.sourceDef)), `${claudeName} maps to the real OpenChamber definition ${entry.sourceDef}`);
+    assert.ok(existsSync(join(HERE, "..", "..", entry.sourceDef)), `${claudeName} maps to the real OpenChamber definition ${entry.sourceDef}`);
+    assert.ok(["subagent", "main"].includes(entry.surface), `${claudeName}: known surface`);
+    if (entry.surface === "main") assert.equal(entry.memoryAgentId, null, `${claudeName}: main surfaces have no duplicate identity`);
+    else assert.equal(typeof entry.memoryAgentId, "string", `${claudeName}: delegation targets carry an identity`);
   }
-  assert.equal(memoryIds.includes("ghost"), false, "Ghost keeps its own ghost-companion profile — never a second identity");
-  const openchamberNames = readdirSync(join(HERE, "../../openchamber/agents")).map((f) => f.replace(/\.md$/, ""));
-  for (const id of memoryIds) assert.ok(openchamberNames.includes(id), `memoryAgentId ${id} matches the OpenChamber roster`);
+  assert.equal(ids.includes("ghost"), false, "Ghost keeps its own ghost-companion profile — never a second identity");
+  const openchamberNames = readdirSync(OPENCHAMBER_AGENTS).map((f) => f.replace(/\.md$/, ""));
+  for (const id of ids) assert.ok(openchamberNames.includes(id), `memoryAgentId ${id} matches the OpenChamber roster`);
 });
 
-test("resolveSingularityAgent accepts only singularity-* names", () => {
+test("resolveSingularityAgent accepts only delegation targets with a singularity-* name", () => {
   assert.equal(resolveSingularityAgent("singularity-thinker")?.memoryAgentId, "thinker");
+  assert.equal(resolveSingularityAgent("singularity-fleet-reviewer")?.memoryAgentId, "fleet-reviewer");
+  assert.equal(resolveSingularityAgent("singularity-super"), null, "main-session surfaces have no subagent identity");
+  assert.equal(resolveSingularityAgent("singularity-ghost"), null);
   assert.equal(resolveSingularityAgent("Explore"), null, "built-in subagents are never captured/recalled");
   assert.equal(resolveSingularityAgent("general-purpose"), null);
   assert.equal(resolveSingularityAgent(undefined), null);
 });
 
-test("standalone is not shipped as a subagent (its guidance belongs to the main-agent config)", () => {
-  assert.ok(!AGENT_FILES.includes("singularity-standalone.md"));
+// --- roster rules ----------------------------------------------------------
+//
+// The surface ALWAYS mirrors the source definition's mode in openchamber/agents/.
+// A `mode: subagent` role is a delegation target; a `mode: primary` role is a
+// main-session surface launched with `claude --agent`. We no longer claim that a
+// primary role can never be installed in ~/.claude/agents (Claude Code has no
+// field that hides a definition from the Agent tool); instead we assert the
+// classification is honest and that every main-surface body declares its launch
+// form and refuses delegated authority.
+
+const SURFACE_BY_MODE = { subagent: "subagent", primary: "main" };
+
+test("surface mirrors the source definition's mode for every mapped agent", () => {
+  for (const [claudeName, entry] of Object.entries(AGENT_MAP)) {
+    const roleFile = entry.sourceDef.split("/").pop();
+    assert.equal(entry.surface, SURFACE_BY_MODE[openchamberMode(roleFile)], `${claudeName}: surface must mirror ${roleFile} mode`);
+  }
+  const mainRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "main").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
+  const subRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "subagent").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
+  assert.deepEqual(subRoles, openchamberFilesByMode("subagent"), "every subagent-mode role is a delegation target");
+  assert.deepEqual(mainRoles, openchamberFilesByMode("primary"),
+    "every portable primary-mode role is a main-session surface");
+});
+
+test("every main-surface definition states its launch form and refuses delegated authority", () => {
+  for (const [claudeName, entry] of Object.entries(AGENT_MAP)) {
+    if (entry.surface !== "main") continue;
+    const text = read(claudeName);
+    assert.ok(text.includes(`claude --agent ${claudeName}`), `${claudeName}: launch form documented`);
+    assert.match(text, /do not (?:hold|claim)/i, `${claudeName}: delegated instance must refuse session authority`);
+  }
+});
+
+test("standalone ships as a main-session surface, not as a delegation twin", () => {
+  assert.equal(AGENT_MAP["singularity-standalone"]?.surface, "main");
+  assert.equal(AGENT_MAP["singularity-standalone"]?.memoryAgentId, null);
+  assert.ok(AGENT_FILES.includes("singularity-standalone.md"));
+});
+
+test("roster scope: all portable non-pentest roles, and nothing else", () => {
+  assert.equal(Object.keys(AGENT_MAP).length, 17);
+  assert.equal(AGENT_FILES.length, 17);
+  for (const name of [...AGENT_FILES, ...Object.keys(AGENT_MAP)]) {
+    assert.doesNotMatch(name, /pentest|redamon/i, `${name}: pentest roles are out of scope`);
+  }
+  for (const file of AGENT_FILES) {
+    assert.doesNotMatch(readFileSync(join(HERE, "agents", file), "utf8"), /pentest|redamon/i, `${file}: no pentest references`);
+  }
 });

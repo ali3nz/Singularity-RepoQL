@@ -246,11 +246,16 @@ refusals that leave persisted state untouched, lease collisions, routing policy
 and the CLI contract. **They prove nothing about live model behaviour** —
 no model-backed test was run for this release (see below).
 
+**Two distinct orchestration lanes.** A run started by the portable harness
+(`bin/ai-orchestra` → `harness/kit/orchestrate.mjs`) and a run started by
+`scripts/orch-run` are separate lanes with separate run ids and separate state
+roots; neither reads the other's state. See `docs/HARNESS.md`.
+
 ### Model-backed testing status: BLOCKED
 
 No live model call was made. The permitted providers are free OpenRouter and
 free OpenCode Go/Zen routes; this host has no credential for either, and the
-task forbids substituting a paid route, a Freebuff agent or a premium
+task forbids substituting a paid route, a managed seat or a premium
 subscription. Rather than run a test whose billing status could not be
 verified, the live-execution acceptance items are recorded as **BLOCKED**, not
 PASS. Deterministic coverage is unaffected.

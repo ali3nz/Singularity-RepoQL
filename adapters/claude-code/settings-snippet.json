@@ -1,12 +1,12 @@
 {
-  "_comment": "Merge into ~/.claude/settings.json. Replace /path/to with the checkout path and set OFFICE_CONFIG (or OFFICE_ENDPOINT + OFFICE_INGEST_KEY) in your environment. Events carry whitelisted metadata only — never prompts or tool I/O.",
+  "_comment": "Merge into <home>/.claude/settings.json (Windows: C:\\Users\\<u>\\.claude\\settings.json). Replace {{NODE_EXE}} with the absolute node executable (process.execPath; e.g. C:\\Users\\<u>\\tools\\node22\\node.exe) and {{OFFICE_HOOK}} with the absolute path of adapters/claude-code/office-hook.mjs. This is the EXEC FORM (command + args): no shell is involved, so paths with spaces and backslashes are passed verbatim — required on Windows, valid on macOS/Linux too. Set OFFICE_CONFIG (or OFFICE_ENDPOINT + OFFICE_INGEST_KEY) in the environment. Events carry whitelisted metadata only — never prompts or tool I/O.",
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs session-start" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs prompt" }] }],
-    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs pre-tool" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs post-tool" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs stop" }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs subagent-stop" }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node /path/to/adapters/claude-code/office-hook.mjs session-end" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "session-start"] }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "prompt"] }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "pre-tool"] }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "post-tool"] }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "stop"] }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "subagent-stop"] }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "{{NODE_EXE}}", "args": ["{{OFFICE_HOOK}}", "session-end"] }] }]
   }
 }

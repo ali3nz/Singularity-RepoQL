@@ -94,7 +94,8 @@ states, retry/resume and observability: [`memory-capture-promotion.md`](memory-c
 ## 4b. Documentation ingestion (shared engine; docs stay authoritative)
 
 Runbooks and guides are ingested by the documentation engine
-(`scripts/memory-doc-ingest.py`, full guide: `docs/DOC-INGESTION.md`):
+(`scripts/doc-ingest-node.mjs`; legacy helper `scripts/memory-doc-ingest.py`,
+full guide: `docs/DOC-INGESTION.md`):
 eligibility → sensitive-content rejection → chunking by headings → idempotent
 chunk writes → bounded retrieval verification → revision supersession → atomic
 ledger update, under a dedicated shared scope (`agent: docs-keeper`, team

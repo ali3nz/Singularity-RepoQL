@@ -29,7 +29,7 @@ export const START_REMINDER =
   "existing RepoQL concepts for the files and decisions this task touches before editing " +
   "(for example `rql explore`), so you build on them instead of duplicating or contradicting them. " +
   "When current operational context helps, also search this installation's indexed shared " +
-  "documentation (`python3 scripts/memory-doc-ingest.py search \"<topic>\"`; bounded result). " +
+  "documentation (`node scripts/doc-ingest-node.mjs search \"<topic>\"`; bounded result). " +
   "If an existing indexed runbook covers this task, prefer the current on-disk source; never act on an old memory copy.";
 
 export const CLOSE_REMINDER =
@@ -54,7 +54,7 @@ export const CLOSE_REMINDER =
   "concrete reason) or DOC_BLOCKED. DOC_NOT_REQUIRED is only valid for non-material " +
   "changes (formatting, typos, throwaway work) and BLOCKED never closes a task. When " +
   "documentation was created or updated, ingest the CURRENT content into the installation's " +
-  "memory stack (`python3 scripts/memory-doc-ingest.py ingest --file <doc> --root <docs " +
+  "memory stack (`node scripts/doc-ingest-node.mjs ingest --file <doc> --root <docs " +
   "root>`) and only claim success with DOC_INGEST_INDEXED (or DOC_INGEST_UNCHANGED); a " +
   "PENDING/FAILED ingestion must be retried (`retry --file <doc> --root <root>`) or reported " +
   "as incomplete, never claimed. Finally record the closure assessment for verification: " +
@@ -68,7 +68,7 @@ const MARKER = "[runbook closeout nudge]";
 
 /**
  * Absolute paths of the installed policy runtime, when the attach installed it.
- * Agent commands like `python3 scripts/doc-policy.mjs …` in the reminder text
+ * Agent commands like `node scripts/doc-policy.mjs …` in the reminder text
  * only resolve inside the product tree; a foreign target's workspace has no
  * scripts/ directory, so the reminder names the ACTUAL runnable helpers when
  * they exist. Empty string when nothing was installed (fail-open). The path is
@@ -81,8 +81,14 @@ function helperHint() {
     const here = dirname(fileURLToPath(import.meta.url));
     const runtimeScripts = join(here, "..", "singularity-runtime", "scripts");
     if (!existsSync(join(runtimeScripts, "doc-policy.mjs"))) return "";
+    // Node is the supported native entrypoint; the Python helper remains a
+    // compatibility fallback for targets attached before the Node engine shipped.
+    const nodeEngine = join(runtimeScripts, "doc-ingest-node.mjs");
+    const pyEngine = join(runtimeScripts, "memory-doc-ingest.py");
+    const ingest = existsSync(nodeEngine) ? `node ${nodeEngine}` : existsSync(pyEngine) ? `python3 ${pyEngine}` : "";
+    if (!ingest) return "";
     return "\n\n[runbook helpers] Run the shared policy and ingestion helper from their installed runtime paths: " +
-      `\`python3 ${join(runtimeScripts, "memory-doc-ingest.py")} …\` and ` +
+      `\`${ingest} …\` and ` +
       "\`node " + join(runtimeScripts, "doc-policy.mjs") + " …\`.";
   } catch { return ""; }
 }

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "profile": "portable-harness",
+  "description": "Portable harness profile: the ai-orchestra kit is the single engine authority. Every host-specific path, credential-backed feature and optional capability is declared here; nothing in harness/kit hardcodes one. An entry resolved to null is a feature this host does not have, and the engine must report it unavailable rather than guess a path.",
+  "engine": {
+    "home": "harness/kit",
+    "entry": "orchestrate.mjs",
+    "launcher": "bin/ai-orchestra",
+    "envHome": "ORCHESTRA_KIT_HOME",
+    "verbSurface": "help, ask, consult, plan, start, status, resume, stop, salvage, selftest, engines, updates, nanny, reset, harvest, vision-smoke, watch, supervise, quality",
+    "runtime": {
+      "node": ">=22",
+      "shell": "posix (Linux, WSL2)",
+      "windowsNote": "Runs under WSL2 bash + Node 22. Native Windows cmd/PowerShell is not a supported shell for the launcher."
+    }
+  },
+  "state": {
+    "owner": "engine",
+    "runsSubdir": "runs",
+    "externalStateEnv": "ORCH_STATE_DIR",
+    "note": "The engine resolves its own state root as <kit home>/runs and creates it on first run. ORCH_STATE_DIR names a different harness lane's state root and is only validated: it must resolve outside the engine home so a portable-harness run id can never overlap it. The shipped tree carries no runs/ directory."
+  },
+  "mapping": {
+    "note": "Explicit container<->host table. `container` is the path the engine sees; `host` is what an external tool (ssh, docker cp, an editor) needs. hostEnv overrides hostDefault; when both are absent the entry is UNMAPPED and translation is identity.",
+    "table": [
+      {
+        "id": "kit",
+        "container": "/workspace/work/ai-orchestration",
+        "hostEnv": "HARNESS_HOST_KIT_ROOT",
+        "hostDefault": null,
+        "role": "engine home as mounted for a containerised host; used only for consult pointer host paths"
+      },
+      {
+        "id": "workspace",
+        "container": "/workspace",
+        "hostEnv": "HARNESS_HOST_WORKSPACE",
+        "hostDefault": null,
+        "role": "worker workspace root; used for free-seat path translation and consult attach normalisation"
+      },
+      {
+        "id": "hubDocs",
+        "container": "/docs",
+        "hostEnv": "HARNESS_HOST_DOCS",
+        "hostDefault": null,
+        "role": "documentation tree for the memory-impact staleness walk; unmapped = no impact walk, never a failure"
+      }
+    ]
+  },
+  "features": {
+    "repoql": {
+      "enabled": false,
+      "bin": null,
+      "cwd": null,
+      "hostId": "portable-harness",
+      "note": "RepoQL is an external retrieval engine and is not bundled. Set `bin` (or REPOQL_BIN) and `cwd` (or REPOQL_CWD) to a working rql host; until then retrieval-dependent stages degrade to INSUFFICIENT and the selftest probe reports UNAVAILABLE.",
+      "scopes": {
+        "harness-kit": "file:///harness/kit/**",
+        "harness-tests": "file:///tests/**",
+        "concepts": "concept:///**"
+      }
+    },
+    "openchamberWatch": {
+      "enabled": false,
+      "sshHost": null,
+      "chatsRoot": null,
+      "opencodeDb": null,
+      "haConfig": null,
+      "note": "Live OpenChamber/HA narration is a fleet-observability feature, not engine behaviour. All four values must be set for the watch cycle to run; otherwise it reports unavailable and produces no events."
+    },
+    "consultFetch": {
+      "sshHost": null,
+      "note": "Optional read-only SSH host used to fetch an --open file that is not present locally; CONSULT_FETCH_HOST overrides it. null = no remote fetch at all: the consultant brief reports the file as unreadable rather than guessing a host."
+    },
+    "hubDocs": {
+      "dir": null,
+      "note": "Overrides the hubDocs mapping entry when a host keeps docs somewhere else."
+    }
+  },
+  "rustAuthority": {
+    "mode": "dormant",
+    "protocolVersion": 1,
+    "binary": null,
+    "socket": null,
+    "note": "The Rust state authority ships dormant and opt-in. It is never built, started or selected by the launcher; the JavaScript engine remains the run-state authority. Enabling it requires an operator decision plus AF_UNIX support (WSL2/Linux only) and an MSVC toolchain on Windows."
+  },
+  "openchamberApp": {
+    "upstream": "https://github.com/openchamber/openchamber",
+    "upstreamTag": "v2.5.2",
+    "upstreamCommit": "c4919abc1e7a0a3beeaa126666487806bf79cfe0",
+    "forkCommit": "9ad2a0200",
+    "status": "fork-delta-unreproducible",
+    "note": "The fleet build carries a 5-commit delta on top of upstream v2.5.2 whose objects are not published. harness/openchamber-patches records the delta, not a tree copy, and states the gap."
+  }
+}

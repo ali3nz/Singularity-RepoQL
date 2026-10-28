@@ -5,12 +5,12 @@ Two independent pieces live here:
 1. **Office visualizer adapter** (below): hook-based metadata events for the
    Claude Office visualizer.
 2. **Native agent integration** ([`docs/CLAUDE-CODE-SETUP.md`](../../docs/CLAUDE-CODE-SETUP.md)):
-   the seven `singularity-*` subagent definitions in `agents/`, the
+   the seventeen `singularity-*` agent definitions in `agents/` (eight delegation targets and nine main-session agents), the
    SubagentStart (recall) / SubagentStop (lesson capture) MemoryCore hooks in
    `memory-hook.mjs`, the documentation hooks in `doc-hook.mjs` (SessionStart
    guidance + Stop documentation-closure check with automatic MemoryCore
    runbook ingestion — shared policy with OpenChamber via
-   `scripts/doc-policy.mjs` / `scripts/memory-doc-ingest.py`, see
+   `scripts/doc-policy.mjs` / `scripts/doc-ingest-node.mjs` (legacy Python helper kept for compatibility), see
    [`docs/DOC-INGESTION.md`](../../docs/DOC-INGESTION.md)), and an idempotent
    installer (`scripts/install-claude-code.mjs`) that wires them to persistent
    identities and registers RepoQL MCP.

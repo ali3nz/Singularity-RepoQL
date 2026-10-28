@@ -25,7 +25,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-HARNESS_ROOT="${HARNESS_ROOT:-/home/bensl/oc-harness}"
+HARNESS_ROOT="${HARNESS_ROOT:-/home/operator/oc-harness}"
 HARNESS_IMAGE="${HARNESS_IMAGE:-node:22-bookworm}"
 NET="${SINGULARITY_NETWORK:-singularity-product-net}"
 WORK="$(mktemp -d)"
@@ -37,6 +37,22 @@ CFG="$HARNESS_ROOT/opt${VARIANT}/config"
 
 log()  { printf '%s\n' "$*"; }
 step() { printf '\n===== %s\n' "$*"; }
+
+# A SYNTHETIC scoped identity for the disposable target — never a real key.
+# Without it the attach correctly reports INCOMPLETE and the option-4 Ghost
+# identity cannot be derived, so the harness could not exercise the real flow.
+export MEMORY_USER_KEY="${MEMORY_USER_KEY:-sk-mem-accept-harness-0000}"
+
+# Package-level secrets the attach may generate OUTSIDE the target config dir.
+PKG_OFFICE="$ROOT/secrets/claude-office.env"
+PKG_GHOST="$ROOT/secrets/ghost.env"
+pkg_state() {
+  local p
+  for p in "$PKG_OFFICE" "$PKG_GHOST"; do
+    if [ -f "$p" ]; then printf '%s %s\n' "$p" "$(sha256sum "$p" | cut -d' ' -f1)"
+    else printf '%s ABSENT\n' "$p"; fi
+  done
+}
 fail=0
 verdict() { if [ "$1" = "yes" ]; then log "PASS — $2"; else log "FAIL — $2"; fail=1; fi; }
 
@@ -73,7 +89,7 @@ cat > "$CFG/opencode.jsonc" <<'EOF'
   "mcp": {
     "repoql": {
       "type": "local",
-      "command": ["/home/bensl/.local/bin/rql", "mcp"],
+      "command": ["/home/operator/.local/bin/rql", "mcp"],
       "enabled": true
     }
   },
@@ -86,6 +102,7 @@ printf '# an unrelated project\n' > "$CFG/projects/unrelated-project/README.md"
 printf '{"name":"user-sentinel","version":"1.0.0"}\n' > "$CFG/plugins/user-sentinel/package.json"
 printf '{"identity":"pre-existing-repoql-identity"}\n' > "$CFG/.rql/identity.json"
 hash_tree "$CFG" > "$WORK/before.txt"
+pkg_state > "$WORK/pkg-secrets-before.txt"
 log "seeded files (pre-attach hashes):"
 sed 's/^/    /' "$WORK/before.txt"
 
@@ -110,13 +127,27 @@ log "OpenChamber deployments BEFORE: $OC_BEFORE | RepoQL-hosting containers BEFO
 step "2. attach the bundle (installation option $VARIANT)"
 ATTACH_ARGS=(--container "$NAME" --variant "$VARIANT")
 [ "$VARIANT" = "4" ] && ATTACH_ARGS+=(--with-ghost)
-node "$ROOT/scripts/attach-openchamber.mjs" "${ATTACH_ARGS[@]}"; ATTACH_RC=$?
+node "$ROOT/scripts/attach-openchamber.mjs" "${ATTACH_ARGS[@]}" 2>&1 | tee "$WORK/attach1.log"
+ATTACH_RC=${PIPESTATUS[0]}
 log "attach rc=$ATTACH_RC"
 hash_tree "$CFG" > "$WORK/after1.txt"
 
 step "3. what the attach did to the seeded content"
 for f in ./AGENTS.md ./opencode.jsonc ./settings.json ./agents/unrelated-agent.md \
          ./projects/unrelated-project/README.md ./plugins/user-sentinel/package.json ./.rql/identity.json; do
+  # AGENTS.md is documented as a managed-block MERGE: the target's own bytes
+  # outside the delimited block are preserved, so byte equality is the WRONG
+  # assertion for this one file.
+  if [ "$f" = "./AGENTS.md" ]; then
+    if grep -qF '<!-- singularity:managed:begin v1 -->' "$CFG/AGENTS.md" \
+       && grep -qF '<!-- singularity:managed:end v1 -->' "$CFG/AGENTS.md" \
+       && grep -qF 'Unrelated user rules of THIS instance' "$CFG/AGENTS.md"; then
+      verdict yes "AGENTS.md accepted as a managed-block merge (user content + delimited policy block)"
+    else
+      verdict no "AGENTS.md lacks the managed block or lost the user's content"
+    fi
+    continue
+  fi
   b="$(grep -F "  $f" "$WORK/before.txt" | cut -d' ' -f1)"
   a="$(grep -F "  $f" "$WORK/after1.txt" | cut -d' ' -f1)"
   if [ -z "$a" ]; then verdict no "$f was REMOVED by the attach"
@@ -145,25 +176,22 @@ log "gate rc=$GATE_RC (0 = every mandatory capability verified, 5 = incomplete)"
 
 # ── 6. real rollback from the attach's own backups ───────────────────────────
 step "6. real rollback — restore the target to its pre-attach state"
-BACKUP="$(ls -1dt "$ROOT"/data/attach-backups/*/ 2>/dev/null | head -1)"
-if [ -z "$BACKUP" ]; then
-  log "no backup directory: the attach replaced nothing (nothing to restore)"
+# The rollback input is the manifest the ATTACH wrote. Never pick "the newest
+# backup dir": a second (idempotent) attach writes a credentials-only dir, so
+# the newest dir need not be the one that recorded the bundle files.
+MANIFEST_PATH="$(grep -o '/[^ ]*MANIFEST\.json' "$WORK/attach1.log" | tail -1)"
+if [ -z "$MANIFEST_PATH" ] || [ ! -f "$MANIFEST_PATH" ]; then
+  verdict no "the attach did not report a usable manifest; the rollback cannot be verified"
+  BACKUP=""
 else
+  BACKUP="$(dirname "$MANIFEST_PATH")"
+  log "manifest:   $MANIFEST_PATH (from the attach log)"
   log "backup dir: $BACKUP"
   ls -1 "$BACKUP" | sed 's/^/    /'
-  # (a) restore every replaced file from the attach's own backup
-  for b in "$BACKUP"/*; do
-    base="$(basename "$b")"
-    rel="$(printf '%s' "$base" | sed 's/__/\//g')"
-    # a ".product" copy is the PRODUCT's version of a preserved file: nothing to restore
-    case "$rel" in *.product) continue ;; esac
-    if [ -f "$CFG/$rel" ]; then cp -p "$b" "$CFG/$rel"; log "    restored $rel from the attach backup"; fi
-  done
-  # (b) remove the files the attach CREATED (present after, absent before)
-  comm -13 <(paths_of "$WORK/before.txt") <(paths_of "$WORK/after1.txt") | while read -r f; do
-    [ -n "$f" ] || continue
-    rm -f "$CFG/${f#./}"; log "    removed $f (created by the attach)"
-  done
+  node "$ROOT/scripts/attach-openchamber.mjs" rollback --backup-dir "$BACKUP"
+  ROLLBACK_RC=$?
+  log "rollback rc=$ROLLBACK_RC"
+  [ "$ROLLBACK_RC" -eq 0 ] || verdict no "the supported rollback did not complete (rc=$ROLLBACK_RC)"
 fi
 hash_tree "$CFG" > "$WORK/after-rollback.txt"
 if diff -q "$WORK/before.txt" "$WORK/after-rollback.txt" >/dev/null; then
@@ -171,6 +199,13 @@ if diff -q "$WORK/before.txt" "$WORK/after-rollback.txt" >/dev/null; then
 else
   verdict no "rollback did not restore the pre-attach state"
   diff "$WORK/before.txt" "$WORK/after-rollback.txt" | sed 's/^/    /'
+fi
+pkg_state > "$WORK/pkg-secrets-after.txt"
+if diff -q "$WORK/pkg-secrets-before.txt" "$WORK/pkg-secrets-after.txt" >/dev/null; then
+  verdict yes "package-level secrets generated by the attach were removed/restored"
+else
+  verdict no "the rollback left generated package-level secrets behind"
+  diff "$WORK/pkg-secrets-before.txt" "$WORK/pkg-secrets-after.txt" | sed 's/^/    /'
 fi
 
 # ── 7. deployment inventory + teardown scope ────────────────────────────────

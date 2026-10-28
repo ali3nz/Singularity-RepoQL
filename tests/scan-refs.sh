@@ -63,6 +63,9 @@ set +e
 # -I: binary files are skipped here on purpose. A PNG cannot be judged by
 # grep, so image metadata is inspected explicitly in the release gate
 # (docs/RELEASE.md) instead of being reported as a noisy false positive.
+# *.patch bodies are byte-exact third-party payloads (their hashes are pinned in
+# series.json), so they are exempt like memory/upstream: rewriting one would
+# break the provenance it exists to prove.
 hits="$(grep -RnIE -f "$CLEAN" \
   --exclude-dir=.git \
   --exclude-dir=upstream \
@@ -77,6 +80,7 @@ hits="$(grep -RnIE -f "$CLEAN" \
   --exclude=forbidden-refs.txt \
   --exclude=forbidden-refs.local.txt \
   --exclude=scan-refs.test.sh \
+  --exclude='*.patch' \
   .)"
 rc=$?
 set -e

@@ -26,7 +26,7 @@ Repository: https://github.com/ali3nz/Singularity-RepoQL
 I already have Claude Code and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 1 instructions in its documentation. Before the first write, inspect my existing installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories and credentials. Back up every conflicting Claude Code configuration file, and get my consent before any change.
 
 Install and configure:
-- Tencent MemoryCore with all seven specialist agents, each with its own scoped identity and its own persistent memory, plus the primary memory for my normal Claude Code sessions.
+- Tencent MemoryCore with all seventeen Claude Code agent definitions — eight delegation targets with their own scoped identity and persistent memory, plus nine main-session modes — and the primary memory for my normal Claude Code sessions.
 - Automatic capture of ordinary conversations, and automatic recall of them in a NEW session, without me running any manual remember command.
 - Automatic extraction of conversations into memory.
 - Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
@@ -50,7 +50,7 @@ Repository: https://github.com/ali3nz/Singularity-RepoQL
 I already have Claude Code and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 2 instructions in its documentation. Before the first write, inspect my existing installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories and credentials. Back up every conflicting Claude Code configuration file, and get my consent before any change.
 
 Install and configure:
-- Tencent MemoryCore with all seven specialist agents, each with its own scoped identity and its own persistent memory, plus the primary memory for my normal Claude Code sessions.
+- Tencent MemoryCore with all seventeen Claude Code agent definitions — eight delegation targets with their own scoped identity and persistent memory, plus nine main-session modes — and the primary memory for my normal Claude Code sessions.
 - Automatic capture of ordinary conversations, and automatic recall of them in a NEW session, without me running any manual remember command.
 - Automatic extraction of conversations into memory.
 - Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
@@ -62,6 +62,17 @@ Install and configure:
 - Claude Office, built from the public fork https://github.com/ali3nz/claude-office, showing native Claude Code events.
 
 This option does not install or depend on OpenChamber.
+
+Provisioning boundary: the Claude Code installer (`scripts/install-claude-code.mjs install --variant 2`) installs the agents, hooks, settings and profiles only. It does NOT start MemoryCore, Ghost or Claude Office. After the memory stack is up, run these follow-ups from the repository root (the installer prints the same list):
+
+```bash
+bash scripts/start-memory-stack.sh
+python3 scripts/provision-secrets.py --variant 2 --with-ghost && bash ghost/setup-ghost.sh
+python3 scripts/provision-secrets.py --variant 2
+docker compose -f office/office.compose.yml up -d
+```
+
+Until those commands run, the Ghost and Claude Office capability checks stay INCOMPLETE — never report them as installed.
 
 When you finish, verify each capability with the repository's acceptance procedure and report the ACTUAL result of every check: the running Ghost, the completed dream cycle and its interruption recovery, the native Claude Office events, the automatic capture and NEW-session recall, the RepoQL tool calls, the documentation and knowledge workflows and the provider failover. If any mandatory capability is missing, report INCOMPLETE and say exactly what is missing. Never report success for a capability you did not verify.
 ```
@@ -76,7 +87,7 @@ Repository: https://github.com/ali3nz/Singularity-RepoQL
 I already have OpenChamber and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 3 instructions in its documentation. Attach to my EXISTING OpenChamber installation. Do NOT install a second OpenChamber instance. Before the first write, inspect that installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories, credentials and my RepoQL identity. Back up every conflicting configuration file, and get my consent before any change.
 
 Install and configure:
-- Tencent MemoryCore with all seven specialist agents, each with its own scoped identity and its own persistent memory, plus the primary memory for my primary OpenChamber session.
+- Tencent MemoryCore with all seventeen Claude Code agent definitions (eight with their own scoped identity and persistent memory) and the full seventeen-role OpenChamber roster, plus the primary memory for my primary OpenChamber session.
 - Automatic capture of ordinary sessions, and automatic recall of them in a NEW session, without me running any manual remember command.
 - Automatic extraction of conversations into memory.
 - Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
@@ -100,7 +111,7 @@ Repository: https://github.com/ali3nz/Singularity-RepoQL
 I already have OpenChamber and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 4 instructions in its documentation. Attach to my EXISTING OpenChamber installation. Do NOT install a second OpenChamber instance. Before the first write, inspect that installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories, credentials and my RepoQL identity. Back up every conflicting configuration file, and get my consent before any change.
 
 Install and configure:
-- Tencent MemoryCore with all seven specialist agents, each with its own scoped identity and its own persistent memory, plus the primary memory for my primary OpenChamber session.
+- Tencent MemoryCore with all seventeen Claude Code agent definitions (eight with their own scoped identity and persistent memory) and the full seventeen-role OpenChamber roster, plus the primary memory for my primary OpenChamber session.
 - Automatic capture of ordinary sessions, and automatic recall of them in a NEW session, without me running any manual remember command.
 - Automatic extraction of conversations into memory.
 - Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.

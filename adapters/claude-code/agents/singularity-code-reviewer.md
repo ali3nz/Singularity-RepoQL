@@ -44,7 +44,7 @@ For material changes, the review verdict must state the documentation outcome
 the implementation reported: `DOC_UPDATED`, `DOC_NOT_REQUIRED` (valid only for
 non-material changes, with a reason) or `DOC_BLOCKED` (never approves the task).
 For `DOC_UPDATED`, verify the documentation actually exists on disk and was
-ingested with `DOC_INGEST_INDEXED` (check `python3 scripts/memory-doc-ingest.py
+ingested with `DOC_INGEST_INDEXED` (check `node scripts/doc-ingest-node.mjs
 status --file <doc> --all`); a `PENDING`/`FAILED` ingestion means the relevant
 work is incomplete — report it, and never approve around it. You do not edit
 implementation files or documentation yourself; return the gap as a finding so

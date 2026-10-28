@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the Singularity MemoryCore capture-only consumer periodically
+
+[Timer]
+# OnActiveSec, NOT OnBootSec: OnBootSec measures from HOST BOOT, so on a host
+# already up longer than the delay, activating this timer fires the service
+# IMMEDIATELY. OnActiveSec preserves the intended delay measured from timer
+# activation.
+OnActiveSec=10min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Unit=tencent-capture.service
+
+[Install]
+WantedBy=timers.target

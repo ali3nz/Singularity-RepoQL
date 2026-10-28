@@ -33,9 +33,12 @@ function scratch() {
 // root, rel, root-scoped identity, verified active revision, chunk accounting.
 function plantLedgerEvidence(rootDir, rel, { withVerified = true, staleSource = false, extraStaleRev = false } = {}) {
   const absRoot = resolve(rootDir); // ledger root = the project root (discovery/ingest scope)
+  // Both engines store the root as a forward-slash path; model the real ledger
+  // shape rather than a Windows-only backslash variant.
+  const rootPosix = absRoot.replace(/\\/g, "/");
   const file = join(absRoot, rel);
   const text = (staleSource ? readFileSync(file, "utf8") + "\nchanged-but-unindexed\n" : readFileSync(file, "utf8"));
-  const rootId = sha8(absRoot);
+  const rootId = sha8(rootPosix);
   const key = `${rootId}::${rel}`;
   const rev = activeRev(rootDir, rel, text);
   const rootIdShield = "root";
@@ -43,7 +46,7 @@ function plantLedgerEvidence(rootDir, rel, { withVerified = true, staleSource = 
     version: 1,
     docs: {
       [key]: {
-        root: absRoot, root_id: rootId, rel,
+        root: rootPosix, root_id: rootId, rel,
         doc_id: sha8(key), title: rel.split("/").pop(),
         active_rev: rev,
         revs: {
@@ -412,7 +415,7 @@ test("§7 automatic assessment: material work without an agent token is DEFERRED
     assert.equal(rec.status, "DEFERRED");
     const stored = loadAssessment("la3", dir);
     assert.equal(stored.captureStatus, "DEFERRED");
-    assert.match(stored.deferredPending, /data\/selflearn\/pending\/.+\.json$/);
+    assert.match(stored.deferredPending.replace(/\\/g, "/"), /data\/selflearn\/pending\/.+\.json$/);
     // DEFERRED must be REAL durable work: a candidate file exists, not just a
     // directory name in the assessment.
     const pending = listPendingCandidates(dir);

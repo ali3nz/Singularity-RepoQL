@@ -4,6 +4,47 @@ All notable changes to this release are recorded here. The repository is
 distributed as a release candidate until the capability gate reports VERIFIED
 for every mandatory capability of the chosen installation option.
 
+## [0.1.0-rc15] - 2026-10-28
+
+Portable harness, runtime parity and a safer attach. The four installation
+options and their selection are unchanged.
+
+- **Portable harness engine.** `harness/kit` (the engine), `bin/ai-orchestra`
+  (a verb-preserving launcher) and `harness/harness.config.json` (one
+  declarative path/capability table) now ship. Nothing in the kit names a host:
+  an unmapped feature reports unavailable. The Rust state authority ships
+  **dormant** with its protocol env names frozen
+  (`ORCHESTRA_RUST_AUTHORITY{,_ROLLBACK,_TOKEN,_TOKEN_FILE,_LEASE_MS}`); nothing
+  builds, starts or selects it.
+- **`node bin/ai-orchestra selftest` is green** (635 checks, exit 0) with one
+  labelled `SKIP` for a fleet-only bridge script. `ORCHESTRA_SELFTEST_PROFILE=fleet`
+  runs the skipped pins on a fleet host.
+- **One component-classification table** (`scripts/bundle-classification.mjs`)
+  drives all four options: Ghost/Office ship only in 2 and 4, the dashboard is
+  an opt-in adjunct no option installs, and an unclassified file is a hard
+  error instead of a silent leak.
+- **Attach is non-destructive.** The target's `AGENTS.md` gains one versioned
+  managed block; `opencode.jsonc`/`dcp.jsonc` are merged without touching
+  comments, ordering or existing values (an unparseable file is refused, never
+  rewritten). A conflicting foreign agent/skill is preserved and ours lands as
+  `singularity-<name>` with the mapping recorded for scoped rollback.
+- **`scripts/doctor.mjs`** gains a classification-driven wiring section per
+  option (component set, managed policy, JSONC integration, credential
+  inclusion *and* exclusion), a capture single-writer section (two automatic
+  writers are refused), and reports the dashboard only when it is installed.
+- **Runtime parity bundle**: Kanzo and MemoryCore connectors, Tencent
+  MemoryCore derivative patches (`memory/patches`), the portable capture
+  consumer with its exclusive single-writer lock, a compose parity override and
+  `docs/RUNTIME-PARITY.md`.
+- **Dashboard** (`dashboard/`) ships as an opt-in adjunct with its own
+  portability guard; no installation option installs it.
+- **Gates**: every new suite is registered in `tests/validate-local.sh`, and the
+  compose config check is mandatory (a missing `docker compose` fails the run).
+- **Known gaps, stated plainly**: the OpenChamber application delta is **not
+  shipped** (`harness/openchamber-patches/apply.sh` exits 3 with an empty
+  series); `harness/rust-authority/tests` mostly needs fleet-only helper
+  scripts, so only the two contract suites that run against this kit are gated.
+
 ## [0.1.0-rc14] - 2026-10-24
 
 Sixth review round. A review of rc13 confirmed both idempotency fixes and asked

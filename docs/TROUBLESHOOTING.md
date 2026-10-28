@@ -88,7 +88,7 @@ attach installer carries it (with the ingestion helper, byte-identical) into
 plugin audibly degrades to advisory-only reminders:
 
 ```bash
-ls <config>/plugins/singularity-runtime/scripts/     # expect: doc-policy.mjs memory-doc-ingest.py
+ls <config>/plugins/singularity-runtime/scripts/     # expect: doc-policy.mjs doc-ingest-node.mjs (legacy: memory-doc-ingest.py)
 ```
 
 If the directory is empty or stale, re-run the attach installer — it is part

@@ -28,9 +28,11 @@ test("loadSharedPolicy: loads the SHARED policy from its installed runtime sibli
     mkdirSync(runtimeScripts, { recursive: true });
     copyFileSync(fileURLToPath(new URL("./index.js", import.meta.url)), join(pluginDir, "index.mjs"));
     copyFileSync(fileURLToPath(new URL("../../../scripts/doc-policy.mjs", import.meta.url)), join(runtimeScripts, "doc-policy.mjs"));
-    // doc-policy imports ./selflearn-candidates.mjs relative to itself, so the
-    // runtime layout needs BOTH scripts — exactly what scripts/attach-openchamber.mjs ships.
+    // doc-policy imports ./selflearn-candidates.mjs and ./doc-ingest-node.mjs
+    // relative to itself, so the runtime layout needs ALL of them — exactly
+    // what scripts/attach-openchamber.mjs must ship for the native path.
     copyFileSync(fileURLToPath(new URL("../../../scripts/selflearn-candidates.mjs", import.meta.url)), join(runtimeScripts, "selflearn-candidates.mjs"));
+    copyFileSync(fileURLToPath(new URL("../../../scripts/doc-ingest-node.mjs", import.meta.url)), join(runtimeScripts, "doc-ingest-node.mjs"));
     const instance = await import(pathToFileURL(join(pluginDir, "index.mjs")).href);
     const trail = [];
     const policy = await instance.loadSharedPolicy((e) => trail.push(e));

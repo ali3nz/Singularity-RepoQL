@@ -36,7 +36,8 @@ OpenCode configuration directory:
 | `openchamber/plugins/product-office/` | `plugins/product-office/` | the memory-capture plugin |
 | `openchamber/plugins/runbook-nudge/`  | `plugins/runbook-nudge/`  | the runbook/concept reminder plugin |
 | `scripts/doc-policy.mjs` | `plugins/singularity-runtime/scripts/doc-policy.mjs` | the shared documentation policy the plugins import at runtime — a byte-identical first-class dependency, so the deterministic import resolves in a foreign target |
-| `scripts/memory-doc-ingest.py` | `plugins/singularity-runtime/scripts/memory-doc-ingest.py` | the ingestion helper the shared policy drives, in its expected sibling layout |
+| `scripts/doc-ingest-node.mjs` | `plugins/singularity-runtime/scripts/doc-ingest-node.mjs` | the Node ingestion engine the shared policy imports (required; the native Windows path) |
+| `scripts/memory-doc-ingest.py` (+ `scripts/memory_client.py`) | `plugins/singularity-runtime/scripts/` | the legacy Python compatibility helper and its client, retained for operators who run it deliberately |
 | `openchamber/package.json` | `package.json` | declares the config dir as an ESM package |
 
 With the Docker Compose path, the config dir is `data/opencode/config/` in
@@ -89,6 +90,35 @@ rollback, teardown scope) lives in
 [`tests/acceptance/attach-harness.sh`](../tests/acceptance/attach-harness.sh):
 `bash tests/acceptance/attach-harness.sh 3|4`.
 
+### 2b. What the attach writes (17 agents, 10 skills)
+
+The bundle carries **17 agent definitions** (`openchamber/agents/*.md`) and
+**10 skills** (`openchamber/skills/<name>/SKILL.md`). The attach copies them
+beside whatever the target already has; it never deletes a file.
+
+| Bundle path | Lands at | Conflict rule |
+| --- | --- | --- |
+| `openchamber/agents/<name>.md` | `<config>/agents/<name>.md` | a different file with that name is preserved and ours lands as `agents/singularity-<name>.md` |
+| `openchamber/skills/<name>/SKILL.md` | `<config>/skills/<name>/SKILL.md` | same rule: `skills/singularity-<name>/` |
+| `openchamber/plugins/**` | `<config>/plugins/**` | replaced with a backup of the previous file |
+| `openchamber/AGENTS.md` | `<config>/AGENTS.md` | **merged**: one managed block, everything outside it untouched |
+| `openchamber/opencode.jsonc`, `dcp.jsonc` | `<config>/…` | **merged**: only missing keys are spliced in; comments, ordering and existing values are preserved |
+
+`singularity-<name>.md` is a *discovered* agent/skill name (OpenCode loads every
+`*.md` in `agents/`), so a namespaced copy stays usable — a `.md.product`
+suffix would not. The mapping is recorded in the attach manifest's
+`namespaceMap`, so `rollback` removes exactly the files it created.
+
+**Managed policy block.** The block between
+`<!-- singularity:managed:begin v1 -->` and
+`<!-- singularity:managed:end v1 -->` is owned by the installer. It carries the
+RepoQL-only issue-reporting rule and the first-step retrieval rule, so every
+installation option reaches the same policy. Re-running the attach is
+idempotent; a malformed block (duplicate or half-written markers) is **refused**
+with the file left byte-identical, and the option reports INCOMPLETE (exit 5)
+rather than "success". Undo strips the block and keeps any text you appended
+after it.
+
 ## 3. Provision credentials and start
 
 Start the memory stack first with `scripts/start-memory-stack.sh`. Build
@@ -129,12 +159,12 @@ capture.
 `plugins/runbook-nudge/` works alongside it: a non-gating context hook that
 asks the primary agent to check tracking records, the covering runbook,
 existing RepoQL concepts and the installation's indexed shared documentation
-(`python3 scripts/memory-doc-ingest.py search "<topic>"`) before substantial
+(`node scripts/doc-ingest-node.mjs search "<topic>"`) before substantial
 work, and to create/update the runbook, refresh concepts, report validation
 honestly AND a documented documentation outcome (`DOC_UPDATED` /
 `DOC_NOT_REQUIRED` with a reason / `DOC_BLOCKED`) before its final answer.
 When documentation was updated, the closeout nudge instructs the agent to
-ingest it into MemoryCore (`memory-doc-ingest.py ingest`, verified retrieval
+ingest it into MemoryCore (`doc-ingest-node.mjs ingest`, verified retrieval
 required) and record the closure assessment (`scripts/doc-policy.mjs assess`,
 SINGDOC token) — the SAME policy the Claude Code integration enforces. It is
 fail-open, it never edits anything, it stays a reminder (OpenCode exposes no

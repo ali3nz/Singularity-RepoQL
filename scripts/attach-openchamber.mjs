@@ -33,6 +33,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { classifyBundleFile, variantIncludesComponent } from "./bundle-classification.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BUNDLE = join(ROOT, "openchamber");
@@ -47,7 +48,264 @@ const ADMIN_KEY_FILE = join(ROOT, "memory", "upstream", ".admin-key");
 // to the attach backup so the operator can merge it deliberately. The
 // package's own compose-managed config dir is NOT a foreign target: there the
 // product owns the files and replaces them as before.
-const PRESERVE_ON_CONFLICT = new Set(["AGENTS.md", "opencode.jsonc", "dcp.jsonc"]);
+// ── managed policy block (AGENTS.md) ────────────────────────────────────────
+// The target's AGENTS.md is its identity: the attach NEVER overwrites it. It
+// merges ONE versioned, deterministic block and leaves every byte outside the
+// markers alone. A malformed block (duplicate/mismatched markers) is a refusal,
+// not a rewrite — the operator's file stays exactly as it was.
+export const MANAGED_BEGIN = "<!-- singularity:managed:begin v1 -->";
+export const MANAGED_END = "<!-- singularity:managed:end v1 -->";
+export const MANAGED_POLICY = [
+  "## Singularity managed policy",
+  "",
+  "This block is owned by the Singularity installer. Do not edit inside the markers.",
+  "",
+  "- Report product issues ONLY through RepoQL: search the repository first, then",
+  "  record the finding in the project's issue tracker. Never report a product",
+  "  issue in agent chat, logs, docs or code comments.",
+  "- RepoQL is the first-step retrieval tool; treat its index as authoritative and",
+  "  the conversation history as supplementary.",
+  "- Keep this installation's configuration and credentials in its own config",
+  "  directory; never copy them into a project checkout.",
+].join("\n");
+
+const countOf = (hay, needle) => hay.split(needle).length - 1;
+const managedBlockText = (body = MANAGED_POLICY) => `${MANAGED_BEGIN}\n${String(body).trimEnd()}\n${MANAGED_END}`;
+const blockShaOf = (body = MANAGED_POLICY) => createHash("sha256").update(managedBlockText(body)).digest("hex");
+
+/**
+ * Merge the managed block into an existing AGENTS.md.
+ * @returns {{ok:boolean, action:"append"|"update"|"unchanged"|"refuse", text:string, reason?:string}}
+ */
+export function mergeManagedBlock(existing, { body = MANAGED_POLICY } = {}) {
+  const text = String(existing ?? "");
+  const begins = countOf(text, MANAGED_BEGIN);
+  const ends = countOf(text, MANAGED_END);
+  if (begins === 0 && ends === 0) {
+    const sep = text.length === 0 ? "" : text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n";
+    return { ok: true, action: "append", text: `${text}${sep}${managedBlockText(body)}` };
+  }
+  if (begins !== 1 || ends !== 1) {
+    return { ok: false, action: "refuse", text, reason: `malformed managed block (${begins} begin / ${ends} end markers) — the file was not modified` };
+  }
+  const i = text.indexOf(MANAGED_BEGIN);
+  const j = text.indexOf(MANAGED_END);
+  if (j < i) return { ok: false, action: "refuse", text, reason: "malformed managed block (end marker before begin marker) — the file was not modified" };
+  const next = `${text.slice(0, i)}${managedBlockText(body)}${text.slice(j + MANAGED_END.length)}`;
+  return next === text ? { ok: true, action: "unchanged", text } : { ok: true, action: "update", text: next };
+}
+
+/** Remove ONLY the managed block; every byte outside the markers is preserved. */
+export function stripManagedBlock(text) {
+  const s = String(text ?? "");
+  const begins = countOf(s, MANAGED_BEGIN);
+  const ends = countOf(s, MANAGED_END);
+  if (begins === 0 && ends === 0) return { ok: true, removed: false, text: s };
+  if (begins !== 1 || ends !== 1) return { ok: false, removed: false, text: s, reason: `malformed managed block (${begins} begin / ${ends} end markers)` };
+  const i = s.indexOf(MANAGED_BEGIN);
+  const j = s.indexOf(MANAGED_END);
+  if (j < i) return { ok: false, removed: false, text: s, reason: "malformed managed block (end before begin)" };
+  let head = s.slice(0, i);
+  const tail = s.slice(j + MANAGED_END.length);
+  // undo exactly the separator this attach inserts before the block
+  if (tail === "" && head.endsWith("\n\n")) head = head.slice(0, -1);
+  return { ok: true, removed: true, text: head + tail };
+}
+
+// ── JSONC merge (comment-preserving) ────────────────────────────────────────
+// A target's opencode.jsonc carries the user's comments, ordering and a
+// pre-existing RepoQL identity. This merge NEVER re-serialises: it validates
+// the file, then splices only MISSING keys into the existing text. Comments,
+// ordering, formatting and every present value are preserved byte-for-byte.
+// If the file cannot be parsed — or a splice cannot be placed safely — the
+// merge REFUSES and the caller reports INCOMPLETE instead of "success".
+
+/** Mask comments and string bodies to spaces, preserving offsets and newlines. */
+export function maskJsonc(text) {
+  const s = String(text ?? "");
+  const out = [];
+  let state = "normal";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i], n = s[i + 1];
+    if (state === "normal") {
+      if (c === "/" && n === "/") { out.push("  "); i++; state = "line"; continue; }
+      if (c === "/" && n === "*") { out.push("  "); i++; state = "block"; continue; }
+      if (c === '"') { out.push('"'); state = "string"; continue; }
+      out.push(c); continue;
+    }
+    if (state === "line") {
+      if (c === "\n") { out.push("\n"); state = "normal"; } else out.push(" ");
+      continue;
+    }
+    if (state === "block") {
+      if (c === "*" && n === "/") { out.push("  "); i++; state = "normal"; continue; }
+      out.push(c === "\n" ? "\n" : " "); continue;
+    }
+    // string body
+    if (c === "\\") { out.push("  "); i++; continue; }
+    if (c === '"') { out.push('"'); state = "normal"; continue; }
+    out.push(c === "\n" ? "\n" : " ");
+  }
+  return out.join("");
+}
+
+/**
+ * Comment-stripped, JSON.parse-compatible text: comments become spaces (offsets
+ * preserved) and JSONC trailing commas are dropped. String contents are NEVER
+ * touched, so a "//" or "," inside a value is not mistaken for syntax.
+ */
+function jsoncToJson(text) {
+  const s = String(text ?? "");
+  let out = "", state = "normal";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i], n = s[i + 1];
+    if (state === "normal") {
+      if (c === "/" && n === "/") { out += "  "; i++; state = "line"; continue; }
+      if (c === "/" && n === "*") { out += "  "; i++; state = "block"; continue; }
+      if (c === ",") {
+        let k = i + 1;
+        while (k < s.length && /\s/.test(s[k])) k++;
+        if (s[k] === "}" || s[k] === "]") { out += " "; continue; } // JSONC trailing comma
+      }
+      if (c === '"') state = "string";
+      out += c; continue;
+    }
+    if (state === "line") {
+      if (c === "\n") { out += "\n"; state = "normal"; } else out += " ";
+      continue;
+    }
+    if (state === "block") {
+      if (c === "*" && n === "/") { out += "  "; i++; state = "normal"; continue; }
+      out += c === "\n" ? "\n" : " "; continue;
+    }
+    if (c === "\\") { out += s.slice(i, i + 2); i++; continue; }
+    if (c === '"') state = "normal";
+    out += c;
+  }
+  return out;
+}
+
+/** Public: parse a JSONC document (comments + trailing commas) without mutating it. */
+export const parseJsonc = (text) => JSON.parse(jsoncToJson(text));
+
+const matchBrace = (masked, open) => {
+  let depth = 0;
+  for (let i = open; i < masked.length; i++) {
+    if (masked[i] === "{") depth++;
+    else if (masked[i] === "}") { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+};
+
+/** Find `"key"` at a given brace depth inside [from, to); returns value span. */
+function findKey(masked, key, { from = 0, to = masked.length, depth = 1 } = {}) {
+  let d = 0;
+  for (let i = from; i < to; i++) {
+    const c = masked[i];
+    if (c === "{" || c === "[") { d++; continue; }
+    if (c === "}" || c === "]") { d--; continue; }
+    if (c !== '"' || d !== depth) continue;
+    const endQuote = masked.indexOf('"', i + 1);
+    if (endQuote < 0) return null;
+    const name = masked.slice(i + 1, endQuote);
+    let k = endQuote + 1;
+    while (k < to && /\s/.test(masked[k])) k++;
+    if (masked[k] !== ":") { i = endQuote; continue; }
+    if (name !== key) { i = endQuote; continue; }
+    let v = k + 1;
+    while (v < to && /\s/.test(masked[v])) v++;
+    let valueEnd;
+    if (masked[v] === "{" || masked[v] === "[") {
+      const close = masked[v] === "{" ? matchBrace(masked, v) : (() => { let dep = 0; for (let z = v; z < masked.length; z++) { if (masked[z] === "[") dep++; else if (masked[z] === "]") { dep--; if (!dep) return z; } } return -1; })();
+      if (close < 0) return null;
+      valueEnd = close + 1;
+    } else {
+      let z = v;
+      while (z < to && !/[,\n}]/.test(masked[z])) z++;
+      valueEnd = z;
+    }
+    return { keyStart: i, valueStart: v, valueEnd };
+  }
+  return null;
+}
+
+/**
+ * Insert the desired integration keys that are MISSING from an existing JSONC
+ * document, preserving comments, ordering and every present value.
+ * @returns {{ok:boolean, text:string, inserted:string[], reason?:string, action:string}}
+ */
+export function mergeJsoncIntegration(existing, desired) {
+  const text = String(existing ?? "");
+  const keys = Object.keys(desired || {});
+  if (!keys.length) return { ok: true, text, inserted: [], action: "unchanged" };
+  if (!text.trim()) {
+    const body = JSON.stringify(desired, null, 2);
+    return { ok: true, text: `${body}\n`, inserted: keys, action: "create" };
+  }
+  let parsed;
+  try { parsed = JSON.parse(jsoncToJson(text)); } catch {
+    return { ok: false, text, inserted: [], action: "refuse", reason: "the target file is not parseable JSONC — refuse rather than rewrite it (no comments were deleted)" };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, text, inserted: [], action: "refuse", reason: "the target file is not a JSON object — refuse rather than rewrite it" };
+  }
+  const masked = maskJsonc(text);
+  const rootOpen = masked.indexOf("{");
+  const rootClose = rootOpen >= 0 ? matchBrace(masked, rootOpen) : -1;
+  if (rootOpen < 0 || rootClose < 0) {
+    return { ok: false, text, inserted: [], action: "refuse", reason: "the target file has no single root object — refuse rather than rewrite it" };
+  }
+  const inserted = [];
+  let out = text;
+  // nested first (a later top-level insert does not shift the mcp span we found)
+  if (desired.mcp && typeof desired.mcp === "object" && parsed.mcp && typeof parsed.mcp === "object") {
+    const mcpSpan = findKey(masked, "mcp", { from: rootOpen, to: rootClose + 1, depth: 1 });
+    if (mcpSpan && masked[mcpSpan.valueStart] === "{") {
+      const mcpOpen = mcpSpan.valueStart;
+      const mcpClose = matchBrace(masked, mcpOpen);
+      const missing = Object.keys(desired.mcp).filter((k) => !(k in parsed.mcp));
+      if (missing.length && mcpClose >= 0) {
+        const indent = detectIndent(text, mcpOpen, mcpClose) + "  ";
+        const snippet = missing.map((k) => `${indent}${JSON.stringify(k)}: ${JSON.stringify(desired.mcp[k], null, 2).replace(/\n/g, `\n${indent}`)}`).join(",\n");
+        const inner = masked.slice(mcpOpen + 1, mcpClose);
+        const hasMembers = /[^\s,]/.test(inner);
+        const at = mcpClose;
+        const add = `${hasMembers ? "," : ""}\n${snippet}`;
+        out = out.slice(0, at) + add + out.slice(at);
+        inserted.push(...missing.map((k) => `mcp.${k}`));
+      }
+    }
+  }
+  // then any missing top-level keys
+  const missingTop = keys.filter((k) => !(k in parsed));
+  if (missingTop.length) {
+    const m2 = maskJsonc(out);
+    const open2 = m2.indexOf("{");
+    const close2 = matchBrace(m2, open2);
+    if (open2 < 0 || close2 < 0) return { ok: false, text, inserted: [], action: "refuse", reason: "root object lost while merging — refuse" };
+    const baseIndent = detectIndent(out, open2, close2);
+    const snippet = missingTop.map((k) => `${baseIndent}${JSON.stringify(k)}: ${JSON.stringify(desired[k]).replace(/\n/g, "")}`).join(",\n");
+    const inner = m2.slice(open2 + 1, close2);
+    const hasMembers = /[^\s,]/.test(inner);
+    out = `${out.slice(0, close2)}${hasMembers ? "," : ""}\n${snippet}\n${out.slice(close2)}`;
+    inserted.push(...missingTop);
+  }
+  // final safety: the merged text must STILL parse and must contain every key
+  let after;
+  try { after = JSON.parse(jsoncToJson(out)); } catch {
+    return { ok: false, text, inserted: [], action: "refuse", reason: "the merged result would not parse — refused, original kept" };
+  }
+  for (const k of keys) if (!(k in after)) return { ok: false, text, inserted: [], action: "refuse", reason: `key ${k} could not be inserted safely — refused, original kept` };
+  return { ok: true, text: out, inserted, action: inserted.length ? "insert" : "unchanged" };
+}
+
+/** Indentation of the first member inside a brace span (falls back to 2 spaces). */
+function detectIndent(text, open, close) {
+  const inner = text.slice(open + 1, close);
+  const m = inner.match(/\n([ \t]+)\S/);
+  return m ? m[1] : "  ";
+}
+
 
 const log = (m) => console.log(`[attach] ${m}`);
 const readJsonFile = (p) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
@@ -94,9 +352,22 @@ export function resolveConfigDir(target) {
   throw new Error("no OpenChamber instance to attach to (run with --discover)");
 }
 
-/** Build the per-file copy plan for the bundle. status: create|replace|present. */
-export function planBundleFiles(configDir, srcRoot = BUNDLE, { preserveConflicts = false } = {}) {
+/**
+ * Build the per-file copy plan for the bundle.
+ * status: create | replace | present | merge-policy | merge-jsonc | namespace | conflict | preserve
+ *
+ * `variant` (1..4) drives the classification table: options 1/3 never see a
+ * Ghost or Office file, so the attach cannot leak them. An unclassified bundle
+ * file is a hard error, never a silent copy.
+ */
+export function planBundleFiles(configDir, srcRoot = BUNDLE, { preserveConflicts = false, variant = null } = {}) {
   const plan = [];
+  const allows = (bundleRel) => {
+    if (variant == null) return true;
+    const c = classifyBundleFile(bundleRel);
+    if (!c) throw new Error(`unclassified bundle file: ${bundleRel} — add an explicit component to scripts/bundle-classification.mjs`);
+    return variantIncludesComponent(variant, c.component);
+  };
   const walk = (src, dst, rel) => {
     for (const e of readdirSync(src, { withFileTypes: true })) {
       const s = join(src, e.name), d = join(dst, e.name), r = rel ? `${rel}/${e.name}` : e.name;
@@ -104,13 +375,30 @@ export function planBundleFiles(configDir, srcRoot = BUNDLE, { preserveConflicts
         if (e.name === "examples") continue; // shipped examples are not runtime config
         walk(s, d, r);
       } else {
-        let status = "create", curSha = null;
+        if (!allows(srcRoot === BUNDLE ? `openchamber/${r}` : r)) continue;
+        let status = "create", curSha = null, finalDst = d, namespacedFrom = null;
         if (existsSync(d)) {
           curSha = sha(d);
-          status = curSha === sha(s) ? "present" : "replace";
+          if (curSha === sha(s)) status = "present";
+          else if (!preserveConflicts) status = "replace";
+          else if (r === "AGENTS.md") status = "merge-policy";
+          else if (r === "opencode.jsonc" || r === "dcp.jsonc") status = "merge-jsonc";
+          else if (/^(agents|skills)\//.test(r)) {
+            // A foreign agent/skill with the same name is PRESERVED. Ours lands
+            // under a deterministic, discovery-compatible name: OpenCode loads
+            // every *.md in agents/, so singularity-<name>.md is discovered
+            // (an ".md.product" suffix would not be).
+            namespacedFrom = r;
+            finalDst = join(dirname(d), `singularity-${e.name}`);
+            if (existsSync(finalDst)) status = sha(finalDst) === sha(s) ? "present" : "conflict";
+            else status = "namespace";
+          } else status = "replace"; // every other bundle file keeps the documented replace-with-backup behaviour
         }
-        if (status === "replace" && preserveConflicts && PRESERVE_ON_CONFLICT.has(r)) status = "preserve";
-        plan.push({ rel: r, src: s, dst: d, status, prevSha: curSha, prevMode: existsSync(d) ? statSync(d).mode & 0o777 : null });
+        plan.push({
+          rel: r, src: s, dst: finalDst, status, prevSha: namespacedFrom ? null : curSha,
+          prevMode: existsSync(finalDst) ? statSync(finalDst).mode & 0o777 : null,
+          namespacedFrom,
+        });
       }
     }
   };
@@ -156,9 +444,43 @@ export function classifyCandidateKey(candidate, { adminKey = "" } = {}) {
   return { class: "scoped", detail: "the candidate is not the memory stack's administrative key" };
 }
 
+/** Integration keys this attach is allowed to add to a foreign target's JSONC. */
+const INTEGRATION_KEYS = Object.freeze({ "opencode.jsonc": ["mcp", "plugin"], "dcp.jsonc": [] });
+
+/** The integration values come from the SHIPPED product file, never a second copy. */
+export function bundleIntegrationKeys(rel, root = BUNDLE) {
+  const keys = INTEGRATION_KEYS[rel] || [];
+  if (!keys.length) return {};
+  const p = join(root, rel);
+  let desired = {};
+  if (existsSync(p)) {
+    try {
+      const parsed = JSON.parse(jsoncToJson(readFileSync(p, "utf8")));
+      for (const k of keys) if (k in parsed) desired[k] = parsed[k];
+    } catch { /* unreadable product file: fall through to the explicit minimum */ }
+  }
+  if (!desired.mcp && keys.includes("mcp")) {
+    desired.mcp = { repoql: { type: "local", command: ["/usr/local/bin/rql", "mcp"], enabled: true } };
+  }
+  if (!desired.plugin && keys.includes("plugin") && existsSync(p)) {
+    // a product file without a plugin entry contributes nothing to merge
+    delete desired.plugin;
+  }
+  return desired;
+}
+
 export function applyBundle(plan, configDir, { dryRun, backupDir: backupDirOpt = null }) {
   const backupDir = backupDirOpt || join(ROOT, "data", "attach-backups", new Date().toISOString().replace(/[:.]/g, "-"));
   const changed = [];
+  const refused = [];
+  const backupOf = (f) => {
+    mkdirSync(backupDir, { recursive: true });
+    const backupPath = join(backupDir, f.rel.replace(/\//g, "__"));
+    mkdirSync(dirname(backupPath), { recursive: true });
+    copyFileSync(f.dst, backupPath);
+    try { chmodSync(backupPath, 0o600); } catch { /* best effort */ }
+    return backupPath;
+  };
   for (const f of plan) {
     if (f.status === "present") { log(`unchanged  ${f.rel}`); continue; }
     if (f.status === "preserve") {
@@ -168,6 +490,31 @@ export function applyBundle(plan, configDir, { dryRun, backupDir: backupDirOpt =
       copyFileSync(f.src, keepPath);
       log(`preserved ${f.rel} — the target has its own version; the product's copy is at ${keepPath} (merge it deliberately, docs/OPENCHAMBER-SETUP.md)`);
       changed.push({ rel: f.rel, dst: f.dst, status: "preserve", prevSha: f.prevSha, afterSha: null, backupPath: null, productCopy: keepPath });
+      continue;
+    }
+    if (f.status === "conflict") {
+      // A foreign file already occupies the deterministic namespaced name.
+      // Overwriting it would destroy another tool's agent: refuse, keep data.
+      refused.push(`${f.rel} — ${f.dst} already exists with different content (foreign agent/skill was NOT overwritten)`);
+      continue;
+    }
+    if (f.status === "merge-policy" || f.status === "merge-jsonc") {
+      const before = readFileSync(f.dst, "utf8");
+      const merged = f.status === "merge-policy"
+        ? mergeManagedBlock(before)
+        : mergeJsoncIntegration(before, bundleIntegrationKeys(f.rel));
+      if (!merged.ok) { refused.push(`${f.rel} — ${merged.reason}`); continue; }
+      if (merged.action === "unchanged") { log(`unchanged  ${f.rel} (integration already present; user values kept)`); continue; }
+      if (dryRun) { log(`(dry run) merge    ${f.rel} (${f.status === "merge-policy" ? "managed block" : `keys ${merged.inserted.join(", ")}`})`); continue; }
+      const backupPath = backupOf(f);
+      writeFileSync(f.dst, merged.text);
+      log(`merged   ${f.rel}${f.status === "merge-jsonc" ? ` (added ${merged.inserted.join(", ") || "nothing"}; comments kept)` : " (managed block)"} (backup: ${backupPath})`);
+      changed.push({
+        rel: f.rel, dst: f.dst, status: "merge",
+        mergeKind: f.status === "merge-policy" ? "policy" : "jsonc",
+        inserted: merged.inserted || [], blockSha: f.status === "merge-policy" ? blockShaOf() : null,
+        prevSha: f.prevSha, afterSha: sha(f.dst), backupPath, productCopy: null,
+      });
       continue;
     }
     if (dryRun) { log(`(dry run) ${f.status.padEnd(7)} ${f.rel}`); continue; }
@@ -181,13 +528,13 @@ export function applyBundle(plan, configDir, { dryRun, backupDir: backupDirOpt =
       try { chmodSync(backupPath, 0o600); } catch { /* best effort */ }
     }
     copyFileSync(f.src, f.dst);
-    log(`${f.status.padEnd(7)} ${f.rel}${backupPath ? ` (backup: ${backupPath})` : ""}`);
+    log(`${f.status === "namespace" ? "namespaced" : f.status.padEnd(7)} ${f.rel}${f.namespacedFrom ? ` → ${f.dst} (foreign ${f.rel} preserved)` : ""}${backupPath ? ` (backup: ${backupPath})` : ""}`);
     changed.push({
-      rel: f.rel, dst: f.dst, status: f.status, prevSha: f.prevSha,
-      afterSha: sha(f.dst), backupPath, productCopy: null,
+      rel: f.rel, dst: f.dst, status: f.status, namespacedFrom: f.namespacedFrom || null,
+      prevSha: f.prevSha, afterSha: sha(f.dst), backupPath, productCopy: null,
     });
   }
-  return { changed, backupDir: changed.length ? backupDir : null };
+  return { changed, refused, backupDir: changed.length ? backupDir : null };
 }
 
 /**
@@ -195,14 +542,21 @@ export function applyBundle(plan, configDir, { dryRun, backupDir: backupDirOpt =
  * after-hashes. It is the ONLY input of the rollback, so a rollback can never
  * touch a file this attach did not write.
  */
-export function writeAttachManifest(backupDir, { target, changed }) {
+export function writeAttachManifest(backupDir, { target, changed, variant = null }) {
   if (!backupDir || !changed.length) return null;
   mkdirSync(backupDir, { recursive: true });
   const manifest = {
     createdAt: new Date().toISOString(),
+    // The installation option this attach performed. The doctor uses this
+    // record to select options 3/4 on a host with no Claude Code install.
+    variant: variant == null ? null : String(variant),
     target: target ? { kind: target.kind, container: target.container || null, configDir: target.configDir || null } : null,
+    // ownership ledger: which product file landed under which namespaced name
+    namespaceMap: Object.fromEntries(changed.filter((c) => c.namespacedFrom).map((c) => [c.namespacedFrom, c.dst])),
     files: changed.map((c) => ({
       rel: c.rel, dst: c.dst, status: c.status,
+      namespacedFrom: c.namespacedFrom || null,
+      mergeKind: c.mergeKind || null, inserted: c.inserted || [], blockSha: c.blockSha || null,
       prevSha: c.prevSha || null, afterSha: c.afterSha || null,
       backupPath: c.backupPath || null,
     })),
@@ -243,10 +597,11 @@ export function rollbackAttach(backupDir, { dryRun = false } = {}) {
   for (const f of manifest.files) {
     if (f.status === "preserve") { skipped.push(f.rel); continue; }
     if (!f.dst) { skipped.push(f.rel); continue; }
+    const replaceLike = f.status === "replace" || f.status === "merge";
     if (!existsSync(f.dst)) {
       // a created file that is already gone is already rolled back; a replaced
       // file that vanished is a foreign deletion and is refused, not skipped
-      if (f.status === "replace") refused.push(`${f.rel} — removed since the attach (not restored)`);
+      if (replaceLike) refused.push(`${f.rel} — removed since the attach (not restored)`);
       else skipped.push(f.rel);
       continue;
     }
@@ -254,15 +609,27 @@ export function rollbackAttach(backupDir, { dryRun = false } = {}) {
     // A file in its recorded PRE-attach state is already rolled back (a repeat
     // run): a no-op, not a foreign edit. Only the attach's own after-state is
     // undone; any other content is a foreign edit and blocks the whole undo.
-    if (f.status === "replace" && f.prevSha && cur === f.prevSha) {
+    if (replaceLike && f.prevSha && cur === f.prevSha) {
       skipped.push(`${f.rel} (already at its pre-attach state)`);
       continue;
     }
     if (f.afterSha && cur !== f.afterSha) {
+      // A managed policy BLOCK can still be undone when the user only appended
+      // content outside it: strip the block, keep every appended byte.
+      if (f.status === "merge" && f.mergeKind === "policy") {
+        const live = readFileSync(f.dst, "utf8");
+        const liveSha = createHash("sha256").update(managedBlockText()).digest("hex");
+        if (f.blockSha && liveSha === f.blockSha) {
+          const stripped = stripManagedBlock(live);
+          if (stripped.ok && stripped.removed) { plan.push({ ...f, blockOnly: true, blockText: stripped.text }); continue; }
+        }
+        refused.push(`${f.rel} — changed since the attach (managed block was edited; not removed)`);
+        continue;
+      }
       refused.push(`${f.rel} — changed since the attach (not restored, not removed)`);
       continue;
     }
-    if (f.status === "replace" && (!f.backupPath || !existsSync(f.backupPath))) {
+    if (replaceLike && (!f.backupPath || !existsSync(f.backupPath))) {
       refused.push(`${f.rel} — the pre-attach backup is missing (not restored)`);
       continue;
     }
@@ -272,10 +639,13 @@ export function rollbackAttach(backupDir, { dryRun = false } = {}) {
     return { ok: false, rc: 5, restored, removed, refused, skipped, detail: "rollback refused: nothing was written" };
   }
   for (const f of plan) {
-    if (f.status === "create") {
+    if (f.blockOnly) {
+      if (!dryRun) writeFileSync(f.dst, f.blockText);
+      restored.push(`${f.rel} (managed block removed; user content kept)`);
+    } else if (f.status === "create" || f.status === "namespace") {
       if (!dryRun) rmSync(f.dst, { force: true });
       removed.push(f.rel);
-    } else if (f.status === "replace") {
+    } else if (f.status === "replace" || f.status === "merge") {
       if (!dryRun) copyFileSync(f.backupPath, f.dst);
       restored.push(f.rel);
     }
@@ -371,10 +741,20 @@ async function main(argv) {
   // files share the same stamp and the same manifest.
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupDir = join(ROOT, "data", "attach-backups", stamp);
-  const plan = planBundleFiles(configDir, BUNDLE, { preserveConflicts: target.kind !== "compose-managed" });
+  const plan = planBundleFiles(configDir, BUNDLE, { preserveConflicts: target.kind !== "compose-managed", variant });
   const applied = applyBundle(plan, configDir, { dryRun, backupDir });
   const sharedApplied = applyBundle(sharedRuntimePlan, configDir, { dryRun, backupDir });
   const manifestFiles = applied.changed.concat(sharedApplied.changed);
+  const refusals = applied.refused.concat(sharedApplied.refused || []);
+  if (refusals.length) {
+    // A conflict or a malformed managed block is never "fixed" by rewriting:
+    // the target's data is preserved and the option is reported INCOMPLETE.
+    for (const r of refusals) warn(`REFUSED   ${r}`);
+    writeAttachManifest(backupDir, { target, changed: manifestFiles, variant });
+    warn(`INSTALL INCOMPLETE — ${refusals.length} file(s) could not be merged safely; nothing was overwritten`);
+    warn("resolve the conflict by hand (or remove the foreign file) and re-run the attach — the operation is idempotent");
+    return 5;
+  }
 
   const pluginDir = join(configDir, "product-secrets");
   let credentialState = { ok: false, detail: "" };
@@ -382,7 +762,11 @@ async function main(argv) {
     mkdirSync(pluginDir, { recursive: true });
     // The credential files the provisioning touches are part of the attach:
     // their previous content is captured so the rollback can restore it.
-    for (const name of ["memory.json", "office.json", "selflearn.json"]) {
+    // Option 4 also carries Ghost: its target identity file is derived and
+    // recorded here, so rollback removes/restores it like every other file.
+    const credentialNames = ["memory.json", "office.json", "selflearn.json"];
+    if (variant === "4") credentialNames.push("ghost.json");
+    for (const name of credentialNames) {
       const p = join(pluginDir, name);
       const existed = existsSync(p);
       let backupPath = null;
@@ -434,17 +818,68 @@ async function main(argv) {
       credentialState = { ok: true, detail: "a scoped (non-administrative) key is in place" };
       log(`memory user key: using the scoped key from ${candidateOrigin} (never printed)`);
     }
+    // provision-secrets.py ALSO writes package-level files (secrets/*.env)
+    // outside the target config dir. They belong to this attach: capture their
+    // pre-state now and record them in the same manifest, so the supported
+    // rollback removes a generated file (or restores a replaced one).
+    const external = [];
+    for (const name of variant === "4" ? ["claude-office.env", ...(withGhost ? ["ghost.env"] : [])] : []) {
+      const dst = join(ROOT, "secrets", name);
+      const existed = existsSync(dst);
+      let backupPath = null;
+      if (existed) {
+        mkdirSync(backupDir, { recursive: true });
+        backupPath = join(backupDir, `pkg__${name}`);
+        copyFileSync(dst, backupPath);
+        try { chmodSync(backupPath, 0o600); } catch { /* best effort */ }
+      }
+      external.push({ rel: `package-secrets/${name}`, dst, status: existed ? "replace" : "create", prevSha: existed ? sha(dst) : null, afterSha: null, backupPath, productCopy: null });
+    }
     const pr = spawnSync("python3", args, { cwd: ROOT, encoding: "utf8", env: provisionEnv });
     log(pr.stdout?.trim() || "provision-secrets produced no output");
+    const finishManifest = () => {
+      // Option 4 carries Ghost: derive the TARGET's ghost.json from its own
+      // memory.json, exactly as ghost/setup-ghost.sh does for the package
+      // config (same service, Ghost ids). The key is copied within the target
+      // and is never printed.
+      if (variant === "4") {
+        const mem = readJsonFile(join(pluginDir, "memory.json"));
+        if (mem && mem.baseUrl && mem.userKey) {
+          writeFileSync(join(pluginDir, "ghost.json"), JSON.stringify({
+            baseUrl: mem.baseUrl,
+            authPrefix: mem.authPrefix || "Bearer ",
+            serviceId: mem.serviceId || "openchamber",
+            userKey: mem.userKey,
+            ghostTeamId: mem.ghostTeamId || "ghost-companion",
+            ghostUserId: mem.ghostUserId || "pilot-operator",
+            ghostAgentId: mem.ghostAgentId || "ghost",
+          }, null, 2) + "\n", { mode: 0o600 });
+          log("ghost.json: derived the target's Ghost memory identity from its memory.json (never printed)");
+        } else {
+          warn("ghost.json: the target has no usable memory identity — Ghost wiring stays INCOMPLETE");
+        }
+      }
+      // Record only the external files this run actually changed.
+      for (const e of external) {
+        if (!existsSync(e.dst)) { if (e.backupPath) rmSync(e.backupPath, { force: true }); continue; }
+        const now = sha(e.dst);
+        if (e.prevSha === now) { if (e.backupPath) rmSync(e.backupPath, { force: true }); continue; }
+        e.afterSha = now;
+        manifestFiles.push(e);
+      }
+      // record what the provisioning wrote (after-hashes) in the same manifest
+      for (const f of manifestFiles) {
+        if (f.rel.startsWith("product-secrets/") && existsSync(f.dst)) f.afterSha = sha(f.dst);
+      }
+      return writeAttachManifest(backupDir, { target, changed: manifestFiles, variant });
+    };
     if (pr.status !== 0) {
       warn(`credential provisioning exited ${pr.status} — ${(pr.stderr || "").trim().split("\n").slice(-2).join(" | ")}`);
+      // Record what WAS written, so the supported rollback can undo it.
+      finishManifest();
       return 3;
     }
-    // record what the provisioning wrote (after-hashes) in the same manifest
-    for (const f of manifestFiles) {
-      if (f.rel.startsWith("product-secrets/") && existsSync(f.dst)) f.afterSha = sha(f.dst);
-    }
-    const manifestPath = writeAttachManifest(backupDir, { target, changed: manifestFiles });
+    const manifestPath = finishManifest();
     if (manifestPath) log(`manifest   ${manifestPath} (rollback: node scripts/attach-openchamber.mjs rollback --backup-dir ${backupDir})`);
     // Verify the key that actually landed in the TARGET: a scoped identity is
     // proved live (auth/verify), an administrative one is reported.

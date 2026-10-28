@@ -26,7 +26,10 @@ step "node syntax"
 for f in scripts/*.mjs ghost/*.mjs adapters/claude-code/*.mjs scripts/doctor.mjs \
          orchestration/*.mjs scripts/orch-run \
          openchamber/plugins/product-office/*.js \
-         openchamber/plugins/runbook-nudge/*.js; do check node --check "$f"; done
+         openchamber/plugins/runbook-nudge/*.js \
+         bin/ai-orchestra harness/kit/orchestrate.mjs harness/kit/lib/*.mjs \
+         harness/kit/tests/*.mjs harness/rust-authority/tests/*.mjs \
+         memory/portable/*.mjs; do check node --check "$f"; done
 
 step "unit tests"
 check node --test scripts/skill-gate.test.mjs
@@ -35,6 +38,8 @@ check node --test scripts/setup-agent-profiles.test.mjs
 check node --test scripts/extraction-failover.test.mjs
 check node --test scripts/install-claude-code.profiles.test.mjs
 check node --test scripts/install-claude-code.gate.test.mjs
+check node --test scripts/install-claude-code.components.test.mjs
+check node --test scripts/bundle-classification.test.mjs
 check node --test scripts/provision-secrets.test.mjs
 check node --test scripts/model-lane.test.mjs
 check node --test scripts/runtime-proofs.test.mjs
@@ -67,6 +72,46 @@ check python3 tests/test-orch-chat.py
 for f in openchamber/plugins/product-office/*.test.mjs \
          openchamber/plugins/runbook-nudge/*.test.mjs; do check node --test "$f"; done
 
+step "harness / dashboard / runtime-parity suites"
+for f in tests/harness-contract.test.mjs tests/harness-paths.test.mjs \
+         tests/harness-config-schema.test.mjs tests/harness-guard.test.mjs \
+         tests/harness-authority.test.mjs tests/portable-agent-bundle.test.mjs \
+         tests/dashboard-portable.test.mjs tests/runtime-parity.test.mjs \
+         tests/doctor-selflearn.test.mjs \
+         tests/attach-harness-contract.test.mjs \
+         harness/kit/lib/consult-integrity.test.mjs \
+         harness/kit/tests/concept-capture-resolution.test.mjs \
+         harness/kit/tests/rust-authority.test.mjs \
+         harness/kit/tests/conversation-review-local-verification.test.mjs \
+         harness/kit/tests/rust-effects.test.mjs; do
+  check node --test "$f"
+done
+# The two Rust-cutover contract suites that run against THIS kit (the rest of
+# harness/rust-authority/tests needs fleet-only helper scripts — docs/HARNESS.md).
+check env ORCHESTRA_REFERENCE_KIT="$ROOT/harness/kit" node --test harness/rust-authority/tests/native-state-hardening-reference.test.mjs
+check env ORCHESTRA_REFERENCE_KIT="$ROOT/harness/kit" node --test harness/rust-authority/tests/state-source-contract.test.mjs
+check bash tests/runtime-parity.sh
+rt_rc=0; bash tests/runtime-parity.patch-roundtrip.sh --series memory/patches/core-v2.0.2-l1recordids || rt_rc=$?
+if [ "$rt_rc" = 77 ]; then
+  echo "   patch roundtrip: SKIP (rc 77 — the upstream tarball is not shipped, so apply/reverse cannot be reconstructed; series.json records base/head hashes)"
+elif [ "$rt_rc" != 0 ]; then
+  fail=1; echo "   ^^ FAILED: bash tests/runtime-parity.patch-roundtrip.sh (rc $rt_rc)"
+fi
+
+step "compose config (mandatory)"
+if ! docker compose version >/dev/null 2>&1; then
+  fail=1
+  echo "   ^^ FAILED: docker compose is required for the compose config gate and was not found"
+else
+  # Synthetic values for interpolation only — never a real credential.
+  export OPENCHAMBER_UI_PASSWORD=validation-only-not-a-secret
+  export REPOQL_RQL_PATH=/usr/local/bin/rql
+  check docker compose -f compose/compose.yml config -q
+  check docker compose -f compose/compose.yml -f compose/repoql.override.yml config -q
+  check docker compose -f compose/compose.yml -f compose/extraction-failover.compose.yml config -q
+  check docker compose -f compose/compose.yml -f compose/repoql.override.yml -f compose/runtime-parity.override.yml config -q
+fi
+
 step "json parses"
 for f in openchamber/package.json openchamber/plugins/product-office/package.json \
          openchamber/plugins/runbook-nudge/package.json \
@@ -90,9 +135,12 @@ check test -f adapters/claude-code/agent-map.mjs
 check test -f adapters/claude-code/memory-hook.mjs
 check test -f adapters/claude-code/doc-hook.mjs
 check test -f scripts/doc-policy.mjs
+check test -f scripts/doc-ingest-node.mjs
 check test -f scripts/memory-doc-ingest.py
 check test -f scripts/memory_client.py
-grep -q "memory-doc-ingest.py" openchamber/AGENTS.md
+check grep -q "doc-ingest-node.mjs" openchamber/AGENTS.md
+check bash -c '! grep -RIn "python3 scripts/memory-doc-ingest.py" AGENTS.md openchamber/AGENTS.md adapters/claude-code/agents docs | grep -q .'
+check grep -q "doc-ingest-node.mjs" adapters/claude-code/agents/singularity-general.md
 # The shared documentation policy surface must be importable from both clients
 check node -e 'const m=require("fs").existsSync; if(!m("scripts/doc-policy.mjs")||!m("adapters/claude-code/doc-hook.mjs")) throw new Error("shared documentation policy surface missing")'
 check test -f compose/repoql.override.yml

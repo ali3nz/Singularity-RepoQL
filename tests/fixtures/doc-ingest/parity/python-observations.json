@@ -1,0 +1,1211 @@
+{
+  "core": {
+    "ledger": {
+      "docs": {
+        "<root-id>::docs/runbook.md": {
+          "active_rev": "28b42f07",
+          "doc_id": "<doc-id>",
+          "last_checked": "<ts>",
+          "last_verified": "<ts>",
+          "rel": "docs/runbook.md",
+          "revs": {
+            "03e54b8a": {
+              "chunks": 1,
+              "hashes": [
+                "991f7c31"
+              ],
+              "ingested_at": "<ts>",
+              "session": "parity-session",
+              "status": "DOC_INGEST_INDEXED",
+              "task_ids": [
+                "docs-<doc-id>-r03e54b8a-c01"
+              ],
+              "verified_at": "<ts>"
+            },
+            "28b42f07": {
+              "chunks": 1,
+              "hashes": [
+                "67571672"
+              ],
+              "ingested_at": "<ts>",
+              "session": null,
+              "status": "DOC_INGEST_INDEXED",
+              "task_ids": [
+                "docs-<doc-id>-r28b42f07-c01"
+              ],
+              "verified_at": "<ts>"
+            }
+          },
+          "root": "<box>/workspace",
+          "root_id": "<root-id>",
+          "title": "Deploy runbook (fixture)"
+        }
+      },
+      "version": 1
+    },
+    "steps": {
+      "calls1": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/runbook.md#03e54b8a chunk 1/1 hash 991f7c31]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/runbook.md#03e54b8a chunk 1/1 hash 991f7c31]\ntitle: Deploy runbook (fixture)\nsource: docs/runbook.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 03e54b8a\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 991f7c31\nscope: singularity-docs/shared\ningested: <ts>\n\n# Deploy runbook (fixture)\n\nOrdinary prose before the first heading.\n\n## Prepare\n\n- Check the node version.\n- Ensure the memory config exists.\n\n```bash\n## this heading lives inside a fence and must not split the chunk\nnode scripts/doc-ingest-node.mjs status --all\n```\n\n## Execute\n\nRun the deploy, then verify the service answers.\n\n### Rollback\n\nRestore the previous revision and re-run the verification.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/runbook.md#03e54b8a chunk 1/1 hash 991f7c31] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-r03e54b8a-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 5,
+            "query": "[doc-ref:docs/runbook.md#03e54b8a chunk 1/1 hash 991f7c31]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        }
+      ],
+      "calls2": [],
+      "calls3": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "deploy runbook",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/runbook.md#28b42f07 chunk 1/1 hash 67571672]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/runbook.md#28b42f07 chunk 1/1 hash 67571672]\ntitle: Deploy runbook (fixture)\nsource: docs/runbook.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 28b42f07\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 67571672\nscope: singularity-docs/shared\ningested: <ts>\n\n# Deploy runbook (fixture)\n\nOrdinary prose before the first heading.\n\n## Prepare\n\n- Check the node version.\n- Ensure the memory config exists.\n\n```bash\n## this heading lives inside a fence and must not split the chunk\nnode scripts/doc-ingest-node.mjs status --all\n```\n\n## Execute\n\nRun the deploy, then verify the service answers.\n\n### Rollback\n\nRestore the previous revision and re-run the verification.\n\n\n## Later revision\n\nA changed procedure for the pump.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/runbook.md#28b42f07 chunk 1/1 hash 67571672] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-r28b42f07-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 5,
+            "query": "[doc-ref:docs/runbook.md#28b42f07 chunk 1/1 hash 67571672]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 5,
+            "query": "[docs-superseded:<doc-id>:03e54b8a->28b42f07]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[docs-superseded:<doc-id>:03e54b8a->28b42f07] Documentation revision 03e54b8a of document <doc-id> is SUPERSEDED by revision 28b42f07. Never present revision 03e54b8a as current guidance.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-superseded:<doc-id>:03e54b8a->28b42f07",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        }
+      ],
+      "ingest1": {
+        "code": 0,
+        "json": {
+          "bytes": 404,
+          "chunks": 1,
+          "doc_id": "<doc-id>",
+          "file": "docs/runbook.md",
+          "identity": "<root-id>::docs/runbook.md",
+          "rev": "03e54b8a",
+          "root": "<root-id>",
+          "session": "parity-session",
+          "status": "DOC_INGEST_INDEXED",
+          "superseded": null,
+          "title": "Deploy runbook (fixture)"
+        },
+        "stderr": ""
+      },
+      "ingest2": {
+        "code": 0,
+        "json": {
+          "doc_id": "<doc-id>",
+          "file": "docs/runbook.md",
+          "identity": "<root-id>::docs/runbook.md",
+          "reason": "verified active revision matches source hash",
+          "rev": "03e54b8a",
+          "root": "<root-id>",
+          "session": null,
+          "status": "DOC_INGEST_UNCHANGED",
+          "title": "Deploy runbook (fixture)"
+        },
+        "stderr": ""
+      },
+      "ingest3": {
+        "code": 0,
+        "json": {
+          "bytes": 459,
+          "chunks": 1,
+          "doc_id": "<doc-id>",
+          "file": "docs/runbook.md",
+          "identity": "<root-id>::docs/runbook.md",
+          "rev": "28b42f07",
+          "root": "<root-id>",
+          "session": null,
+          "status": "DOC_INGEST_INDEXED",
+          "superseded": "written",
+          "title": "Deploy runbook (fixture)"
+        },
+        "stderr": ""
+      },
+      "ledger1": {
+        "docs": {
+          "<root-id>::docs/runbook.md": {
+            "active_rev": "03e54b8a",
+            "doc_id": "<doc-id>",
+            "last_verified": "<ts>",
+            "rel": "docs/runbook.md",
+            "revs": {
+              "03e54b8a": {
+                "chunks": 1,
+                "hashes": [
+                  "991f7c31"
+                ],
+                "ingested_at": "<ts>",
+                "session": "parity-session",
+                "status": "DOC_INGEST_INDEXED",
+                "task_ids": [
+                  "docs-<doc-id>-r03e54b8a-c01"
+                ],
+                "verified_at": "<ts>"
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Deploy runbook (fixture)"
+          }
+        },
+        "version": 1
+      },
+      "ledger2": {
+        "docs": {
+          "<root-id>::docs/runbook.md": {
+            "active_rev": "03e54b8a",
+            "doc_id": "<doc-id>",
+            "last_checked": "<ts>",
+            "last_verified": "<ts>",
+            "rel": "docs/runbook.md",
+            "revs": {
+              "03e54b8a": {
+                "chunks": 1,
+                "hashes": [
+                  "991f7c31"
+                ],
+                "ingested_at": "<ts>",
+                "session": "parity-session",
+                "status": "DOC_INGEST_INDEXED",
+                "task_ids": [
+                  "docs-<doc-id>-r03e54b8a-c01"
+                ],
+                "verified_at": "<ts>"
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Deploy runbook (fixture)"
+          }
+        },
+        "version": 1
+      },
+      "ledger3": {
+        "docs": {
+          "<root-id>::docs/runbook.md": {
+            "active_rev": "28b42f07",
+            "doc_id": "<doc-id>",
+            "last_checked": "<ts>",
+            "last_verified": "<ts>",
+            "rel": "docs/runbook.md",
+            "revs": {
+              "03e54b8a": {
+                "chunks": 1,
+                "hashes": [
+                  "991f7c31"
+                ],
+                "ingested_at": "<ts>",
+                "session": "parity-session",
+                "status": "DOC_INGEST_INDEXED",
+                "task_ids": [
+                  "docs-<doc-id>-r03e54b8a-c01"
+                ],
+                "verified_at": "<ts>"
+              },
+              "28b42f07": {
+                "chunks": 1,
+                "hashes": [
+                  "67571672"
+                ],
+                "ingested_at": "<ts>",
+                "session": null,
+                "status": "DOC_INGEST_INDEXED",
+                "task_ids": [
+                  "docs-<doc-id>-r28b42f07-c01"
+                ],
+                "verified_at": "<ts>"
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Deploy runbook (fixture)"
+          }
+        },
+        "version": 1
+      },
+      "search": {
+        "code": 0,
+        "json": {
+          "items": []
+        },
+        "stderr": ""
+      },
+      "search3": {
+        "code": 0,
+        "json": {
+          "items": [
+            {
+              "content": "[doc-ref:docs/runbook.md#28b42f07 chunk 1/1 hash 67571672]\ntitle: Deploy runbook (fixture)\nsource: docs/runbook.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 28b42f07\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 67571672\nscope: singularity-docs/shared\ningested: <ts>\n\n# Deploy runbook (fixture)\n\nOrdinary prose before the first heading.\n\n## Prepare\n\n- Check the node version.\n- Ensure the memory config exists.\n\n```bash\n## this heading lives inside a fence and must not split the chunk\nnode scripts/doc-ingest-node.mjs status --all\n```\n\n## Execute\n\nRun the deploy, then verify the service answers.\n\n### Rollback\n\nRestore the previous revision and re-run the verification.\n\n\n## Later revision\n\nA changed procedure for the pump.",
+              "revision": "28b42f07",
+              "root": "<root-id>",
+              "source": "docs/runbook.md"
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "searchStale": {
+        "code": 0,
+        "json": {
+          "items": []
+        },
+        "stderr": ""
+      },
+      "status": {
+        "code": 0,
+        "json": [
+          {
+            "active_rev": "03e54b8a",
+            "chunks": 1,
+            "doc_id": "<doc-id>",
+            "file": "docs/runbook.md",
+            "root": "<root-id>",
+            "stale_source": false,
+            "status": "DOC_INGEST_INDEXED",
+            "title": "Deploy runbook (fixture)",
+            "verified_at": "<ts>"
+          }
+        ],
+        "stderr": ""
+      },
+      "status3": {
+        "code": 0,
+        "json": [
+          {
+            "active_rev": "28b42f07",
+            "chunks": 1,
+            "doc_id": "<doc-id>",
+            "file": "docs/runbook.md",
+            "root": "<root-id>",
+            "stale_source": false,
+            "status": "DOC_INGEST_INDEXED",
+            "title": "Deploy runbook (fixture)",
+            "verified_at": "<ts>"
+          }
+        ],
+        "stderr": ""
+      },
+      "verify": {
+        "code": 0,
+        "json": {
+          "chunks": 1,
+          "file": "docs/runbook.md",
+          "revision": "03e54b8a",
+          "root": "<root-id>",
+          "status": "DOC_INGEST_VERIFIED",
+          "verified_at": "<ts>"
+        },
+        "stderr": ""
+      },
+      "verify3": {
+        "code": 0,
+        "json": {
+          "chunks": 1,
+          "file": "docs/runbook.md",
+          "revision": "28b42f07",
+          "root": "<root-id>",
+          "status": "DOC_INGEST_VERIFIED",
+          "verified_at": "<ts>"
+        },
+        "stderr": ""
+      }
+    }
+  },
+  "failure": {
+    "ledger": {
+      "docs": {
+        "<root-id>::docs/auth.md": {
+          "active_rev": "7ead17ea",
+          "doc_id": "<doc-id>",
+          "last_verified": "<ts>",
+          "rel": "docs/auth.md",
+          "revs": {
+            "7ead17ea": {
+              "chunks": 1,
+              "hashes": [
+                "00b1ead2"
+              ],
+              "ingested_at": "<ts>",
+              "reason": "chunk write failed",
+              "session": null,
+              "status": "DOC_INGEST_INDEXED",
+              "task_ids": [
+                "docs-<doc-id>-r7ead17ea-c01"
+              ],
+              "verified_at": "<ts>"
+            }
+          },
+          "root": "<box>/workspace",
+          "root_id": "<root-id>",
+          "title": "Auth runbook"
+        },
+        "<root-id>::docs/failing.md": {
+          "active_rev": "489c8b37",
+          "doc_id": "<doc-id>",
+          "last_verified": "<ts>",
+          "rel": "docs/failing.md",
+          "revs": {
+            "489c8b37": {
+              "chunks": 1,
+              "hashes": [
+                "504b3c26"
+              ],
+              "ingested_at": "<ts>",
+              "reason": "chunk write failed",
+              "session": null,
+              "status": "DOC_INGEST_INDEXED",
+              "task_ids": [
+                "docs-<doc-id>-r489c8b37-c01"
+              ],
+              "verified_at": "<ts>"
+            }
+          },
+          "root": "<box>/workspace",
+          "root_id": "<root-id>",
+          "title": "Failing runbook"
+        }
+      },
+      "version": 1
+    },
+    "steps": {
+      "callsAuthFailed": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2]\ntitle: Auth runbook\nsource: docs/auth.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 7ead17ea\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 00b1ead2\nscope: singularity-docs/shared\ningested: <ts>\n\n# Auth runbook\n\nA rejected write that must be retried.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-r7ead17ea-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        }
+      ],
+      "callsFailed": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26]\ntitle: Failing runbook\nsource: docs/failing.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 489c8b37\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 504b3c26\nscope: singularity-docs/shared\ningested: <ts>\n\n# Failing runbook\n\nA write that will be refused.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-r489c8b37-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        }
+      ],
+      "callsRetry": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2]\ntitle: Auth runbook\nsource: docs/auth.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 7ead17ea\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 00b1ead2\nscope: singularity-docs/shared\ningested: <ts>\n\n# Auth runbook\n\nA rejected write that must be retried.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-r7ead17ea-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 5,
+            "query": "[doc-ref:docs/auth.md#7ead17ea chunk 1/1 hash 00b1ead2]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26]\ntitle: Failing runbook\nsource: docs/failing.md (canonical file on disk — this memory record is its indexed copy)\nrevision: 489c8b37\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: 504b3c26\nscope: singularity-docs/shared\ningested: <ts>\n\n# Failing runbook\n\nA write that will be refused.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-r489c8b37-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 5,
+            "query": "[doc-ref:docs/failing.md#489c8b37 chunk 1/1 hash 504b3c26]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        }
+      ],
+      "ingestAuthFailed": {
+        "code": 0,
+        "json": {
+          "doc_id": "<doc-id>",
+          "file": "docs/auth.md",
+          "identity": "<root-id>::docs/auth.md",
+          "reason": "chunk write failed",
+          "rev": "7ead17ea",
+          "root": "<root-id>",
+          "session": null,
+          "status": "DOC_INGEST_FAILED",
+          "title": "Auth runbook"
+        },
+        "stderr": ""
+      },
+      "ingestFailed": {
+        "code": 0,
+        "json": {
+          "doc_id": "<doc-id>",
+          "file": "docs/failing.md",
+          "identity": "<root-id>::docs/failing.md",
+          "reason": "chunk write failed",
+          "rev": "489c8b37",
+          "root": "<root-id>",
+          "session": null,
+          "status": "DOC_INGEST_FAILED",
+          "title": "Failing runbook"
+        },
+        "stderr": ""
+      },
+      "ledgerAuthFailed": {
+        "docs": {
+          "<root-id>::docs/auth.md": {
+            "active_rev": null,
+            "doc_id": "<doc-id>",
+            "rel": "docs/auth.md",
+            "revs": {
+              "7ead17ea": {
+                "chunks": 1,
+                "hashes": [
+                  "00b1ead2"
+                ],
+                "ingested_at": "<ts>",
+                "reason": "chunk write failed",
+                "session": null,
+                "status": "DOC_INGEST_FAILED",
+                "task_ids": [
+                  "docs-<doc-id>-r7ead17ea-c01"
+                ]
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Auth runbook"
+          },
+          "<root-id>::docs/failing.md": {
+            "active_rev": null,
+            "doc_id": "<doc-id>",
+            "rel": "docs/failing.md",
+            "revs": {
+              "489c8b37": {
+                "chunks": 1,
+                "hashes": [
+                  "504b3c26"
+                ],
+                "ingested_at": "<ts>",
+                "reason": "chunk write failed",
+                "session": null,
+                "status": "DOC_INGEST_FAILED",
+                "task_ids": [
+                  "docs-<doc-id>-r489c8b37-c01"
+                ]
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Failing runbook"
+          }
+        },
+        "version": 1
+      },
+      "ledgerFailed": {
+        "docs": {
+          "<root-id>::docs/failing.md": {
+            "active_rev": null,
+            "doc_id": "<doc-id>",
+            "rel": "docs/failing.md",
+            "revs": {
+              "489c8b37": {
+                "chunks": 1,
+                "hashes": [
+                  "504b3c26"
+                ],
+                "ingested_at": "<ts>",
+                "reason": "chunk write failed",
+                "session": null,
+                "status": "DOC_INGEST_FAILED",
+                "task_ids": [
+                  "docs-<doc-id>-r489c8b37-c01"
+                ]
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Failing runbook"
+          }
+        },
+        "version": 1
+      },
+      "ledgerRetry": {
+        "docs": {
+          "<root-id>::docs/auth.md": {
+            "active_rev": "7ead17ea",
+            "doc_id": "<doc-id>",
+            "last_verified": "<ts>",
+            "rel": "docs/auth.md",
+            "revs": {
+              "7ead17ea": {
+                "chunks": 1,
+                "hashes": [
+                  "00b1ead2"
+                ],
+                "ingested_at": "<ts>",
+                "reason": "chunk write failed",
+                "session": null,
+                "status": "DOC_INGEST_INDEXED",
+                "task_ids": [
+                  "docs-<doc-id>-r7ead17ea-c01"
+                ],
+                "verified_at": "<ts>"
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Auth runbook"
+          },
+          "<root-id>::docs/failing.md": {
+            "active_rev": "489c8b37",
+            "doc_id": "<doc-id>",
+            "last_verified": "<ts>",
+            "rel": "docs/failing.md",
+            "revs": {
+              "489c8b37": {
+                "chunks": 1,
+                "hashes": [
+                  "504b3c26"
+                ],
+                "ingested_at": "<ts>",
+                "reason": "chunk write failed",
+                "session": null,
+                "status": "DOC_INGEST_INDEXED",
+                "task_ids": [
+                  "docs-<doc-id>-r489c8b37-c01"
+                ],
+                "verified_at": "<ts>"
+              }
+            },
+            "root": "<box>/workspace",
+            "root_id": "<root-id>",
+            "title": "Failing runbook"
+          }
+        },
+        "version": 1
+      },
+      "retry": {
+        "code": 0,
+        "json": {
+          "results": [
+            {
+              "bytes": 55,
+              "chunks": 1,
+              "doc_id": "<doc-id>",
+              "file": "docs/auth.md",
+              "identity": "<root-id>::docs/auth.md",
+              "rev": "7ead17ea",
+              "root": "<root-id>",
+              "session": null,
+              "status": "DOC_INGEST_INDEXED",
+              "superseded": null,
+              "title": "Auth runbook"
+            },
+            {
+              "bytes": 49,
+              "chunks": 1,
+              "doc_id": "<doc-id>",
+              "file": "docs/failing.md",
+              "identity": "<root-id>::docs/failing.md",
+              "rev": "489c8b37",
+              "root": "<root-id>",
+              "session": null,
+              "status": "DOC_INGEST_INDEXED",
+              "superseded": null,
+              "title": "Failing runbook"
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "verifyAuth": {
+        "code": 0,
+        "json": {
+          "chunks": 1,
+          "file": "docs/auth.md",
+          "revision": "7ead17ea",
+          "root": "<root-id>",
+          "status": "DOC_INGEST_VERIFIED",
+          "verified_at": "<ts>"
+        },
+        "stderr": ""
+      },
+      "verifyFailed": {
+        "code": 0,
+        "json": {
+          "file": "docs/failing.md",
+          "reason": "active revision verification record is 'missing active revision', not a verified index",
+          "status": "DOC_INGEST_NOT_VERIFIED"
+        },
+        "stderr": ""
+      },
+      "verifyRetry": {
+        "code": 0,
+        "json": {
+          "chunks": 1,
+          "file": "docs/failing.md",
+          "revision": "489c8b37",
+          "root": "<root-id>",
+          "status": "DOC_INGEST_VERIFIED",
+          "verified_at": "<ts>"
+        },
+        "stderr": ""
+      }
+    }
+  },
+  "appError": {
+    "ledger": {
+      "docs": {
+        "<root-id>::docs/denied.md": {
+          "active_rev": null,
+          "doc_id": "<doc-id>",
+          "rel": "docs/denied.md",
+          "revs": {
+            "bb38b458": {
+              "chunks": 1,
+              "hashes": [
+                "e14b7677"
+              ],
+              "ingested_at": "<ts>",
+              "reason": "chunk write failed",
+              "session": null,
+              "status": "DOC_INGEST_FAILED",
+              "task_ids": [
+                "docs-<doc-id>-rbb38b458-c01"
+              ]
+            }
+          },
+          "root": "<box>/workspace",
+          "root_id": "<root-id>",
+          "title": "Denied runbook"
+        }
+      },
+      "version": 1
+    },
+    "steps": {
+      "callsCode": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/denied.md#bb38b458 chunk 1/1 hash e14b7677]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/denied.md#bb38b458 chunk 1/1 hash e14b7677]\ntitle: Denied runbook\nsource: docs/denied.md (canonical file on disk — this memory record is its indexed copy)\nrevision: bb38b458\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: e14b7677\nscope: singularity-docs/shared\ningested: <ts>\n\n# Denied runbook\n\nApplication-level refusal.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/denied.md#bb38b458 chunk 1/1 hash e14b7677] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-rbb38b458-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        }
+      ],
+      "callsError": [
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "limit": 10,
+            "query": "[doc-ref:docs/denied.md#bb38b458 chunk 1/1 hash e14b7677]",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/search"
+        },
+        {
+          "body": {
+            "agent_id": "docs-keeper",
+            "messages": [
+              {
+                "content": "[doc-ref:docs/denied.md#bb38b458 chunk 1/1 hash e14b7677]\ntitle: Denied runbook\nsource: docs/denied.md (canonical file on disk — this memory record is its indexed copy)\nrevision: bb38b458\nroot-id: <root-id>\nchunk: 1/1\ncontent-hash: e14b7677\nscope: singularity-docs/shared\ningested: <ts>\n\n# Denied runbook\n\nApplication-level refusal.",
+                "recorded_at": "<ts>",
+                "role": "user"
+              },
+              {
+                "content": "Documentation record [doc-ref:docs/denied.md#bb38b458 chunk 1/1 hash e14b7677] acknowledged.",
+                "recorded_at": "<ts>",
+                "role": "assistant"
+              }
+            ],
+            "session_id": "singularity-documentation",
+            "task_id": "docs-<doc-id>-rbb38b458-c01",
+            "team_id": "singularity-docs",
+            "user_id": "shared"
+          },
+          "headers": {
+            "authorization": "Bearer gw-test-only",
+            "content-type": "application/json",
+            "x-tdai-service-id": "svc-test",
+            "x-tdai-user-key": "usr-test"
+          },
+          "path": "/v3/conversation/add"
+        }
+      ],
+      "codeError": {
+        "code": 0,
+        "json": {
+          "doc_id": "<doc-id>",
+          "file": "docs/denied.md",
+          "identity": "<root-id>::docs/denied.md",
+          "reason": "chunk write failed",
+          "rev": "bb38b458",
+          "root": "<root-id>",
+          "session": null,
+          "status": "DOC_INGEST_FAILED",
+          "title": "Denied runbook"
+        },
+        "stderr": ""
+      },
+      "errorField": {
+        "code": 0,
+        "json": {
+          "doc_id": "<doc-id>",
+          "file": "docs/denied.md",
+          "identity": "<root-id>::docs/denied.md",
+          "reason": "chunk write failed",
+          "rev": "bb38b458",
+          "root": "<root-id>",
+          "session": null,
+          "status": "DOC_INGEST_FAILED",
+          "title": "Denied runbook"
+        },
+        "stderr": ""
+      }
+    }
+  },
+  "refusals": {
+    "ledger": null,
+    "steps": {
+      "assignment": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/assign.md",
+          "reason": "sensitive assignment detected in docs/assign.md; reject or redact per local policy",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "calls": [],
+      "empty": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/empty.md",
+          "reason": "document is empty",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "missing": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/absent.md",
+          "reason": "cannot resolve document",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "notMarkdown": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/notes.txt",
+          "reason": "only .md documentation is eligible: notes.txt",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "outsideRoot": {
+        "code": 0,
+        "json": {
+          "file": "<box>/outside/outside.md",
+          "reason": "path is outside the documentation allowlist roots (pass --root)",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "secretContent": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/content.md",
+          "reason": "sensitive content detected in docs/content.md (pattern \\bsk-[A-Za-z0-9][A-Za-z0-9_-...); reject or redact per local policy before ingestion",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "secretName": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/.env.local",
+          "reason": "secret-like filename refused: .env.local",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "tooLarge": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/large.md",
+          "reason": "document too large to ingest safely (204810 > 204800 bytes); split it",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      },
+      "unbalancedFence": {
+        "code": 0,
+        "json": {
+          "file": "<box>/workspace/docs/fence.md",
+          "reason": "unbalanced code fences — refusing to guess chunk boundaries",
+          "status": "DOC_INGEST_BLOCKED"
+        },
+        "stderr": ""
+      }
+    }
+  }
+}
