@@ -16,7 +16,8 @@ Design rules this file keeps:
 from __future__ import annotations
 
 import argparse
-import fcntl
+from contextlib import contextmanager
+from file_lock import fcntl
 import hashlib
 import hmac
 import http.client
@@ -33,15 +34,15 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit, urljoin, unquote
 
 from access import AccessVerifier
 from repoql_bridge import Config, RepoQL, UpstreamError, host_uptime_seconds, summarise_log
+from variant_features import features as variant_features, route_allowed as variant_route_allowed
 
 # Ticket 789: Harness Control Center (telemetry store + HTTP adapter).
 try:
@@ -153,6 +154,10 @@ def repository_of(uri: str, roots: list[str]) -> str | None:
 # --------------------------------------------------------------------------
 
 
+class ExclusionStateError(RuntimeError):
+    """Exclusion state is not trustworthy; do not mutate it."""
+
+
 class ExclusionStore:
     """Metadata for exclusions written into a mount's `.repoqlignore`.
 
@@ -169,28 +174,76 @@ class ExclusionStore:
         self._lock = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    @contextmanager
+    def _mutation_lock(self):
+        """Serialize ledger read-modify-write across dashboard processes.
+
+        A persistent dedicated lockfile avoids the rename/inode race that
+        would result from locking the atomically replaced JSON ledger itself.
+        The file is retained across process exit and is never unlinked.
+        """
+        lock_path = self.path.with_name(self.path.name + '.lock')
+        with self._lock:
+            if lock_path.is_symlink():
+                raise ExclusionStateError("EXCLUSIONS_LOCK_SYMLINK_REFUSED")
+            with lock_path.open('a+b') as stream:
+                if lock_path.is_symlink():
+                    raise ExclusionStateError("EXCLUSIONS_LOCK_SYMLINK_REFUSED")
+                # msvcrt.locking protects a byte range on Windows. Ensure that
+                # byte exists even on a newly created lock file.
+                stream.seek(0, os.SEEK_END)
+                if stream.tell() == 0:
+                    stream.write(b'\0')
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.chmod(lock_path, 0o600)
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
     def load(self) -> list[dict]:
+        # A genuinely absent ledger means no exclusions. Malformed/unreadable
+        # state means UNKNOWN, not empty: a subsequent add must never erase
+        # an existing user's exclusions because parsing failed.
         try:
+            if self.path.is_symlink():
+                raise ExclusionStateError("EXCLUSIONS_LEDGER_SYMLINK_REFUSED")
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except FileNotFoundError:
             return []
-        return data.get("exclusions", []) if isinstance(data, dict) else []
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise ExclusionStateError("EXCLUSIONS_LEDGER_UNREADABLE") from exc
+        if not isinstance(data, dict) or not isinstance(data.get("exclusions"), list) or any(
+            not isinstance(item, dict) for item in data["exclusions"]
+        ):
+            raise ExclusionStateError("EXCLUSIONS_LEDGER_INVALID_SCHEMA")
+        return data["exclusions"]
 
     def save(self, records: list[dict]) -> None:
+        if self.path.is_symlink():
+            raise ExclusionStateError("EXCLUSIONS_LEDGER_SYMLINK_REFUSED")
+        # Refuse a pre-existing pending write instead of silently truncating
+        # evidence from an interrupted dashboard operation.
         tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps({"exclusions": records}, indent=2) + "\n", encoding="utf-8")
-        os.chmod(tmp, 0o644)
+        payload = json.dumps({"exclusions": records}, indent=2) + "\n"
+        with tmp.open("x", encoding="utf-8") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(tmp, 0o600)
         tmp.replace(self.path)
 
     def add(self, record: dict) -> None:
-        with self._lock:
+        with self._mutation_lock():
             records = self.load()
             records = [r for r in records if r.get("id") != record["id"] and r.get("uri") != record["uri"]]
             records.append(record)
             self.save(records)
 
     def update(self, record_id: str, **fields) -> dict | None:
-        with self._lock:
+        with self._mutation_lock():
             records = self.load()
             for record in records:
                 if record.get("id") == record_id:
@@ -200,7 +253,7 @@ class ExclusionStore:
         return None
 
     def remove(self, record_id: str) -> dict | None:
-        with self._lock:
+        with self._mutation_lock():
             records = self.load()
             for record in records:
                 if record.get("id") == record_id:
@@ -366,6 +419,11 @@ class App:
         return conn
 
     def cpu_series(self, period: str) -> dict:
+        # Native measurements have a separate database and explicit Rust identity
+        # contract; never serve a pre-existing Linux cpu.db on Windows.
+        if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+            from native_cpu_history import series
+            return series(self.config, period, PERIODS)
         window, bucket = PERIODS.get(period, PERIODS["1h"])
         since = int(time.time()) - window
         series: list[dict] = []
@@ -640,11 +698,37 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         params = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
         try:
+            profile = variant_features()
+            if not variant_route_allowed(path, profile):
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "feature_not_in_install_variant"})
+                return
             # MUST precede every dashboard route, including DELETE and /api/*.
             # This host is only Office; its Access audience grants no dashboard access.
             if self.is_public_office_host():
                 from native_panel_proxy import serve
                 serve(self, 'office', method, parsed, public_root=True)
+                return
+            if path == '/.well-known/singularity-health':
+                # Native Windows supervisor identity probe. This endpoint is
+                # intentionally small, loopback-only and unauthenticated so
+                # startup checks never need to put a bearer token into a
+                # process launcher configuration or query string. A matching
+                # header is a readiness hint, NOT proof of process ownership.
+                try:
+                    local_peer = ipaddress.ip_address(self.client_address[0]).is_loopback
+                except ValueError:
+                    local_peer = False
+                if method != 'GET' or os.environ.get('SINGULARITY_WINDOWS_NATIVE') != '1' or not local_peer:
+                    self.send_json(HTTPStatus.NOT_FOUND, {'error': 'not_found'})
+                    return
+                body = b'{"ok":true}'
+                self.send_response(HTTPStatus.OK)
+                self.send_header('X-Singularity-Component', 'dashboard')
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
                 return
             for panel in ('tencent', 'office', 'kanzo'):
                 if path.startswith('/embed/' + panel + '/'):
@@ -744,6 +828,12 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
+                if path == "/api/ghost/scheduler":
+                    self.serve_ghost_scheduler(method)
+                    return
+                if path == "/api/ghost/plans":
+                    self.serve_ghost_plans(method)
+                    return
                 if path in ("/api/ghost/status", "/api/ghost/control"):
                     self.serve_ghost_api(method, path)
                     return
@@ -769,14 +859,19 @@ class Handler(BaseHTTPRequestHandler):
         except PermissionError as exc:
             self.send_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except Exception as exc:  # pragma: no cover - defensive
-            traceback.print_exc()
-            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"{type(exc).__name__}: {exc}"})
+            # Unanticipated exceptions may contain access keys, capability
+            # links or private filesystem paths. Neither the HTTP response nor
+            # routine diagnostics should echo those values.
+            print(f"dashboard internal error ({type(exc).__name__})", file=sys.stderr, flush=True)
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "internal_error"})
 
     def access_identity(self) -> dict | None:
         return self.app.access_identity(self.headers)
 
     def is_public_office_host(self) -> bool:
         """Match one configured hostname exactly, not a suffix or caller-supplied URL."""
+        if not variant_features()["features"]["office"]:
+            return False
         configured = urlparse(os.environ.get("CLAUDE_OFFICE_PUBLIC_URL", "")).hostname
         try:
             supplied = urlparse("//" + getattr(self, "headers", {}).get("Host", "")).hostname
@@ -839,6 +934,104 @@ class Handler(BaseHTTPRequestHandler):
         return (parsed.netloc.lower() == host.lower()
                 and parsed.scheme == self.request_scheme())
 
+    def serve_ghost_plans(self, method: str) -> None:
+        """Private scheduling drafts only; never represent these as active jobs."""
+        from ghost_schedule_plans import control
+        if method in ("POST", "DELETE"):
+            # Ghost draft prompts can contain private agent instructions.
+            # Unlike general bearer-authenticated CLI routes, this endpoint is
+            # browser-only and requires an exact authenticated browser origin.
+            if (not self.request_origin_allowed(require_origin=True)
+                    or self.headers.get("X-Requested-With") != "repoql-dashboard"
+                    or self.headers.get("X-Ghost-Control") != "1"
+                    or self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json"
+                    or self.headers.get("Sec-Fetch-Site", "") == "cross-site"):
+
+                self.send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "control_request_rejected"})
+                return
+            try:
+                body = self.read_body()
+            except ValueError:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "invalid_json"})
+                return
+            status, payload = control(method, body)
+        else:
+            status, payload = control(method)
+        self.send_json(HTTPStatus(status), payload)
+
+    def serve_ghost_scheduler(self, method: str) -> None:
+        """Proxy native schedule actions and require an independent live readback."""
+        # A verified Cloudflare email/sub does not identify a Windows SID. This
+        # per-user scheduler surface is available only through this process's
+        # local dashboard capability until an operator-owned identity mapping
+        # exists; never let a remote Access user inherit the server owner's SID.
+        if not self.scheduler_identity_bound():
+            self.send_json(HTTPStatus.FORBIDDEN, {
+                "ok": False, "verified": False, "error": "scheduler_owner_binding_required", "schedules": [],
+            })
+            return
+        if os.environ.get("SINGULARITY_WINDOWS_NATIVE") != "1":
+            self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {
+                "ok": False, "verified": False, "error": "native_scheduler_unavailable", "schedules": [],
+            })
+            return
+        if method not in ("GET", "POST"):
+            self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {"ok": False, "error": "method_not_allowed"})
+            return
+        body = None
+        if method == "POST":
+            from ghost_bridge import control_headers_valid
+            if not control_headers_valid(self.headers, self.headers.get("Host", "")):
+                self.send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "control_request_rejected"})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = -1
+            if not 0 < length <= 131072:
+                self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": "invalid_request_size"})
+                return
+            try:
+                body = self.read_scheduler_body()
+            except ValueError:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "invalid_json"})
+                return
+        from ghost_schedule_plans import scheduler_control
+        from native_ghost import control_request as host_request
+        status, payload = scheduler_control(method, body, host_request=host_request)
+        self.send_json(HTTPStatus(status), payload)
+
+    def read_scheduler_body(self) -> dict:
+        """Parse scheduler JSON while refusing duplicate keys at every depth."""
+        length = int(self.headers.get("Content-Length") or 0)
+        if not 0 < length <= 131072:
+            raise ValueError("invalid scheduler request size")
+        raw = self.rfile.read(length)
+
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate scheduler request field")
+                result[key] = value
+            return result
+
+        try:
+            payload = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_pairs)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("invalid scheduler request JSON")
+        if not isinstance(payload, dict):
+            raise ValueError("scheduler request must be an object")
+        return payload
+
+    def scheduler_identity_bound(self) -> bool:
+        """Require this user's bearer capability and a loopback browser peer."""
+        try:
+            local_peer = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except (ValueError, IndexError, TypeError):
+            local_peer = False
+        return self.bearer_authorized() and local_peer
+
     def serve_ghost_api(self, method: str, path: str) -> None:
         from ghost_bridge import control_headers_valid, control_request, read_status
         if path == "/api/ghost/status":
@@ -888,11 +1081,23 @@ class Handler(BaseHTTPRequestHandler):
         return valid_launch_cookie(self.headers.get("Cookie", ""), self.app.token, max_age=3600)
 
     def _embed_upstream_path(self, path: str) -> str:
-        rest = path[len(EMBED_PREFIX):]
-        if not rest:
-            return "/"
-        if not rest.startswith("/") or "\\" in rest or ".." in rest or len(rest) > 4096:
+        if not (path == EMBED_PREFIX or path.startswith(EMBED_PREFIX + "/")):
+            raise PermissionError("invalid native panel prefix")
+        rest = path[len(EMBED_PREFIX):] or "/"
+        if not rest.startswith("/") or rest.startswith("//") or len(rest) > 4096:
             raise PermissionError("invalid native panel path")
+        # Validate multiple decoding passes: the fixed upstream may decode a
+        # percent-encoded path more than once. Reject traversal *before* it
+        # reaches the upstream instead of relying on its URL normalizer.
+        decoded = rest
+        for _ in range(3):
+            if ("\\" in decoded or "\x00" in decoded or decoded.startswith("//") or
+                    any(part in (".", "..") for part in decoded.split("/"))):
+                raise PermissionError("invalid native panel path")
+            next_decoded = unquote(decoded)
+            if next_decoded == decoded:
+                break
+            decoded = next_decoded
         return rest
 
     def _rewrite_embed_text(self, text: str) -> str:
@@ -908,6 +1113,50 @@ class Handler(BaseHTTPRequestHandler):
         # Template-built paths such as ${location.host}/api/dashboard/session.
         text = _re.sub(r'(\})/(api/)', r'\1' + EMBED_PREFIX + r'/\2', text)
         return text
+
+    def _safe_repoql_redirect(self, location: str, upstream_path: str) -> str:
+        """Keep the official local panel's redirects on our authenticated origin.
+
+        RepoQL may return a localhost absolute URL, e.g. after authenticating.
+        Forwarding it unchanged bypasses the dashboard origin and breaks remote
+        clients. No redirect may name a third-party origin or an alternate port.
+        """
+        if (not isinstance(location, str) or not location or len(location) > 4096
+                or any(c in location for c in ("\\", "\r", "\n", "\x00"))):
+            raise PermissionError("unsafe native panel redirect")
+        parsed = urlsplit(location)
+        if parsed.username is not None or parsed.password is not None:
+            raise PermissionError("unsafe native panel redirect authority")
+        if parsed.scheme or parsed.netloc:
+            try:
+                port = parsed.port
+            except ValueError as exc:
+                raise PermissionError("invalid native panel redirect port") from exc
+            if (parsed.scheme != "http" or parsed.hostname not in
+                    ("localhost", "127.0.0.1", "::1") or port != NATIVE_REPOQL_UPSTREAM[1]):
+                raise PermissionError("foreign native panel redirect refused")
+        # A protocol-relative URL is never relative to the fixed upstream.
+        if location.startswith("//") or parsed.path.startswith("//"):
+            raise PermissionError("unsafe native panel redirect path")
+        raw_path = parsed.path or upstream_path.split("?", 1)[0]
+        # Reject traversal in encoded and ordinary form *before* urljoin can
+        # normalize it away. One decode also rules out encoded slashes and NUL.
+        decoded = raw_path
+        for _ in range(3):
+            if ("\\" in decoded or "\x00" in decoded or decoded.startswith("//") or
+                    any(part in (".", "..") for part in decoded.split("/"))):
+                raise PermissionError("unsafe native panel redirect path")
+            next_decoded = unquote(decoded)
+            if next_decoded == decoded:
+                break
+            decoded = next_decoded
+        resolved = urljoin(upstream_path, raw_path) if not raw_path.startswith("/") else raw_path
+        if not resolved.startswith("/") or resolved.startswith("//"):
+            raise PermissionError("unsafe native panel redirect path")
+        # Upstream paths live beneath /embed/repoql, even when a local panel
+        # returns an absolute /login or /#k=... capability URL.
+        embedded = resolved if resolved.startswith(EMBED_PREFIX + "/") else EMBED_PREFIX + resolved
+        return urlunsplit(("", "", embedded, parsed.query, parsed.fragment))
 
     def _rewrite_embed_cookie(self, value: str) -> str:
         parts = []
@@ -927,27 +1176,65 @@ class Handler(BaseHTTPRequestHandler):
             parts.append(item)
         return "; ".join(parts)
 
+    def _repoql_forward_headers(self, *, websocket: bool = False) -> dict[str, str]:
+        """Forward panel headers without exporting dashboard authentication.
+
+        RepoQL may use its *own* Authorization bearer and session cookies, so
+        do not indiscriminately remove them. The dashboard's bearer and scoped
+        launch cookie must never cross the proxy boundary. Cloudflare Access
+        identity headers belong to this dashboard's outer authentication only.
+        """
+        from repoql_native_auth import COOKIE_NAME
+
+        hop_by_hop = {'host', 'connection', 'keep-alive', 'proxy-authorization',
+                      'proxy-authenticate', 'te', 'trailer', 'transfer-encoding',
+                      'upgrade', 'content-length', 'accept-encoding', 'referer'}
+        if websocket:
+            hop_by_hop -= {'accept-encoding'}
+        result: dict[str, str] = {}
+        for key, value in self.headers.items():
+            low = key.lower()
+            if ('\r' in key or '\n' in key or '\r' in value or '\n' in value):
+                raise PermissionError('invalid forwarded header')
+            if low in hop_by_hop or low.startswith('cf-access-'):
+                continue
+            if low == 'authorization':
+                if value.startswith('Bearer ') and hmac.compare_digest(value[7:].strip(), self.app.token):
+                    continue
+            if low == 'cookie':
+                safe_cookies = []
+                for part in value.split(';'):
+                    field = part.strip()
+                    if field and field.split('=', 1)[0].strip().lower() != COOKIE_NAME.lower():
+                        safe_cookies.append(field)
+                if not safe_cookies:
+                    continue
+                value = '; '.join(safe_cookies)
+            result[key] = value
+        return result
+
     def proxy_repoql(self, method: str, parsed) -> None:
         upstream_path = self._embed_upstream_path(parsed.path)
         if parsed.query:
             upstream_path += "?" + parsed.query
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_content_length"})
+            return
         if length < 0 or length > 8 * 1024 * 1024:
             self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "request_too_large"})
             return
-        body = self.rfile.read(length) if length else None
         if method in ("POST", "PUT", "PATCH", "DELETE") and not self.request_origin_allowed(
                 require_origin=not self.bearer_authorized()):
             self.send_json(HTTPStatus.FORBIDDEN, {"error": "cross-origin request refused"})
             return
-        headers = {}
-        for key, value in self.headers.items():
-            low = key.lower()
-            if low in ("host", "connection", "keep-alive", "proxy-authorization",
-                       "proxy-authenticate", "te", "trailer", "transfer-encoding",
-                       "upgrade", "content-length", "accept-encoding"):
-                continue
-            headers[key] = value
+        body = self.rfile.read(length) if length else None
+        try:
+            headers = self._repoql_forward_headers()
+        except PermissionError:
+            self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_header'})
+            return
         headers["Host"] = "127.0.0.1:41005"
         headers["Accept-Encoding"] = "identity"
         if "Origin" in headers:
@@ -967,6 +1254,18 @@ class Handler(BaseHTTPRequestHandler):
                    ("text/html", "text/css", "javascript", "image/svg")):
                 text = content.decode("utf-8", "replace")
                 content = self._rewrite_embed_text(text).encode("utf-8")
+            redirect = None
+            if response.status in (301, 302, 303, 307, 308):
+                try:
+                    redirect = self._safe_repoql_redirect(
+                        response.getheader("Location"), upstream_path)
+                except (PermissionError, ValueError, TypeError):
+                    # Do not send a foreign Location or a possibly credential-
+                    # bearing upstream error body back to the browser.
+                    self.send_json(HTTPStatus.BAD_GATEWAY,
+                                   {"error": "native_repoql_redirect_refused"})
+                    return
+                content = b""
             self.send_response(response.status)
             for key, value in response.getheaders():
                 low = key.lower()
@@ -975,9 +1274,16 @@ class Handler(BaseHTTPRequestHandler):
                     continue
                 if low == "set-cookie":
                     value = self._rewrite_embed_cookie(value)
-                if low == "location" and value.startswith("/") and not value.startswith("//"):
-                    value = EMBED_PREFIX + value
+                if low == "location":
+                    if redirect is None:
+                        # Non-redirect responses cannot inject navigation.
+                        continue
+                    value = redirect
+                if low in ("proxy-authenticate", "proxy-authorization", "trailer", "te", "upgrade"):
+                    continue
                 self.send_header(key, value)
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(content)))
             self.end_headers()
             if method != "HEAD":
@@ -1007,10 +1313,8 @@ class Handler(BaseHTTPRequestHandler):
         upstream = None
         try:
             lines = [f"GET {upstream_path} HTTP/1.1"]
-            for key, value in self.headers.items():
-                low = key.lower()
-                if low in ("host", "origin", "connection", "upgrade", "keep-alive",
-                           "proxy-authorization", "proxy-authenticate"):
+            for key, value in self._repoql_forward_headers(websocket=True).items():
+                if key.lower() == 'origin':
                     continue
                 lines.append(f"{key}: {value}")
             lines.append("Host: 127.0.0.1:41005")
@@ -1032,7 +1336,7 @@ class Handler(BaseHTTPRequestHandler):
                         return
                     target = upstream if source is self.connection else self.connection
                     target.sendall(data)
-        except OSError:
+        except (OSError, PermissionError):
             return
         finally:
             if upstream is not None:
@@ -1040,6 +1344,9 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
 
     def serve_static(self, path: str) -> None:
+        if path.startswith(("/ghost/", "/office/")) and not variant_route_allowed(path, variant_features()):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "feature_not_in_install_variant"})
+            return
         relative = "index.html" if path in ("/", "") else path.lstrip("/")
         target = (STATIC_DIR / relative).resolve()
         # Component-boundary containment: a string prefix would accept sibling dirs like static-foo.
@@ -1051,11 +1358,16 @@ class Handler(BaseHTTPRequestHandler):
         content_type = {
             ".html": "text/html; charset=utf-8",
             ".js": "application/javascript; charset=utf-8",
+            ".mjs": "application/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8",
             ".svg": "image/svg+xml",
             ".json": "application/json",
         }.get(target.suffix, "application/octet-stream")
         body = target.read_bytes()
+        if target.name == "index.html":
+            public_profile = variant_features()
+            feature_json = json.dumps(public_profile, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
+            body = body.replace(b"<head>", ("<head>\n<script>window.__SINGULARITY_VARIANT__=" + feature_json + ";</script>").encode("utf-8"), 1)
         if target.name == "index.html" and self.access_identity() is not None:
             # Tell the SPA that Access already vouched for this browser, so it does
             # not look for the loopback capability key in the URL fragment.
@@ -1074,6 +1386,11 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self, method: str, path: str, params: dict) -> dict | None:
         app = self.app
         if method == "GET":
+            if path == "/api/features":
+                return variant_features()
+            if path == "/api/native/windows/readiness":
+                from native_readiness import report
+                return report(app.config)
             if path == "/api/harness/office":
                 from office_bridge import office_status
                 return office_status()
@@ -1081,6 +1398,8 @@ class Handler(BaseHTTPRequestHandler):
                 from repo_query_usage import from_environment
                 return from_environment([r["root"] for r in app.repo_rows()["repositories"] if r.get("root")])
             if path == "/api/freebuff/allowance":
+                if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+                    return {"available": False, "error": "not_part_of_native_gui_subscription_usage"}
                 from freebuff_allowance import get_allowance
                 return get_allowance()
             if path.startswith("/api/harness"):
@@ -1088,6 +1407,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise UpstreamError("harness telemetry module unavailable")
                 return app.harness.get(path, params)
             if path == "/api/openchamber/telemetry":
+                if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+                    return {"available": False, "reason": "unverified_provider_wide_usage_not_native_subscription_usage"}
                 configured_summary = os.environ.get("SINGULARITY_OPENCHAMBER_SUMMARY_FILE", "").strip()
                 if not configured_summary:
                     return {"available": False, "reason": "OpenChamber summary is not configured"}
@@ -2118,6 +2439,14 @@ def main(argv: list[str]) -> int:
         args.check = True
 
     config = Config.load(Path(args.config))
+    # No native dashboard, connector install or secret issuance with the wrong
+    # RepoQL binary. This check must run before App or the HTTP listener exists.
+    if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+        from native_repoql_gate import check_native_repoql
+        verdict = check_native_repoql(config)
+        if not verdict["ok"]:
+            print(json.dumps({"release_blocked": "repoql_incompatible", **verdict}), file=sys.stderr)
+            return 2
     if args.command == "harness":
         if Harness is None:
             print(json.dumps({"ok": False, "error": "harness telemetry module unavailable"}))

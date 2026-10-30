@@ -149,6 +149,21 @@ Do not silently overwrite verified knowledge with conversational claims.
 When superseding knowledge, preserve the previous version where
 the configured mechanism supports it.
 
+## Native Windows MCP and Kanban/Agent Chat availability
+
+For native Windows variants, RepoQL and Kanzo are two **distinct MCP servers**.
+Claude Code uses project `.mcp.json`, while OpenChamber/OpenCode 2 uses
+`opencode.json` with `mcp.servers`. Never assume either server is connected
+merely because a manifest or agent definition exists. Use RepoQL for indexed
+code evidence and concepts, Kanzo for durable board/task changes, and the
+separate authenticated Agent Chat relay for agent messages. Verify tool
+registration and read-after-write for each; never fabricate a card, message,
+connector result or memory. The dashboard must attribute usage only to the
+installed GUI and report authoritative quota as unknown when unavailable.
+Ghost and Office are **required** only for variants 2/4; their process and
+integration health must be independently verified. A zero-Claude-worker state
+never authorizes a paid provider or a synthetic background worker.
+
 ## Using project tools
 
 Use the tools available in the active runtime.

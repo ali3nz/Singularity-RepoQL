@@ -1,0 +1,17 @@
+digraph ClaudeComplete {
+  graph [rankdir=LR bgcolor="#0B1220" pad=0.30 nodesep=0.40 ranksep=0.68 fontname="DejaVu Sans" fontcolor="#DAE8F2" label="CLAUDE CODE COMPLETE  |  SYSTEM ARCHITECTURE" labelloc=t fontsize=22];
+  node [shape=box style="rounded,filled" fillcolor="#17253A" color="#49647E" fontcolor="#F3F7FC" fontname="DejaVu Sans" fontsize=12 penwidth=1.2 margin="0.20,0.15"];
+  edge [color="#7A95AA" arrowsize=0.75 penwidth=1.5];
+  gui [label="NATIVE CLAUDE DESKTOP\nCode tab" fillcolor="#245E9C" color="#65B6F2" fontsize=16];
+  agent [label="17 Singularity agents\n10 Singularity skills"];
+  plugin [label="Official RepoQL plugin\n17 plugin skills"];
+  hooks [label="Lifecycle + Office hooks\nNative configuration"];
+  tencent [label="Tencent MemoryCore\nScoped delegated + parent memory" fillcolor="#4E2755" color="#CA82D2"];
+  repoql [label="RepoQL 1.7.18\nIndexed source and docs" fillcolor="#153D62" color="#69C2ED"];
+  kanzo [label="Kanzo MCP\nTasks and boards" fillcolor="#285A46" color="#7FD6AE"];
+  office [label="Claude Office\nEvent visualization" fillcolor="#68492E" color="#D5B181"];
+  ghost [label="Ghost\nIsolated identity + lifecycle" fillcolor="#54334D" color="#D2A0C3"];
+  gui -> agent; gui -> plugin; gui -> kanzo;
+  agent -> hooks; hooks -> tencent; hooks -> office; agent -> ghost; plugin -> repoql;
+  tencent -> repoql [label="independent revision checks" fontcolor="#AEBBC9" fontsize=10 style=dashed dir=both constraint=false];
+}

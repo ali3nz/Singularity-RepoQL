@@ -2,7 +2,7 @@
 
 This connector copies a Tencent MemoryCore store into a RepoQL workspace, so that you and your agents can search what the store remembered, when it remembered it and in which session, beside the code.
 
-The store has no API that reads its records back, so this connector reads the store's own files from the data folder on this machine: the `records/` JSONL shards (L1), the `scene_blocks/` files under each profile (L2) and the `persona*.md` files under each profile (L3). It sends no request, uses no secret, and never writes to the store's folder: the store's service is the folder's only writer.
+The store has no API that reads its records back, so this connector reads the store's own files from the data folder on this machine: the `records/` JSONL shards (L1), the `scene_blocks/` files under each profile (L2) and the `persona*.md` files under each profile (L3). It sends no request, uses no secret, and never writes to the store's folder: the store's service is the folder's only writer. Its `fetch` pass reads that source and stores only sanitized output-file records in RepoQL's private import database; `render` publishes those records without reading the source.
 
 ## What it reads
 
@@ -16,6 +16,7 @@ The store has no API that reads its records back, so this connector reads the st
 - Of each record: `source_message_ids` (pointers into the conversation logs, which are not in the copy), `sessionKey` (it repeats `sessionId`), and every `metadata` member except the two activity instants.
 - A profile folder whose name states no team and an agent: nothing of it is copied, and the import names it as a gap until the store names it properly.
 - The text of a file that holds a zero byte, which no workspace file can hold: it is left out and named as a gap.
+- An incomplete JSONL line or a source file that changes while it is read: the previous copy of that source file is retained and the import reports a gap until a complete read succeeds.
 
 ## What the copy holds about a person
 
@@ -46,7 +47,7 @@ The manifest suggests `~/tencent-memory/data`; keep it or write your own. The co
 
 ## What it needs
 
-Nothing else. No network host is granted, no secret is stored, and no inference is used. The import is swept every 15 minutes, and a full sweep (which removes what the store removed) runs once a day.
+Nothing else. No network host is granted, no secret is stored, and no inference is used. Each 15-minute pass reads the complete source listing. RepoQL removes files that the store removed only after the source listing completes unchanged; an interrupted or failed pass does not remove prior records.
 
 ## Search by meaning
 
@@ -55,7 +56,7 @@ The default is `embedding: full`: each file's text is sent to the embedding serv
 ## Trying it
 
 ```
-rql connector test connector.ts --fixtures lifecycle.json      # the suite: 4 generations, no host, no network
+rql connector test connectors/memorycore/connector.ts --fixtures connectors/memorycore/suite.json  # offline fixture generations
 rql connector pack connector.ts --id Tencent.MemoryCore --version 1.0.0 --authors <you>
 rql connector install Tencent.MemoryCore.1.0.0.nupkg --source-root data=<the data folder>
 rql import memorycore://data

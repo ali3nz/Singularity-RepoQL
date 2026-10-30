@@ -37,6 +37,14 @@ import {
 
 const HOOK_SCRIPT = "/srv/singularity/adapters/claude-code/memory-hook.mjs";
 
+// The legacy Docker/Ubuntu installer refuses to run on Windows before it
+// reaches any option/flag logic (NATIVE_WINDOWS_INSTALLER_INCOMPLETE, rc 5);
+// the supported Windows path is native/windows/manage_native_windows.ps1.
+// Tests that exercise the POSIX installer's CLI therefore do not apply here.
+const LEGACY_INSTALLER_SKIP = process.platform === "win32"
+  ? "the legacy Docker/Ubuntu installer refuses to run on Windows (NATIVE_WINDOWS_INSTALLER_INCOMPLETE, rc 5); the native Windows path is manage_native_windows.ps1"
+  : false;
+
 test("hook command recognition is precise", () => {
   assert.equal(isSingularityHookCommand(`node ${HOOK_SCRIPT} subagent-start`), true);
   assert.equal(isSingularityHookCommand(`node ${HOOK_SCRIPT} subagent-stop`), true);
@@ -54,9 +62,13 @@ test("ensureMemoryIntegration adds both hook events and env without touching unr
       SubagentStop: [{ hooks: [{ type: "command", command: "node /other/officestop.mjs" }] }],
     },
   };
+  // The command shape is platform-specific (Windows uses exec form with
+  // node.exe + args). This test asserts POSIX command strings, so pin the
+  // platform instead of depending on the host running the suite.
   const { settings, changed } = ensureMemoryIntegration(existing, {
     scriptPath: HOOK_SCRIPT,
     env: integrationEnv("/srv/singularity"),
+    platform: "linux",
   });
   assert.equal(changed, true);
   assert.equal(settings.model, "opus", "unrelated settings preserved");
@@ -67,7 +79,7 @@ test("ensureMemoryIntegration adds both hook events and env without touching unr
   // env: ours added when absent, user's existing value never overwritten
   assert.equal(settings.env.EXISTING_VAR, "keep-me");
   assert.equal(settings.env.SINGULARITY_REPO_ROOT, "/user/override");
-  assert.equal(settings.env.SINGULARITY_MEMORY_CONFIG, "/srv/singularity/data/opencode/config/product-secrets/memory.json");
+  assert.equal(settings.env.SINGULARITY_MEMORY_CONFIG, join("/srv/singularity", "data/opencode/config/product-secrets/memory.json"));
 });
 
 test("re-running ensureMemoryIntegration is a no-op (idempotency)", () => {
@@ -110,8 +122,9 @@ test("removeMemoryIntegration keeps env keys that were edited by the user afterw
 });
 
 test("settingsPathFor picks user vs project layout", () => {
-  assert.equal(settingsPathFor("user", "/home/u", "/proj"), "/home/u/.claude/settings.json");
-  assert.equal(settingsPathFor("project", "/home/u", "/proj"), "/proj/.claude/settings.json");
+  // Compare through join() so the assertion holds on both path flavours.
+  assert.equal(settingsPathFor("user", "/home/u", "/proj"), join("/home/u", ".claude/settings.json"));
+  assert.equal(settingsPathFor("project", "/home/u", "/proj"), join("/proj", ".claude/settings.json"));
 });
 
 // ── installer (pure planning + file application) ─────────────────────────────
@@ -215,7 +228,7 @@ test("applySettings refuses a malformed existing settings file and preserves it;
   assert.ok(existsSync(missingPath));
 });
 
-test("credential-bearing files are 0600 with pre-existing modes corrected (POSIX)", { skip: process.platform === "win32" }, () => {
+test("credential-bearing files are 0600 with pre-existing modes corrected (POSIX)", { skip: process.platform === "win32" ? "POSIX mode bits do not exist on Windows; this legacy installer path does not run on Windows" : false }, () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-perm-"));
   const settingsPath = join(dir, "settings.json");
   // A pre-existing group/world-readable settings file with a token inside:
@@ -260,8 +273,8 @@ test("parseFlags: defaults, project scope paths, team/user overrides, unknown fl
   assert.equal(f1.agentsTarget, join(home, ".claude/agents"));
   assert.equal(f1.mainMemory, null, "main-agent memory is an explicit decision (no silent default in flags)");
   const f2 = parseFlags(["--scope", "project", "--project-dir", "/proj"], home, "/proj");
-  assert.equal(f2.settingsPath, "/proj/.claude/settings.json");
-  assert.equal(f2.agentsTarget, "/proj/.claude/agents");
+  assert.equal(f2.settingsPath, resolve("/proj", ".claude/settings.json"));
+  assert.equal(f2.agentsTarget, resolve("/proj", ".claude/agents"));
   const f3 = parseFlags(["--team", "t1", "--user", "u1"], home, "/proj");
   assert.equal(f3.team, "t1");
   assert.equal(f3.user, "u1");
@@ -419,7 +432,7 @@ test("parseOptionChoice accepts only option ids 1..4", () => {
   assert.equal(parseOptionChoice("y"), null);
 });
 
-test("install without an option selection stops unmodified (no unnumbered base install)", async () => {
+test("install without an option selection stops unmodified (no unnumbered base install)", { skip: LEGACY_INSTALLER_SKIP }, async () => {
   const logs = [];
   // capture output: runInstall logs module-side; instrument by monkeypatching
   // console via stream? Simpler: run in a non-TTY CI-like environment and assert rc.
@@ -466,7 +479,7 @@ test("a re-install MERGES the earlier replace proof: uninstall restores the user
   assert.equal(readFileSync(target, "utf8"), original);
 });
 
-test("uninstall --dry-run PLANS the settings removal it would perform", () => {
+test("uninstall --dry-run PLANS the settings removal it would perform", { skip: LEGACY_INSTALLER_SKIP }, () => {
   // Regression: the dry run reported "settings: nothing to change" while the
   // real uninstall removed the integration hooks.
   const home = mkdtempSync(join(tmpdir(), "cc-uninstall-dry-"));

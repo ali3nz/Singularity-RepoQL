@@ -319,8 +319,30 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
   // (root may be a disposable fixture, not the product tree).
   const routerScript = fileURLToPath(new URL("./extraction-failover.mjs", import.meta.url));
 
-  const portA = pickPort(), portB = pickPort();
-  const [srvA, srvB] = await Promise.all([mockServer("A", portA), mockServer("B", portB)]);
+  // Open both mock upstreams under the same guard as the proof. A busy port
+  // (EADDRINUSE) is retried on a fresh port; if the pair still cannot be
+  // opened, whatever DID open is closed before returning. The earlier code
+  // awaited both binds outside the try/finally, so one failed bind left the
+  // other listening and kept the test process alive forever.
+  const closeServer = (s) => { try { s?.close(); s?.closeAllConnections?.(); } catch { /* already closed */ } };
+  const openMock = async (tag) => {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const port = pickPort();
+      try { return { port, srv: await mockServer(tag, port) }; }
+      catch (e) { lastErr = e; if (e?.code !== "EADDRINUSE") break; }
+    }
+    throw lastErr || new Error("no free port for a mock upstream");
+  };
+  let portA, portB, srvA = null, srvB = null;
+  try {
+    ({ port: portA, srv: srvA } = await openMock("A"));
+    ({ port: portB, srv: srvB } = await openMock("B"));
+  } catch (e) {
+    closeServer(srvA);
+    closeServer(srvB);
+    return { ok: false, state: "INCOMPLETE", detail: `the controlled fallback proof could not open its local upstreams: ${String(e?.code || e?.message || e).slice(0, 120)}` };
+  }
   const secretsDir = mkdtempSync(join(tmpdir(), "sing-failover-secrets-"));
   writeFileSync(join(secretsDir, "groq-api-key"), "mock-key-A", "utf8");
   writeFileSync(join(secretsDir, "cohere-api-key"), "mock-key-B", "utf8");
@@ -415,8 +437,8 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
     return { ok: false, state: "INCOMPLETE", detail: `the controlled fallback proof did not hold: ${String(e?.message || e).slice(0, 220)}` };
   } finally {
     for (const c of children) { try { c.kill("SIGKILL"); } catch {} }
-    try { srvA.close(); } catch {}
-    try { srvB.close(); } catch {}
+    closeServer(srvA);
+    closeServer(srvB);
   }
 }
 

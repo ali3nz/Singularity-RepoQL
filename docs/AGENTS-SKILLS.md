@@ -112,6 +112,18 @@ installed by options 2 and 4; this repository carries the office plugin and comp
 file, not the visualizer source. Ghost ships here as an agent definition plus its
 `ghost/` runtime helpers and is enabled only by options 2 and 4.
 
+## Native Windows Claude Code skills (Milestone 32)
+
+The native Windows Claude configuration installer **now supports installation** of
+all ten above skills under `~/.claude/skills/<slug>/SKILL.md` for the complete
+Claude Code variant. The lean Claude variant installs nine, excluding
+`claude-office-visual`. It canonicalizes skill frontmatter names and replaces
+the Office skill's Linux Compose deployment wording in the **installed** copy
+only. Source inclusion does not prove installation in the Desktop Code tab;
+Codex must execute the Windows installer and confirm skill discovery, skill
+execution and guarded rollback. These are distinct from the separately licensed
+RepoQL plugin skills, which are not bundled.
+
 ## Claude Code adapter
 
 `adapters/claude-code/agents/` ships all **17 portable roles** as `singularity-*`

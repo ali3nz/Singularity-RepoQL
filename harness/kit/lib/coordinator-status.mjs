@@ -5,7 +5,7 @@
 // verify the cmdline is actually a run-loop orchestrate.mjs process, and
 // surface the current run id where possible. The Watchdog (§12+) MUST reuse
 // this same function so its reports never lie about liveness either.
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import * as SLOTS from "./run-slots.mjs"; // ticket 189 K1/K2: slot locks + active-run registry
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ export const COORDINATOR_STATES = Object.freeze({
   NOT_RUNNING: "NOT_RUNNING", // no lock file
   STALE_LOCK: "STALE_LOCK", // lock exists but pid dead/garbage/self
   MULTIPLE: "MULTIPLE",     // more than one live coordinator process
+  UNVERIFIED: "UNVERIFIED", // platform cannot prove native process ownership
 });
 
 // Injectable for tests: default reads the real /proc filesystem.
@@ -41,7 +42,7 @@ function scanCoordinatorPids({ listDir = null } = {}) {
   }
   const pids = [];
   try {
-    for (const ent of existsSync("/proc") ? require("node:fs").readdirSync("/proc") : []) {
+    for (const ent of existsSync("/proc") ? readdirSync("/proc") : []) {
       if (!/^\d+$/.test(ent)) continue;
       const cmd = procCmdline(Number(ent));
       if (cmd && cmd.includes("orchestrate.mjs")) {
@@ -92,7 +93,13 @@ function slotCoordinatorStatus(runsDir, { runId = null, isAlive } = {}) {
 }
 
 // Returns { state, pid, runId, detail } — never throws.
-export function coordinatorStatus(runsDir, { listDir = null, lockFileName = "COORDINATOR.lock", runId: forRunId = null, isAlive = null } = {}) {
+export function coordinatorStatus(runsDir, { listDir = null, lockFileName = "COORDINATOR.lock", runId: forRunId = null, isAlive = null, platform = process.platform } = {}) {
+  // A PID file, absent /proc, or a caller-supplied callback is not Windows
+  // ownership evidence. Until the Rust authority IPC is connected, never
+  // assert that a coordinator is dead, stale, or free to replace.
+  if (process.platform !== "linux" || platform !== "linux") {
+    return { state: COORDINATOR_STATES.UNVERIFIED, pid: null, runId: forRunId, detail: "native Rust coordinator ownership proof required" };
+  }
   if (!listDir && slotAware(runsDir)) return slotCoordinatorStatus(runsDir, { runId: forRunId, isAlive });
   const lockFile = join(runsDir, lockFileName);
   let lockPid = null;
@@ -144,6 +151,8 @@ export function renderCoordinatorLine(runsDir, opts = {}) {
       return "Coordinator: NOT RUNNING";
     case COORDINATOR_STATES.STALE_LOCK:
       return `Coordinator: STALE LOCK${cs.pid ? ` pid=${cs.pid}` : ""} (${cs.detail})`;
+    case COORDINATOR_STATES.UNVERIFIED:
+      return "Coordinator: UNVERIFIED (native Rust ownership proof required)";
     case COORDINATOR_STATES.MULTIPLE:
       return `Coordinator: MULTIPLE PROCESSES DETECTED (${cs.detail})`;
     default:

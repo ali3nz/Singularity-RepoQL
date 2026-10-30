@@ -1,6 +1,5 @@
 import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric} from './observability.js';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
-import {mountGhost} from './ghost/dashboard.js';
 import {initNavigationUI, navPathFor} from './navigation_ui.js';
 import {renderRepoqlCheatSheet, bindRepoqlCheatSheet} from './repoql_cheatsheet.js';
 import {renderMemoryArchitecturePage, bindMemoryArchitecturePage, renderOrchestraWorkflowPage, bindOrchestraWorkflowPage} from './workflow_graphs.js';
@@ -14,10 +13,14 @@ const CONN = document.getElementById("conn");
 const CONN_LABEL = document.getElementById("connLabel");
 const HOST_LINE = document.getElementById("hostLine");
 
-// repoql-host.service runs with CPUQuota=400% (4 cores). CPU samples are
-// recorded as percent of one core; display them as a percentage of that quota.
-const CPU_QUOTA_CORES = 4;
-const CPU_QUOTA_LABEL = "4-core quota";
+// The legacy Linux host has a 4-core systemd quota. Native Windows does not.
+// Native Rust reports raw process CPU in percent of one logical core; it may
+// exceed 100% for a multicore process, which is correct and must not be capped.
+const nativeInstall = Boolean(window.__SINGULARITY_VARIANT__?.variant);
+const CPU_QUOTA_CORES = nativeInstall ? 1 : 4;
+const CPU_QUOTA_LABEL = nativeInstall ? "one logical core" : "4-core quota";
+const guiUsageName = () => window.__SINGULARITY_VARIANT__?.gui === 'openchamber-desktop'
+  ? 'OpenChamber Desktop' : 'Claude Desktop Code';
 const quotaPct = (value) => (value == null ? value : value / CPU_QUOTA_CORES);
 
 const state = {
@@ -299,6 +302,10 @@ async function route() {
   state.cleanup = null;
   clearTimers();
   const { path, params } = parseRoute();
+  if (!featureAllowed(path)) {
+    APP.innerHTML = '<div class="empty">This component is not included in the selected Singularity installation option.</div>';
+    return;
+  }
   markNav(path);
   if (state.routeEpoch > 1) window.scrollTo(0, 0);
   try {
@@ -314,6 +321,7 @@ async function route() {
     if (path === "/knowledge/connections") return await viewLinks({...params, collection: params.collection || "see_also"}, true);
 
     if (path === "/unified/usage") return await viewUnifiedUsage();
+    if (path === "/native/status" && nativeInstall) return await viewNativeInstallStatus();
     if (path === "/") return await viewDashboard();
     if (path === "/repositories/view") return await viewRepository(params);
     if (path === "/repositories") {
@@ -362,6 +370,7 @@ async function route() {
 }
 
 async function viewGhostOperations() {
+  const {mountGhost} = await import('./ghost/dashboard.js');
   const epoch=state.routeEpoch;
   APP.innerHTML=pageHead('Ghost Operations','Persistent agent · Live activity, schedule, memory, and authorized operator controls') +
     '<section id="ghost-integrated" aria-label="Ghost Operations"><div class="loading">Loading Ghost controls…</div></section>';
@@ -1408,18 +1417,16 @@ async function mountCpu(panel, params) {
           <dl class="kv">
             <dt>Bucket</dt><dd>${data.bucket_seconds >= 60 ? data.bucket_seconds / 60 + " min" : data.bucket_seconds + " s"}</dd>
             <dt>Retention</dt><dd>${data.retention_days} days</dd>
-            <dt>Measured by</dt><dd>systemd timer, 30 s</dd>
+            <dt>Measured by</dt><dd>${nativeInstall?(data.available?'Native Rust Win32 collector':'Native Rust collector (unavailable)'):'systemd timer, 30 s'}</dd>
           </dl>
-          <div class="small muted" style="margin-top:12px">Samples are collected by <span class="mono">repoql-cpu-collector.timer</span>, not by this page.</div>
+          <div class="small muted" style="margin-top:12px">${nativeInstall?'Windows CPU samples are recorded only by the optional native Rust bridge collector. Missing or unverified samples remain gaps; Linux history is never reused.':'Samples are collected by repoql-cpu-collector.timer, not by this page.'}</div>
         </div>
         <div class="block">
           <div class="block-title">Method</div>
           <div class="small muted" style="line-height:1.7">
-            <span class="mono">cpu_pct = Δ(utime+stime) ÷ CLK_TCK ÷ Δseconds × 100</span><br>
-            read from <span class="mono">/proc/&lt;repoql-host-pid&gt;/stat</span>. The collector stores raw
-            process CPU; the dashboard normalizes the display to RepoQL's 4-core CPU quota
-            (<span class="mono">CPUQuota=400%</span>). Whole-host CPU is never reported as RepoQL usage.
-            Periods without measurements stay empty rather than being interpolated.
+            ${nativeInstall
+              ? 'Win32 GetSystemTimes/GetProcessTimes via the Rust bridge: process usage is percentage of one logical core, not systemd quota. History is displayed only from the separate Windows collector database. Missing values stay unknown.'
+              : 'cpu_pct = Δ(utime+stime) ÷ CLK_TCK ÷ Δseconds × 100, read from Linux /proc. Display normalized against the 4-core systemd CPU quota (CPUQuota=400%). Missing values stay unknown.'}
           </div>
         </div>
       </div>
@@ -1958,6 +1965,20 @@ async function viewConnectors() {
 
 // -------------------------------------------------------------- bootstrapping
 
+const selectedFeatures = window.__SINGULARITY_VARIANT__?.features || null;
+function featureAllowed(path) {
+  if (!selectedFeatures) return true; // Legacy source/standalone test harness
+  if (path === "/ghost" || path.startsWith("/ghost/")) return selectedFeatures.ghost === true;
+  if (path === "/office" || path.startsWith("/office/")) return selectedFeatures.office === true;
+  if (path === "/kanban") return selectedFeatures.kanban === true;
+  if (path === "/agentchat") return selectedFeatures.agent_chat === true;
+  return true;
+}
+for (const link of document.querySelectorAll('[data-nav]')) {
+  if (!featureAllowed(link.dataset.nav)) link.hidden = true;
+  if (link.dataset.nav === '/native/status') link.hidden = !nativeInstall;
+  if (link.dataset.nav === '/unified/usage' && nativeInstall) link.textContent = guiUsageName()+' Usage';
+}
 initNavigationUI();
 captureSecret();
 // window.__RQDASH_ACCESS__ is set by the server when a Cloudflare Access JWT
@@ -2403,7 +2424,7 @@ async function viewOffice() {
   const frame_src = st.embed_url;
   if (!frame_src) {
     body.innerHTML = `<div class="block"><div class="block-title">Office <span class="tag amber">no launch URL</span></div>
-      <p class="muted">Set CLAUDE_OFFICE_EMBED_URL on the dashboard service first.</p></div>`;
+      <p class="muted">Configure the Office panel credential source on the dashboard service (see the Windows Office rollback guide).</p></div>`;
     return;
   }
   await api('/api/embed/office/handshake');
@@ -2671,12 +2692,24 @@ function renderOpenChamberCoverage(payload, selectedDays = 90) {
     ${dataTable(['Provider','Calls','With tokens','Total tokens','Unmeasured'],rows,([name,r])=>`<tr><td>${esc(displayLabel(name, 'Unattributed'))}</td><td>${fmt(r.calls)}</td><td>${fmt(r.measured_calls)}</td><td>${fmt(r.tokens)}</td><td>${fmt(r.missing_token_calls)}</td></tr>`,'No sources measured')}`;
 }
 
+async function viewNativeInstallStatus(){
+  if (!nativeInstall) return;
+  const profile=window.__SINGULARITY_VARIANT__;
+  APP.innerHTML=pageHead('Native Windows integration status', 'Read-only checks are not end-to-end acceptance.')+
+    '<div id="native-status-body" class="block">Checking configured services…</div>';
+  const result=await api('/api/native/windows/readiness');
+  const rows=Object.entries(result.services||{});
+  document.getElementById('native-status-body').innerHTML=`<p class="muted small">Installation option ${esc(profile.variant)} · ${esc(guiUsageName())} · RepoQL ${esc(result.repoql_required_version||'unknown')}. Service reachability does not prove indexing, capture, restart recovery, subscription metering or GUI integration.</p>
+    <div class="table-wrap"><table class="data"><thead><tr><th>Component</th><th>Evidence</th><th>Reason</th></tr></thead><tbody>${rows.map(([key,value])=>`<tr><td>${esc(key.replaceAll('_',' '))}</td><td>${pill(value.state)}</td><td>${esc(value.reason||'Specific local probe passed; functional acceptance pending')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
 async function viewUnifiedUsage() {
-  APP.innerHTML=pageHead('Fleet AI Usage', 'Measured tokens and source coverage. Financial estimates are not displayed.')+`
-    <div class="unified-topline"><span class="live-beacon"><i></i> FLEET TELEMETRY</span><span class="muted small">Measured receipts only · no inferred tokens</span></div>
+  const nativeGui=nativeInstall;
+  APP.innerHTML=pageHead(nativeGui?guiUsageName()+' Usage':'Fleet AI Usage', nativeGui?'Only locally reported receipts attributable to this installed GUI. Subscription allowances and complete totals are not available.':'Measured tokens and source coverage. Financial estimates are not displayed.')+`
+    <div class="unified-topline"><span class="live-beacon"><i></i> ${nativeGui?'NATIVE GUI RECEIPTS':'FLEET TELEMETRY'}</span><span class="muted small">Reported receipts only · no inferred tokens</span></div>
     <div class="toolbar"><select id="usage-period" class="select"><option value="1">1 day</option><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select><button id="usage-reload" class="btn primary">Refresh</button><span id="usage-age" class="muted small"></span></div>
     <div id="usage-summary" class="grid cols-3"></div>
-    <div class="block" style="margin-top:14px"><div class="block-title">Daily input and output tokens</div><div id="usage-token-chart" class="ob-chart"></div></div>
+    <div class="block" id="usage-history-block" style="margin-top:14px"><div class="block-title">Daily input and output tokens</div><div id="usage-token-chart" class="ob-chart"></div></div>
     <details class="block" style="margin-top:14px"><summary>OpenChamber provider breakdown · separate coverage</summary><div id="usage-openchamber">Loading source coverage…</div></details>
     <details class="block" id="fb-details" style="margin-top:14px">
       <summary>Freebuff token breakdown and receipts</summary>
@@ -2694,6 +2727,17 @@ async function viewUnifiedUsage() {
     <details class="block" style="margin-top:14px"><summary>Source coverage and collection health</summary>
       <p class="muted small">Sol consultations run through CatGPT: their thinking tokens are free and unmetered, and CatGPT send/receive receipts are not counted as model or Codex Pro token usage. Sol review activity is reported by Harness telemetry.</p><div id="usage-sources"></div></details>
     <details class="block" style="margin-top:14px"><summary>Recent token receipts</summary><div class="table-wrap"><div id="usage-events"></div></div></details>`;
+  if(nativeGui){
+    // Native Windows does not surface fleet/Freebuff or provider-wide usage as
+    // desktop-subscription metrics. A recent page cannot produce a daily chart.
+    document.getElementById('fb-details')?.remove();
+    document.getElementById('fb-allowance')?.closest('details')?.remove();
+    document.getElementById('usage-openchamber')?.closest('details')?.remove();
+    document.getElementById('usage-history-block')?.remove();
+    const note=document.createElement('p');note.className='muted small';
+    note.textContent=guiUsageName()+' receipts: recent source-attributed samples only. Other GUI, Freebuff and unrelated provider traffic are excluded. '+(window.__SINGULARITY_VARIANT__?.gui==='openchamber-desktop'?'For authoritative provider plan quotas, open OpenChamber Settings → Usage; this dashboard does not claim to mirror those limits.':'Claude Code hook usage does not prove a subscription allowance or complete desktop-only token history.');
+    document.getElementById('usage-summary')?.before(note);
+  }
   let disposed=false,seq=0;
   const reportedLabel=v=>displayLabel(v);
   const box=(label,value,sub='')=>`<div class="block usage-stat"><div class="block-title">${esc(label)}</div><div class="unified-metric">${esc(value)}</div><div class="muted small">${esc(sub)}</div></div>`;
@@ -2772,26 +2816,30 @@ async function viewUnifiedUsage() {
     }catch(e){toast('Freebuff filter',e.message,'error');}
   }
   async function load(){const id=++seq,days=document.getElementById('usage-period').value;
-    const [u,oc,a]=await Promise.all([api('/api/unified/usage?'+fbFilterQuery().q),api('/api/openchamber/telemetry').catch(e=>({available:false,reason:e.message})),api('/api/freebuff/allowance').catch(e=>({available:false,error:e.message}))]);
+    const [u,oc,a]=await Promise.all([api('/api/unified/usage?'+fbFilterQuery().q),nativeGui?Promise.resolve(null):api('/api/openchamber/telemetry').catch(e=>({available:false,reason:e.message})),nativeGui?Promise.resolve(null):api('/api/freebuff/allowance').catch(e=>({available:false,error:e.message}))]);
     if(!available()||id!==seq)return;
     if(u?.available===false)throw new Error(u.error||'Unified usage service unavailable');
-    document.getElementById('usage-openchamber').innerHTML=renderOpenChamberCoverage(oc,Number(days)||30);
-    document.getElementById('usage-summary').innerHTML=box('Input tokens',fmt(u.input_tokens_recorded),'Measured across '+fmt(u.input_token_events)+' invocation records')+
-      box('Output tokens',fmt(u.output_tokens_recorded),'Measured across '+fmt(u.output_token_events)+' invocation records')+
-      box('Sources with data',fmt((u.sources||[]).filter(s=>s.events>0).length)+' / '+fmt((u.sources||[]).length),'Unavailable sources are not zero consumption');
+    if(!nativeGui) document.getElementById('usage-openchamber').innerHTML=renderOpenChamberCoverage(oc,Number(days)||30);
+    document.getElementById('usage-summary').innerHTML=nativeGui
+      ? box('Total input tokens','Unknown','Recent events are not a complete history')+
+        box('Total output tokens','Unknown','Provider quotas and subscription limits are not exposed')+
+        box('Attributed receipts',fmt((u.recent||[]).length),'Recent sample only · '+guiUsageName())
+      : box('Input tokens',fmt(u.input_tokens_recorded),'Measured across '+fmt(u.input_token_events)+' invocation records')+
+        box('Output tokens',fmt(u.output_tokens_recorded),'Measured across '+fmt(u.output_token_events)+' invocation records')+
+        box('Sources with data',fmt((u.sources||[]).filter(s=>s.events>0).length)+' / '+fmt((u.sources||[]).length),'Unavailable sources are not zero consumption');
     document.getElementById('usage-age').textContent='Checked '+relative(u.collected_at);
     document.getElementById('usage-sources').innerHTML=`<div class="table-wrap"><table class="data"><thead><tr><th>Source</th><th>State</th><th>Events</th><th>Last observed</th></tr></thead><tbody>`+
-      (u.sources||[]).map(s=>`<tr><td>${esc(s.label)}</td><td>${pill(s.status)}</td><td>${fmt(s.events)}</td><td>${esc(s.latest_at||'No recorded sample')}</td></tr>`).join('')+'</tbody></table></div>';
+      (u.sources||[]).map(s=>`<tr><td>${esc(s.label)}</td><td>${pill(s.status)}</td><td>${fmt(s.events)}</td><td>${esc(s.latest_at||'No recorded sample')}</td></tr>`).join('')+'</tbody></table></div>'+(nativeGui?`<p class="muted small">${esc(u.note||'Native GUI token receipts not yet verified.')}</p>`:'');
     const daily=u.daily||[];
-    sparkChart(document.getElementById('usage-token-chart'),daily,[{key:'input_tokens',label:'Input',color:'#4aabff'},{key:'output_tokens',label:'Output',color:'#bd96ff'}],{empty:'No timestamped token measurements available. Connect collectors before trends can appear.'});
+    if(!nativeGui) sparkChart(document.getElementById('usage-token-chart'),daily,[{key:'input_tokens',label:'Input',color:'#4aabff'},{key:'output_tokens',label:'Output',color:'#bd96ff'}],{empty:'No timestamped token measurements available. Connect collectors before trends can appear.'});
     document.getElementById('usage-events').innerHTML=`<table class="data"><thead><tr><th>Time</th><th>Source</th><th>Model</th><th>Input</th><th>Output</th></tr></thead><tbody>`+
       (u.recent||[]).filter(e=>numeric(e.input_tokens)!==null||numeric(e.output_tokens)!==null).slice(0,50).map(e=>`<tr><td class="small">${esc(e.timestamp)}</td><td>${esc(displayLabel(e.source))}</td><td>${esc(reportedLabel(e.model))}</td><td>${fmt(e.input_tokens)}</td><td>${fmt(e.output_tokens)}</td></tr>`).join('')+'</tbody></table><p class="muted small">Newest 50 records with reported input or output tokens. Records without tokens remain in source coverage. Missing values are not estimated.</p>';
     fbData=u.freebuff&&typeof u.freebuff==='object'?u.freebuff:null;
-    if(fbData)renderFreebuff();else document.getElementById('fb-summary').innerHTML=`<p>${pill('unavailable')} Freebuff receipt section unavailable in this response.</p>`;
+    if(fbData)renderFreebuff();else if(document.getElementById('fb-summary')) document.getElementById('fb-summary').innerHTML=`<p>${pill('unavailable')} Freebuff receipt section unavailable in this response.</p>`;
     renderAllowance(a);
   }
-  document.getElementById('fb-host').addEventListener('change',applyFbFilter);
-  document.getElementById('fb-model').addEventListener('change',applyFbFilter);
+  document.getElementById('fb-host')?.addEventListener('change',applyFbFilter);
+  document.getElementById('fb-model')?.addEventListener('change',applyFbFilter);
   const refresh=()=>load().catch(e=>{if(available())toast('Usage',e.message,'error')});
   document.getElementById('usage-reload').addEventListener('click',refresh);
   document.getElementById('usage-period').addEventListener('change',refresh);
@@ -2804,6 +2852,8 @@ async function viewUnifiedUsage() {
 // module only ever runs the bootstrap above; no view, fetch or timer starts.
 export const __editorTestSurface = {rowsOf, contentOf, createDiscoveryGuard, applyHarnessRefresh, harnessInterval,
   displayLabel, pill, statusPill, categoryChip, metricBlock,
+  get nativeUsageGui(){return nativeInstall ? guiUsageName() : null;},
+  get cpuScale(){return {cores:CPU_QUOTA_CORES,label:CPU_QUOTA_LABEL};},
   diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS,
   debounceForRoute, sequencer,
   get refreshMs(){return harnessRefreshMs;}};

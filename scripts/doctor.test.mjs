@@ -303,7 +303,18 @@ test("the dashboard is claimed only when it is installed (opt-in adjunct)", asyn
     const withDash = await doctor({ env: { ...base, SINGULARITY_DASHBOARD_DIR: dash } });
     const row = withDash.find((s) => /dashboard/i.test(s.name));
     assert.ok(row, "an installed dashboard is reported");
-    assert.equal(row.state, "VERIFIED");
-    assert.match(row.detail, /opt-in/);
+    assert.equal(row.state, "CONFIGURED");
+    assert.match(row.detail, /NOT verified/);
+    const filePath = join(dash, "file.txt");
+    writeFileSync(filePath, "not a dashboard directory");
+    const withFile = await doctor({ env: { ...base, SINGULARITY_DASHBOARD_DIR: filePath } });
+    assert.equal(withFile.some((s) => s.name === "dashboard"), false);
+    const symlink = join(dir, "dashboard-link");
+    try {
+      const { symlinkSync } = await import('node:fs');
+      symlinkSync(dash, symlink, process.platform === 'win32' ? 'junction' : 'dir');
+      const withLink = await doctor({ env: { ...base, SINGULARITY_DASHBOARD_DIR: symlink } });
+      assert.equal(withLink.some((s) => s.name === "dashboard"), false);
+    } catch (error) { if (error?.code !== 'EPERM' && error?.code !== 'EACCES') throw error; }
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(dash, { recursive: true, force: true }); }
 });

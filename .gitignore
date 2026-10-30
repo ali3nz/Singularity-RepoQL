@@ -41,6 +41,9 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Rust outputs are local; dependency lockfiles remain source-controlled.
+target/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -54,3 +57,10 @@ tests/forbidden-refs.local.txt
 
 # Harness engine runtime state (created on first run; never shipped)
 harness/kit/runs/
+
+# RepoQL: the release export never ships .repoql/ (host state and index cache
+# are local); concepts under .repoql/concepts/ stay committable on purpose.
+.repoql/*
+!.repoql/.gitignore
+!.repoql/concepts/
+.pytest_cache/

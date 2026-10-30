@@ -19,24 +19,47 @@ def public_office_url() -> str | None:
     return value
 
 
-def embed_url() -> str | None:
-    """Launch on the dashboard origin so Office needs no second Access login."""
-    value = os.environ.get("CLAUDE_OFFICE_EMBED_URL", "").strip()
-    if not value:
+def validated_legacy_embed_token(*, strict: bool = True) -> str | None:
+    """Return an existing Office launch token only for its configured HTTPS host.
+
+    Do not log or return this value from any dashboard HTTP endpoint. This
+    supports an explicit native-Windows rollback, not authentication bypass.
+    """
+    value = os.environ.get("SINGULARITY_OFFICE_EMBED_URL", "").strip() or os.environ.get("CLAUDE_OFFICE_EMBED_URL", "").strip()
+    public = public_office_url()
+    if not value or not public:
         return None
     parsed = urlsplit(value)
-    public = public_office_url()
-    if not public:
-        return None
     target = urlsplit(public)
     if (parsed.scheme != "https" or parsed.netloc != target.netloc
             or parsed.username or parsed.password or parsed.fragment
             or parsed.path not in ("", "/")):
         return None
-    query = parse_qs(parsed.query)
-    if len(query.get("token", [])) != 1 or not query["token"][0] or query.get("embed") != ["1"]:
+    pairs = parse_qs(parsed.query, keep_blank_values=True)
+    # Office may pass an optional room selection through its established URL.
+    # Do not allow arbitrary additional query parameters in native mode.
+    if (strict and (set(pairs) - {"token", "embed", "room"})) or len(pairs.get("token", [])) != 1 or pairs.get("embed") != ["1"] or (strict and "room" in pairs and pairs["room"] not in (["modern"], ["dm"])):
         return None
-    return "/embed/office/?embed=1"
+    token = pairs["token"][0]
+    if not token or len(token) > 4096 or any(c in token for c in "\r\n"):
+        return None
+    return token
+
+
+def embed_url() -> str | None:
+    """Return a same-origin iframe URL, never the upstream bearer token."""
+    if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+        # Prefer the proven production token-URL method by default. The
+        # private-file mechanism remains an explicit optional alternative.
+        from native_panel_proxy import backend_key
+        try:
+            backend_key("office")
+        except (OSError, PermissionError, ValueError):
+            return None
+        return "/embed/office/?embed=1"
+    # Preserve the pre-port Linux launch semantics (including unrelated
+    # extra query parameters), while native rollback remains stricter.
+    return "/embed/office/?embed=1" if validated_legacy_embed_token(strict=False) else None
 
 
 def office_status() -> dict:

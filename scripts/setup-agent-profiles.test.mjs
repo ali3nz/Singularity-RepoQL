@@ -350,3 +350,26 @@ test("the shipped OpenChamber roster is fully provisionable, Ghost excepted", ()
     "thinker",
   ]);
 });
+
+
+test('verifyOnly on selected role never seeds missing and writes no ledger', async () => {
+  const fx=fixture({board:md('B'),explore:md('E')});
+  const calls=[];
+  const result=await provisionAgentProfiles({agentsDir:fx.agentsDir,ledgerPath:fx.ledgerPath,
+    identityMap:{board:{team_id:'T',user_id:'U',agent_id:'board'}},
+    agentNames:['board'],verifyOnly:true,cfg,fetchImpl:liveFetch(calls),now});
+  assert.deepEqual(result.results.map(x=>[x.name,x.status]),[['board','failed']]);
+  assert.equal(calls.length,1);
+  assert.ok(calls[0].url.endsWith('/search'));
+  assert.equal(existsSync(fx.ledgerPath),false);
+});
+
+test('selected profile seeding refuses missing/duplicate or non-agent role before touching the ledger', async()=>{
+  const fx=fixture({board:md('B'),explore:md('E')});
+  for(const names of [['ghost'],['board','board'],[]]){
+    await assert.rejects(provisionAgentProfiles({agentsDir:fx.agentsDir,
+      ledgerPath:fx.ledgerPath,agentNames:names,cfg,fetchImpl:()=>{throw Error('network was called')}}),
+      /PROFILE_ROSTER_SELECTION_INVALID/);
+  }
+  assert.equal(existsSync(fx.ledgerPath),false);
+});

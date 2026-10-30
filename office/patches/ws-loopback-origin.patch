@@ -1,0 +1,15 @@
+--- a/backend/app/api/websocket.py
++++ b/backend/app/api/websocket.py
+@@ -76,6 +76,12 @@
+     """
+     origin = websocket.headers.get("origin")
+     if origin is not None:
++        # Loopback origins are permitted unconditionally (QA-014), any port:
++        # the native Windows build serves the static UI on 127.0.0.1:18128,
++        # which is not in BACKEND_CORS_ORIGINS and used to be rejected 4003.
++        host = urlparse(origin).hostname
++        if host in _LOCALHOST_HOSTS:
++            return True
+         return origin.rstrip("/") in _allowed_ws_origins()
+ 
+     # Non-browser clients (no Origin) — always require the effective API key

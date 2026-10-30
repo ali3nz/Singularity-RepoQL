@@ -1,0 +1,65 @@
+{
+  "import": "memorycore://data",
+  "source": { "data": "fixtures/live-1" },
+  "generations": [
+    {
+      "name": "complete store copy",
+      "clock": "2026-01-08T00:00:00Z",
+      "pass": "full",
+      "stopAfterChecks": 1,
+      "expect": {
+        "paths": {
+          "records/2026-01-07/m_1736233200000_aa01bb02.md": { "contains": ["kind: \"memory-record\"", "source_file: \"records/2026-01-07.jsonl\""] },
+          "records/2026-01-07/m_1736233260000_cc03dd04.md": { "contains": ["kind: \"memory-record\""] },
+          "records/2026-01-07/m_1736233320000_ee05ff06.md": { "contains": ["kind: \"memory-record\""] },
+          "records/2026-01-07/m_1736233380000_1107aa08.md": { "contains": ["[redacted]"] },
+          "personas/team-fixture/agt-fixture/persona.md": { "contains": ["kind: \"memory-persona\""] },
+          "personas/team-fixture/agt-fixture/persona.label-plane.md": { "contains": ["plane: \"label-plane\""] },
+          "scenes/team-fixture/agt-fixture/Old-Scene.md": { "contains": ["kind: \"memory-scene\""] },
+          "scenes/team-fixture/agt-fixture/Setup-Session.md": { "contains": ["kind: \"memory-scene\""] },
+          "overview.md": { "contains": ["memory records: 4", "scene blocks: 2", "persona files: 2", "profile folder"] },
+          "conversations/2026-01-07.md": { "absent": true },
+          "metadata/instance.md": { "absent": true }
+        }
+      }
+    },
+    {
+      "name": "replace the source snapshot",
+      "clock": "2026-01-08T00:15:00Z",
+      "pass": "full",
+      "source": { "data": "fixtures/live-2" },
+      "expect": {
+        "paths": {
+          "scenes/team-fixture/agt-fixture/Old-Scene.md": { "absent": true },
+          "scenes/team-fixture/agt-fixture/Second-Scene.md": { "contains": ["kind: \"memory-scene\""] },
+          "overview.md": { "contains": ["memory records: 5", "scene blocks: 2"] }
+        }
+      }
+    },
+    {
+      "name": "remove a scene that the complete source no longer lists",
+      "clock": "2026-01-08T00:30:00Z",
+      "pass": "full",
+      "source": { "data": "fixtures/live-3" },
+      "expect": {
+        "paths": {
+          "scenes/team-fixture/agt-fixture/Second-Scene.md": { "absent": true },
+          "scenes/team-fixture/agt-fixture/Setup-Session.md": { "contains": ["kind: \"memory-scene\""] },
+          "overview.md": { "contains": ["memory records: 4", "profile folder"] }
+        }
+      }
+    },
+    {
+      "name": "retain prior records while a shard ends in an incomplete line",
+      "clock": "2026-01-08T00:45:00Z",
+      "pass": "full",
+      "source": { "data": "fixtures/live-torn" },
+      "expect": {
+        "paths": {
+          "records/2026-01-07/m_1736233200000_aa01bb02.md": { "contains": ["kind: \"memory-record\""] },
+          "overview.md": { "contains": ["memory records: 4", "The newest lines of records/2026-01-07.jsonl"] }
+        }
+      }
+    }
+  ]
+}

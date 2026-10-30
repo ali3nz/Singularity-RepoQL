@@ -45,22 +45,32 @@ export const VARIANT_COMPONENTS = Object.freeze({
 const RULES = [
   // ── Ghost ────────────────────────────────────────────────────────────────
   { component: COMPONENT.GHOST, test: (p) => p === "openchamber/agents/ghost.md" },
+  { component: COMPONENT.GHOST, test: (p) => [
+    "native/windows/ghost_scheduler_host.py",
+    "native/windows/ghost_task_scheduler.ps1",
+    "native/windows/manage_ghost_scheduler.ps1",
+    "native/windows/test_ghost_scheduler_host.py",
+  ].includes(p) },
   { component: COMPONENT.GHOST, test: (p) => /^openchamber\/plugins\/product-ghost\//.test(p) },
   { component: COMPONENT.GHOST, test: (p) => /^ghost\//.test(p) },
   { component: COMPONENT.GHOST, test: (p) => /^systemd\/ghost-/.test(p) },
   { component: COMPONENT.GHOST, test: (p) => /^compose\/ghost[.-]/.test(p) },
+  { component: COMPONENT.GHOST, test: (p) => /^dashboard\/static\/ghost\//.test(p) || p === "dashboard/ghost_bridge.py" || p === "native/desktop-bridge/src/ghost.rs" || p === "dashboard/native_ghost.py" || p === "dashboard/test_native_ghost.py" },
   // ── Office ───────────────────────────────────────────────────────────────
   { component: COMPONENT.OFFICE, test: (p) => /^openchamber\/plugins\/product-office\//.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => /^office\//.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => /^systemd\/office-/.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => /^compose\/office[.-]/.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => p === "scripts/orch_chat_office.py" },
-  // ── Dashboard (opt-in adjunct; never installed by an option) ──────────────
+  { component: COMPONENT.OFFICE, test: (p) => /^native\/gui-plugins\/openchamber\/singularity-office(?:\.test)?\.mjs$/.test(p) || p === "native/desktop-bridge/src/office.rs" || p === "dashboard/office_bridge.py" },
+  // ── Dashboard (opt-in adjunct; native Windows variants always include it) ─
   { component: COMPONENT.DASHBOARD, test: (p) => /^dashboard\//.test(p) },
   // ── Core (explicit prefixes; anything else is UNCLASSIFIED on purpose) ────
+  { component: COMPONENT.CORE, test: (p) => /^native\//.test(p) || ["WINDOWS_GUI_PORT_STATUS.md", "WINDOWS_NATIVE_RELEASE_PROGRESS_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE6_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE7_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE8_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE9_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE10_20261029.md"].includes(p) },
   { component: COMPONENT.CORE, test: (p) => /^\.github\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^bin\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^connectors\//.test(p) },
+  { component: COMPONENT.CORE, test: (p) => /^repoql-feedback\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^harness\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^adapters\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^compose\//.test(p) },
@@ -88,15 +98,15 @@ export const CREDENTIAL_COMPONENTS = Object.freeze({
 
 /** Directories the shipped tree is walked from (explicit; no blind tree crawl). */
 const WALK_ROOTS = [
-  ".github", "adapters", "bin", "compose", "connectors", "dashboard", "docs",
+  ".github", "adapters", "bin", "compose", "connectors", "dashboard", "docs", "native",
   "ghost", "harness", "memory", "office", "openchamber", "orchestration",
   "scripts", "systemd", "templates", "tests",
 ];
 // Runtime/derived directories are never part of the shipped set.
-const SKIP_DIRS = new Set(["node_modules", ".git", "__pycache__", "runs"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", "__pycache__", "runs", "target"]);
 const ROOT_FILES = [
   ".gitignore", "AGENTS.md", "CHANGELOG.md", "INSTRUCTIONS.md", "LICENSE",
-  "MANIFEST.json", "README.md", "SHA256SUMS", "THIRD_PARTY_NOTICES.md",
+  "MANIFEST.json", "README.md", "SHA256SUMS", "THIRD_PARTY_NOTICES.md", "WINDOWS_GUI_PORT_STATUS.md", "WINDOWS_NATIVE_RELEASE_PROGRESS_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE6_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE7_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE8_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE9_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE10_20261029.md",
 ];
 
 /**

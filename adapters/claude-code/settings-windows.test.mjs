@@ -22,11 +22,11 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const POSIX_SCRIPT = "/opt/singularity/adapters/claude-code/memory-hook.mjs";
-// The real Windows shape: Program Files has a space, the user path has none
-// here, and every separator is a backslash that a shell form would eat.
+// The real Windows shape: Program Files has a space, a user profile may have
+// one too, and every separator is a backslash that a shell form would eat.
 const WIN_NODE = "C:\\Program Files\\nodejs\\node.exe";
-const WIN_SCRIPT = "C:\\Users\\Ben Smith\\.claude\\singularity\\adapters\\claude-code\\memory-hook.mjs";
-const WIN_DOC_SCRIPT = "C:\\Users\\Ben Smith\\.claude\\singularity\\adapters\\claude-code\\doc-hook.mjs";
+const WIN_SCRIPT = "C:\\Users\\example User\\.claude\\singularity\\adapters\\claude-code\\memory-hook.mjs";
+const WIN_DOC_SCRIPT = "C:\\Users\\example User\\.claude\\singularity\\adapters\\claude-code\\doc-hook.mjs";
 
 const handlersOn = (settings, event) =>
   (settings.hooks?.[event] || []).flatMap((g) => (Array.isArray(g?.hooks) ? g.hooks : []));
@@ -153,10 +153,12 @@ test("foreign same-basename handlers survive merge and uninstall; user edits are
     platform: "win32",
     nodePath: WIN_NODE,
   }).settings;
-  // Foreign same-basename handlers (including user args) are untouched; ours
-  // is added beside them.
-  assert.deepEqual(installed.hooks.SubagentStart[0].hooks.slice(0, 2), user.hooks.SubagentStart[0].hooks);
-  assert.equal(installed.hooks.SubagentStart[0].hooks.length, 3);
+  // Foreign same-basename handlers (including user args) remain in their
+  // matcher group; our always-on hook uses an independent unmatched group.
+  assert.deepEqual(installed.hooks.SubagentStart[0].hooks, user.hooks.SubagentStart[0].hooks);
+  assert.equal(installed.hooks.SubagentStart.length, 2);
+  assert.equal(installed.hooks.SubagentStart[1].matcher, undefined);
+  assert.equal(installed.hooks.SubagentStart[1].hooks[0].command, WIN_NODE);
 
   // A user edit after install: an extra unrelated hook and env override.
   installed.hooks.UserPromptSubmit = [{ hooks: [{ type: "command", command: "echo after-install" }] }];
@@ -277,17 +279,18 @@ test("uninstall removes an exec-form handler merged by an earlier Windows instal
   assert.deepEqual(removed.settings, {});
 });
 
-test("merge attaches to an existing matcher group and preserves its matcher", () => {
+test("merge keeps a foreign matcher separate and adds an always-on hook group", () => {
   const settings = {
     hooks: { SubagentStart: [{ matcher: ".*", hooks: [{ type: "command", command: "echo user" }] }] },
   };
   const merged = ensureMemoryIntegration(settings, {
     scriptPath: WIN_SCRIPT, env: {}, platform: "win32", nodePath: WIN_NODE,
   }).settings;
-  assert.equal(merged.hooks.SubagentStart.length, 1);
+  assert.equal(merged.hooks.SubagentStart.length, 2);
   assert.equal(merged.hooks.SubagentStart[0].matcher, ".*");
   assert.deepEqual(merged.hooks.SubagentStart[0].hooks[0], { type: "command", command: "echo user" });
-  assert.equal(merged.hooks.SubagentStart[0].hooks[1].command, WIN_NODE);
+  assert.equal(merged.hooks.SubagentStart[1].matcher, undefined);
+  assert.equal(merged.hooks.SubagentStart[1].hooks[0].command, WIN_NODE);
 });
 
 test("handlerSpec defaults to the host platform and keeps POSIX form there", () => {

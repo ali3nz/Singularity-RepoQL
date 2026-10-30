@@ -45,7 +45,7 @@ import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { callMemoryCore, loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
+import { callMemoryCore, loadGhostMemoryConfig } from "./memory-config-loader.mjs";
 import { discoverOpenchamber, resolveConfigDir } from "./attach-openchamber.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");

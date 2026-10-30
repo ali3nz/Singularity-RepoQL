@@ -53,9 +53,7 @@ The grant is part of the package, not a setting a reader has to discover.
 
 ## Building
 
-Both packages build with the RepoQL CLI (host `1.7.15` is the pinned version;
-`1.7.17` rejects the folder importer this product uses, so do not upgrade the
-host for a build):
+Windows release target: build both connectors with RepoQL CLI **1.7.18** (connector ABI 1). The user reports that 1.7.18 fixes the 1.7.17 compatibility regression; this is **not yet verified against the actual Windows CLI**. Production may remain on its previously proven 1.7.15. Do not reuse connector packages across CLI versions without a real install, indexing and readback test:
 
 ```bash
 cd connectors/kanzo

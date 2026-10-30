@@ -28,6 +28,37 @@ DEFAULT_BASE = "http://127.0.0.1:7879"
 MAX_BODY = 4 * 1024 * 1024
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # The coordinator token must never follow a 30x into another service.
+        return None
+
+# Do not allow machine HTTP_PROXY/HTTPS_PROXY settings to forward a private
+# loopback coordinator bearer token to a proxy managed by another process.
+_NO_REDIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+
+
+def _default_token_file() -> Path:
+    if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+        root = os.environ.get("LOCALAPPDATA")
+        # Never silently fall back to a Linux XDG path on a Windows build.
+        return (Path(root) if root else Path.home() / "AppData" / "Local") / "Singularity" / "Harness" / "coordinator.token"
+    return Path(os.environ.get("SINGULARITY_STATE_DIR") or Path.home() / ".local" / "state" / "singularity-dashboard") / "coordinator.token"
+
+
+def _valid_base_url(base: str, *, allow_remote: bool) -> bool:
+    try:
+        parsed = urllib.parse.urlsplit(base)
+        if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/'):
+            return False
+        if parsed.port is None or not (1 <= parsed.port <= 65535):
+            return False
+        if parsed.scheme == "http" and parsed.hostname in LOOPBACK_HOSTS:
+            return True
+        return allow_remote and parsed.scheme == "https" and bool(parsed.hostname)
+    except ValueError:
+        return False
+
 
 def _is_loopback(base: str) -> bool:
     try:
@@ -45,12 +76,7 @@ class RustHarness:
         self.allow_remote = allow_remote
         self.timeout = timeout
         self._token = token
-        self._token_file = Path(
-            token_file
-            or os.environ.get("RUST_HARNESS_TOKEN_FILE")
-            or Path(os.environ.get("SINGULARITY_STATE_DIR")
-                    or Path.home() / ".local" / "state" / "singularity-dashboard") / "coordinator.token"
-        )
+        self._token_file = Path(token_file or os.environ.get("RUST_HARNESS_TOKEN_FILE") or _default_token_file())
 
     # -- auth ---------------------------------------------------------
     def token(self) -> str:
@@ -67,11 +93,11 @@ class RustHarness:
         return self._token
 
     def configured(self) -> bool:
-        return bool(self.token()) and (self.allow_remote or _is_loopback(self.base_url))
+        return bool(self.token()) and _valid_base_url(self.base_url, allow_remote=self.allow_remote)
 
     # -- transport ----------------------------------------------------
     def _get(self, path: str) -> dict:
-        if not (self.allow_remote or _is_loopback(self.base_url)):
+        if not _valid_base_url(self.base_url, allow_remote=self.allow_remote):
             return {"available": False, "error": "non_loopback_refused"}
         token = self.token()
         if not token:
@@ -79,7 +105,7 @@ class RustHarness:
         request = urllib.request.Request(self.base_url + path, method="GET")
         request.add_header("Authorization", "Bearer " + token)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with _NO_REDIRECT_OPENER.open(request, timeout=self.timeout) as response:
                 body = response.read(MAX_BODY + 1)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
             # Never include the header or the token in the error text.
@@ -100,7 +126,7 @@ class RustHarness:
         if payload.get("available") is False:
             return payload
         if not payload.get("ok"):
-            return payload
+            return {"available": False, "error": "health_not_ok"}
         if payload.get("schema") != SCHEMA or payload.get("readOnly") is not True:
             return {"available": False, "error": "schema_mismatch"}
         return {"available": True, **payload}

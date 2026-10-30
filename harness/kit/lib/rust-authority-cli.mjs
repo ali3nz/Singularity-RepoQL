@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One request/one response over the Orchestra state-authority Unix socket.
+// One request/one response over a Unix socket or a native Windows named pipe.
 //
 // The coordinator's state writes are synchronous, so `rust-authority.mjs`
 // invokes this tiny CLI with spawnSync and passes the request on stdin. Keeping
@@ -14,6 +14,13 @@ import net from "node:net";
 const socketPath = process.argv[2];
 const REQUEST_LIMIT = 8 * 1024 * 1024;
 const CLIENT_TIMEOUT_MS = 7000;
+const WINDOWS_PIPE_PREFIX = "\\\\.\\pipe\\";
+if (socketPath?.startsWith("\\\\") &&
+    (!socketPath.startsWith(WINDOWS_PIPE_PREFIX) ||
+     !/^[a-zA-Z0-9_-]{1,120}$/.test(socketPath.slice(WINDOWS_PIPE_PREFIX.length)))) {
+  process.stderr.write("local named pipe required\n");
+  process.exit(3);
+}
 
 function fail(code, detail) {
   process.stdout.write(
@@ -47,6 +54,12 @@ process.stdin.on("end", () => {
   });
   socket.on("data", (chunk) => {
     buffer += chunk;
+    if (Buffer.byteLength(buffer, "utf8") > REQUEST_LIMIT) {
+      done = true;
+      clearTimeout(timer);
+      socket.destroy();
+      fail("RESPONSE_TOO_LARGE");
+    }
     const newline = buffer.indexOf("\n");
     if (newline >= 0 && !done) {
       done = true;

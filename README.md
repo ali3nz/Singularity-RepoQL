@@ -1,193 +1,55 @@
-# Singularity-RepoQL
+---
+description: Install and evaluate the Singularity RepoQL native Windows source release candidate.
+tags: [singularity, repoql, windows, claude-code, installation, release]
+---
 
-Singularity-RepoQL gives your coding agents memory and code intelligence that survive the session. Pick exactly one of the four installation options below and hand its brief, as written, to your AI agent.
+# Singularity RepoQL — Claude Code Complete for Windows
 
-![RepoQL provides source-linked technical knowledge; Tencent MemoryCore provides scoped experience and bounded recall. Rules, source and live evidence outrank recalled memory.](docs/assets/memory-architecture.png)
+One native Windows package brings together RepoQL code intelligence, Tencent MemoryCore, Ghost scheduling, an authenticated dashboard, and the Claude Office activity viewer. The installer targets the complete package only.
 
-Claude Office visualizes agent activity in a live pixel-art office: one desk per
-agent, presence driven by real events rather than a mock. See the
-[Claude Office fork](https://github.com/ali3nz/claude-office) for a preview of
-the floor and `docs/OFFICE-SETUP.md` for this repository's deployment.
+Codex can build, install, test, and operate the native components without a local Claude application. Claude Code agent definitions, skills, rules, and lifecycle hooks are included for users who choose that integration. Installing those files alone does not establish that a Claude session captured or recalled memory.
 
-## Choose exactly one installation option
+**Release status: Windows-native source release candidate.** Native reboot/logon startup, Claude desktop Code-mode RepoQL and Kanzo discovery, parent-conversation capture, and a scripted automatic documentation-ingestion smoke test have been verified on one Windows x64 workstation. This is not a signed, turnkey binary installer or full release certification. See the [acceptance results and remaining limits](docs/WINDOWS-RELEASE-ACCEPTANCE.md). Historical milestone receipts verify only their own checkpoints.
 
-1. **Option 1** — Claude Code + Tencent MemoryCore
-2. **Option 2** — Claude Code Complete (+ Ghost, + Claude Office)
-3. **Option 3** — existing OpenChamber + Tencent MemoryCore
-4. **Option 4** — existing OpenChamber Complete (+ Ghost, + Claude Office)
+## Install the complete package
 
-## Option 1 — Claude Code + Tencent MemoryCore
+Follow [Native Windows installation](docs/NATIVE-WINDOWS-INSTALLATION.md). The native lifecycle entrypoint is `native/windows/manage_native_windows.ps1`. It provides Plan, Install, Start, Status, Stop, Uninstall, and Reinstall operations; mutations require `-Apply`. The public entrypoint selects the complete package internally and presents no option menu.
 
-```text
-Install Singularity RepoQL — Option 1: Claude Code + Tencent MemoryCore.
+The package uses native Windows executables and per-user scheduled tasks. Its dashboard and control services bind to loopback. Keep private configuration and credentials in the protected per-user state directory. Never paste keys into issues, logs, command arguments, or Git.
 
-Repository: https://github.com/ali3nz/Singularity-RepoQL
+Dependencies include Windows x64, RepoQL **1.7.18**, Python with timezone data, and the runtimes described in the installation guide. Building the Rust binaries also needs the MSVC toolchain and Windows SDK. Docker and WSL are not prerequisites for the native path. A configured runner executable is required for Ghost work; installing the scheduler does not provision a model account or bypass its limits.
 
-I already have Claude Code and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 1 instructions in its documentation. Before the first write, inspect my existing installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories and credentials. Back up every conflicting Claude Code configuration file, and get my consent before any change.
+## Components
 
-Install and configure:
-- Tencent MemoryCore with all seventeen Claude Code agent definitions — eight delegation targets with their own scoped identity and persistent memory, plus nine main-session modes — and the primary memory for my normal Claude Code sessions.
-- Automatic capture of ordinary conversations, and automatic recall of them in a NEW session, without me running any manual remember command.
-- Automatic extraction of conversations into memory.
-- Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
-- Evaluation of knowledge candidates and their gated promotion into verified knowledge.
-- The existing RepoQL MCP integration, so real RepoQL tool calls work.
-- The native Claude Code lifecycle hooks and gates.
-- Two working LLM API providers with a controlled failover between them.
+- **RepoQL** indexes code and approved knowledge. The bundled MemoryCore and Kanzo connectors use the RepoQL 1.7.18 `parse` / `fetch` / `render` contract. Earlier experimental `abi: 1` manifests are incompatible with this supported runtime.
+- **Tencent MemoryCore** stores scoped conversations and extracted memories. The connector reads L1 record shards and L2/L3 profile files without modifying the source store. Capture, extraction, and recall require their runtime and identity configuration; a healthy listener alone verifies none of them.
+- **Ghost** keeps planning drafts separate from registered Windows schedules. Activation rereads the exact draft revision, persists the prompt revision, registers a real task, and verifies its action, principal, trigger, and enabled state before displaying it as active. Updates and cancellation also require independent readback. Execution receipts survive host restart.
+- **Dashboard** provides authenticated schedule editing and native integration panels. A per-user capability binds local scheduler requests to the configured Windows owner. Cloudflare identity alone does not authorize that owner's tasks.
+- **Claude Office** visualizes actual agent events. Its upstream code has separate provenance and license notices. Office presence is event evidence, not proof that a model request, memory extraction, or scheduled job succeeded.
+- **Claude Code integration** includes seventeen role definitions and ten Singularity skills. The official RepoQL plugin owns RepoQL MCP; the project MCP entry owns Kanzo. Existing unrelated settings and credentials are preserved.
 
-This option does not install Ghost, Claude Office or OpenChamber.
+## Use Claude desktop Code mode
 
-When you finish, verify each capability with the repository's acceptance procedure and report the ACTUAL result of every check: the automatic capture, the NEW-session recall, the RepoQL tool calls, the documentation and knowledge workflows and the provider failover. If any mandatory capability is missing, report INCOMPLETE and say exactly what is missing. Never report success for a capability you did not verify.
-```
+Open the workspace selected during installation. Kanzo is registered in that workspace's `.mcp.json`, not globally and not automatically in another repository. Approve the project MCP server when Claude prompts. A successful `list_projects` response saying there are no projects is a valid connection test; it does not create a project.
 
-## Option 2 — Claude Code Complete
+The official RepoQL plugin supplies code-intelligence tools. Point it at an actual repository rather than a home or Documents directory. The parent-session Stop and SessionEnd hooks capture user and assistant messages into their own MemoryCore identity. Documentation hooks baseline eligible Markdown at SessionStart and discover changes at Stop. [Document ingestion](docs/DOC-INGESTION.md) distinguishes a verified searchable revision from a pending or failed write.
 
-```text
-Install Singularity RepoQL — Option 2: Claude Code Complete.
+## Providers
 
-Repository: https://github.com/ali3nz/Singularity-RepoQL
+Use provider credentials you own. The extraction router supports Cohere and additional OpenAI-compatible providers configured with a private key file and provider descriptor. Provider availability, quotas, and models can change. A controlled provider failure must reach a second real provider before failover is accepted.
 
-I already have Claude Code and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 2 instructions in its documentation. Before the first write, inspect my existing installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories and credentials. Back up every conflicting Claude Code configuration file, and get my consent before any change.
+On Windows the router binds only to loopback. Enable its local bearer requirement and keep the access key in the private secrets directory. Router health is not a successful completion test.
 
-Install and configure:
-- Tencent MemoryCore with all seventeen Claude Code agent definitions — eight delegation targets with their own scoped identity and persistent memory, plus nine main-session modes — and the primary memory for my normal Claude Code sessions.
-- Automatic capture of ordinary conversations, and automatic recall of them in a NEW session, without me running any manual remember command.
-- Automatic extraction of conversations into memory.
-- Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
-- Evaluation of knowledge candidates and their gated promotion into verified knowledge.
-- The existing RepoQL MCP integration, so real RepoQL tool calls work.
-- The native Claude Code lifecycle hooks and gates.
-- Two working LLM API providers with a controlled failover between them.
-- The Ghost persistent companion agent with its checkpointed dream workflow and interruption recovery, using the Claude Code backend.
-- Claude Office, built from the public fork https://github.com/ali3nz/claude-office, showing native Claude Code events.
+## Development and acceptance
 
-This option does not install or depend on OpenChamber.
+Build and test directly on Windows. Inspect existing product ownership before changing tasks, files, or services. Clean-install tests remove only project-owned resources and preserve unrelated software, user data, and Codex.
 
-Provisioning boundary: the Claude Code installer (`scripts/install-claude-code.mjs install --variant 2`) installs the agents, hooks, settings and profiles only. It does NOT start MemoryCore, Ghost or Claude Office. After the memory stack is up, run these follow-ups from the repository root (the installer prints the same list):
+Native Rust compilation, focused source tests, live browser tests, actual scheduler execution, memory/provider integration, install/restart/uninstall/reinstall, and reboot recovery are separate checks. Report untested checks explicitly. Do not label a source archive as a usable installer or a successful test as proof of a different advertised capability.
 
-```bash
-bash scripts/start-memory-stack.sh
-python3 scripts/provision-secrets.py --variant 2 --with-ghost && bash ghost/setup-ghost.sh
-python3 scripts/provision-secrets.py --variant 2
-docker compose -f office/office.compose.yml up -d
-```
+The [acceptance report](docs/WINDOWS-RELEASE-ACCEPTANCE.md) records the verified native path. Legacy Linux/container instructions and historical four-profile source tools remain for provenance and compatibility work. They are not additional installer choices in this Windows release candidate.
 
-Until those commands run, the Ghost and Claude Office capability checks stay INCOMPLETE — never report them as installed.
+## Documentation and license
 
-When you finish, verify each capability with the repository's acceptance procedure and report the ACTUAL result of every check: the running Ghost, the completed dream cycle and its interruption recovery, the native Claude Office events, the automatic capture and NEW-session recall, the RepoQL tool calls, the documentation and knowledge workflows and the provider failover. If any mandatory capability is missing, report INCOMPLETE and say exactly what is missing. Never report success for a capability you did not verify.
-```
+[Architecture](docs/ARCHITECTURE.md), [memory](docs/MEMORY-SETUP.md), [Claude Code integration](docs/CLAUDE-CODE-SETUP.md), [Office](docs/OFFICE-SETUP.md), and [tagged-release gates](docs/RELEASE.md).
 
-## Option 3 — existing OpenChamber + Tencent MemoryCore
-
-```text
-Install Singularity RepoQL — Option 3: existing OpenChamber + Tencent MemoryCore.
-
-Repository: https://github.com/ali3nz/Singularity-RepoQL
-
-I already have OpenChamber and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 3 instructions in its documentation. Attach to my EXISTING OpenChamber installation. Do NOT install a second OpenChamber instance. Before the first write, inspect that installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories, credentials and my RepoQL identity. Back up every conflicting configuration file, and get my consent before any change.
-
-Install and configure:
-- Tencent MemoryCore with all seventeen Claude Code agent definitions (eight with their own scoped identity and persistent memory) and the full seventeen-role OpenChamber roster, plus the primary memory for my primary OpenChamber session.
-- Automatic capture of ordinary sessions, and automatic recall of them in a NEW session, without me running any manual remember command.
-- Automatic extraction of conversations into memory.
-- Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
-- Evaluation of knowledge candidates and their gated promotion into verified knowledge.
-- The existing RepoQL MCP integration, so real RepoQL tool calls work in my sessions.
-- The native OpenChamber hooks and gates.
-- Two working LLM API providers with a controlled failover between them. Help me configure them.
-
-This option does not install Ghost and does not install Claude Office.
-
-When you finish, verify each capability with the repository's acceptance procedure and report the ACTUAL result of every check: the automatic capture, the NEW-session recall, the real RepoQL tool calls, the documentation and knowledge workflows and the provider failover. If any mandatory capability is missing, report INCOMPLETE and say exactly what is missing. Never report success for a capability you did not verify.
-```
-
-## Option 4 — existing OpenChamber Complete
-
-```text
-Install Singularity RepoQL — Option 4: existing OpenChamber Complete.
-
-Repository: https://github.com/ali3nz/Singularity-RepoQL
-
-I already have OpenChamber and RepoQL. Clone the repository, or update my existing clone, and follow the technical Option 4 instructions in its documentation. Attach to my EXISTING OpenChamber installation. Do NOT install a second OpenChamber instance. Before the first write, inspect that installation and show me what would change. Preserve my existing configuration, projects, agents, plugins, indexes, memories, credentials and my RepoQL identity. Back up every conflicting configuration file, and get my consent before any change.
-
-Install and configure:
-- Tencent MemoryCore with all seventeen Claude Code agent definitions (eight with their own scoped identity and persistent memory) and the full seventeen-role OpenChamber roster, plus the primary memory for my primary OpenChamber session.
-- Automatic capture of ordinary sessions, and automatic recall of them in a NEW session, without me running any manual remember command.
-- Automatic extraction of conversations into memory.
-- Automatic documentation assessment, automatic documentation updates and automatic verified ingestion of the approved documentation.
-- Evaluation of knowledge candidates and their gated promotion into verified knowledge.
-- The existing RepoQL MCP integration, so real RepoQL tool calls work in my sessions.
-- The native OpenChamber hooks and gates.
-- Two working LLM API providers with a controlled failover between them.
-- The Ghost persistent companion agent with its checkpointed dream workflow and interruption recovery, using the OpenChamber backend.
-- Claude Office, built from the public fork https://github.com/ali3nz/claude-office, showing native OpenChamber activity.
-
-Verify each capability with the repository's acceptance procedure and report the ACTUAL result of every check: the running Ghost, the completed dream cycle and its interruption recovery, the native Claude Office events, the automatic capture and NEW-session recall, the real RepoQL tool calls, the documentation and knowledge workflows and the provider failover. If any mandatory capability is missing, report INCOMPLETE and say exactly what is missing. Never report success for a capability you did not verify.
-```
-
-## What it does
-
-- Persistent memory per agent identity: captured automatically from ordinary sessions and recalled automatically in a later session, with no manual remember command.
-- Automatic extraction, documentation assessment, documentation updates and verified ingestion of the approved documentation.
-- Gated evaluation and promotion of knowledge candidates into verified knowledge.
-- RepoQL code intelligence wired into the client you already use.
-- One diagnostic entrypoint — `node scripts/doctor.mjs` — reports every capability of your installation (VERIFIED / INCOMPLETE / DEGRADED / NOT_CONFIGURED / FAILED), machine-readable with `--json`, and exits nonzero while anything is unverified.
-
-The installer reports INCOMPLETE until every mandatory capability of the chosen option is verified by a real check. Nothing is reported as working on configuration alone.
-
-## Optional orchestration
-
-Orchestrated runs ship as an optional capability, separate from the installer's
-mandatory set and separate from any coordinator you already run:
-`node scripts/orch-run` keeps persistent run and case identity, an explicit
-six-stage workflow (`plan` -> `implement` -> `validate` -> `review` -> `accept`)
-whose transitions need recorded evidence, identity-bound approvals that a
-coordinator cannot grant itself, filesystem resource leases, role-based model
-routing with a `free_only` policy that has no paid fallback, and supervision
-queries (`health`, `history`, `verify`). State is local JSON under `./.orch` by
-default; nothing is emailed, uploaded or posted, and Discord is not involved.
-
-Execution modes are seat plans with authority, not agent aliases:
-`node scripts/orch-run modes`. The contract, authority rules and honest limits
-are in `docs/ORCHESTRATION.md`; the source-level comparison against the private
-reference implementation is in `docs/CAPABILITY-MATRIX.md`.
-
-## Requirements
-
-- Git, and access to `https://github.com/ali3nz/Singularity-RepoQL`.
-- Docker, to run the Tencent MemoryCore stack.
-- Claude Code (options 1 and 2) or an existing OpenChamber installation (options 3 and 4). Options 3 and 4 attach to that installation and never install a second one.
-- RepoQL, already installed and reachable.
-- Two LLM API provider accounts of your own, with keys you hold: **Groq**
-  (https://console.groq.com/) and **Cohere** (https://dashboard.cohere.com/).
-  The shipped extraction failover router carries routes for exactly these two —
-  `groq-120b`, then `cohere-a+`, then `groq-20b` — and that pair is the minimum
-  the installer accepts. Both providers offer free API keys; put them in the
-  secrets directory as `groq-api-key` and `cohere-api-key`. Pricing, quotas and
-  model availability are set by each provider, not by this repository.
-- Optional extra providers, no code change required: drop a pair of files in the
-  secrets directory — `<name>-api-key` and `<name>-api-provider.json` holding
-  `{ "name": "...", "base": "https://...", "model": "..." }` — and the router
-  appends it as an extra hop. Validation is strict: plain-HTTP bases, localhost,
-  duplicate names and incomplete files are refused, so an invalid file never
-  becomes a hop. Public OpenAI-compatible endpoints include NVIDIA
-  (https://build.nvidia.com/), Cerebras (https://cloud.cerebras.ai/) and
-  OpenRouter (https://openrouter.ai/).
-- Both extraction providers verified with a controlled live fallback
-  (`node scripts/runtime-proofs.mjs`) before you accept the installation.
-
-## Technical documentation
-
-Memory Core — `docs/MEMORY-SETUP.md` · Claude Code — `docs/CLAUDE-CODE-SETUP.md` ·
-OpenChamber — `docs/OPENCHAMBER-SETUP.md` · Ghost — `docs/GHOST-SETUP.md` ·
-Claude Office — `docs/OFFICE-SETUP.md` · RepoQL — `docs/REPOQL-SETUP.md` ·
-documentation ingestion — `docs/DOC-INGESTION.md` ·
-memory capture and promotion — `docs/memory-capture-promotion.md` ·
-architecture — `docs/ARCHITECTURE.md` · troubleshooting — `docs/TROUBLESHOOTING.md` ·
-orchestration — `docs/ORCHESTRATION.md` ·
-capability matrix — `docs/CAPABILITY-MATRIX.md` ·
-release gate — `docs/RELEASE.md`
-
-## License
-
-This repository is licensed under the MIT License (see `LICENSE`).
+This repository is MIT licensed. Preserve separate upstream and third-party notices when distributing Tencent, Office, Kanzo, and other dependencies.

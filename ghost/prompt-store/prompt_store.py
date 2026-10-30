@@ -20,7 +20,6 @@ revision, and every save keeps its own revision file.
 from __future__ import annotations
 
 import datetime
-import fcntl
 import hashlib
 import json
 import os
@@ -28,7 +27,22 @@ import re
 from pathlib import Path
 
 SCHEMA = "ghost-prompts/1"
-DEFAULT_ROOT = Path(os.environ.get("GHOST_PROMPT_DIR") or "/var/lib/ghost-control/prompts")
+def _default_root() -> Path:
+    explicit = os.environ.get("GHOST_PROMPT_DIR")
+    if explicit:
+        return Path(explicit)
+    if os.name == "nt":
+        # Service data belongs in ProgramData, not the working directory or a
+        # bogus `\var\lib` path. The installer must enforce NTFS ACLs.
+        base = os.environ.get("PROGRAMDATA")
+        if not base:
+            raise PromptError("windows_programdata_unavailable")
+        return Path(base) / "Singularity" / "ghost" / "prompts"
+    return Path("/var/lib/ghost-control/prompts")
+
+
+# Evaluated after PromptError is declared, below.
+
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
 MANIFEST = "prompts.json"
 AUDIT = ".audit.jsonl"
@@ -36,6 +50,9 @@ AUDIT = ".audit.jsonl"
 
 class PromptError(ValueError):
     """A save/revert request that must be refused (never a partial write)."""
+
+
+DEFAULT_ROOT = _default_root()
 
 
 # --- registry ---------------------------------------------------------------
@@ -126,13 +143,40 @@ class _Lock:
     def __enter__(self):
         _ensure(self.path.parent)
         self.handle = open(self.path, "a+b")
-        fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                # msvcrt.locking locks a byte range from the current seek
+                # offset. Ensure the same single byte exists in every writer.
+                self.handle.seek(0, os.SEEK_END)
+                if self.handle.tell() == 0:
+                    self.handle.write(b"\0")
+                    self.handle.flush()
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
+        except BaseException:
+            self.handle.close()
+            self.handle = None
+            raise
         return self
 
     def __exit__(self, *exc):
-        fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
-        self.handle.close()
-        self.handle = None
+        if self.handle is None:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.handle.close()
+            self.handle = None
 
 
 def _atomic_write(path: Path, text: str) -> None:

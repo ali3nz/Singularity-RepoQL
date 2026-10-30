@@ -46,7 +46,7 @@ import {
 } from "node:fs";
 import { request } from "node:http";
 import { createServer } from "node:net";
-import { platform as osPlatform } from "node:os";
+import { platform as osPlatform, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -133,7 +133,7 @@ export function validateConfig(raw) {
     }
     if (!entry || typeof entry !== "object") throw new SupervisorError(`component ${name} must be an object`, "CONFIG");
     const kind = requireString(entry.kind, `${name}.kind`);
-    if (!["core", "panel", "knowledge", "fake"].includes(kind)) {
+    if (!["core", "panel", "knowledge", "gateway", "fake"].includes(kind)) {
       throw new SupervisorError(`${name}.kind is unsupported: ${kind}`, "CONFIG");
     }
     const host = requireString(entry.host ?? "127.0.0.1", `${name}.host`);
@@ -180,6 +180,7 @@ export function validateConfig(raw) {
       stopTimeoutMs: Number(entry.stopTimeoutMs ?? 10_000),
       coreConfig: entry.coreConfig ?? null,
       upstream: entry.upstream ?? null,
+      llmKeyFile: entry.llmKeyFile ? requireAbsolute(entry.llmKeyFile, `${name}.llmKeyFile`) : null,
     };
   }
   if (!components.core) throw new SupervisorError("config.components.core is required", "CONFIG");
@@ -277,7 +278,7 @@ export function buildComponentEnv(component, config, token) {
   };
   const env = { ...process.env, ...base };
   for (const key of Object.keys(env)) {
-    if (key.startsWith("TDAI_") || key.startsWith("PANEL_") || key.startsWith("KNOWLEDGE_")) {
+    if (key.startsWith("TDAI_") || key.startsWith("PANEL_") || key.startsWith("KNOWLEDGE_") || key.startsWith("EXTRACTION_FAILOVER_")) {
       delete env[key];
     }
   }
@@ -291,8 +292,23 @@ export function buildComponentEnv(component, config, token) {
     env.TDAI_LLM_API_KEY = token;
     env.TDAI_LLM_BASE_URL = "http://127.0.0.1:9/v1";
     env.TDAI_LLM_MODEL = "native-test-model";
+    if (component.llmKeyFile) {
+      let llmKey;
+      try { llmKey = readFileSync(component.llmKeyFile, "utf8").trim(); }
+      catch (error) { throw new SupervisorError(`cannot read core llmKeyFile: ${error.message}`, "CONFIG"); }
+      if (!llmKey) throw new SupervisorError("core llmKeyFile is empty", "CONFIG");
+      env.TDAI_LLM_API_KEY = llmKey;
+    }
     env.HOST = component.host;
     env.PORT = String(component.port);
+  } else if (component.kind === "gateway") {
+    env.HOST = component.host;
+    env.PORT = String(component.port);
+    env.EXTRACTION_FAILOVER_PORT = String(component.port);
+    env.EXTRACTION_FAILOVER_BIND = component.host;
+    env.EXTRACTION_FAILOVER_SECRETS_DIR = join(config.stateDir, "secrets");
+    env.EXTRACTION_FAILOVER_REQUIRE_AUTH = "1";
+    env.EXTRACTION_FAILOVER_TIMEOUT_MS = "60000";
   } else if (component.kind === "panel") {
     env.HOST = component.host;
     env.PORT = String(component.port);
@@ -442,7 +458,10 @@ export function createFileAcl({ platform = osPlatform(), execFile = execFileSync
       },
     };
   }
-  const user = env.USERNAME || env.USER;
+  let user = env.USERNAME || env.USER;
+  if (!user) {
+    try { user = userInfo().username; } catch { user = null; }
+  }
   if (!user) {
     return {
       restrict() {
@@ -532,7 +551,7 @@ export function queryProcess(pid, { platform = osPlatform(), execFile = execFile
   return platform === "win32" ? queryProcessWindows(pid, { execFile }) : queryProcessPosix(pid);
 }
 
-function sameInstant(a, b, toleranceMs = 2500) {
+function sameInstant(a, b, toleranceMs = 0) {
   const ta = Date.parse(a);
   const tb = Date.parse(b);
   if (!Number.isFinite(ta) || !Number.isFinite(tb)) return a === b;
@@ -554,10 +573,15 @@ export function verifyOwnership(record, { query = queryProcess } = {}) {
     return { ok: false, reason: `process query failed: ${error.message}` };
   }
   if (!live) return { ok: false, absent: true, reason: "process is not running" };
-  if (record.exe && live.exe && !samePath(record.exe, live.exe)) {
+  // Never infer ownership from PID alone: inaccessible CIM/proc metadata must
+  // fail closed rather than authorizing SIGTERM of an unrelated process.
+  if (!record.exe || !record.startedAt || !live.exe || !live.startedAt) {
+    return { ok: false, reason: "process executable/start-time identity unavailable" };
+  }
+  if (!samePath(record.exe, live.exe)) {
     return { ok: false, reason: `executable changed (${live.exe})` };
   }
-  if (record.startedAt && live.startedAt && !sameInstant(record.startedAt, live.startedAt)) {
+  if (!sameInstant(record.startedAt, live.startedAt)) {
     return { ok: false, reason: `start time changed (${live.startedAt})` };
   }
   return { ok: true };
@@ -743,7 +767,14 @@ async function startOnce(config, token, deps) {
     throw error;
   }
   const manifest = buildManifest(config, started);
-  writeManifest(config, manifest);
+  try {
+    writeManifest(config, manifest);
+  } catch (error) {
+    // Starting a service without a durable ownership manifest makes it
+    // unmanageable and risks killing a recycled PID on a later restart.
+    await stopProcesses(started, { query, sleep });
+    throw error;
+  }
   return manifest;
 }
 
@@ -852,6 +883,29 @@ export async function restartStack(config, deps = {}) {
   if (!stopped.ok) return { ok: false, code: "STOP_INCOMPLETE", stop: stopped };
   const manifest = await startStack(config, deps);
   return { ok: true, code: "RESTARTED", manifest };
+}
+
+/**
+ * Long-lived supervisor entrypoint used as a single Rust-supervisor component.
+ * It owns the core+panel children and stays in the foreground so the parent's
+ * Job Object is the outer containment boundary. A healthy existing manifest is
+ * never adopted blindly: it is stopped with PID ownership checks first, which
+ * also clears a stale manifest left by a hard task termination.
+ */
+export async function serveStack(config, deps = {}) {
+  if (readManifest(config)) {
+    const stopped = await stopStack(config, deps);
+    if (!stopped.ok) {
+      throw new SupervisorError(`refusing to serve over an unverified existing stack: ${stopped.code}`, "MANIFEST");
+    }
+  }
+  await startStack(config, deps);
+  const status = await statusStack(config, deps);
+  if (!status.ok) {
+    await stopStack(config, deps);
+    throw new SupervisorError("memory stack did not pass post-start ownership and health verification", "HEALTH");
+  }
+  return { ok: true, code: "SERVING", processes: status.processes };
 }
 
 /** Pure plan used by `prepare --dry-run` and the tests. */
@@ -991,7 +1045,7 @@ export function runCommand(command, args, options = {}) {
   execFileSync(command, args, { stdio: "inherit", windowsHide: true, ...options });
 }
 
-const CLI_VERBS = new Set(["prepare", "start", "status", "stop", "restart"]);
+const CLI_VERBS = new Set(["prepare", "start", "status", "stop", "restart", "serve"]);
 
 export function parseCli(argv = process.argv.slice(2)) {
   const verb = argv[0];
@@ -1011,6 +1065,12 @@ export function parseCli(argv = process.argv.slice(2)) {
     else throw new SupervisorError(`unknown argument: ${arg}`, "USAGE");
   }
   if (!configPath) throw new SupervisorError("--config is required", "USAGE");
+  if (dryRun && verb !== "prepare") {
+    throw new SupervisorError("--dry-run is supported only for prepare; refusing to execute the requested operation", "USAGE");
+  }
+  if (clean && verb !== "prepare") {
+    throw new SupervisorError("--clean is supported only for prepare", "USAGE");
+  }
   return { verb, configPath, json, dryRun, clean };
 }
 
@@ -1026,6 +1086,42 @@ async function main(argv) {
     result = await statusStack(config);
   } else if (args.verb === "stop") {
     result = await stopStack(config);
+  } else if (args.verb === "serve") {
+    result = await serveStack(config);
+    const output = args.json ? JSON.stringify(result, null, 2) : humanSummary(args.verb, result);
+    process.stdout.write(`${output}\n`);
+    await new Promise((resolve) => {
+      let stopping = false;
+      let checking = false;
+      const shutdown = async () => {
+        if (stopping) return;
+        stopping = true;
+        clearInterval(timer);
+        try { await stopStack(config); } finally { resolve(); }
+      };
+      const timer = setInterval(async () => {
+        if (stopping || checking) return;
+        checking = true;
+        try {
+          const status = await statusStack(config);
+          if (!status.ok) {
+            process.stderr.write(`memory stack degraded: ${status.code}\n`);
+            clearInterval(timer);
+            await stopStack(config);
+            process.exit(1);
+          }
+        } catch (error) {
+          process.stderr.write(`memory stack status failed: ${error.message}\n`);
+          clearInterval(timer);
+          try { await stopStack(config); } finally { process.exit(1); }
+        } finally {
+          checking = false;
+        }
+      }, 15000);
+      process.on("SIGTERM", () => { void shutdown(); });
+      process.on("SIGINT", () => { void shutdown(); });
+    });
+    return;
   } else {
     result = await restartStack(config);
   }

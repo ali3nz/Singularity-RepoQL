@@ -137,6 +137,24 @@ class Fixtures(unittest.TestCase):
         self.assertEqual(len(matches), 1, f"ledger lookup for {rel}: {len(matches)} entries")
         return matches[0]
 
+    def test_corrupt_ledger_never_reinitialized_or_overwritten(self):
+        doc = self.make_runbook("corrupt-ledger.md", "Must retain prior revision metadata.")
+        stub = StubMemory(searchable_after=0)
+        stub.start()
+        stub.started.wait(2)
+        self.set_gateway(stub)
+        ledger = self.root / "data" / "doc-index" / "ledger.json"
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        for bad in ("{not-json", "[]", '{"version": 1, "docs": []}', '{"version": 2, "docs": {}}'):
+            with self.subTest(bad=bad):
+                ledger.write_text(bad)
+                with self.assertRaisesRegex(mdi.Blocked, "DOC_LEDGER_CORRUPT"):
+                    mdi.ingest_file(doc, root_arg=str(self.root / "docs"))
+                self.assertEqual(ledger.read_text(), bad)
+        ledger.write_text('{"version": 1, "docs": {}}')
+        result = mdi.ingest_file(doc, root_arg=str(self.root / "docs"))
+        self.assertEqual(result["status"], "DOC_INGEST_INDEXED")
+
     # ── F: a synthetic new runbook is ingested and verified searchable ───────
     def test_f_new_runbook_ingested_and_verified(self):
         p = self.make_runbook("runbook-f.md", "Operating procedure: run the synthetic validation, then record observed output.")

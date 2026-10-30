@@ -1,8 +1,11 @@
-abi: 1
 scheme: memorycore
 title: Tencent MemoryCore
 summary: Copies a Tencent MemoryCore store into the workspace - one file for each L1 memory record, each L2 scene block and each L3 persona, with the store's own ids, instants and provenance; raw conversations, vectors and checkpoints are left out.
-calls: [sync, parse]
+calls: [parse, fetch, render]
+recordsVersion: 2
+fetchIntervalSeconds: 900
+fullFetchIntervalSeconds: 900
+maxValueBytes: 65536
 uri:
   example: memorycore://data
 source:

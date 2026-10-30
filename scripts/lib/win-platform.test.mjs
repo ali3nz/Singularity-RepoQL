@@ -14,15 +14,15 @@ import {
   windowsCmdLauncher,
 } from "./win-platform.mjs";
 
-const WIN_HOME = "C:\\Users\\Ben";
+const WIN_HOME = "C:\\Users\\example";
 const winEnv = { USERPROFILE: WIN_HOME, PATH: "C:\\Windows\\System32;C:\\Program Files\\Git\\cmd" };
 
 test("resolveHome prefers USERPROFILE on Windows and HOME on POSIX", () => {
   assert.equal(resolveHome({ env: winEnv, platform: "win32" }), WIN_HOME);
-  assert.equal(resolveHome({ env: { HOME: "/home/ben" }, platform: "linux" }), "/home/ben");
-  assert.equal(resolveHome({ env: { HOME: "/home/ben" }, platform: "darwin" }), "/home/ben");
+  assert.equal(resolveHome({ env: { HOME: "/home/user" }, platform: "linux" }), "/home/user");
+  assert.equal(resolveHome({ env: { HOME: "/home/user" }, platform: "darwin" }), "/home/user");
   assert.equal(
-    resolveHome({ env: { USERPROFILE: WIN_HOME, HOME: "/mnt/c/Users/Ben" }, platform: "win32" }),
+    resolveHome({ env: { USERPROFILE: WIN_HOME, HOME: "/mnt/c/Users/example" }, platform: "win32" }),
     WIN_HOME,
     "HOME is an emulation artefact on native Windows; it must not win",
   );
@@ -30,8 +30,8 @@ test("resolveHome prefers USERPROFILE on Windows and HOME on POSIX", () => {
 });
 
 test("claudeConfigDir is <home>\\.claude on Windows, never a POSIX path", () => {
-  assert.equal(claudeConfigDir({ home: WIN_HOME, platform: "win32" }), "C:\\Users\\Ben\\.claude");
-  assert.equal(claudeConfigDir({ home: "/home/ben", platform: "linux" }), "/home/ben/.claude");
+  assert.equal(claudeConfigDir({ home: WIN_HOME, platform: "win32" }), "C:\\Users\\example\\.claude");
+  assert.equal(claudeConfigDir({ home: "/home/user", platform: "linux" }), "/home/user/.claude");
 });
 
 test("PATH splitting uses the platform separator (; on Windows)", () => {
@@ -42,7 +42,7 @@ test("PATH splitting uses the platform separator (; on Windows)", () => {
 
 test("claude candidates are ordered: env override, PATH, user-local-bin, desktop data", () => {
   const candidates = claudeExecutableCandidates({
-    env: { ...winEnv, CLAUDE_CODE_PATH: "D:\\tools\\claude.exe", LOCALAPPDATA: "C:\\Users\\Ben\\AppData\\Local" },
+    env: { ...winEnv, CLAUDE_CODE_PATH: "D:\\tools\\claude.exe", LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local" },
     platform: "win32",
     home: WIN_HOME,
   });
@@ -51,16 +51,16 @@ test("claude candidates are ordered: env override, PATH, user-local-bin, desktop
   assert.equal(candidates[0].path, "D:\\tools\\claude.exe");
   assert.equal(kinds.includes("path"), true);
   assert.deepEqual(candidates.find((c) => c.kind === "user-local-bin"), {
-    path: "C:\\Users\\Ben\\.local\\bin\\claude.exe",
+    path: "C:\\Users\\example\\.local\\bin\\claude.exe",
     kind: "user-local-bin",
     source: "USERPROFILE\\.local\\bin",
   });
   assert.equal(candidates.at(-1).kind, "desktop-bundled");
-  assert.equal(candidates.at(-1).path, "C:\\Users\\Ben\\AppData\\Local\\Claude-Data");
+  assert.equal(candidates.at(-1).path, "C:\\Users\\example\\AppData\\Local\\Claude-Data");
 });
 
 test("findBundledDesktopClaude picks the newest bundled claude-code build", () => {
-  const dataDir = "C:\\Users\\Ben\\AppData\\Local\\Claude-Data";
+  const dataDir = "C:\\Users\\example\\AppData\\Local\\Claude-Data";
   const tree = {
     [dataDir]: [{ name: "claude_pzs8sxrjxfjjc" }, { name: "other" }],
     [`${dataDir}\\claude_pzs8sxrjxfjjc\\claude-code`]: [{ name: "2.1.309" }, { name: "2.1.400" }],
@@ -84,11 +84,11 @@ test("findBundledDesktopClaude picks the newest bundled claude-code build", () =
 });
 
 test("findClaudeExecutable never invents a binary: PATH win, bundled fallback, honest null", () => {
-  const bundled = "C:\\Users\\Ben\\AppData\\Local\\Claude-Data\\claude_x\\claude-code\\2.1.309\\h\\claude.exe";
+  const bundled = "C:\\Users\\example\\AppData\\Local\\Claude-Data\\claude_x\\claude-code\\2.1.309\\h\\claude.exe";
   const tree = {
-    "C:\\Users\\Ben\\AppData\\Local\\Claude-Data": [{ name: "claude_x" }],
-    "C:\\Users\\Ben\\AppData\\Local\\Claude-Data\\claude_x\\claude-code": [{ name: "2.1.309" }],
-    "C:\\Users\\Ben\\AppData\\Local\\Claude-Data\\claude_x\\claude-code\\2.1.309": [{ name: "h" }],
+    "C:\\Users\\example\\AppData\\Local\\Claude-Data": [{ name: "claude_x" }],
+    "C:\\Users\\example\\AppData\\Local\\Claude-Data\\claude_x\\claude-code": [{ name: "2.1.309" }],
+    "C:\\Users\\example\\AppData\\Local\\Claude-Data\\claude_x\\claude-code\\2.1.309": [{ name: "h" }],
   };
   const readdir = (dir) => {
     if (!tree[dir]) throw new Error("ENOENT");
@@ -96,7 +96,7 @@ test("findClaudeExecutable never invents a binary: PATH win, bundled fallback, h
   };
 
   const viaPath = findClaudeExecutable({
-    env: { ...winEnv, LOCALAPPDATA: "C:\\Users\\Ben\\AppData\\Local" },
+    env: { ...winEnv, LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local" },
     platform: "win32",
     home: WIN_HOME,
     exists: (p) => p === "C:\\Program Files\\Git\\cmd\\claude.exe",
@@ -105,7 +105,7 @@ test("findClaudeExecutable never invents a binary: PATH win, bundled fallback, h
   assert.deepEqual(viaPath, { path: "C:\\Program Files\\Git\\cmd\\claude.exe", kind: "path", source: "PATH" });
 
   const viaDesktop = findClaudeExecutable({
-    env: { USERPROFILE: WIN_HOME, PATH: "", LOCALAPPDATA: "C:\\Users\\Ben\\AppData\\Local" },
+    env: { USERPROFILE: WIN_HOME, PATH: "", LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local" },
     platform: "win32",
     home: WIN_HOME,
     exists: (p) => p === bundled,
@@ -115,7 +115,7 @@ test("findClaudeExecutable never invents a binary: PATH win, bundled fallback, h
   assert.equal(viaDesktop.kind, "desktop-bundled");
 
   assert.equal(findClaudeExecutable({
-    env: { USERPROFILE: WIN_HOME, PATH: "", LOCALAPPDATA: "C:\\Users\\Ben\\AppData\\Local" },
+    env: { USERPROFILE: WIN_HOME, PATH: "", LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local" },
     platform: "win32",
     home: WIN_HOME,
     exists: () => false,
@@ -129,14 +129,14 @@ test("findRqlExecutable checks PATH then the install dir, per platform", () => {
     { path: "D:\\bin\\rql.exe", kind: "path" },
   );
   assert.deepEqual(
-    findRqlExecutable({ env: { PATH: "" }, platform: "linux", home: "/home/ben", exists: (p) => p === "/home/ben/.local/bin/rql" }),
-    { path: "/home/ben/.local/bin/rql", kind: "install-dir" },
+    findRqlExecutable({ env: { PATH: "" }, platform: "linux", home: "/home/user", exists: (p) => p === "/home/user/.local/bin/rql" }),
+    { path: "/home/user/.local/bin/rql", kind: "install-dir" },
   );
   assert.equal(findRqlExecutable({ env: { PATH: "" }, platform: "win32", home: WIN_HOME, exists: () => false }), null);
 });
 
 test("verifySecretFilePermissions is HONEST on win32 (no false 'enforced')", () => {
-  const result = verifySecretFilePermissions("C:\\Users\\Ben\\.claude\\settings.json", { platform: "win32" });
+  const result = verifySecretFilePermissions("C:\\Users\\example\\.claude\\settings.json", { platform: "win32" });
   assert.equal(result.enforced, false);
   assert.equal(result.verified, false);
   assert.equal(result.mode, "windows-acl-unverified");

@@ -1,0 +1,73 @@
+--- a/frontend/src/components/game/OfficeDesks.tsx
++++ b/frontend/src/components/game/OfficeDesks.tsx
+@@ -79,8 +79,9 @@
+ /**
+  * The 10 workstation desks from the shared W17ant layout.
+  *
+- * Issue 226 R5 (operator): only desks that are actually OCCUPIED by a visible
+- * agent are drawn - an empty workstation is not rendered at all.
++ * B5 (operator): the full authored desk set is drawn, occupied or not, so a
++ * Ghost-only roster still shows the whole floor. Occupancy only decides who
++ * sits where; it no longer hides furniture.
+  * `occupied` holds the 1-based desk numbers (matching getSpotForDesk).
+  */
+ export function DeskCluster({
+@@ -89,16 +90,14 @@
+   occupied: Set<number>;
+ }): ReactNode {
+   // The desk set is FIXED by the saved layout (authored desks minus hidden
+-  // ones); only OCCUPIED pool seats draw their workstation, so empty desks
+-  // never pop onto the floor. Operator-inserted desks are skipped here and
+-  // render through InsertedSpriteView. `occupied` holds 1-based pool seat
+-  // numbers (matching assignDeskSeats).
++  // ones) and rendered in full (B5); occupancy is no longer a draw gate.
++  // Operator-inserted desks are skipped here and render through
++  // InsertedSpriteView. `occupied` holds 1-based pool seat numbers.
+   const seats = useDeskSeats();
+   return (
+     <>
+       {seats.map((seat, i) => {
+         if (!seat.base) return null; // inserted desks draw themselves
+-        if (!occupied.has(i + 1)) return null; // empty desk stays off floor
+         return (
+           <DeskSprite
+             key={seat.id}
+@@ -313,20 +312,26 @@
+   { name: "Ghost Protocol", deskId: "desk-ghostreporting" },
+ ];
+ 
+-/** Persistent-identity workstations (issue 226 R5) - only when present. */
+-export function SolDesks({ present }: { present: Set<string> }): ReactNode {
++/**
++ * Persistent-identity workstations (issue 226 R5).
++ *
++ * B6 (operator): the desks are FURNITURE, not an identity signal. Render the
++ * whole pinned set unconditionally so a Ghost-only roster still shows the
++ * operator's floor exactly like the live deployment; an absent owner leaves an
++ * empty desk, which is the intended view. Identity seeding is unaffected and
++ * stays Ghost-only.
++ */
++export function SolDesks(_props: { present?: Set<string> } = {}): ReactNode {
+   return (
+     <>
+-      {PINNED_DESKS.map((desk, i) =>
+-        present.has(PINNED_DESK_OWNERS[i].name) ? (
+-          <DeskSprite
+-            key={`pinned-desk-${i}`}
+-            id={PINNED_DESK_OWNERS[i].deskId}
+-            name={`${PINNED_DESK_OWNERS[i].name}'s Desk`}
+-            desk={desk}
+-          />
+-        ) : null,
+-      )}
++      {PINNED_DESKS.map((desk, i) => (
++        <DeskSprite
++          key={`pinned-desk-${i}`}
++          id={PINNED_DESK_OWNERS[i].deskId}
++          name={`${PINNED_DESK_OWNERS[i].name}'s Desk`}
++          desk={desk}
++        />
++      ))}
+     </>
+   );
+ }

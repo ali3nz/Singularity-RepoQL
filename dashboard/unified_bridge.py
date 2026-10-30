@@ -5,13 +5,12 @@ before this module. Rust independently requires a gateway secret and binds loopb
 """
 from __future__ import annotations
 import json
+import http.client
 import os
 import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 
 BASE = os.environ.get('UNIFIED_SERVICE_BASE', 'http://127.0.0.1:18101').rstrip('/')
 SECRET_FILE = Path(os.environ.get('UNIFIED_GATEWAY_TOKEN_FILE')
@@ -119,42 +118,73 @@ def forward_unified(method, path, params=None, body=None):
         raise FileNotFoundError('unknown unified route')
     if (method, path) == ('GET', '/api/unified/graph'):
         return _cached_graph(method, path, params, body)
-    return _fetch_upstream(method, path, params, body)
+    payload = _fetch_upstream(method, path, params, body)
+    if (method, path) == ('GET', '/api/unified/usage') and os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
+        from native_gui_usage import project
+        from variant_features import features
+        return project(payload, profile=features())
+    return payload
+
+
+def _fixed_loopback_base():
+    """Pin the actual connection to an IP literal, never DNS or redirects.
+
+    The dashboard is a credentialed proxy. Calling urlopen() here would allow
+    an upstream 30x to influence its destination; origin aliases and URL user
+    information must not be accepted as security boundaries.
+    """
+    parts = urlsplit(BASE)
+    if (parts.scheme != 'http' or parts.hostname not in ('127.0.0.1', '::1')
+            or parts.username is not None or parts.password is not None
+            or parts.path not in ('', '/') or parts.query or parts.fragment):
+        raise PermissionError('unified bridge requires a fixed loopback IP origin')
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise PermissionError('unified bridge port invalid') from exc
+    if port is None or not 1 <= port <= 65535:
+        raise PermissionError('unified bridge requires an explicit port')
+    return parts.hostname, port
 
 
 def _fetch_upstream(method, path, params=None, body=None):
-    parts = urlsplit(BASE)
-    if parts.scheme != 'http' or parts.hostname not in ('127.0.0.1','localhost','::1'):
-        raise PermissionError('unified bridge refuses non-loopback upstream')
+    # Reject invalid origins before opening any connection or reading a key.
+    host, port = _fixed_loopback_base()
     try:
         secret = SECRET_FILE.read_text(encoding='utf-8').strip()
     except OSError:
         return {'available': False, 'error': 'unified_gateway_not_configured'}
-    if not secret:
+    if not secret or '\r' in secret or '\n' in secret:
         return {'available': False, 'error': 'unified_gateway_not_configured'}
+    route = ROUTES.get((method, path))
+    if route is None:
+        raise FileNotFoundError('unknown unified route')
     qs = urlencode(params or {}) if method == 'GET' else ''
-    url = BASE + ROUTES[(method,path)] + ('?' + qs if qs else '')
-    request = Request(url, method=method, headers={
+    target = route + ('?' + qs if qs else '')
+    headers = {
         'Authorization': 'Bearer ' + secret,
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-    }, data=json.dumps(body or {}).encode('utf-8') if method == 'POST' else None)
+    }
+    encoded = json.dumps(body or {}).encode('utf-8') if method == 'POST' else None
+    conn = http.client.HTTPConnection(host, port, timeout=75 if path == '/api/unified/graph' else 18)
     try:
-        with urlopen(request, timeout=75 if path == '/api/unified/graph' else 18) as response:
-            raw = response.read(8 * 1024 * 1024 + 1)
-    except HTTPError as exc:
-        detail = ''
-        try:
-            payload = json.loads(exc.read(2048).decode('utf-8'))
-            if isinstance(payload, dict) and isinstance(payload.get('error'), str):
-                detail = payload['error'][:160]
-        except (ValueError, UnicodeDecodeError, OSError):
-            detail = ''
-        return {'available': False, 'error': f'unified_http_{exc.code}' + (':' + detail if detail else '')}
-    except (URLError, TimeoutError, OSError):
+        conn.request(method, target, body=encoded, headers=headers)
+        response = conn.getresponse()
+        # HTTPConnection does not follow redirects. Never send the gateway key
+        # to an upstream-specified Location; even a relative redirect is a
+        # configuration mismatch for this fixed protocol.
+        if response.status in (301, 302, 303, 307, 308):
+            return {'available': False, 'error': 'unified_upstream_redirect_refused'}
+        if response.status < 200 or response.status >= 300:
+            return {'available': False, 'error': f'unified_http_{response.status}'}
+        raw = response.read(8 * 1024 * 1024 + 1)
+        if len(raw) > 8 * 1024 * 1024:
+            return {'available': False, 'error': 'unified_response_too_large'}
+    except (OSError, TimeoutError, http.client.HTTPException):
         return {'available': False, 'error': 'unified_service_unavailable'}
-    if len(raw) > 8 * 1024 * 1024:
-        return {'available': False, 'error': 'unified_response_too_large'}
+    finally:
+        conn.close()
     try:
         return json.loads(raw)
     except (ValueError, UnicodeDecodeError):

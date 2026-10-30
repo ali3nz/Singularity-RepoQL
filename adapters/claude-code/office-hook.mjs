@@ -58,6 +58,7 @@ try {
     try {
       await fetch(endpoint, {
         method: "POST",
+        redirect: "error", // never forward the ingestion key to a redirect target
         headers: { "Content-Type": "application/json", "X-API-Key": key },
         body: JSON.stringify(e),
         signal: AbortSignal.timeout(1500),

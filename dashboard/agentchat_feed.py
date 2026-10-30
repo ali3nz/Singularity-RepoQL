@@ -12,9 +12,17 @@ import re
 import stat
 from pathlib import Path
 
+def default_state_root(*, platform=None, env=None, home=None):
+    platform = platform or os.name
+    env = os.environ if env is None else env
+    home = Path.home() if home is None else Path(home)
+    if platform == 'nt':
+        return Path(env.get('LOCALAPPDATA') or home / 'AppData' / 'Local') / 'Singularity' / 'AgentChat'
+    return home / '.local' / 'state' / 'singularity-dashboard' / 'agentchat'
+
 ROOT = Path(os.environ.get('SINGULARITY_AGENTCHAT_STATE_DIR')
             or os.environ.get('RQLDASH_AGENTCHAT_STATE_DIR')
-            or Path.home() / '.local' / 'state' / 'singularity-dashboard' / 'agentchat')
+            or default_state_root())
 FILE_RE = re.compile(r'^[a-z0-9_-]{1,90}\.jsonl$')
 MAX_FILES = 160
 TAIL_BYTES = 128 * 1024
@@ -23,10 +31,19 @@ TAIL_BYTES = 128 * 1024
 def _latest_lines(path: Path):
     """Read the tail without following links or reading historical full inboxes."""
     try:
+        # Windows lacks O_NOFOLLOW. Check the entry without following its
+        # final link *before* opening it, then verify the opened file identity
+        # against that entry. Reject filename swaps, reparse points, and any
+        # unverified file identity instead of following an unexpected target.
+        before = os.lstat(path)
+        if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+                or (getattr(before, 'st_file_attributes', 0) & 0x400)):
+            return []
         fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_CLOEXEC', 0))
         with os.fdopen(fd, 'rb') as stream:
             info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode):
+            if (not stat.S_ISREG(info.st_mode) or info.st_dev != before.st_dev
+                    or info.st_ino != before.st_ino):
                 return []
             length = min(info.st_size, TAIL_BYTES)
             stream.seek(-length, os.SEEK_END)

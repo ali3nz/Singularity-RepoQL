@@ -80,6 +80,24 @@ test("option 1 and 3 ship CORE only — exact exclusion of Ghost and Office", ()
   }
 });
 
+test("native Ghost scheduler source is complete-only and never falls through to core", () => {
+  const files = [
+    "native/windows/ghost_scheduler_host.py",
+    "native/windows/ghost_task_scheduler.ps1",
+    "native/windows/manage_ghost_scheduler.ps1",
+    "native/windows/test_ghost_scheduler_host.py",
+  ];
+  for (const path of files) assert.equal(classifyBundleFile(path).component, COMPONENT.GHOST, path);
+  for (const variant of ["1", "3"]) {
+    const set = variantFileSet([...FIXTURE, ...files], variant);
+    assert.ok(files.every((path) => !set.includes(path)), `option ${variant} must exclude native Ghost scheduler files`);
+  }
+  for (const variant of ["2", "4"]) {
+    const set = variantFileSet([...FIXTURE, ...files], variant);
+    assert.ok(files.every((path) => set.includes(path)), `option ${variant} must include native Ghost scheduler files`);
+  }
+});
+
 test("option 2 and 4 ship CORE + Ghost + Office — exact inclusion", () => {
   for (const v of ["2", "4"]) {
     const set = variantFileSet(FIXTURE, v);
@@ -151,6 +169,7 @@ function auditCredentialNames(variant) {
 test("the real shipped tree is fully classified (no silent new file)", () => {
   const files = walkShippedFiles(ROOT);
   assert.ok(files.length > 100, `the walk must see the shipped tree (saw ${files.length})`);
+  assert.ok(!files.some((path) => path.split("/").includes("target")), "Cargo build outputs are never source package files");
   const parts = partitionBundleFiles(files);
   assert.deepEqual(parts.unclassified, [], "every shipped file needs an explicit component");
   assert.ok(parts.ghost.length > 0 && parts.office.length > 0, "the real tree carries Ghost and Office payload");

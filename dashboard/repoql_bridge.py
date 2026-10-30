@@ -87,7 +87,8 @@ class Config:
                                 str(Path.home()))),
             rql=Path(pick("SINGULARITY_RQL_BIN", "RQLDASH_RQL", "rql", "rql")),
             state_dir=Path(pick("SINGULARITY_STATE_DIR", "RQLDASH_STATE", "state_dir",
-                                str(Path.home() / ".local" / "state" / "singularity-dashboard"))),
+                                str((Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'Singularity' / 'Dashboard')
+                                    if os.name == 'nt' else (Path.home() / '.local' / 'state' / 'singularity-dashboard')))),
             bind=pick("SINGULARITY_BIND", "RQLDASH_BIND", "bind", "127.0.0.1"),
             port=int(pick("SINGULARITY_PORT", "RQLDASH_PORT", "port", 18100)),
             sample_interval_seconds=int(pick("SINGULARITY_SAMPLE_INTERVAL",
@@ -269,6 +270,10 @@ class RepoQL:
             pid = int(pid)
         except (TypeError, ValueError):
             return None
+        if os.name == "nt":
+            # Python cannot verify process start-time/executable ownership; a
+            # Windows Rust supervisor will provide authoritative host status.
+            return None
         return pid if Path(f"/proc/{pid}").exists() else None
 
     def host_log_path(self) -> Path | None:
@@ -341,6 +346,9 @@ class RepoQL:
         Percent is per core (100 = one saturated core), matching `ps %CPU`'s
         scale but computed from a real delta rather than the lifetime average.
         """
+        if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+            from native_cpu import sample_cpu
+            return sample_cpu(pid if pid is not None else self.host_pid())
         pid = pid or self.host_pid()
         if pid is None:
             return {"available": False, "reason": "repoql-host process is not running"}

@@ -10,6 +10,7 @@
 // Run: node --test scripts/runtime-proofs.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -208,12 +209,18 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   return path;
 }
 
+// Windows cannot execute a shebang script directly. Spawn the same script with
+// the running Node binary so the real stdio MCP child process is exercised on
+// every platform; POSIX keeps the product's own spawn path untouched.
+const spawnScript = (cmd, argv, opts) => spawn(process.execPath, [cmd, ...argv], opts);
+const SPAWN_IMPL = process.platform === "win32" ? spawnScript : undefined;
+
 test("the RepoQL probe makes a real read-only tools/call and verifies it", async () => {
   const bin = fakeRql();
   const prev = process.env.FAKE_RQL_MODE;
   process.env.FAKE_RQL_MODE = "good";
   try {
-    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000 });
+    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000, spawnImpl: SPAWN_IMPL });
     assert.equal(r.ok, true, r.detail);
     assert.equal(r.state, "VERIFIED");
     assert.match(r.detail, /tools\/call succeeded/);
@@ -224,7 +231,7 @@ test("a server without the read-only query tool is INCOMPLETE, never a pass", as
   const bin = fakeRql();
   process.env.FAKE_RQL_MODE = "no-query";
   try {
-    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000 });
+    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000, spawnImpl: SPAWN_IMPL });
     assert.equal(r.ok, false);
     assert.match(r.detail, /does not expose the read-only query tool/);
   } finally { delete process.env.FAKE_RQL_MODE; }
@@ -234,7 +241,7 @@ test("a tools/call that reports an error is INCOMPLETE", async () => {
   const bin = fakeRql();
   process.env.FAKE_RQL_MODE = "tool-error";
   try {
-    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000 });
+    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000, spawnImpl: SPAWN_IMPL });
     assert.equal(r.ok, false);
     assert.match(r.detail, /reported an error/);
   } finally { delete process.env.FAKE_RQL_MODE; }
@@ -244,7 +251,7 @@ test("a server that never answers times out as INCOMPLETE", async () => {
   const bin = fakeRql();
   process.env.FAKE_RQL_MODE = "silent";
   try {
-    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 1500 });
+    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 1500, spawnImpl: SPAWN_IMPL });
     assert.equal(r.ok, false);
     assert.equal(r.state, "INCOMPLETE");
     assert.match(r.detail, /did not answer within/);
@@ -255,7 +262,7 @@ test("a server that exits before answering is INCOMPLETE (no stand-in passes)", 
   const bin = fakeRql();
   process.env.FAKE_RQL_MODE = "exit";
   try {
-    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000 });
+    const r = await probeRepoqlMcp({ rqlPath: bin, timeout: 8000, spawnImpl: SPAWN_IMPL });
     assert.equal(r.ok, false);
     assert.equal(r.state, "INCOMPLETE");
   } finally { delete process.env.FAKE_RQL_MODE; }
@@ -393,4 +400,30 @@ test("provider credentials that cannot be reached are INCOMPLETE with the real r
   assert.equal(r.ok, false);
   assert.equal(r.state, "INCOMPLETE");
   assert.match(r.detail, /unreachable/);
+});
+
+test("a busy upstream port does not leave an earlier mock upstream listening (no test-process hang)", async () => {
+  // Hold one port, then ask the proof to use it as the second upstream. The
+  // proof may retry on another port and finish either way; what must hold is
+  // that the first upstream it opened (on freePort) is CLOSED on return, so
+  // the port is bindable again. Before the fix a leaked listener kept the
+  // test process alive forever.
+  const { runControlledFailoverProof: proof } = await import("./runtime-proofs.mjs");
+  const busy = createServer();
+  await new Promise((r) => busy.listen(0, "127.0.0.1", r));
+  const busyPort = busy.address().port;
+  const free = createServer();
+  await new Promise((r) => free.listen(0, "127.0.0.1", r));
+  const freePort = free.address().port;
+  await new Promise((r) => free.close(r));
+  try {
+    // mockPorts is popped from the end: freePort is opened first (A), busyPort second (B).
+    const r = await proof({ root: process.cwd(), mockPorts: [busyPort, freePort], overallTimeout: 4000 });
+    assert.equal(typeof r.ok, "boolean");
+    const probe = createServer();
+    await new Promise((res, rej) => { probe.once("error", rej); probe.listen(freePort, "127.0.0.1", res); });
+    await new Promise((r2) => probe.close(r2));
+  } finally {
+    busy.close();
+  }
 });

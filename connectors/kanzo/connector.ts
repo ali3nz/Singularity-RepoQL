@@ -5,7 +5,7 @@
 // left, manifest.yaml states what it asks for, README.md tells the person who installs it what it keeps,
 // help/layout.md tells a reader how to ask, and sql/ holds the views a reader queries.
 //
-//   rql connector test connector.ts --fixtures lifecycle.json
+//   rql connector test connectors/kanzo/connector.ts --fixtures connectors/kanzo/suite.json
 //   rql connector pack connector.ts --id RepoQL.Connectors.Kanzo --version 1.0.0 --authors fleet
 //
 // The source. Kanzo is the fleet's shared board. It serves a loopback-only HTTP API with no authentication, and one
@@ -50,7 +50,7 @@
 //   writes the same bytes. A file is rewritten only when what it holds changed.
 // - Removal on the source's word only. Every sweep reads the whole board and not a change feed, so a sweep that
 //   completes removes a file whose record the complete, validated listing no longer names — and only then.
-import { Connector, InvalidImport, type ImportTarget, type ImportUri, type SyncRequest, type SyncResult, type Term } from 'repoql:connector';
+import { Connector, InvalidImport, type Changes, type FetchResult, type ImportTarget, type ImportUri, type Row, type Term } from 'repoql:connector';
 
 // The board's own loopback address. The manifest grants this host and no other, and the connector builds every URL
 // from it, so no answer can send a request anywhere else.
@@ -58,12 +58,12 @@ const BASE = 'http://localhost:4242';
 const LISTING = '/api/board?done=all';
 
 // A call may make 20 requests. One is the listing; the rest read the comments of cards that have some.
-const DETAILS_A_CALL = 19;
-// The version of what a file looks like. Raise it with any change to `writeTask` or `writeProject`: every file is
-// then written again from what is kept.
-const SHAPE = 1;
-// Every folder this connector writes. A full sweep removes from each what it did not list.
-const FOLDERS = ['tasks', 'projects'];
+const COLLECTION = 'kanzo';
+const RUN_KEY = '@run';
+const META_KEY = '@board';
+const SHAPE = 2;
+const VALUE_CHUNK = 4000;
+const PAGE = 500;
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const REPO = /^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -73,13 +73,14 @@ const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 interface Card {
   id: number; project: string; title: string; description: string; tags: string[];
   human: boolean; status: string; position: number; created: string; updated: string; comments: number;
+  source: Provenance | null; closure: Closure | null; dropped: number;
 }
 interface Project {
   id: number; slug: string; name: string; repos: string[]; color: string | null;
   created: string; open: number; total: number;
 }
 interface Board { version: string; changes: string; statuses: string[]; projects: Project[]; cards: Card[] }
-interface Comment { id: number; author: string; created: string; body: string }
+interface Comment { id: number; author: string; created: string; body: string; closure: Closure | null }
 // What migration provenance a card's file shows. Every member is optional: a card that was not imported has none.
 interface Provenance {
   imported_at?: string; importer?: string; source_key?: string; source_path?: string; source_sha256?: string;
@@ -95,11 +96,20 @@ interface Closure {
 }
 // The text of one field after the broker's envelopes are taken out of it.
 interface Unwrapped { text: string; source: Provenance | null; closure: Closure | null; dropped: number }
-// What each card's file is written from, kept under .state, which is never indexed.
-interface KeptCard { shape: number; updated: string; comments: number; changes: string }
-interface Kept { shape: number; changes: string; complete: string; cards: Record<string, KeptCard> }
-// The whole cursor of a sweep: the instant it began, and whether it may remove what it does not list.
-interface Position { began: string; all: boolean }
+interface KeptCard { kind: 'card-state'; shape: number; updated: string; comments: number; changes: string }
+interface BoardMeta {
+  kind: 'board-meta'; version: string; changes: string; statuses: string[]; projects: Project[];
+  began: string; taskCount: number; commentCount: number; tasksWithComments: number;
+  migrated: number; humanTasks: number; byStatus: Record<string, number>; lastChange: string;
+}
+interface CardSnapshot { kind: 'card-snapshot'; card: Card }
+interface Run { kind: 'run'; board: BoardMeta; needs: number[]; next: number }
+interface FileRow {
+  kind: 'file'; path: string; part: number; parts: number; content: string; time: string; origin: string;
+  taskId?: number; projectSlug?: string;
+}
+type Stored = FileRow | KeptCard | BoardMeta | CardSnapshot | Run;
+interface OutputFile { path: string; text: string; time: string; origin: string }
 
 // Every value copied from an answer is held to its type first. A value of another type fails the call, which
 // publishes nothing and removes nothing. The error names the member and never the value.
@@ -273,9 +283,6 @@ function closureOf(body: Record<string, unknown>, what: string): Closure {
 }
 
 export default class Kanzo extends Connector {
-  // The host makes one instance for each call, so these last one call and no longer.
-  private details = 0;
-
   // An import is kanzo://board. There is one board on this machine, and the connector reaches only its loopback
   // address, so a URI that names anything else is refused before anything is imported.
   static parse(uri: ImportUri): ImportTarget {
@@ -285,63 +292,137 @@ export default class Kanzo extends Connector {
     return { root: 'kanzo://board/', title: 'Kanzo board' };
   }
 
-  sync({ full, cursor }: SyncRequest): SyncResult {
-    const at: Position = cursor === undefined ? { began: this.clock.now(), all: full } : this.position(cursor);
-    const kept: Kept = this.read('.state/kept.json', { shape: SHAPE, changes: '', complete: '', cards: {} });
-    if (kept.shape !== SHAPE) kept.cards = {};
-
-    const board = this.listing();
-    const projects = new Map(board.projects.map(project => [project.slug, project]));
-    const needs = (card: Card): boolean => {
-      const held = kept.cards[String(card.id)];
-      return card.comments > 0 && (kept.shape !== SHAPE || !held || held.comments !== card.comments ||
-        held.updated !== card.updated || held.changes !== board.changes);
-    };
-
-    // The comments of the cards that have some, and have changed, are read now, as many as a call may ask for.
-    const comments = new Map<number, Comment[]>();
-    for (const card of board.cards) {
-      if (this.details >= DETAILS_A_CALL || this.signal.aborted) break;
-      if (!needs(card) || comments.has(card.id)) continue;
-      comments.set(card.id, this.comments(card, projects.get(card.project)!));
-      this.details++;
+  fetch(cursor?: string): FetchResult {
+    if (this.pass?.full !== true) throw new Error('Kanzo requires a complete validated board listing; no rows were removed.');
+    let run: Run;
+    if (cursor === undefined) {
+      const board = this.listing();
+      run = { kind: 'run', board: this.boardMeta(board, this.clock.now()), needs: [], next: 0 };
+      this.prepareBoard(board, run);
+      this.db.put<BoardMeta>(COLLECTION, META_KEY, run.board);
+      this.db.put<Run>(COLLECTION, RUN_KEY, run);
+    } else {
+      const found = this.db.get<Run>(COLLECTION, RUN_KEY);
+      if (!this.validRun(found)) throw new Error('The saved Kanzo listing is missing or malformed; no rows were removed.');
+      run = found;
+      let position: unknown;
+      try { position = JSON.parse(cursor); } catch { refuse('a cursor that is not JSON'); }
+      const row = object(position, 'a cursor');
+      const next = count(row.next, 'a cursor position');
+      if (next !== run.next || next > run.needs.length) throw new Error('The saved Kanzo cursor does not match its validated listing; no rows were removed.');
     }
-
-    // Every card whose file can be written whole now is written. A card whose comments this sweep has not read yet
-    // keeps the file it already has, which is complete for the board as it was; the next call of the sweep finishes
-    // it. A card with no comments needs no request: its file is complete from the listing.
-    for (const card of board.cards) {
-      const read = comments.get(card.id);
-      if (card.comments > 0 && !read) continue;
-      this.writeCard(card, projects.get(card.project)!, read ?? [], board);
-      kept.cards[String(card.id)] = { shape: SHAPE, updated: card.updated, comments: card.comments, changes: board.changes };
-    }
-    const newest = newestUpdate(board);
-    for (const project of board.projects) this.writeProject(project, board, newest(project.slug));
-
-    const left = board.cards.filter(card => needs(card) && !comments.has(card.id));
-    if (left.length) {
-      kept.shape = SHAPE;
-      this.workspace.writeText('.state/kept.json', JSON.stringify(kept));
-      return { nextCursor: JSON.stringify(at) };
-    }
-
-    // Every card has been read, and every sweep reads the whole board and not a change feed, so the complete listing
-    // is the source's own word on what exists: what it does not name is removed, in a full sweep and in any other.
-    // It happens here, at the call that completes the sweep, and never before every record has been validated. The
-    // one thing a sweep is asked for that changes is whether `complete_as_of` moves.
-    this.reconcile(board, kept);
-    this.finish(board, kept, at);
-    return {};
+    return this.finishFetch(run);
   }
 
-  // The cursor of a sweep, held to its form: a cursor that does not parse fails the call rather than reading a
-  // partial sweep as a full one.
-  private position(cursor: string): Position {
-    let value: unknown;
-    try { value = JSON.parse(cursor); } catch { refuse('a cursor that is not JSON'); }
-    const at = object(value, 'a cursor');
-    return { began: instant(at.began, 'a cursor began'), all: boolean(at.all, 'a cursor all') };
+  private validRun(value: unknown): value is Run {
+    if (!isObject(value) || value.kind !== 'run' || !Array.isArray(value.needs) || typeof value.next !== 'number' || !Number.isInteger(value.next) || value.next < 0) return false;
+    return value.needs.every(id => Number.isInteger(id) && id > 0) && isObject(value.board) && value.board.kind === 'board-meta';
+  }
+
+  private boardMeta(board: Board, began: string): BoardMeta {
+    const byStatus = Object.create(null) as Record<string, number>;
+    for (const status of board.statuses) byStatus[status] = board.cards.filter(card => card.status === status).length;
+    const lastChange = board.cards.reduce((newest, card) => Date.parse(card.updated) > Date.parse(newest) ? card.updated : newest, '1970-01-01T00:00:00Z');
+    return {
+      kind: 'board-meta', version: board.version, changes: board.changes, statuses: board.statuses, projects: board.projects, began,
+      taskCount: board.cards.length, commentCount: board.cards.reduce((sum, card) => sum + card.comments, 0),
+      tasksWithComments: board.cards.filter(card => card.comments > 0).length,
+      migrated: board.cards.filter(card => card.source !== null).length, humanTasks: board.cards.filter(card => card.human).length, byStatus, lastChange,
+    };
+  }
+
+  private stateKey(id: number): string { return `state|${id}`; }
+  private snapshotKey(id: number): string { return `snapshot|${id}`; }
+  private fileKey(path: string, part: number): string { return `file|${encodeURIComponent(path)}|${String(part).padStart(6, '0')}`; }
+
+  private putFile(path: string, contents: string, modified: string, origin: string, taskId?: number, projectSlug?: string): void {
+    const chunks: string[] = [];
+    if (!contents.length) chunks.push('');
+    else for (let at = 0; at < contents.length; at += VALUE_CHUNK) chunks.push(contents.slice(at, at + VALUE_CHUNK));
+    for (let part = 0; part < chunks.length; part += 1) {
+      const row: FileRow = { kind: 'file', path, part, parts: chunks.length, content: chunks[part], time: modified, origin };
+      if (taskId !== undefined) row.taskId = taskId;
+      if (projectSlug !== undefined) row.projectSlug = projectSlug;
+      this.db.put<FileRow>(COLLECTION, this.fileKey(path, part), row, { time: modified });
+    }
+  }
+
+  private rows(): Row<Stored>[] {
+    const rows: Row<Stored>[] = [];
+    let after: string | undefined;
+    do {
+      const page = this.db.list<Stored>(COLLECTION, { after, limit: PAGE });
+      rows.push(...page.rows);
+      after = page.next;
+    } while (after !== undefined);
+    return rows;
+  }
+
+  private existingTaskFiles(): Map<number, FileRow[]> {
+    const grouped = new Map<number, FileRow[]>();
+    for (const row of this.rows()) {
+      const value = row.value as Stored;
+      if (value.kind !== 'file' || value.taskId === undefined) continue;
+      const found = grouped.get(value.taskId) ?? [];
+      found.push(value);
+      grouped.set(value.taskId, found);
+    }
+    return grouped;
+  }
+
+  private touchTask(id: number, files: Map<number, FileRow[]>): boolean {
+    const parts = (files.get(id) ?? []).sort((a, b) => a.part - b.part);
+    if (!parts.length || parts.length !== parts[0].parts || parts.some((part, index) => part.part !== index || part.parts !== parts.length)) return false;
+    const keys = parts.map(part => this.fileKey(part.path, part.part));
+    for (let at = 0; at < keys.length; at += PAGE) this.db.touch(COLLECTION, keys.slice(at, at + PAGE));
+    return true;
+  }
+
+  private prepareBoard(board: Board, run: Run): void {
+    const projects = new Map(board.projects.map(project => [project.slug, project]));
+    const oldFiles = this.existingTaskFiles();
+    const newest = newestUpdate(board);
+    for (const project of board.projects) this.writeProject(project, board, newest(project.slug));
+    for (const card of board.cards) {
+      const stateKey = this.stateKey(card.id);
+      const held = this.db.get<KeptCard>(COLLECTION, stateKey);
+      const needsDetails = card.comments > 0 && (!held || held.kind !== 'card-state' || held.shape !== SHAPE ||
+        held.comments !== card.comments || held.updated !== card.updated || held.changes !== board.changes);
+      if (card.comments === 0) {
+        this.writeCard(card, projects.get(card.project)!, [], board);
+        this.db.put<KeptCard>(COLLECTION, stateKey, { kind: 'card-state', shape: SHAPE, updated: card.updated, comments: card.comments, changes: board.changes });
+      } else if (needsDetails || !this.touchTask(card.id, oldFiles)) {
+        this.db.put<CardSnapshot>(COLLECTION, this.snapshotKey(card.id), { kind: 'card-snapshot', card });
+        run.needs.push(card.id);
+      }
+    }
+  }
+
+  private finishFetch(run: Run): FetchResult {
+    const projects = new Map(run.board.projects.map(project => [project.slug, project]));
+    while (run.next < run.needs.length) {
+      if (this.signal.aborted) {
+        this.db.put<Run>(COLLECTION, RUN_KEY, run);
+        return { cursor: JSON.stringify({ next: run.next }) };
+      }
+      const id = run.needs[run.next];
+      const snapshot = this.db.get<CardSnapshot>(COLLECTION, this.snapshotKey(id));
+      if (!snapshot || snapshot.kind !== 'card-snapshot' || snapshot.card.id !== id) throw new Error(`The saved Kanzo task ${id} is missing; no rows were removed.`);
+      const project = projects.get(snapshot.card.project);
+      if (!project) throw new Error(`The saved Kanzo project for task ${id} is missing; no rows were removed.`);
+      const comments = this.comments(snapshot.card, project);
+      this.writeCard(snapshot.card, project, comments, { ...run.board, cards: [snapshot.card] });
+      this.db.put<KeptCard>(COLLECTION, this.stateKey(id), { kind: 'card-state', shape: SHAPE, updated: snapshot.card.updated,
+        comments: snapshot.card.comments, changes: run.board.changes });
+      this.db.remove(COLLECTION, this.snapshotKey(id));
+      run.next += 1;
+      this.db.put<Run>(COLLECTION, RUN_KEY, run);
+      if (this.signal.aborted && run.next < run.needs.length) return { cursor: JSON.stringify({ next: run.next }) };
+    }
+
+    this.writeOverview(run.board);
+    this.db.remove(COLLECTION, RUN_KEY);
+    return { removeUnseen: true };
   }
 
   // One complete board, read and validated. Nothing is written from an answer that does not pass every check here:
@@ -366,7 +447,7 @@ export default class Kanzo extends Connector {
     const projects = list(body.projects, 'projects').map((entry): Project => {
       const row = object(entry, 'a project');
       const slug = filled(row.slug, 'a project slug');
-      if (!SLUG.test(slug)) refuse(`a project slug ${JSON.stringify(slug)} that is not a slug`);
+      if (!SLUG.test(slug)) refuse('a project slug that is not a slug');
       const repos = list(row.repos, `the repos of project ${slug}`).map(repo => {
         const name = filled(repo, `a repo of project ${slug}`);
         if (!REPO.test(name)) refuse(`a repo of project ${slug} that is not owner/name`);
@@ -381,6 +462,7 @@ export default class Kanzo extends Connector {
     });
     if (!projects.length) refuse('an empty projects list');
     if (new Set(projects.map(project => project.slug)).size !== projects.length) refuse('a project listed twice');
+    if (new Set(projects.map(project => project.id)).size !== projects.length) refuse('two projects with the same id');
     const slugs = new Set(projects.map(project => project.slug));
 
     const seen = new Set<number>();
@@ -390,14 +472,15 @@ export default class Kanzo extends Connector {
       if (id === 0) refuse('a task with id 0');
       if (seen.has(id)) refuse(`a task id ${id} listed twice`);
       seen.add(id);
-      const project = filled(row.project, `the project of task ${id}`);
-      if (!slugs.has(project)) refuse(`task ${id} in project ${JSON.stringify(project)}, which the answer does not list`);
+      const project = this.projectSlug(row.project, projects, `the project of task ${id}`);
+      if (!slugs.has(project)) refuse(`task ${id} in a project the answer does not list`);
       const status = filled(row.status, `the status of task ${id}`);
-      if (!statuses.includes(status)) refuse(`task ${id} with status ${JSON.stringify(status)}, which the answer does not list`);
+      if (!statuses.includes(status)) refuse(`task ${id} with a status the answer does not list`);
       const tags = list(row.tags ?? [], `the tags of task ${id}`).map(tag => filled(tag, `a tag of task ${id}`));
+      const unwrapped = unwrap(text(row.description ?? '', `the description of task ${id}`), `task ${id} description`);
       return {
         id, project, title: scrub(filled(row.title, `the title of task ${id}`)),
-        description: text(row.description ?? '', `the description of task ${id}`),
+        description: scrub(unwrapped.text), source: unwrapped.source, closure: unwrapped.closure, dropped: unwrapped.dropped,
         tags: [...new Set(tags)].sort(), human: boolean(row.human, `the human flag of task ${id}`), status,
         position: number(row.position, `the position of task ${id}`),
         created: instant(row.created_at, `the created_at of task ${id}`),
@@ -418,6 +501,15 @@ export default class Kanzo extends Connector {
     return { version, changes, statuses, projects, cards };
   }
 
+  private projectSlug(value: unknown, projects: Project[], what: string): string {
+    if (typeof value === 'string') {
+      const slug = filled(value, what);
+      if (projects.some(project => project.slug === slug)) return slug;
+      return refuse(`${what} that names no listed project`);
+    }
+    return refuse(`${what} that is not a project slug string`);
+  }
+
   // One card's comments, from the board's own detail answer. The listing said how many there are, and this answer
   // must hold that many: a count that moved while the sweep read means the sweep and the board disagree, and the
   // next sweep reads both again.
@@ -432,18 +524,20 @@ export default class Kanzo extends Connector {
     const body = object(reply.body, `the answer to ${path}`);
     const task = object(body.task, `the task of ${path}`);
     if (count(task.id, `the id of the task of ${path}`) !== card.id) refuse(`something other than task ${card.id} for ${path}`);
-    if (filled(task.project, `the project of the task of ${path}`) !== project.slug) refuse(`task ${card.id} in another project than the listing states`);
+    const detailProject = this.projectSlug(task.project, [project], `the project of the task of ${path}`);
+    if (detailProject !== project.slug) refuse(`task ${card.id} in another project than the listing states`);
     const rows = list(body.comments ?? [], `the comments of task ${card.id}`);
     const comments = rows.map((entry): Comment => {
       const row = object(entry, `a comment of task ${card.id}`);
       if (count(row.task_id, `the task_id of a comment of task ${card.id}`) !== card.id)
         refuse(`a comment of task ${card.id} that belongs to another task`);
       const author = text(row.author ?? '', `the author of a comment of task ${card.id}`).trim();
+      const unwrapped = unwrap(text(row.body ?? '', `the body of a comment of task ${card.id}`), `a comment on task ${card.id}`);
       return {
         id: count(row.id, `the id of a comment of task ${card.id}`),
         author: author ? scrub(author.replace(/\s+/g, ' ')) : 'unknown',
         created: instant(row.created_at, `the created_at of a comment of task ${card.id}`),
-        body: text(row.body ?? '', `the body of a comment of task ${card.id}`),
+        body: scrub(unwrapped.text), closure: unwrapped.closure,
       };
     }).sort((a, b) => a.created === b.created ? a.id - b.id : a.created < b.created ? -1 : 1);
     if (comments.length !== card.comments)
@@ -459,8 +553,8 @@ export default class Kanzo extends Connector {
   private writeCard(card: Card, project: Project, comments: Comment[], board: Board): void {
     const path = `tasks/${card.id}.md`;
     const key = `${card.project}#${card.id}`;
-    const closure = unwrap(card.description, `task ${card.id} description`);
-    const source = closure.source;
+    const closure = { text: card.description, source: card.source, closure: card.closure, dropped: card.dropped };
+    const source = card.source;
     const open = card.status !== 'done';
     const said = card.comments === 0 ? 'no comments' : card.comments === 1 ? '1 comment' : `${card.comments} comments`;
     const description = open
@@ -532,21 +626,20 @@ export default class Kanzo extends Connector {
       lines.push(`## Comments (${card.comments})`, '');
       for (const block of rendered) lines.push(block, '');
     }
-    this.put(path, `${facts(pairs)}${lines.join('\n').replace(/\n+$/, '')}\n`, card.updated,
-      `${BASE}/#${card.project}/${card.id}`);
+    this.putFile(path, `${facts(pairs)}${lines.join('\n').replace(/\n+$/, '')}\n`, card.updated,
+      `${BASE}/#${card.project}/${card.id}`, card.id);
   }
 
   // One comment as a section. A comment that holds a closure envelope is the broker's own record of a closure, so
   // its meaningful fields are set out and the boilerplate around them is dropped with the envelope. Any other
   // comment is its own text, scrubbed.
   private comment(entry: Comment): string {
-    const unwrapped = unwrap(entry.body, `a comment on a task`);
     const head = `### ${entry.author.replace(/[\r\n]+/g, ' ')}, ${when(entry.created)}`;
-    if (!unwrapped.closure) {
-      const body = unwrapped.text ? scrub(unwrapped.text) : '(no text)';
+    if (!entry.closure) {
+      const body = entry.body ? scrub(entry.body) : '(no text)';
       return `${head}\n\n${body}`;
     }
-    const closure = unwrapped.closure;
+    const closure = entry.closure;
     const lines: string[] = [head, '', 'A closure the Kanzo lifecycle broker recorded. Its session and signature are not copied.', ''];
     lines.push(`- Outcome: ${code(closure.outcome || 'not stated')}`);
     if (closure.declared_outcome) lines.push(`- Declared by the caller: ${code(closure.declared_outcome)}${closure.outcome_mismatch ? ' (it differs from the outcome the checks gave)' : ''}`);
@@ -583,61 +676,30 @@ export default class Kanzo extends Connector {
     lines.push('', '## Tasks', '');
     lines.push(`Every task of this project is a file under \`tasks/\`, with \`project: "${project.slug}"\` in its frontmatter:`,
       '', '```sql', 'SELECT key, title, status FROM kanzo_tasks WHERE project = \'' + project.slug + '\' ORDER BY id;', '```');
-    this.put(path, `${facts(pairs)}${lines.join('\n')}\n`, lastChange, `${BASE}/#${project.slug}`);
+    this.putFile(path, `${facts(pairs)}${lines.join('\n')}\n`, lastChange, `${BASE}/#${project.slug}`, undefined, project.slug);
   }
 
-  // Removes the files of records a complete listing no longer names. It runs only after every record of the listing
-  // has been validated, and only in a sweep that was asked to read everything; the state of a removed card goes too.
-  private reconcile(board: Board, kept: Kept): void {
-    const cards = new Set(board.cards.map(card => `tasks/${card.id}.md`));
-    const projects = new Set(board.projects.map(project => `projects/${project.slug}.md`));
-    const listed = { tasks: cards, projects };
-    for (const folder of FOLDERS) {
-      if (!this.workspace.exists(folder)) continue;
-      for (const entry of this.workspace.list(folder)) {
-        const path = `${folder}/${entry.name}`;
-        if (!listed[folder as 'tasks' | 'projects'].has(path)) this.workspace.remove(path);
-      }
-    }
-    const present = new Set(board.cards.map(card => String(card.id)));
-    for (const id of Object.keys(kept.cards)) if (!present.has(id)) delete kept.cards[id];
-  }
-
-  // The last call of a sweep that read everything. The overview says what the copy holds and what it leaves out; the
-  // concepts and terms say what a reader of these files would get wrong; and the state file records the sweep.
-  private finish(board: Board, kept: Kept, at: Position): void {
-    kept.shape = SHAPE;
-    kept.changes = board.changes;
-    if (at.all) kept.complete = at.began;
-    this.workspace.writeText('.state/kept.json', JSON.stringify(kept));
-    this.writeOverview(board, kept);
-    this.teach(board);
-  }
-
-  // What the copy holds, and when it was last compared with the whole board. The instant is the start of the last
-  // full sweep and not of this call, so a sweep that finds nothing changed writes the same bytes.
-  private writeOverview(board: Board, kept: Kept): void {
-    const byStatus = board.statuses.map(status => `${status}: ${board.cards.filter(card => card.status === status).length}`);
-    const comments = board.cards.reduce((sum, card) => sum + card.comments, 0);
-    const imported = board.cards.filter(card => unwrap(card.description, 'a description').source).length;
-    const human = board.cards.filter(card => card.human).length;
+  // What the copy holds, and when it was last compared with the whole board. The
+  // complete timestamp is the beginning of the validated source pass.
+  private writeOverview(board: BoardMeta): void {
+    const byStatus = board.statuses.map(status => `${status}: ${board.byStatus[status] ?? 0}`);
     const projects = board.projects.map(project => `- ${project.name}, ${code(project.slug)}: ${project.total} tasks, ${project.open} open`);
     const statuses = board.statuses.map(status => `- ${code(status)}${status === 'done' ? ' — administratively closed; this is not a claim that the work succeeded' : ''}`);
     const description = `What this copy of the Kanzo board holds, when it was last compared with the whole board, and what it leaves out.`;
     const pairs: [string, unknown][] = [
       ['title', 'Kanzo board, as copied'], ['description', description], ['kind', 'overview'],
       ['board', 'kanzo://board/'], ['board_version', board.version], ['changes', board.changes],
-      ['complete_as_of', kept.complete], ['tasks', board.cards.length], ['projects', board.projects.length],
-      ['comments', comments], ['tasks_with_comments', board.cards.filter(card => card.comments > 0).length],
-      ['migrated', imported], ['human_tasks', human],
+      ['complete_as_of', board.began], ['tasks', board.taskCount], ['projects', board.projects.length],
+      ['comments', board.commentCount], ['tasks_with_comments', board.tasksWithComments],
+      ['migrated', board.migrated], ['human_tasks', board.humanTasks],
     ];
     const lines: string[] = [];
     lines.push('# The Kanzo board, as copied', '');
     lines.push(`This is a copy of the whole Kanzo board: every task in every column, open or done, and every project. ` +
-      `Tasks: ${board.cards.length}. Projects: ${board.projects.length}. Comments: ${comments}.`);
+      `Tasks: ${board.taskCount}. Projects: ${board.projects.length}. Comments: ${board.commentCount}.`);
     lines.push('');
     lines.push('Every sweep reads the whole board and removes what the board no longer names. The last full sweep ' +
-      `began at ${kept.complete || 'an instant this copy does not hold'}, and every sweep since has read the whole ` +
+      `began at ${board.began || 'an instant this copy does not hold'}, and every sweep since has read the whole ` +
       'listing: a card\'s facts are at most fifteen minutes old, and its comments are re-read when the card moved ' +
       'or the board\'s change counter moved.');
     lines.push('');
@@ -661,15 +723,13 @@ export default class Kanzo extends Connector {
       '"unknown", not "success".');
     // The file's time is the later of the last complete read and the last change of any card, and never this
     // machine's clock, so a sweep that changes nothing does not touch it.
-    const lastChange = board.cards.reduce((newest, card) =>
-      Date.parse(card.updated) > Date.parse(newest) ? card.updated : newest, '1970-01-01T00:00:00Z');
-    const stamp = Date.parse(kept.complete) > Date.parse(lastChange) ? kept.complete : lastChange;
-    this.put('overview.md', `${facts(pairs)}${lines.join('\n')}\n`, stamp, `${BASE}/`);
+    const stamp = Date.parse(board.began) > Date.parse(board.lastChange) ? board.began : board.lastChange;
+    this.putFile('overview.md', `${facts(pairs)}${lines.join('\n')}\n`, stamp, `${BASE}/`);
   }
 
   // What a reader of these files would get wrong without being told. Each concept arrives with the files it is about;
   // none holds anything of a card.
-  private teach(board: Board): void {
+  private teach(board: BoardMeta): void {
     this.concepts.set({
       name: 'DoneIsAdministrativeClosure', category: 'rule', relevance: 'tasks/**',
       invariant: 'A task whose status is done was closed administratively; the copy does not say the work succeeded, that tests passed, or that anyone approved it.',
@@ -745,23 +805,59 @@ export default class Kanzo extends Connector {
     return { status: reply.status, body: reply.body };
   }
 
-  // A file written only when what it holds or its time changed, so a sweep that finds nothing changed writes nothing.
-  private put(path: string, contents: string, modified: string, origin: string): void {
-    let same = false;
-    if (this.workspace.exists(path)) {
-      same = this.workspace.readText(path) === contents &&
-        Date.parse(this.workspace.stat(path).modified) === Date.parse(modified);
-    }
-    if (!same) {
-      this.workspace.writeText(path, contents);
-      this.workspace.setModified(path, modified);
-    }
-    this.origin.set(path, origin);
+  private allRowsForRender(): Row<Stored>[] {
+    const selected = this.db.query('SELECT key, value FROM kv WHERE collection = $1 ORDER BY key', [COLLECTION]);
+    return selected.map(entry => {
+      if (typeof entry.key !== 'string') throw new Error('The Kanzo database has a malformed key; render was not published.');
+      let value: unknown = entry.value;
+      if (typeof value === 'string') {
+        try { value = JSON.parse(value); } catch { throw new Error('The Kanzo database has a malformed row; render was not published.'); }
+      }
+      if (!isObject(value)) throw new Error('The Kanzo database has a malformed row; render was not published.');
+      return { key: entry.key, value: value as unknown as Stored };
+    });
   }
 
-  private read<T>(path: string, otherwise: T): T {
-    if (!this.workspace.exists(path)) return otherwise;
-    try { return JSON.parse(this.workspace.readText(path)) as T; } catch { return otherwise; }
+  private removedPaths(changes: Changes): string[] {
+    const paths = new Set<string>();
+    let after: string | undefined;
+    do {
+      const page = this.db.changes(COLLECTION, { since: changes.since, until: changes.until, after, limit: PAGE });
+      for (const key of page.removed) {
+        const match = /^file\|([^|]+)\|\d{6}$/.exec(key);
+        if (match !== null) {
+          try { paths.add(decodeURIComponent(match[1])); }
+          catch { throw new Error('The removed Kanzo path is malformed; render was not published.'); }
+        }
+      }
+      after = page.next;
+    } while (after !== undefined);
+    return Array.from(paths).sort();
+  }
+
+  render(changes: Changes): void {
+    const groups = new Map<string, FileRow[]>();
+    let board: BoardMeta | undefined;
+    for (const row of this.allRowsForRender()) {
+      const value = row.value as Stored;
+      if (value.kind === 'file') {
+        const group = groups.get(value.path) ?? [];
+        group.push(value);
+        groups.set(value.path, group);
+      } else if (value.kind === 'board-meta') board = value;
+    }
+    for (const path of this.removedPaths(changes)) this.files.remove(path);
+    const files: OutputFile[] = [];
+    for (const [path, parts] of groups) {
+      parts.sort((a, b) => a.part - b.part);
+      for (let i = 0; i < parts.length; i += 1)
+        if (parts[i].part !== i || parts[i].parts !== parts.length) throw new Error(`The stored Kanzo file ${path} is missing a chunk; render was not published.`);
+      const first = parts[0];
+      files.push({ path, text: parts.map(part => part.content).join(''), time: first.time, origin: first.origin });
+    }
+    files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+    for (const file of files) this.files.write(file.path, file.text, { origin: file.origin, time: file.time });
+    if (board) this.teach(board);
   }
 }
 

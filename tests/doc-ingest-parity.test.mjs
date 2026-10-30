@@ -26,7 +26,7 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import {
   mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync,
-  symlinkSync, readdirSync, utimesSync,
+  symlinkSync, readdirSync, utimesSync, statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -612,28 +612,36 @@ test("locking: two concurrent Node ingests serialise and both records survive", 
   }
 });
 
-test("locking: a stale lock is reaped by both runtimes and never left behind after failure", { timeout: 120_000 }, async (t) => {
+test("locking: a stale lock is never auto-reaped; both runtimes fail closed until explicit cleanup", { timeout: 120_000 }, async (t) => {
   const gateway = await startGateway();
   const box = makeBox();
   try {
     const doc = box.doc("stale.md", "# Stale\n\nLock recovery.\n");
-    const lock = lockOf(box, "node");
-    mkdirSync(lock, { recursive: true });
     const old = new Date(Date.now() - 10 * 60_000);
-    utimesSync(lock, old, old);
-    const res = await run("node", box, gateway, ["ingest", "--file", doc, "--root", box.root]);
-    assert.equal(res.json.status, "DOC_INGEST_INDEXED", JSON.stringify(res.json));
-    assert.equal(existsSync(lock), false);
+    const engines = ["node"];
+    if (PY_AVAILABLE) engines.push("py");
+    else t.diagnostic("python3 unavailable: Python stale-lock fail-closed not exercised here");
 
-    if (PY_AVAILABLE) {
-      const lockPy = lockOf(box, "py");
-      mkdirSync(lockPy, { recursive: true });
-      utimesSync(lockPy, old, old);
-      const py = await run("py", box, gateway, ["ingest", "--file", doc, "--root", box.root]);
-      assert.equal(py.json.status, "DOC_INGEST_INDEXED", JSON.stringify(py.json));
-      assert.equal(existsSync(lockPy), false);
-    } else {
-      t.diagnostic("python3 unavailable: Python stale-lock reaping not exercised here");
+    for (const engine of engines) {
+      const lock = lockOf(box, engine);
+      mkdirSync(lock, { recursive: true });
+      utimesSync(lock, old, old);
+      const beforeEntries = readdirSync(lock).sort();
+      const beforeMtime = statSync(lock).mtimeMs;
+
+      const refused = await run(engine, box, gateway, ["ingest", "--file", doc, "--root", box.root]);
+      assert.notEqual(refused.code, 0, `${engine}: a stale lock must fail closed`);
+      assert.notEqual(refused.json?.status, "DOC_INGEST_INDEXED", `${engine}: a stale lock must never be auto-reaped`);
+      assert.equal(existsSync(lock), true, `${engine}: the stale lock must remain in place`);
+      assert.deepEqual(readdirSync(lock).sort(), beforeEntries, `${engine}: no owner record may be written into a stale lock`);
+      assert.equal(statSync(lock).mtimeMs, beforeMtime, `${engine}: the stale lock must be unchanged`);
+
+      // Operator-simulated recovery in the disposable fixture only.
+      assert.ok(lock.startsWith(box.dir), "cleanup must stay inside the test fixture");
+      rmSync(lock, { recursive: true, force: true });
+      const recovered = await run(engine, box, gateway, ["ingest", "--file", doc, "--root", box.root]);
+      assert.equal(recovered.json.status, "DOC_INGEST_INDEXED", `${engine}: explicit cleanup allows the write`);
+      assert.equal(existsSync(lock), false, `${engine}: a successful ingest releases its own lock`);
     }
 
     // A hard failure must release the lock too.

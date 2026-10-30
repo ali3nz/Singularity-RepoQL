@@ -27,7 +27,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { callMemoryCore, loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
+import { callMemoryCore, loadGhostMemoryConfig } from "./memory-config-loader.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_TEAM = "openchamber-agents";
@@ -108,16 +108,27 @@ export async function provisionAgentProfiles({
   env = process.env,
   cfg,
   identityMap = null,
+  agentNames = null,
+  verifyOnly = false,
   fetchImpl = globalThis.fetch,
   now = () => new Date().toISOString(),
 }) {
+  if (verifyOnly && dryRun) throw new Error("VERIFY_ONLY_AND_DRY_RUN_CONFLICT");
+  const roster = listAgents(agentsDir);
+  const wanted = agentNames === null ? roster : agentNames;
+  if (!Array.isArray(wanted) || !wanted.length ||
+      new Set(wanted).size !== wanted.length ||
+      wanted.some(name => typeof name !== "string" || !roster.includes(name))) {
+    throw new Error("PROFILE_ROSTER_SELECTION_INVALID");
+  }
+  // Validate selections before touching the ledger or making any network calls.
   const ledger = readLedger(ledgerPath);
   const results = [];
   const saveLedger = () => {
     mkdirSync(dirname(ledgerPath), { recursive: true });
     writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2) + "\n", { mode: 0o600 });
   };
-  for (const name of listAgents(agentsDir)) {
+  for (const name of wanted) {
     // Map mode binds each agent to an existing identity; the env overrides are ignored there.
     let identity;
     if (identityMap) {
@@ -167,7 +178,7 @@ export async function provisionAgentProfiles({
       results.push({ name, status: identityMap ? "would-verify" : "would-seed", identity });
       continue;
     }
-    if (identityMap) {
+    if (identityMap || verifyOnly) {
       // Verify before seeding: any stored message under the mapped identity means the
       // profile already exists (shared core), so writing a second charter would duplicate it.
       let found;
@@ -186,9 +197,16 @@ export async function provisionAgentProfiles({
         continue;
       }
       if ((found.data?.messages || []).some((m) => isCharterFor(m, name, `agent-profile-${name}`))) {
-        ledger.profiles[name] = { ...identity, session_id: null, seeded_at: now(), source: "existing" };
-        saveLedger();
+        if (!verifyOnly) {
+          ledger.profiles[name] = { ...identity, session_id: null, seeded_at: now(), source: "existing" };
+          saveLedger();
+        }
         results.push({ name, status: "verified", identity });
+        continue;
+      }
+      // Read-only verify refuses missing charters instead of silently seeding.
+      if (verifyOnly) {
+        results.push({ name, status: "failed", identity, detail: "charter absent in live MemoryCore" });
         continue;
       }
       // No existing profile under this identity: fall through and seed it.

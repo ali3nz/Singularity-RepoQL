@@ -4,7 +4,7 @@ All writes are called only after server.py's existing identity, same-origin and
 custom-header checks. JSON file is protected by a fixed-name advisory flock.
 """
 from __future__ import annotations
-import fcntl
+from file_lock import fcntl
 import json
 import os
 import re
@@ -47,6 +47,10 @@ def save_annotation(body):
         raise ValueError('annotation too large')
     if any(ord(ch)<32 and ch not in '\t\n' for ch in notes+label):
         raise ValueError('invalid control characters')
+    if os.name == 'nt':
+        # Windows mode bits do not enforce ACLs. Do not mutate personal graph
+        # annotations until Rust's Windows ACL-protected store is available.
+        raise PermissionError('native Windows annotation writes require ACL-protected Rust store')
     path=_path();path.parent.mkdir(parents=True,exist_ok=True)
     if path.is_symlink():raise PermissionError('annotation store cannot be a symlink')
     lockpath=path.with_suffix('.lock')

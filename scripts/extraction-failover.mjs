@@ -1,5 +1,6 @@
 import http from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import { cohereQuota } from "./cohere-quota.mjs";
 
 /**
@@ -13,6 +14,10 @@ import { cohereQuota } from "./cohere-quota.mjs";
 const GROQ_BASE = process.env.EXTRACTION_FAILOVER_GROQ_BASE || "https://api.groq.com/openai/v1";
 const COHERE_BASE = process.env.EXTRACTION_FAILOVER_COHERE_BASE || "https://api.cohere.ai/compatibility/v1";
 const LISTEN_PORT = Number(process.env.EXTRACTION_FAILOVER_PORT || 8430);
+const LISTEN_HOST = process.env.EXTRACTION_FAILOVER_BIND || (process.platform === "win32" ? "127.0.0.1" : "0.0.0.0");
+if (process.platform === "win32" && !["127.0.0.1", "::1"].includes(LISTEN_HOST)) {
+  throw new Error("Native Windows extraction requires a loopback listener");
+}
 // Per-hop timeout must fit inside the core's per-task
 // budgets — L1 extract/dedup/persona = 180 s (l1-extractor.ts etc.), L2/L3 =
 // 300 s. 60 s lets a single hung hop fail over AND a second hung hop still
@@ -32,6 +37,10 @@ function readKey(name) {
 }
 const groqKey = readKey("groq-api-key");
 const cohereKey = readKey("cohere-api-key");
+const routerKey = readKey("router-access-key");
+if (process.env.EXTRACTION_FAILOVER_REQUIRE_AUTH === "1" && !routerKey) {
+  throw new Error("Private router access key required");
+}
 
 const LADDER = [
   { name: "groq-120b", base: GROQ_BASE, key: groqKey, model: "openai/gpt-oss-120b" },
@@ -90,7 +99,7 @@ const state = { attempts: 0, failovers: 0, lastModel: null, lastError: null };
 // /health reports inject so the acceptance can PROVE the knob was removed.
 const rawInject = String(process.env.EXTRACTION_FAILOVER_INJECT || "");
 const INJECT_STATUS = new Set([401, 403, 408, 429, 500, 502, 503, 504]);
-const injectMatch = /^([a-zA-Z0-9._-]+):(4[0-9]{2}|5[0-9]{2})$/.exec(rawInject.trim());
+const injectMatch = /^([a-zA-Z0-9._+-]+):(4[0-9]{2}|5[0-9]{2})$/.exec(rawInject.trim());
 if (rawInject && !injectMatch) throw new Error(
   "EXTRACTION_FAILOVER_INJECT is malformed (want <provider-name>:<http-status>)");
 const INJECT = injectMatch && INJECT_STATUS.has(Number(injectMatch[2]))
@@ -160,11 +169,25 @@ async function pumpBody(upstreamBody, res, controller) {
 export const server = http.createServer(async (req, res) => {
   if (req.url === "/health" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ status: "ok", ...state, hopTimeoutMs: HOP_TIMEOUT_MS, ladder: LADDER.map(l => l.name), inject: INJECT ? `${INJECT.provider}:${INJECT.status}` : null }));
+    return res.end(JSON.stringify({ status: "ok", ...state, authenticationRequired: Boolean(routerKey), hopTimeoutMs: HOP_TIMEOUT_MS, ladder: LADDER.map(l => l.name), inject: INJECT ? `${INJECT.provider}:${INJECT.status}` : null }));
   }
-  if (!req.url?.startsWith("/chat/completions") || req.method !== "POST") {
+  // Accept both the bare OpenAI path and the `/v1`-prefixed one. The memory core
+  // is configured with TDAI_LLM_BASE_URL=http://127.0.0.1:<port>/v1 and its
+  // OpenAI-compatible client appends `/chat/completions`, so the live request is
+  // `/v1/chat/completions`. Accepting only the bare path returned 404 for every
+  // extraction call and left L1 empty with `reason=llm_error`.
+  const routePath = (req.url || "").split("?")[0];
+  if ((routePath !== "/chat/completions" && routePath !== "/v1/chat/completions") || req.method !== "POST") {
     res.writeHead(404).end();
     return;
+  }
+  if (routerKey) {
+    const actual = Buffer.from(String(req.headers.authorization || ""));
+    const expected = Buffer.from(`Bearer ${routerKey}`);
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: { message: "router authentication required" } }));
+    }
   }
   let payload;
   try {
@@ -279,4 +302,4 @@ export const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: { message: "extraction ladder exhausted" } }));
 });
 
-server.listen(LISTEN_PORT, "0.0.0.0", () => console.log("EXTRACTION_FAILOVER_READY port=" + LISTEN_PORT + " ladder=" + LADDER.map(l => l.name).join(">")));
+server.listen(LISTEN_PORT, LISTEN_HOST, () => console.log("EXTRACTION_FAILOVER_READY port=" + LISTEN_PORT + " ladder=" + LADDER.map(l => l.name).join(">")));

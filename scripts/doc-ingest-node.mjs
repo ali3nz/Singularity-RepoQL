@@ -25,25 +25,26 @@
 //   MEMORY_SECRETS              memory.json path
 //   KNOWLEDGE_INDEX_BASE_URL    memory gateway base (default http://127.0.0.1:8420)
 //   SINGULARITY_DOC_DATA        state dir (default ./data)
-//   SINGULARITY_DOC_ROOTS       extra allowlist roots, ':' separated
+//   SINGULARITY_DOC_ROOTS       extra allowlist roots, OS path-delimiter separated (; on Windows)
 //   DOC_INDEX_TEAM/DOC_INDEX_USER   shared documentation scope
 //
-// Platform note: the Python engine serialises the ledger with fcntl.flock. Node
-// has no flock, so the same critical section uses an atomic lock DIRECTORY with
-// a stale-lock reaper; the ledger write itself is still temp-file + rename, so a
-// crash can never leave a torn ledger.
-import { createHash } from "node:crypto";
+// Both Python and Node use the SAME owner-tagged atomic lock directory.
+// Never automatically reap it by age: a remote memory request may outlive the
+// stale threshold, and deleting a live lock can lose ledger records. A crash
+// requires operator recovery after verifying both engines are stopped.
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   readFileSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export class Blocked extends Error {}
@@ -60,7 +61,6 @@ const VERIFY_POLL_MS = 3_000;
 const SEARCH_LIMIT_DEFAULT = 5;
 const MEMORY_TIMEOUT_MS = 10_000;
 const LOCK_TIMEOUT_MS = 10_000;
-const LOCK_STALE_MS = 120_000;
 
 // Secret-shaped content is rejected, never redacted silently into the store.
 const SECRET_PATTERNS = [
@@ -80,7 +80,6 @@ function ctxOf(opts = {}) {
     sleep: opts.sleep || ((ms) => new Promise((done) => setTimeout(done, ms))),
     now: opts.now || (() => new Date()),
     lockTimeoutMs: opts.lockTimeoutMs ?? LOCK_TIMEOUT_MS,
-    lockStaleMs: opts.lockStaleMs ?? LOCK_STALE_MS,
     verifyTimeoutMs: opts.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS,
     verifyPollMs: opts.verifyPollMs ?? VERIFY_POLL_MS,
   };
@@ -88,6 +87,7 @@ function ctxOf(opts = {}) {
 
 export const sha = (text) => createHash("sha256").update(String(text), "utf8").digest("hex");
 const sha8 = (text) => sha(text).slice(0, 8);
+const normalizeDocText = (text) => String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 const toPosix = (p) => String(p).replace(/\\/g, "/");
 const timestamp = (date) => date.toISOString().replace(/\.\d{3}Z$/, "Z");
 
@@ -132,8 +132,10 @@ function ledgerJson(ledger) {
     `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`)}\n`;
 }
 
-function baseUrl(env = process.env) {
-  return String(env.KNOWLEDGE_INDEX_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+function baseUrl(env = process.env, cfg = {}) {
+  // The native Claude installer supplies a single MemoryCore configuration.
+  // A workspace cwd cannot decide which gateway receives shared runbooks.
+  return String(env.KNOWLEDGE_INDEX_BASE_URL || cfg.hostBaseUrl || cfg.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
 function scopeOf(env = process.env) {
@@ -168,7 +170,7 @@ export function documentIdentity(rootAbs, rel) {
 // ── memory gateway client ────────────────────────────────────────────────────
 
 export function loadConfig(env = process.env) {
-  const p = resolve(String(env.MEMORY_SECRETS || DEFAULT_MEMORY_SECRETS));
+  const p = resolve(String(env.SINGULARITY_MEMORY_CONFIG || env.MEMORY_SECRETS || DEFAULT_MEMORY_SECRETS));
   let cfg;
   try {
     cfg = JSON.parse(readFileSync(p, "utf8"));
@@ -210,8 +212,9 @@ async function memoryCall(path, payload, ctx, cfg) {
   };
   let res;
   try {
-    res = await ctx.fetchImpl(`${baseUrl(ctx.env)}/v3${path}`, {
+    res = await ctx.fetchImpl(`${baseUrl(ctx.env,cfg)}/v3${path}`, {
       method: "POST",
+      redirect: "error",
       headers,
       body: JSON.stringify(payload),
       signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(MEMORY_TIMEOUT_MS) : undefined,
@@ -304,7 +307,7 @@ function isInside(parent, child) {
 
 export function docRoots(rootArg, env = process.env) {
   const roots = [];
-  const candidates = [...(rootArg ? [rootArg] : []), ...String(env.SINGULARITY_DOC_ROOTS || "").split(":").filter(Boolean)];
+  const candidates = [...(rootArg ? [rootArg] : []), ...String(env.SINGULARITY_DOC_ROOTS || "").split(delimiter).filter(Boolean)];
   for (const item of candidates) {
     const rp = resolve(item);
     if (!roots.includes(rp)) roots.push(rp);
@@ -393,27 +396,35 @@ export function chunkMarkdown(text) {
 function acquireLock(lockDir, ctx) {
   mkdirSync(dirname(lockDir), { recursive: true });
   const start = Date.now();
+  const ownerPath = join(lockDir, "owner");
   for (;;) {
     try {
       mkdirSync(lockDir);
+      const owner = randomUUID();
+      try {
+        writeFileSync(ownerPath, owner, { flag: "wx", mode: 0o600 });
+      } catch (e) {
+        try { rmdirSync(lockDir); } catch { /* uncertain ownership: fail closed */ }
+        throw e;
+      }
       return () => {
+        // A replaced lock must NEVER be released by the old writer.
         try {
-          rmSync(lockDir, { recursive: true, force: true });
-        } catch {
-          /* a stale directory is reaped by the next writer */
+          if (readFileSync(ownerPath, "utf8") !== owner) {
+            throw new Error(`ledger lock ownership changed: ${lockDir}`);
+          }
+          rmSync(ownerPath);
+          rmdirSync(lockDir);
+        } catch (e) {
+          if (e?.code !== "ENOENT") throw e;
+          throw new Error(`ledger lock disappeared while held: ${lockDir}`);
         }
       };
     } catch (e) {
       if (e?.code !== "EEXIST") throw e;
-      try {
-        if (Date.now() - statSync(lockDir).mtimeMs > ctx.lockStaleMs) {
-          rmSync(lockDir, { recursive: true, force: true });
-          continue;
-        }
-      } catch {
-        /* the holder just released it */
+      if (Date.now() - start > ctx.lockTimeoutMs) {
+        throw new Error(`ledger lock busy: ${lockDir} (never auto-reaped; verify both writers stopped before manual recovery)`);
       }
-      if (Date.now() - start > ctx.lockTimeoutMs) throw new Error(`ledger lock busy: ${lockDir}`);
       sleepSync(50);
     }
   }
@@ -425,19 +436,7 @@ export async function withLedger(fn, opts = {}) {
   mkdirSync(dirname(file), { recursive: true });
   const release = acquireLock(lockDirPath(ctx.env), ctx);
   try {
-    let ledger = { version: 1, docs: {} };
-    if (existsSync(file)) {
-      try {
-        ledger = JSON.parse(readFileSync(file, "utf8"));
-      } catch (e) {
-        // Only a malformed ledger is treated as empty (as the Python helper
-        // does for ValueError). An I/O/permission failure must surface, never
-        // silently replace a ledger we could not read.
-        if (!(e instanceof SyntaxError)) throw e;
-        ledger = { version: 1, docs: {} };
-      }
-    }
-    if (!ledger || typeof ledger !== "object" || !ledger.docs || typeof ledger.docs !== "object") ledger = { version: 1, docs: {} };
+    const ledger = loadLedger(ctx.env);
     const result = await fn(ledger);
     const tmp = join(dirname(file), "ledger.tmp");
     writeFileSync(tmp, ledgerJson(ledger));
@@ -451,12 +450,19 @@ export async function withLedger(fn, opts = {}) {
 export function loadLedger(env = process.env) {
   const file = ledgerPath(env);
   if (!existsSync(file)) return { version: 1, docs: {} };
+  let ledger;
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    ledger = JSON.parse(readFileSync(file, "utf8"));
   } catch (e) {
-    if (e instanceof SyntaxError) return { version: 1, docs: {} };
+    if (e instanceof SyntaxError) throw new Blocked("DOC_LEDGER_CORRUPT: invalid JSON; preserve the file and recover it manually");
     throw e;
   }
+  if (!ledger || Array.isArray(ledger) || typeof ledger !== "object" ||
+      ledger.version !== 1 || !ledger.docs || Array.isArray(ledger.docs) ||
+      typeof ledger.docs !== "object") {
+    throw new Blocked("DOC_LEDGER_CORRUPT: invalid ledger structure; preserve the file and recover it manually");
+  }
+  return ledger;
 }
 
 // ── core ingest ──────────────────────────────────────────────────────────────
@@ -477,7 +483,7 @@ export async function ingestFile(filePath, opts = {}) {
     rel = classified.rel;
     title = classified.title;
     rootDir = classified.root;
-    text = readFileSync(realpathSync(filePath), "utf8");
+    text = normalizeDocText(readFileSync(realpathSync(filePath), "utf8"));
     rejectSensitive(text, rel);
   } catch (e) {
     if (e instanceof Blocked) return { status: "DOC_INGEST_BLOCKED", file: String(filePath), reason: e.message };
@@ -487,6 +493,10 @@ export async function ingestFile(filePath, opts = {}) {
   const rootId = sha8(toPosix(resolve(rootDir)));
   const key = `${rootId}::${rel}`;
   const rev = sha8(text);
+  // Optional explicitly approved recovery operation: refuse stale requests
+  // before opening a ledger transaction or making any MemoryCore writes.
+  if(opts.expectedRevision!==undefined && opts.expectedRevision!==rev)
+    return {status:'DOC_INGEST_BLOCKED',file:rel,reason:'EXPECTED_SOURCE_REVISION_CHANGED'};
   const docId8 = sha8(key);
 
   return withLedger(async (ledger) => {
@@ -718,7 +728,7 @@ function statusRow(entry, fallbackRel) {
     const p = join(entry.root, rel);
     if (existsSync(p)) {
       try {
-        stale = sha8(readFileSync(p, "utf8")) !== active;
+        stale = sha8(normalizeDocText(readFileSync(p, "utf8"))) !== active;
       } catch {
         stale = null;
       }
@@ -810,7 +820,7 @@ export function verifyFile(rel, opts = {}) {
   }
   const active = entry.active_rev;
   const rec = active ? entry.revs?.[active] || {} : {};
-  const current = sha8(readFileSync(target, "utf8"));
+  const current = sha8(normalizeDocText(readFileSync(target, "utf8")));
   if (active && current !== active) {
     return { status: "DOC_INGEST_NOT_VERIFIED", file: relE, reason: "changed source was never indexed successfully (stale hash)" };
   }

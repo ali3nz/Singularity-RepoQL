@@ -13,11 +13,29 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   verifyOptionTarget, detectOpenchamberInstance, targetConfigDir, VARIANTS,
   gateComplete, main,
 } from "./install-claude-code.mjs";
+
+// The gate's host probe spawns `node` by name (a POSIX host always has it on
+// PATH). On Windows the runtime is a full path, so expose its directory for
+// this test process; the legacy gate itself is not supported on Windows.
+if (process.platform === "win32") {
+  const nodeDir = dirname(process.execPath);
+  const pathParts = String(process.env.PATH || "").split(";");
+  if (!pathParts.some((p) => p.toLowerCase() === nodeDir.toLowerCase())) {
+    process.env.PATH = `${nodeDir};${process.env.PATH || ""}`;
+  }
+}
+
+// The legacy Docker/Ubuntu installer gate refuses to run on Windows before it
+// reaches option validation (NATIVE_WINDOWS_INSTALLER_INCOMPLETE, rc 5); the
+// supported Windows path is native/windows/manage_native_windows.ps1.
+const LEGACY_GATE_SKIP = process.platform === "win32"
+  ? "the legacy Docker/Ubuntu installer gate refuses to run on Windows (NATIVE_WINDOWS_INSTALLER_INCOMPLETE, rc 5); the native Windows path is manage_native_windows.ps1"
+  : false;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -384,7 +402,7 @@ test("Office is INCOMPLETE without an office.json (never a silent pass)", async 
   } finally { await svc.close(); }
 });
 
-test("the gate command REFUSES options 1 and 2 and never prints COMPLETE (B6)", async () => {
+test("the gate command REFUSES options 1 and 2 and never prints COMPLETE (B6)", { skip: LEGACY_GATE_SKIP }, async () => {
   for (const v of ["1", "2"]) {
     const { rc, out } = await runCli(["gate", "--variant", v]);
     assert.equal(rc, 2, `option ${v} must be refused by the gate`);
@@ -393,7 +411,7 @@ test("the gate command REFUSES options 1 and 2 and never prints COMPLETE (B6)", 
   }
 });
 
-test("install --variant 3|4 is REFUSED before any mutation (B6)", async () => {
+test("install --variant 3|4 is REFUSED before any mutation (B6)", { skip: LEGACY_GATE_SKIP }, async () => {
   const home = mkdtempSync(join(tmpdir(), "install-refuse-"));
   const { rc, out } = await runCli(["install", "--variant", "3"]);
   assert.equal(rc, 2);

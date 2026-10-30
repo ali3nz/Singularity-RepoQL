@@ -7,6 +7,7 @@ Run after `build_suite.py`, once the files have been read and judged by hand. It
 comment thread is complete and that a pasted credential was replaced.
 """
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
-RQL = "/root/.repoql/versions/1.7.15/rql"
+RQL = os.environ.get("SINGULARITY_RQL_EXE") or shutil.which("rql")
 
 # generation index -> (generations to run, paths pinned by sha256, paths pinned by text, paths that must be absent)
 SPEC = {
@@ -41,6 +42,8 @@ def run(generations: int) -> dict:
     out = ROOT / f"pin-out-{generations}"
     if out.exists():
         shutil.rmtree(out)
+    if not RQL:
+        raise SystemExit("RepoQL rql executable not configured: set SINGULARITY_RQL_EXE")
     result = subprocess.run([RQL, "connector", "test", "connector.ts", "--fixtures", part.name,
                              "--workspace-out", out.name], cwd=ROOT, capture_output=True, text=True)
     part.unlink()
@@ -89,6 +92,8 @@ def main() -> None:
     print("the pinned comment text holds both comments, and no pasted credential")
 
     # And the suite, as finally written, must pass whole.
+    if not RQL:
+        raise SystemExit("RepoQL rql executable not configured: set SINGULARITY_RQL_EXE")
     result = subprocess.run([RQL, "connector", "test", "connector.ts", "--fixtures", "lifecycle.json"],
                             cwd=ROOT, capture_output=True, text=True)
     print(result.stdout.strip().splitlines()[-1] if result.stdout.strip() else result.stderr)

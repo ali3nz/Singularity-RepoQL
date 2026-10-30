@@ -31,7 +31,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime as dt
-import fcntl
+from file_lock import fcntl
 import glob
 import hashlib
 import json
@@ -42,9 +42,19 @@ import sys
 import time
 from pathlib import Path
 
-STATE = Path(os.environ.get("SINGULARITY_STATE_DIR")
-             or os.environ.get("RQLDASH_STATE_DIR")
-             or Path.home() / ".local" / "state" / "singularity-dashboard")
+def default_telemetry_state_dir(*, platform=None, env=None, home=None):
+    """Match the dashboard's per-user state root without guessing Linux paths on Windows."""
+    platform = os.name if platform is None else platform
+    env = os.environ if env is None else env
+    home = Path.home() if home is None else Path(home)
+    override = env.get("SINGULARITY_STATE_DIR") or env.get("RQLDASH_STATE_DIR")
+    if override:
+        return Path(override)
+    if platform == "nt":
+        return Path(env.get("LOCALAPPDATA") or home / "AppData" / "Local") / "Singularity" / "Dashboard"
+    return home / ".local" / "state" / "singularity-dashboard"
+
+STATE = default_telemetry_state_dir()
 # Harness inputs are user-owned runtime data configured OUTSIDE the shipped tree.
 # When a path is not configured the panel reports an empty, truthful dataset.
 HARNESS_DATA = Path(os.environ.get("SINGULARITY_HARNESS_DATA_DIR") or STATE / "harness")
@@ -1627,8 +1637,41 @@ class Harness:
         }
 
     # -- nannies -----------------------------------------------------
-    def nannies(self):
+    def nannies(self, *, platform=None, task_probe=None):
         import subprocess
+        platform = os.name if platform is None else platform
+        if platform == "nt":
+            # Do not display systemd units on a native Windows installation.
+            # A registered Task Scheduler entry only proves configuration, not
+            # that its Rust child processes are running or healthy.
+            if task_probe is None:
+                def task_probe():
+                    return subprocess.run(
+                        ["schtasks.exe", "/Query", "/TN", "Singularity-Rust-Native-Supervisor", "/FO", "CSV", "/NH"],
+                        capture_output=True, text=True, timeout=4, check=False)
+            status = "unverified"
+            try:
+                probe = task_probe()
+                if probe.returncode == 0:
+                    status = "registered-unverified"
+            except (OSError, subprocess.SubprocessError):
+                pass
+            return {
+                "nannies": [{
+                    "unit": "Singularity-Rust-Native-Supervisor",
+                    "name": "Native Rust supervisor",
+                    "purpose": "Native Windows process lifecycle",
+                    "configured": status,
+                    "effective": "unverified",
+                    "last_trigger": None,
+                    "source": "windows:TaskScheduler",
+                    "operator_changeable": False,
+                    "change_note": "A task registration is not a service health or feature-parity receipt",
+                }],
+                "last_alerts": self._q("SELECT name,last_decision,last_ts,detail FROM nanny_events ORDER BY last_ts DESC LIMIT 20"),
+                "note": "native child process ownership, restart and behaviour require separate Windows acceptance",
+                "settings": self.settings_with_effective(),
+            }
         units = {
             "orch-nanny.timer": "Fleet nanny: patrols orchestration runs and emits alerts",
             "orch-nanny-relay.timer": "Nanny relay: delivers queued operator alerts",

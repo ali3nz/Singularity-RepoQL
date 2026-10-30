@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   classifyFiles,
   evaluateAssessment,
@@ -12,6 +12,7 @@ import {
   baselinePath,
   sanitizeSession,
   scanDocCensus,
+  isEligibleDocPath,
   observeWorkspace,
   autoIngestChangedDocs,
   collectEvidence,
@@ -60,8 +61,11 @@ function plantLedgerEvidence(rootDir, rel, { withVerified = true, staleSource = 
     },
   };
   mkdirSync(join(rootDir, "data", "doc-index"), { recursive: true });
-  let existing = {};
-  try { existing = JSON.parse(readFileSync(join(rootDir, "data", "doc-index", "ledger.json"), "utf8")); } catch { /* fresh */ }
+  let existing = { version: 1, docs: {} };
+  try {
+    const parsed = JSON.parse(readFileSync(join(rootDir, "data", "doc-index", "ledger.json"), "utf8"));
+    if (parsed && parsed.version === 1 && parsed.docs && !Array.isArray(parsed.docs)) existing = parsed;
+  } catch { /* fresh */ }
   existing.docs = { ...(existing.docs || {}), ...ledger.docs };
   writeFileSync(join(rootDir, "data", "doc-index", "ledger.json"), JSON.stringify(existing, null, 2));
   return { key, rootId, rev };
@@ -93,9 +97,34 @@ test("classifyFiles: product runtime state is never task material (regression)",
     "data/doc-policy/assess-1.json",
     "data/doc-index/ledger.json",
     "data/opencode/config/opencode.jsonc",
+    "data/agent-backups/2026-10-30T08-49-27-992Z/tool.mjs",
     "src/cache.py",
   ]);
   assert.deepEqual(material, ["src/cache.py"], "only real source counts");
+});
+
+test("discovery: runtime backup artifacts are never documentation (regression: false DOC_UPDATED on .241)", () => {
+  const dir = scratch();
+  try {
+    mkdirSync(join(dir, "docs"), { recursive: true });
+    writeFileSync(join(dir, "docs", "runbook.md"), "# Real runbook\n");
+    const backups = [
+      "data/agent-backups/2026-10-30T08-49-27-992Z/singularity-thinker.md",
+      "data/agent-backups/2026-10-30T08-49-28-001Z/singularity-board.md",
+      "data/attach-backups/2026-10-30T08-49-29-853Z/AGENTS.md",
+      "data/selflearn/pending/candidate.md",
+      "data/doc-policy/baseline-s.md",
+    ];
+    for (const rel of backups) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
+      writeFileSync(join(dir, rel), "# runtime state\n");
+    }
+    const census = scanDocCensus(dir);
+    assert.deepEqual([...census.values()].map((m) => m.rel), ["docs/runbook.md"], "only the real doc is censused");
+    for (const rel of backups) {
+      assert.equal(isEligibleDocPath(join(dir, rel), dir), false, `${rel} is runtime state, not documentation`);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("no assessment recorded / DOC_BLOCKED behaves as before", () => {
@@ -386,13 +415,19 @@ test("CLI end-to-end refuses material DOC_NOT_REQUIRED; check on unknown session
 test("§7 automatic assessment: CAPTURED only from verified ingestion evidence, never auto-approved", async () => {
   const dir = scratch();
   try {
+    mkdirSync(join(dir, "docs"), { recursive: true });
+    writeFileSync(join(dir, "docs", "r.md"), "# Runbook\n");
     const env = { SINGULARITY_REPO_ROOT: dir };
     const rec = await recordAutomaticLearningAssessment("la1", dir, { env, results: [{ file: "docs/r.md", status: "DOC_INGEST_VERIFIED" }], observable: true, newDirty: ["docs/r.md"] });
     assert.equal(rec.status, "CAPTURED");
     const stored = loadAssessment("la1", dir);
     assert.equal(stored.captureStatus, "CAPTURED");
-    assert.equal(stored.ingestion[0], "DOC_INGEST_VERIFIED", "CAPTURED is evidence-derived, not a claim");
+    assert.equal(stored.ingestion[0], "DOC_INGEST_INDEXED", "the record claims the pass's real ledger status, never the verify verdict");
     assert.equal(stored.automatic, true, "the record honestly marks its automatic origin");
+    assert.deepEqual(
+      evaluateAssessment({ ...stored, projectRoot: dir }, { evidence: { "docs/r.md": { status: "DOC_INGEST_VERIFIED" } } }), [],
+      "the automatic record passes the same evaluator the hook applies",
+    );
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -550,7 +585,28 @@ test("§7 CAPTURED derives from the ledger verification through the SAME verify 
     });
     assert.equal(rec.status, "CAPTURED");
     const stored = loadAssessment("la6", dir);
-    assert.equal(stored.ingestion[0], "DOC_INGEST_VERIFIED");
+    assert.equal(stored.ingestion[0], "DOC_INGEST_INDEXED", "the record reports the ingest pass status, not the verify verdict");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("§7 automatic assessment: a ledger-verified doc records INDEXED and passes the hook's evaluator (regression)", async () => {
+  const dir = scratch();
+  try {
+    mkdirSync(join(dir, "docs"), { recursive: true });
+    writeFileSync(join(dir, "docs", "runbook.md"), "# Runbook\n\nVerified content.\n");
+    plantLedgerEvidence(dir, "docs/runbook.md");
+    const rec = await recordAutomaticLearningAssessment("la9", dir, {
+      env: { SINGULARITY_REPO_ROOT: dir },
+      results: [{ file: "docs/runbook.md", status: "DOC_INGEST_INDEXED" }],
+      observable: true,
+      newDirty: ["docs/runbook.md"],
+    });
+    assert.equal(rec.status, "CAPTURED");
+    const stored = loadAssessment("la9", dir);
+    assert.deepEqual(stored.ingestion, ["DOC_INGEST_INDEXED"], "the record claims the pass's real ledger status");
+    const evidence = await collectEvidence(stored.docs, dir);
+    assert.equal(evidence["docs/runbook.md"].status, "DOC_INGEST_VERIFIED", "the planted ledger verifies the doc");
+    assert.deepEqual(evaluateAssessment({ ...stored, projectRoot: dir }, { evidence }), [], "the automatic record must pass the same evaluator the hook applies");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

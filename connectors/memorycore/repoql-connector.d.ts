@@ -1,17 +1,7 @@
-// Type declarations for a connector written as two files: connector.ts, whose default export extends the
-// Connector class of the built-in module 'repoql:connector', and manifest.yaml beside it, which states what the
-// connector asks for. rql builds the two into a connector module; no code of the file runs while it is built.
-// Nothing here runs. `rql connector test` and `rql connector pack` check a connector's types against this file, with
-// the TypeScript compiler rql carries, and refuse a file with a type error. A host that loads a connector checks no
-// type. A read of a member this file does not declare, on a member of the class or on a reply, also throws at run
-// time, naming the member: that finds a read the compiler cannot see behind `any`. The host checks every shape it is
-// handed and refuses anything else, naming the member.
-//
-// Write this file and a tsconfig.json beside a connector, for an editor:  rql connector types
-// Reference it from the first line of a connector:                       /// <reference path="./repoql-connector.d.ts" />
-// Test the connector with no host and no network:                        rql connector test connector.ts --fixtures lifecycle.json
+// The connector author API. `rql connector types` writes this file beside a connector, and the type check of a
+// connector reads it. It declares the module 'repoql:connector'. help:///skills/writing-connectors/SKILL.md teaches it.
 
-/** The lines a connector logs. The host bounds a line and replaces the call's secrets in it. */
+/** Lines the host logs with a failed call, and `rql connector test` prints under each call, in its text and JSON reports; nothing else reads them. */
 declare var console: {
   log(...values: unknown[]): void;
   warn(...values: unknown[]): void;
@@ -19,499 +9,451 @@ declare var console: {
 };
 
 declare module 'repoql:connector' {
-  /** Any JSON value: a target, a reply, a JSON response body. */
+  /** Any JSON value: what a record holds, what a query returns, and what a parameter takes. */
   export type Json = string | number | boolean | null | Json[] | { [member: string]: Json };
 
+  /** The host's number for one committed call. 0 is before the first. */
+  export type Generation = number;
+
   /**
-   * A connector: one TypeScript file whose default export extends this class. What the connector asks for is in
-   * `manifest.yaml`; a class that declares `static manifest` is refused. The host calls only the operations the
-   * manifest names under `calls`.
-   *
-   * Every call runs once, in a fresh sandbox, synchronously: no method is `async`, and every member below returns
-   * its value at once. No state survives a call: keep a position in the cursor, or in a file under `.state/`.
-   * `Date` and `this.clock.now()` read one frozen instant in a call, `performance.now()` returns 0 and
-   * `Math.random()` throws, so the same source data always gives the same files.
-   *
-   * A connector brings a workspace up to date by writing files into it. RepoQL indexes the workspace like any
-   * folder: nothing reaches the index except by being a file there.
+   * A connector: up to three pipeline handlers, each optional. The host runs an import's handlers one call at a time,
+   * in a fresh sandbox: fetch until fetching settles, then analyze, then render. fetch, analyze and render may be async;
+   * every member of the class returns its value at once, so a handler awaits only what it computes itself. No state
+   * survives a call except what `this.db` holds.
    */
   export abstract class Connector {
-    /** An HTTPS client that reaches only the hosts the manifest names under `network.hosts`. */
+    /**
+     * fetch, openEvents and functions: HTTPS to the URLs the manifest's network entries allow. No request count; the envelope
+     * paces. There is no secrets API: the host attaches the credential an entry's `auth` declares, so a module never
+     * holds one. For example, in manifest.yaml:
+     *
+     *     network:
+     *       hosts:
+     *         - url: https://api.github.com/repos/**
+     *           auth: [{ bearer: GITHUB_TOKEN }]
+     *         - url: https://acme.atlassian.net/rest/api/3/**
+     *           auth: [{ basic: { user: JIRA_EMAIL, password: JIRA_API_TOKEN } }]
+     *         - url: https://api.example.com/v2/**
+     *           auth: [{ header: { name: X-Api-Key, secret: EXAMPLE_API_KEY } }]
+     *         - url: https://maps.example.com/api/**
+     *           auth: [{ query: { name: key, secret: MAPS_KEY } }]
+     *         - url: https://oauth2.googleapis.com/token
+     *         - url: https://bigquery.googleapis.com/bigquery/v2/**
+     *           auth: [{ oauth2: { tokenUrl: https://oauth2.googleapis.com/token, clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET, refreshToken: GOOGLE_REFRESH_TOKEN } }]
+     *
+     * A request that sets the header or query parameter its entry's credential uses throws, on any hop, and so does a
+     * response or a redirect that echoes a credential the host attached.
+     */
     readonly http: Http;
-    /** The values of the secret names the manifest lists under `secrets`. */
-    readonly secrets: Secrets;
-    /** The call's frozen instant. */
-    readonly clock: Clock;
-    /** Whether the host asks this call to finish and return. A `sync` that has more to do reads it between items. */
-    readonly signal: StopSignal;
+    /** fetch only, when the manifest asks for source roots: the granted folder, read-only, at `/source`. */
+    readonly source: SourceFolder;
     /**
-     * The import's files, at `/workspace`. Present in `sync` and `prune`, and in a function that takes an import: read
-     * and write when an `execute` script's member calls it, read-only from a query, where every change throws the
-     * read-only message. In any other call every member throws.
+     * Every handler and functions; not mapEvent. Writes (`put`, `remove`, `touch`) are fetch's and analyze's only, each
+     * to its own collections: a collection belongs to the handler that first writes it. render and functions only read.
      */
-    readonly workspace: Workspace;
-    /** The folder of the source root the import's URI names as its authority, read-only, at `/source`. Only when the manifest asks for source roots. */
-    readonly source: Folder;
-    /** RepoQL's inference, when the manifest declares `inference: true` and the operator granted it. */
+    readonly db: Database;
+    /** fetch, analyze and render. */
+    readonly blobs: Blobs;
+    /** render only. */
+    readonly files: Files;
+    /** fetch, analyze and render, when the operator granted inference. The host records each answer per request. */
     readonly llm: Llm;
-    /** Where a reader finds a workspace file in the source system. */
-    readonly origin: Origin;
-    /** What the connector teaches about its import: how to use or think about a set of its files. Works in `sync` and `prune`, and in a function a script's member calls; from a query `set` and `remove` throw the read-only message; in any other call every member throws. */
+    /** render only. */
     readonly concepts: Concepts;
-    /** The source's own terms, with the words that should recall them. Works in `sync` and `prune`, and in a function a script's member calls; from a query `set` and `remove` throw the read-only message; in any other call every member throws. */
+    /** render only. */
     readonly vocabulary: Vocabulary;
-    /**
-     * In `sync` and `prune`, and in a function that takes an import: the import this call serves, as `parse` answered
-     * its root, the same in each. In a function that takes no import, reading it throws, naming `import: true`.
-     */
+    /** fetch, analyze, render and functions. */
+    readonly settings: Settings;
+    /** Every handler but mapEvent: the call's frozen instant. In render it is the time of the newest generation its changes reach. */
+    readonly clock: Clock;
+    /** `aborted` reads `true` once a fifth of the call's five minutes is left: return a cursor that resumes. */
+    readonly signal: StopSignal;
+    /** The import the call serves, as `parse` answered for its URI; for a function, the import its first argument names. mapEvent and openEvents are given none, and read `this.partition`. */
     readonly import?: Import;
-    /** The partition whose credentials this call reads, when the manifest says `partitioned: true`. */
+    /**
+     * When the manifest declares `partitioned: true`: the partition the import's secrets and events are kept under, the
+     * import URI's authority unless `parse` names another. In mapEvent it is the partition whose webhook URL or stream the
+     * event arrived on, and in openEvents the partition the stream is dialled for, so `scheme://${this.partition}/<key>` names a record of that import.
+     */
     readonly partition?: string;
+    /** fetch only: the pass the call belongs to; absent for a call that fetches only the keys pushed events named. */
+    readonly pass?: Pass;
+    /** fetch only: the keys of records pushed events named, relative to the import's root, such as `PAY-123`. Up to 1,000. */
+    readonly keys?: readonly string[];
 
+    /** Resumable: absent `cursor` on a pass's first call. Writes source records to fetch's own collections. */
+    fetch?(cursor?: string): FetchResult | void | Promise<FetchResult | void>;
+    /** Optional and resumable: runs once fetching settles, reads the whole database, and derives records into its own collections. No network. */
+    analyze?(changes: Changes, cursor?: string): AnalyzeResult | void | Promise<AnalyzeResult | void>;
+    /** One call: writes the files for `changes` from the database, which it reads only. It returns nothing. */
+    render?(changes: Changes): void | Promise<void>;
+    // A function the manifest declares is a method named after it. A scalar function's method takes a call's
+    // argument rows together, up to its `batch`, and returns one answer for each in the same order, so it can ask
+    // the source for all of them in one request. A table function's method takes one call's arguments and returns
+    // an array of row objects whose members are the declared columns.
     /**
-     * Brings the workspace up to date. Called with no cursor, then with each answer's `nextCursor` until an answer
-     * has none. The files a call wrote are published when it returns, all or none; a thrown error publishes nothing.
+     * When the manifest declares `events: { stream: true }`: the socket the host dials and holds. It may ask the source
+     * for the URL with `this.http`, as Slack's Socket Mode hands out a single-use one, and reaches nothing else.
      */
-    abstract sync(request: SyncRequest): SyncResult | void;
-
-    /**
-     * Optional, with `prune` under the manifest's `calls` — which of the files older than `retentionDays` to
-     * remove. A candidate the answer does not name is kept.
-     */
-    prune?(candidates: string[]): PruneResult;
-
-    /** Optional, with `openEvents` under `calls` — where the host dials the event stream, asked afresh at every connect. */
     openEvents?(): EventStream;
-
-    /**
-     * Optional, with `mapEvent` under `calls` — maps one pushed CloudEvent to the files the host should bring up to
-     * date. It carries no content: the `sync` it causes fetches what changed. It has 5 seconds.
-     */
+    /** Under a five-second deadline, with the event alone: no database, network, model or settings. */
     mapEvent?(event: CloudEvent): EventOutcome;
-
-    // With `invoke` under `calls`, the class also declares one instance method for each function the manifest declares
-    // under `functions`, named after it, such as `balance(customer: string): number | null`. It takes one row's
-    // arguments in order and returns that row's value; a table function's method returns an array of row objects whose
-    // members are the declared columns. It has HTTP, secrets and `llm` as a `sync` has, and 30 seconds for every row
-    // of one call. A function that takes an import (every function of a partitioned connector, and one that declares
-    // `import: true`) reads that import as `this.import` and its `workspace` and `source`; any other function has none of them. Called by an
-    // `execute` script's member, it writes the workspace as `sync` does, and each change is published when it
-    // completes. Called from a query, every change it tries throws "This file system is read-only while a function
-    // answers a query: write files from sync instead.": the workspace's writes, `saveTo`, `origin.set`, and setting
-    // or removing concepts and vocabulary. See help:///connectors/functions.md.
   }
 
-  /**
-   * With `parse` under `calls`, the class also declares `static parse(uri: ImportUri): ImportTarget`, which maps
-   * an import URI to its target. It is pure: it has no clock, no directory and no capability, and one second.
-   * To reject a URI, throw `InvalidImport`.
-   *
-   * Only the root of an import is kept. The host asks `parse` about the root again before every sweep, and `sync`
-   * is given that answer. So `parse` of the root must answer what `parse` of the URI answered: the same root,
-   * `target`, `partition` and `title`. An import or a suite whose URI is answered otherwise is refused.
-   */
+  /** The class a connector's module exports as its default. */
   export interface ConnectorClass {
+    /** A fresh instance for each call: no field survives the call. */
     new (): Connector;
+    /** Named `parse` in the manifest's calls: turns an import's URI into its root and target, or throws InvalidImport. */
     parse?(uri: ImportUri): ImportTarget;
   }
 
-  /** Thrown from `static parse` to reject an import URI. The message reaches the user, followed by the manifest's `uri.example`. */
+  /** Thrown by `parse` for a URI the connector does not take: its message says what a valid URI looks like. */
   export class InvalidImport extends Error {
+    /** Marks the error as the connector's refusal of the URI. */
     readonly invalidImport: true;
+    /** `message`: what a valid URI looks like, such as `An import names one account, such as tracker://acme.` */
     constructor(message: string);
   }
 
-  /** An import URI in its canonical parts. */
-  export interface ImportUri {
-    scheme: string;
-    authority: string;
-    path: string[];
-    /**
-     * A root has no query, so no sweep is given one. Read the query only to choose the root or to reject the URI:
-     * what `target`, `partition` or `title` needs goes in the root's path.
-     */
-    query: [name: string, value: string][];
-  }
+  /** An import's URI, as `parse` is given it: `tracker://acme/PAY?state=open` is `tracker`, `acme`, `['PAY']`, `[['state', 'open']]`. */
+  export interface ImportUri { scheme: string; authority: string; path: string[]; query: [name: string, value: string][] }
+  /**
+   * What `parse` answers: the import's `root`, a URI that ends with `/` and under which its files are served; the `target`
+   * fetch, analyze, render and an import's function read as `this.import.target`; a `partition` its secrets are kept under; and a `title` status shows.
+   */
+  export interface ImportTarget { root: string; partition?: string; title?: string; target?: Json }
+  /** The import a call serves: its root, its target, and its partition. */
+  export interface Import { root: string; target: Json; partition: string }
+  /** Asked afresh at every read. */
+  export interface StopSignal { readonly aborted: boolean }
+  /** `now()` answers an ISO 8601 instant in UTC to the millisecond, such as `2026-03-04T05:06:07.000Z`: take `slice(0, 19) + 'Z'` for whole seconds. */
+  export interface Clock { now(): string }
 
-  /** What `parse` answers. */
-  export interface ImportTarget {
-    /**
-     * The canonical identity of the import, such as `notes://team/`: the URI's scheme and authority, then any path,
-     * ending in `/`, with no query. Everything else in the answer comes from the root alone.
-     */
-    root: string;
-    /** Only with `partitioned: true`: whose credentials the import reads. Absent means the root's authority. */
-    partition?: string;
-    /** At most 200 characters. */
-    title?: string;
-    /** At most 4 KiB of JSON, handed to every `sync`, `prune` and function that takes an import as `this.import.target`. Never stored: every call has the one `parse` of the root answers. */
-    target?: Json;
-  }
+  // ---- The handlers --------------------------------------------------------------------------------------------
 
-  /** The import a `sync`, a `prune` or a function that takes an import serves. */
-  export interface Import {
-    root: string;
-    target: Json;
-    partition: string;
+  /** The pass a fetch call belongs to. */
+  export interface Pass {
+    /** `true` on every call of a full pass: list everything the source holds, and end with `removeUnseen: true`. */
+    full: boolean;
+  }
+  /** What a fetch call returns; returning nothing ends the pass. */
+  export interface FetchResult {
+    /** Present: call again. Absent: the pass is done. At most 16,384 characters. */
+    cursor?: string;
+    /** Whole seconds, 1 through 86,400, only beside a cursor. */
+    wait?: number;
+    /**
+     * `true` on the last call of a full pass whose listing was whole: the host removes every record of fetch's
+     * collections that this pass did not put, touch or read by key. The host ignores it on any other call.
+     */
+    removeUnseen?: boolean;
   }
 
   /**
-   * The host's request that a call finish what it is doing and return. A `sync` or a `prune` is asked when less than
-   * a fifth of its deadline is left: the last minute of five. Nothing stops a call that is asked. One that reads
-   * `aborted` true returns `nextCursor` for what is left, and what it wrote is published. One that runs on is
-   * stopped by its deadline, and nothing it wrote is kept.
+   * What analyze or render is given: the records that changed or were removed after generation `since` and up to
+   * `until`, which `this.db.changes(collection, { since, until })` pages through. `full: true` asks for every record,
+   * with `since` 0: in render, the host then removes every published file the call did not write, once a full pass has
+   * completed in the import's database. `keys` is present only when the host split a render by key range: the call
+   * renders the keys after `keys.after` and through `keys.through`, an absent bound leaving that end open. `list` and
+   * `changes` already show the call only its range; a query sees every row, so a render that queries reads the bounds.
    */
-  export interface StopSignal {
-    /** True once the call is asked to stop, and for the rest of the call. Read it after an item, never before the first. */
-    readonly aborted: boolean;
-  }
-
-  /** The members of a `sync` call's input document. */
-  export interface SyncRequest {
-    /** Whether this sweep must visit everything: the first sweep, one after the workspace was lost, and each authoritative sweep. */
-    full: boolean;
-    /** The `nextCursor` of the call before this one. */
+  export interface Changes { full: boolean; since: Generation; until: Generation; keys?: KeyRange }
+  /** One slice of a split render: the key the slice starts after, and its last key, in collection and then key order. */
+  export interface KeyRange { after?: RecordKey; through?: RecordKey }
+  /** A record's address: its collection and its key within it. */
+  export interface RecordKey { collection: string; key: string }
+  /** What an analyze call returns; returning nothing ends the run. */
+  export interface AnalyzeResult {
+    /** Present: call again with it. Absent: the run is done. At most 16,384 characters. */
     cursor?: string;
-    /** In a sync an event caused: the files to bring up to date, as `mapEvent` named them. */
-    keys?: string[];
+    /** Whole seconds, 1 through 86,400, only beside a cursor. */
+    wait?: number;
   }
 
-  export interface SyncResult {
-    /** Present when there is more to do: the next call's `cursor`, at most 16,384 characters. */
-    nextCursor?: string;
-    /** Beside `nextCursor`: how long the host waits before the next call, 0 through 86,400. */
-    retryAfterSeconds?: number;
+  // ---- The import database -------------------------------------------------------------------------------------
+
+  /** One record: its key, its value, and its own time; the staged files its value names by `blob:sha256:<hex>` live with it. */
+  export interface Row<T = Json> { key: string; value: T; time?: string }
+
+  /** A page of `list`. Pass `next` as `after` for the next page. */
+  export interface Page<T = Json> { rows: Row<T>[]; next?: string }
+
+  /** A page of what changed between two generations. A key is never in both lists. */
+  export interface ChangePage<T = Json> { changed: Row<T>[]; removed: string[]; next?: string }
+
+  /** The import's database: records in collections, and full SQL over them. */
+  export interface Database {
     /**
-     * Only on the answer that ends a sweep, the one with no `nextCursor`: what the copy lacks, at most 16 gaps. It
-     * describes the whole copy as it stands after this sweep, not only what this sweep read: a sweep that rewrites part of
-     * the copy accounts for what earlier sweeps left, keeping what its files do not say under `.state`. The import is
-     * then partial until a later sweep ends naming nothing: `rql import list`, `rql connector status` and the
-     * footer of every read of its files say so, with the command that reads the rest.
+     * A value, including this call's own writes, or `undefined` for a key with no record: a record that holds `null`
+     * reads as `null`. In fetch, a row put under another `recordsVersion` reads as absent, and a key read during a pass
+     * counts as seen by it.
      */
-    missing?: Missing[];
+    get<T = Json>(collection: string, key: string): T | undefined;
+    /** The values of the keys that exist, read as `get` reads them, for up to 10,000 keys. */
+    getMany<T = Json>(collection: string, keys: string[]): Record<string, T>;
+    /**
+     * fetch and analyze, each to its own collections. A put of the value and time already kept changes nothing. A value
+     * is at most 16 KiB of JSON, or the manifest's `maxValueBytes`, at most 128 KiB, which grows the import's memory:
+     * stage a larger body and put its `blob:sha256:<hex>` identifier in the value instead.
+     */
+    put<T = Json>(collection: string, key: string, value: T, options?: { time?: string | Date }): void;
+    /** fetch and analyze. */
+    remove(collection: string, key: string): void;
+    /** fetch only: this pass saw these keys, without reading or changing them. */
+    touch(collection: string, keys: string[]): void;
+    /** A page of a collection in key order, at most 1,000 rows and 1,000 when `limit` is absent, with this call's own writes. Reads nothing as seen. */
+    list<T = Json>(collection: string, options?: { prefix?: string; after?: string; limit?: number }): Page<T>;
+    /**
+     * fetch, analyze and render: the collection's committed changes after `since` and up to `until`, in key order,
+     * at most 1,000 a page. The call's own writes commit after every window, so they are never in one.
+     */
+    changes<T = Json>(collection: string, options: { since: Generation; until: Generation; after?: string; limit?: number }): ChangePage<T>;
+    /**
+     * Any one statement, reads and writes alike, inside the call's one transaction: a SELECT over
+     * `kv(collection, key, value, time)` and the connector's own tables, or a statement that creates or writes a table
+     * of its own. Parameters are `$1`, `$2` and so on. A parameter that is an array or an object arrives as JSON text:
+     * decode it as JSON first, as in `$1::JSON::VARCHAR[]`. A direct `$1::VARCHAR[]` drops the backslash of every escape
+     * but `\"` and `\\`, so `\u00e9` reads as `u00e9`. DuckDB's locked settings bound it: no file, extension or
+     * network, and memory spills inside the import. A statement that would begin or end a transaction, attach or
+     * detach a database, SET, RESET or USE anything but a variable, run a bare PRAGMA, or reach enable_logging, is
+     * refused, and one whose failure aborts the transaction fails the call. It returns at
+     * most 10,000 rows and 16 MiB of JSON, and the call's deadline interrupts it. `render` and functions only read.
+     */
+    query(sql: string, params?: Json[]): Record<string, Json>[];
   }
 
-  /** One part of the source that the copy lacks, and why. */
-  export interface Missing {
-    /** What the copy lacks, 1 to 200 characters, such as `Revenue and margin for every customer`. Each gap's `what` is its own. */
-    what: string;
-    /** Why it was not read, 1 to 1,000 characters, such as `STRIPE_API_KEY may not read Charges and Customers`. */
-    why: string;
-    /** One of the manifest's `secrets`, when a value of it that may read more is the fix. The host names the command that sets it. */
-    secret?: string;
+  /** fetch, analyze and render: reads a staged file a record names, as text, as JSON or as bytes. */
+  export interface Blobs {
+    /** A staged file by its `blob:sha256:<hex>` identifier. */
+    read(blob: string, as: 'text'): string;
+    read(blob: string, as: 'json'): Json;
+    read(blob: string, as: 'bytes'): Uint8Array;
   }
 
-  export interface PruneResult {
-    /** The candidates to remove. A path that was not a candidate fails the call. */
-    remove: string[];
+  /** `origin`: the web address a person opens for the record. `time`: the record's own time. */
+  export interface FileOptions { origin?: string; time?: string | Date }
+
+  /** render only: the files it publishes, each at a path relative to the import's root with forward slashes, such as `issues/PAY-1.md`. */
+  export interface Files {
+    /** Writes a file. A file whose bytes, origin and time are unchanged is left alone and not indexed again. */
+    write(path: string, content: string | Uint8Array, options?: FileOptions): void;
+    /** Publishes a staged file at a path, as a file the import holds. */
+    promote(blob: string, path: string, options?: FileOptions): void;
+    /** Removes a published file. A path that holds no file is already removed, and its removal is no error. A full render removes every file it did not write, without this. */
+    remove(path: string): void;
+    /** The previous version of the file stays published, and status lists the path and the reason. */
+    fail(path: string, reason: string): void;
   }
 
-  export interface EventStream {
-    url: string;
-    headers?: Record<string, string>;
-  }
+  /** A setting the manifest declares: the operator's stated value, else the manifest's default, else `undefined`. */
+  export interface Settings { get(name: string): string | undefined }
 
-  /** A pushed event in the CloudEvents shape. */
-  export interface CloudEvent {
-    id: string;
-    source: string;
-    type: string;
-    data?: Json;
-    [attribute: string]: Json | undefined;
-  }
+  // ---- Shared by every handler ----------------------------------------------------------------------------------------
 
-  export interface EventOutcome {
-    /** At most 1,000 URIs of files to bring up to date. */
-    sync?: string[];
-    /** Run a sweep after the event sync. */
-    sweep?: boolean;
-    /** What the host sends back on the stream, at most 64 KiB. */
-    reply?: Json;
-    /** Close the stream and dial again. */
-    reconnect?: boolean;
-  }
-
-  export interface Clock {
-    /** The call's frozen instant, as ISO 8601 text. A `parse` has no clock, and there this throws. */
-    now(): string;
-  }
-
+  /** One request `this.http.request` sends. */
   export interface HttpRequest {
-    /** Default `GET`. */
+    /** `GET` when absent. */
     method?: string;
+    /** An absolute URL a network entry of the manifest allows. */
     url: string;
+    /** Request headers. The credential's own header is the host's to attach, and setting it throws. */
     headers?: Record<string, string>;
-    /** At most 1 MiB. Send a larger body from a file with `bodyFrom`. */
+    /** At most 1 MiB. */
     body?: string | Uint8Array;
-    /** How `body` is read from the response. Default `json`. */
+    /** How `body` is read: `json`, the default, `text` or `bytes`. */
     responseType?: 'json' | 'text' | 'bytes';
     /**
-     * The host writes the response body straight to this file, and the response then holds `bytesWritten` in
-     * place of `body`. A path under the workspace, such as `.state/raw/report.pdf`. The host makes the directories above it.
+     * fetch only: move the body into a staged file. The response then holds `blob` in place of `body`; one answered with
+     * a status outside 2xx stages nothing and holds its body as a `Uint8Array`, whatever `responseType` says.
      */
-    saveTo?: string;
-    /** The host sends this file as the body: a path under the workspace, or `/source/...` for a file of the source folder. */
-    bodyFrom?: string;
+    stage?: boolean;
   }
-
+  /** A response of any status. `request` throws when the host refuses the request, when the source cannot be reached, and on a 429, as `RateLimited`. */
   export interface HttpResponse {
+    /** The HTTP status. */
     status: number;
-    /** Lower-case header names. */
+    /** Lowercase names. */
     headers: Record<string, string>;
-    /** JSON, text or bytes as `responseType` asked. Absent with `saveTo`. */
+    /** As `responseType` asked. */
     body?: Json | Uint8Array;
-    /** With `saveTo`: the bytes written to the file, which is 0 for a status outside 200 through 299. */
-    bytesWritten?: number;
+    /** With `stage`: the staged file's identifier, `blob:sha256:<hex>`. */
+    blob?: string;
+  }
+  /**
+   * Thrown when the source answers 429, and by every request after it until Retry-After has passed. Uncaught, the call
+   * commits nothing and is called again after Retry-After. Caught, return `{ cursor, wait: retryAfterSeconds }`.
+   */
+  export class RateLimited extends Error {
+    /** The whole seconds left of the source's Retry-After, at most 86,400: the `wait` to return. */
+    readonly retryAfterSeconds: number;
   }
 
+  /** fetch, openEvents and functions: HTTPS to the URLs the manifest's network entries allow, with the credential each declares attached. */
   export interface Http {
-    /** Sends one request and returns its response whatever the status. At most 20 requests a call: a 21st fails the call, even when its error is caught. */
+    /** Sends one request and answers its response, whatever its status. */
     request(options: HttpRequest): HttpResponse;
-    /** A `GET` that returns the JSON body, and throws for a status outside 200 through 299. */
-    get(url: string): Json;
+    /** A GET whose response body is JSON, typed as the caller states. It throws on a status outside 2xx. */
+    get<T = Json>(url: string): T;
   }
 
-  export interface Secrets {
-    /**
-     * Reads a declared secret. With `{ forUpdate: true }` it first takes that secret's lock across every process
-     * on the machine: read a value you are about to spend, such as a one-time refresh token, this way.
-     */
-    get(name: string, options?: { forUpdate?: boolean }): string;
-    /** Stores a rotated value. A token never belongs in a workspace file. */
-    update(name: string, value: string): void;
-  }
-
-  export interface FileEntry {
-    name: string;
-    directory: boolean;
-  }
-
-  export interface FileStat {
-    size: number;
-    /** ISO 8601 text. */
-    modified: string;
-    directory: boolean;
-  }
-
-  /** The reading members of a directory. Every path is relative to the directory, such as `eng/general.md`. */
-  export interface Folder {
-    /**
-     * The whole file as text, read as UTF-8. The call holds the file's bytes while it reads, and then the string: one
-     * byte a character when every character is at or below U+00FF, two bytes a character otherwise. A file that does
-     * not fit in the memory the call has left throws; `memoryMiB` in manifest.yaml raises the call's memory ceiling.
-     */
+  /** One entry of a folder `list` read. */
+  export interface FileEntry { name: string; directory: boolean }
+  /** A file's size in bytes, its modified instant, and whether it is a folder. */
+  export interface FileStat { size: number; modified: string; directory: boolean }
+  /** The granted folder, read-only. Every path is relative to it, with forward slashes. */
+  export interface SourceFolder {
+    /** A file's text, as UTF-8. */
     readText(path: string): string;
-    /** The whole file as bytes. The call holds the file twice while it reads, and once afterwards. */
+    /** A file's bytes. */
     readBytes(path: string): Uint8Array;
+    /** Whether a file or folder is there. */
     exists(path: string): boolean;
-    /** Throws when nothing is at the path. */
+    /** A file's size, modified instant and kind. */
     stat(path: string): FileStat;
-    /** The entries of a directory, in the byte order of their names; of the directory itself with no path. */
+    /** The entries of a folder; the granted folder itself when `path` is absent. */
     list(path?: string): FileEntry[];
+    /** Copies one file of the folder into a staged file and returns its identifier. */
+    stage(path: string): string;
   }
 
+  /** The socket `openEvents` names: a URL a network entry allows, and headers beside the credential the host attaches. */
+  export interface EventStream { url: string; headers?: Record<string, string> }
   /**
-   * The import's files. A file under `.state/` is the connector's own and is never indexed. A file's modified
-   * time is the call's instant unless the connector sets it.
+   * A pushed event, as CloudEvents 1.0 defines it. A webhook request whose body is not a CloudEvent arrives as type
+   * `ai.repoql.webhook`, with the body, byte for byte, as base64 text in `data_base64`, and the headers the manifest
+   * names as a JSON object, as text, in `repoqlheaders`. A folder change is type `ai.repoql.folder`, whose `subject`
+   * is the changed path under the folder.
    */
-  export interface Workspace extends Folder {
-    /** Writes a file, making the directories above it. */
-    writeText(path: string, text: string): void;
-    /** Writes a file, making the directories above it. */
-    writeBytes(path: string, bytes: Uint8Array): void;
-    /** Removes a file, or a directory that is empty. */
-    remove(path: string): void;
-    /** Renames a file or a directory, making the directories above its new name. */
-    rename(from: string, to: string): void;
-    /** Makes a directory with the directories above it. One that exists is no failure. */
-    makeDirectory(path: string): void;
-    /** Sets a file's modified time: ISO 8601 text, a `Date`, or milliseconds since the epoch. */
-    setModified(path: string, instant: string | Date | number): void;
-  }
-
-  export interface CompletionRequest {
-    prompt: string;
-    context?: string;
-    system?: string;
-    effort?: 'low' | 'balanced' | 'high';
-    /** 0 through 16,384, where 0 leaves the length to the host. */
-    maxTokens?: number;
-  }
-
-  export interface Completion {
-    content: string;
-    model: string;
-    inputTokens: number;
-    outputTokens: number;
-  }
-
+  export interface CloudEvent { id: string; source: string; type: string; data?: Json; [attribute: string]: Json | undefined }
   /**
-   * What a question asks, or what one of its outcomes means: plain words, or an object or an array that sets
-   * them out in parts, such as `{ what, not_for, examples }`. The names of the parts are yours to choose.
+   * `keys`: the records to fetch, up to 1,000, each by its URI under an import's root, such as `tracker://acme/PAY-123`.
+   * `pass`: ask for a pass of every import the event's partition serves instead. `reply`: the answer to the sender, sent in place of
+   * a stream's declared acknowledgement, and only once the keys are stored.
+   * `reconnect`: dial the stream again.
    */
+  export interface EventOutcome { keys?: string[]; pass?: boolean; reconnect?: boolean; reply?: Json }
+
+  /** What `complete` asks the model: the prompt, with context and a system prompt beside it. */
+  export interface CompletionRequest { prompt: string; context?: string; system?: string; effort?: 'low' | 'balanced' | 'high'; maxTokens?: number }
+  /** The model's answer to a completion. */
+  export interface Completion { content: string; model: string; inputTokens: number; outputTokens: number }
+  /** Words that describe a question or one of its criteria. */
   export type Description = string | Json[] | { [part: string]: Json };
-
-  /**
-   * One question of a decision. `type` names its form, and `criteria` describes its outcomes.
-   * A `choice` takes 1 to 255 named options. A `score` takes 2 to 10 descriptions, lowest level first.
-   * A `noul` asks yes or no, and its `criteria` may describe what `true` and `false` mean.
-   * A description that is `null` leaves its option or level undescribed.
-   */
+  /** One question `decide` asks: a `choice` among named criteria, a `score` over ordered criteria, or a `noul`, answered as a number. */
   export type Question =
     | { type: 'choice'; instructions?: Description | null; criteria: Record<string, Description | null> }
     | { type: 'score'; instructions?: Description | null; criteria: (Description | null)[] }
     | { type: 'noul'; instructions?: Description | null; criteria?: { true?: Description | null; false?: Description | null } | null };
-
-  /**
-   * The answer to one question. `type` names its form, which is the form of its question. A score's levels are counted from 0, the first
-   * description, and `score` is the mean of the level numbers, each weighted by its probability. `legend` gives
-   * each level its description, when the decision service sent one. `noul` is the probability of yes, from 0 to 1.
-   */
+  /** The model's answer to one question, of the question's own type. */
   export type Answer =
     | { type: 'choice'; choice: string; confidence: number; probabilities: Record<string, number> }
     | { type: 'score'; score: number; confidence: number; probabilities: Record<string, number>; legend?: Record<string, Json> }
     | { type: 'noul'; noul: number };
-
-  export interface Decision {
-    model: string;
-    answers: Record<string, Answer>;
-    usage: { input_tokens: number; output_tokens: number };
-  }
-
-  /**
-   * A decision request. Its shape and the shape of its reply are those of TypeSafe AI's Jev decision API,
-   * except that the host chooses the model.
-   */
-  export interface DecisionRequest {
-    /** The content the questions are about. */
-    state: Json;
-    /** At most 32 questions. */
-    questions: Record<string, Question>;
-  }
-
-  /**
-   * Inference is never promised. When it is switched off, signed out, over its plan or unreachable, a request
-   * throws an `Error` whose `unavailable` is `true`: catch it and write the raw text. A call makes at most 20
-   * `complete` requests and at most 1,000 `decide` requests.
-   */
+  /** The model's answers to a `decide` request, by question name. */
+  export interface Decision { model: string; answers: Record<string, Answer>; usage: { input_tokens: number; output_tokens: number } }
+  /** What `decide` asks: the part of a record the questions are about, and the questions by name. */
+  export interface DecisionRequest { state: Json; questions: Record<string, Question> }
+  /** An answer, or `undefined` when the model cannot answer yet; the host records either per request. */
   export interface Llm {
-    complete(request: CompletionRequest): Completion;
-    decide(request: DecisionRequest): Decision;
+    /** A completion of the prompt, or `undefined` when the model cannot answer yet. */
+    complete(request: CompletionRequest): Completion | undefined;
+    /** The answer to each question about `state`, or `undefined` when the model cannot answer yet. */
+    decide(request: DecisionRequest): Decision | undefined;
   }
 
-  export interface Origin {
-    /** Records the URL of a workspace file in the source system. The file must exist, and is not one under `.state/`. */
-    set(path: string, url: string): void;
-  }
-
-  /** One thing worth knowing about a set of the import's files. An agent gets it with the files `relevance` matches. */
+  /**
+   * A concept render states: how to read a set of the import's files. `relevance` is the files it arrives with, as
+   * patterns relative to the import's root; `invariant` is the one sentence that always holds.
+   */
   export interface Concept {
-    /** A short CamelCase name, such as `TicketLifecycle`. One concept has one name: setting it again replaces it. */
+    /** A CamelCase name, unique in the import. */
     name: string;
-    /** `rule` for what must hold, `shape` for where things are and the form they take, `wisdom` for a way to think about them. */
+    /** `rule`: what always holds. `shape`: where things are and how they connect. `wisdom`: how to think about the records. */
     category: 'rule' | 'shape' | 'wisdom';
-    /** The idea in one sentence, at most 240 characters. */
+    /** One sentence that always holds. */
     invariant: string;
-    /** Words an agent would search by. At least one. */
+    /** Words an agent would search with. */
     tags: string[];
-    /** The files the concept is about, as patterns relative to the import's root: `'tickets/**'`, `'**\/*.thread.md'`, or `'**'` for the whole import. A pattern that starts with `!` excludes. */
+    /** The files it arrives with, as patterns relative to the import's root, such as `issues/**`. */
     relevance: string | string[];
     /** Why the invariant holds. */
     why?: string;
-    /** An example that makes it concrete. */
+    /** A case that makes the invariant clear. */
     example?: string;
-    /** Further short points: distinctions, limits, what it is not. */
+    /** Distinctions and boundaries, one a line. */
     depth?: string[];
   }
+  /** A concept as `list` answers it. */
+  export interface ConceptListed { name: string; category: 'rule' | 'shape' | 'wisdom'; invariant: string; tags: string[]; relevance: string[] }
+  /** render only: the import's concepts. `set` with the value a concept already has changes nothing; `remove` answers whether one was there. */
+  export interface Concepts { set(concept: Concept): void; remove(name: string): boolean; list(): ConceptListed[] }
+  /** A term render states: what a word means in this import, the outside words that should find it, and the files it applies to, relative to the root. */
+  export interface Term { term: string; meaning: string; aliases?: string[]; domain?: string; scope?: string | string[] }
+  /** render only: the import's terms. `set` with the value a term already has changes nothing; `remove` answers whether one was there. */
+  export interface Vocabulary { set(term: Term): void; remove(term: string, domain?: string): boolean; list(): Term[] }
 
-  /** What `concepts.list` returns for one concept: what its front matter states, without `why`, `example` and `depth`. */
-  export interface ConceptListed {
-    name: string;
-    category: 'rule' | 'shape' | 'wisdom';
-    invariant: string;
-    tags: string[];
-    relevance: string[];
+  // ---- Writing what a source said ------------------------------------------------------------------------------------
+
+  /**
+   * The address a record is linked by, from an address as a source wrote it: `&amp;`, `&lt;` and `&gt;` read as the
+   * characters they escape, the scheme and the host lowercased, and the parameters that only track a click dropped
+   * (`utm_*`, `fbclid`, `gclid`, `dclid`, `gbraid`, `wbraid`, `msclkid`, `mc_cid`, `mc_eid`, `_hsenc`, `_hsmi`, `igshid`,
+   * `yclid` and `ref_src`). Every other parameter stays, in its order, and so does the fragment. It never throws for
+   * text that is not an address: such text comes back with only those changes. A connector that knows its own system's
+   * canonical form, such as a pull request's page without its tab, applies that after this.
+   */
+  export function canonicalAddress(url: string): string;
+
+  /** Outside text written into a Markdown file as data: text a source holds, such as a title, a message or a comment. */
+  export const markdown: Markdown;
+
+  /**
+   * Each member writes text as data that cannot become the file's own structure. Every line ending a source may write
+   * (CR, CRLF, U+2028, U+2029, NEL, VT and FF) becomes `\n`, and control characters but the tab are dropped. A mark
+   * that would open a block at the start of a line is escaped: a heading, a quote, a list, a numbered or lettered list,
+   * a thematic break, a setext underline, frontmatter, a fence, a table row, a link definition or a definition. An `@`
+   * that could start a reference read assembles is doubled, as `@@`, which read shows as one `@`. A member throws a
+   * TypeError for a value that is not a string.
+   */
+  export interface Markdown {
+    /**
+     * Lines of text, as paragraphs whose emphasis, code and links still show. `<` and `|` are escaped wherever they stand,
+     * with any backslashes just before them, so the text holds no HTML and no table. Put a blank line before and after it.
+     */
+    text(value: string): string;
+    /** Lines of text escaped as `text` escapes them, as a blockquote, every line `> `-prefixed. End it with a blank line, or the next line joins the quote. */
+    quote(value: string): string;
+    /**
+     * Text on one line, for a heading, a list item, a link's words or a table cell. Whitespace runs become one space. These
+     * are escaped wherever they stand: the backslash, `` ` ``, `*`, `[`, `]`, `<`, `>`, `|` and `~`. An `&` is escaped where
+     * it starts an entity, and a `#` where it starts the text or could close a heading. A run of `_`, `^`, `++` or `==` is
+     * escaped wherever the host's Markdown could take it to open or close emphasis, superscript, inserted or marked text,
+     * by Markdig's own delimiter rule. So `gemini_flash`, `#12` and `R&D` read as written.
+     */
+    inline(value: string): string;
+    /**
+     * A link to `url` with `label` as its words, escaped as `inline` escapes them but for the marks that open a block, which
+     * a link's words cannot, or the address when `label` is empty.
+     * Only an `http` or `https` address is linked: for any other, or none, the words come back alone. A character
+     * that could end the destination or break a table, such as whitespace, a parenthesis or a pipe, is percent-encoded.
+     */
+    link(label: string, url: string | null | undefined): string;
   }
 
   /**
-   * The import's concepts. RepoQL writes and stores them: a connector states values and never a file. A concept is
-   * kept until it is removed, is published with the call that set it, and is discarded with a call that fails. A value
-   * RepoQL refuses throws an `Error` that names the member and says what to write.
+   * Orders two instants, earlier first, as `sort` takes them: negative, 0 or positive. Each is ISO 8601 text with a date,
+   * a time to the second, from 0 to 9 digits of a fraction, and `Z` or an offset, such as `2026-03-01T09:30:00.5Z`; or a
+   * Date. Text with mixed fractions does not sort as text: `12:00:00Z` sorts after `12:00:00.5Z`. It throws a TypeError
+   * for any other value, such as a date that does not exist.
    */
-  export interface Concepts {
-    set(concept: Concept): void;
-    /** Removes the concept of that name. Returns whether the import held one. */
-    remove(name: string): boolean;
-    /** The import's concepts, in name order, with what this call set or removed. */
-    list(): ConceptListed[];
-  }
+  export function compareInstants(a: string | Date, b: string | Date): number;
 
-  /** One of the source's own terms. */
-  export interface Term {
-    /** The name the source really uses, such as `SLA breach`. */
-    term: string;
-    /** One sentence that explains it. */
-    meaning: string;
-    /** Words from outside the source that should recall the term. */
-    aliases?: string[];
-    /** Tells two senses of one term apart, such as `billing`. */
-    domain?: string;
-    /** The files the term belongs to, as patterns relative to the import's root. Absent means the whole import. */
-    scope?: string | string[];
-  }
-
-  /** The import's terms, kept, published and discarded as its concepts are. */
-  export interface Vocabulary {
-    set(term: Term): void;
-    /** Removes the term, in `domain` when it was set in one. Returns whether the import held it. */
-    remove(term: string, domain?: string): boolean;
-    /** The import's terms, by term and then domain, with what this call set or removed. */
-    list(): Term[];
-  }
+  /**
+   * The bytes `value` takes in the import database: the UTF-8 bytes of its JSON, as `this.db.put` stores it, which is
+   * what the manifest's `maxValueBytes` bounds. A string counts its quotes and escapes. It throws a TypeError for a
+   * value JSON cannot hold, such as `undefined`. `put` refuses a value that holds half a character, a lone surrogate,
+   * whatever its size.
+   */
+  export function utf8Size<T = Json>(value: T): number;
 }
-
-// The built-in libraries. A connector may import no other module. Each is imported by its name with or without the
-// prefix 'repoql:'. The two declared here are typed. Every other built-in library is typed `any` by the last lines of
-// this file, so a mistake in a call of one is not reported.
-declare module 'repoql:yaml' {
-  const yaml: { load(text: string): unknown; dump(value: unknown): string };
-  export default yaml;
-  export function load(text: string): unknown;
-  export function dump(value: unknown): string;
-}
-declare module 'repoql:base64' {
-  /** UTF-8 text as base64. */
-  export function encode(text: string): string;
-  /** Base64 back to UTF-8 text. */
-  export function decode(base64: string): string;
-  /** Bytes as base64. */
-  export function fromUint8Array(bytes: Uint8Array): string;
-  /** Base64 as bytes. */
-  export function toUint8Array(base64: string): Uint8Array;
-}
-declare module 'repoql:*';
-declare module 'yaml' {
-  export * from 'repoql:yaml';
-  export { default } from 'repoql:yaml';
-}
-declare module 'base64' {
-  export * from 'repoql:base64';
-}
-declare module 'change-case';
-declare module 'dayjs';
-declare module 'diff';
-declare module 'front-matter';
-declare module 'fuse';
-declare module 'ignore';
-declare module 'ini';
-declare module 'json5';
-declare module 'microdiff';
-declare module 'mustache';
-declare module 'ohash';
-declare module 'parse-diff';
-declare module 'picomatch';
-declare module 'radash';
-declare module 'semver';
-declare module 'toml';
-declare module 'toposort';
-declare module 'xml';

@@ -16,7 +16,7 @@ optional service you can run beside an existing RepoQL installation.
 | Requirement | Detail |
 | --- | --- |
 | Python | 3.11 or newer; standard library only. PyJWT is imported lazily and only for optional Cloudflare Access verification. |
-| RepoQL runtime | A user-installed `rql` CLI and a workspace it serves. The supported connector runtime for this export is **1.7.15**; setup does not upgrade it. |
+| RepoQL runtime | A user-installed `rql` CLI and a workspace it serves. The supported connector runtime for this export is **1.7.18**; setup does not upgrade it. |
 | Node (optional) | Only to run `tests/dashboard-portable.test.mjs` and the static JS checks. |
 | Attached panels (optional) | Kanzo, Tencent MemoryPanel, Claude Office and Ghost are **separate programs**. Nothing here installs, starts or bundles them. |
 

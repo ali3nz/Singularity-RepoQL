@@ -1,0 +1,46 @@
+# Claude Office backend dependency pins - Windows x86_64, CPython 3.12
+# Resolved 20261030T035738Z from release\office\requirements-windows-py313.lock.txt in a
+# fresh CPython 3.12.10 venv (pip 26.2.1); the complete pin set installed with
+# exit 0 and 'pip check' reported no broken requirements. The resolved set is
+# identical to the 3.13 lock, so both Office and the 3.12 dashboard/Ghost
+# runtime use the same versions.
+#
+# These are exact version pins, NOT hash-pinned: matching the py313 lock format
+# no wheelhouse or artifact hashes were recorded. To make this hash-enforcing,
+# build a wheelhouse and add --hash lines:
+#   pip download -r office/requirements-windows-py312.lock.txt -d wheelhouse
+#   pip hash wheelhouse/*.whl
+#
+# The project itself (claude-office-visualizer) is deliberately absent: uvicorn
+# runs app.main:app from the backend directory, so nothing is pip-installed for it.
+
+aiosqlite==0.22.1
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+click==8.5.0
+fastapi==0.141.1
+greenlet==3.5.6
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+idna==3.19
+markdown-it-py==4.2.0
+mdurl==0.1.2
+pydantic_core==2.46.5
+pydantic==2.13.5
+pydantic-settings==2.15.0
+Pygments==2.21.0
+python-dotenv==1.2.3
+python-multipart==0.0.32
+PyYAML==6.0.3
+rich==15.0.0
+SQLAlchemy==2.0.52
+starlette==1.6.0
+typing_extensions==4.16.0
+typing-inspection==0.4.4
+uvicorn==0.53.0
+watchfiles==1.2.0
+websockets==17.1

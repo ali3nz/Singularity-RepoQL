@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 import select
 import socket
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit, urljoin, parse_qsl
 
 from repoql_native_auth import COOKIE_NAME, create_launch_cookie, valid_launch_cookie
 
@@ -25,6 +25,12 @@ def _upstream(kind, default_port):
         port = int(os.environ.get(port_key, default_port))
     except (TypeError, ValueError):
         port = default_port
+    if not 1 <= port <= 65535:
+        raise ValueError('invalid fixed panel port')
+    if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1' and host.lower() not in ('localhost', '127.0.0.1', '::1'):
+        # A public dashboard must never proxy an arbitrary network host with
+        # its private credentials. Fix configuration before starting a panel.
+        raise ValueError('native Windows panel upstream must be loopback')
     return (host, port)
 
 
@@ -49,9 +55,26 @@ def upstream_path(kind, path):
 
 def backend_key(kind):
     if kind == 'office':
-        # Existing private service setting, not delivered to this iframe.
-        key = parse_qs(urlsplit(os.environ.get('SINGULARITY_OFFICE_EMBED_URL',
-            os.environ.get('CLAUDE_OFFICE_EMBED_URL', ''))).query).get('token', [''])[0]
+        if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
+            mode = os.environ.get('SINGULARITY_OFFICE_NATIVE_AUTH_MODE', 'legacy_url').strip()
+            if mode == 'key_file':
+                # Optional alternative. Installer must enforce owner/service-only ACLs.
+                key_file = os.environ.get('SINGULARITY_OFFICE_PANEL_KEY_FILE', '').strip()
+                if not key_file:
+                    raise PermissionError('panel credential unavailable')
+                key = Path(key_file).read_text(encoding='utf-8').strip()
+            elif mode == 'legacy_url':
+                # Production-compatible default. Token stays server-side.
+                # The token is extracted server-side; never redirect the
+                # browser to the original capability-bearing URL.
+                from office_bridge import validated_legacy_embed_token
+                key = validated_legacy_embed_token() or ''
+            else:
+                raise PermissionError('unsupported Office authentication mode')
+        else:
+            # Preserve the old Linux configuration and authenticated proxy.
+            key = parse_qs(urlsplit(os.environ.get('SINGULARITY_OFFICE_EMBED_URL',
+                os.environ.get('CLAUDE_OFFICE_EMBED_URL', ''))).query).get('token', [''])[0]
     else:
         key_file = os.environ.get('SINGULARITY_TENCENT_OWNER_KEY_FILE',
                                   os.environ.get('TENCENT_OWNER_KEY_FILE', '')).strip()
@@ -63,8 +86,8 @@ def backend_key(kind):
     return key
 
 
-def authenticated(handler):
-    return handler.authorized() or valid_launch_cookie(handler.headers.get('Cookie', ''), handler.app.token, max_age=3600)
+def authenticated(handler, kind):
+    return handler.authorized() or valid_launch_cookie(handler.headers.get('Cookie', ''), handler.app.token, max_age=3600, audience=kind)
 
 
 def handshake(handler, kind):
@@ -91,7 +114,7 @@ def handshake(handler, kind):
         if not ready:
             handler.send_json(503, {'error': 'local_kanzo_unavailable'})
             return
-    cookie = create_launch_cookie(handler.app.token)
+    cookie = create_launch_cookie(handler.app.token, audience=kind)
     secure = '; Secure' if handler.access_identity() is not None or handler.request_is_https() else ''
     body = b'{"ready":true}'
     handler.send_response(200)
@@ -123,6 +146,40 @@ def rewrite(kind, text, content_type):
         text = text.replace('<head>', '<head><script src="' + base + '/_transport.js"></script>', 1)
     return text
 
+
+
+def _panel_redirect(kind, current_path, location, *, public_root=False):
+    """Translate an upstream redirect onto the already authenticated origin.
+
+    Never send an Office capability-bearing URL, a remote origin, a network-path
+    redirect, or an upstream loopback URL to the browser. Backend credentials
+    stay exclusively in the dashboard-to-service request headers.
+    """
+    if not isinstance(location, str) or not location or len(location) > 4096 or any(c in location for c in ('\r', '\n', '\x00', '\\')):
+        raise PermissionError('unsafe panel redirect')
+    dest = urlsplit(location)
+    if dest.fragment or dest.username or dest.password:
+        raise PermissionError('unsafe panel redirect')
+    if dest.scheme or dest.netloc:
+        # Backend-generated absolute redirects may refer to its own fixed
+        # listener, but never to any other host/port (including LAN hosts).
+        upstream_host, upstream_port = UPSTREAM[kind]
+        if dest.scheme != 'http' or dest.hostname != upstream_host or dest.port != upstream_port:
+            raise PermissionError('remote panel redirect refused')
+    if not dest.path and not dest.query:
+        raise PermissionError('empty panel redirect')
+    if any(segment in ('.', '..') for segment in dest.path.split('/')) or '%' in dest.path:
+        raise PermissionError('unsafe panel redirect path')
+    target = urljoin(current_path, dest.path) if dest.path else current_path
+    if not target.startswith('/') or target.startswith('//') or any(c in target for c in ('\\', '\r', '\n')):
+        raise PermissionError('unsafe panel redirect path')
+    # Never expose any upstream credentials included in a Location query.
+    sensitive = {'token', 'key', 'api_key', 'access_token', 'secret', 'password', 'authorization'}
+    query = parse_qsl(dest.query, keep_blank_values=True)
+    if any(key.lower() in sensitive for key, _ in query):
+        query = [(key, value) for key, value in query if key.lower() not in sensitive]
+    browser_path = target if public_root else prefix(kind) + target
+    return urlunsplit(('', '', browser_path, urlencode(query), ''))
 
 def tencent_session():
     """Verify the real configured user, returning only public session fields."""
@@ -169,7 +226,7 @@ def serve(handler, kind, method, parsed, *, public_root=False):
                 handler.end_headers()
                 return
     else:
-        if not authenticated(handler):
+        if not authenticated(handler, kind):
             handler.send_json(401, {'error': 'dashboard_session_required'})
             return
         path = upstream_path(kind, parsed.path)
@@ -191,6 +248,7 @@ def serve(handler, kind, method, parsed, *, public_root=False):
         return
     if method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'):
         raise PermissionError('unsupported panel method')
+    redirect_location = None
     if path == '/_transport.js' and not public_root:
         content, code, content_type = transport(kind), 200, 'text/javascript; charset=utf-8'
     elif kind == 'tencent' and path == '/api/v1/auth/session' and method == 'GET':
@@ -231,13 +289,25 @@ def serve(handler, kind, method, parsed, *, public_root=False):
             if len(content) > limit:
                 raise ValueError('panel response too large')
             code = response.status
-            content_type = response.getheader('Content-Type') or 'application/octet-stream'
+            if code in (301, 302, 303, 307, 308):
+                try:
+                    redirect_location = _panel_redirect(kind, path, response.getheader('Location'), public_root=public_root)
+                    # Upstream redirect bodies sometimes echo the original URL
+                    # (including its capability token). Never relay that body.
+                    content = b''
+                except (PermissionError, ValueError):
+                    code = 502
+                    content = b'{"error":"upstream_redirect_refused"}'
+                    content_type = 'application/json'
+            content_type = 'application/json' if code == 502 else (response.getheader('Content-Type') or 'application/octet-stream')
             if not public_root and any(t in content_type for t in ('text/html', 'javascript', 'text/css')):
                 content = rewrite(kind, content.decode('utf-8', 'replace'), content_type).encode()
         finally:
             conn.close()
     handler.send_response(code)
     handler.send_header('Content-Type', content_type)
+    if redirect_location is not None and code in (301, 302, 303, 307, 308):
+        handler.send_header('Location', redirect_location)
     handler.send_header('Cache-Control', 'no-store')
     handler.send_header('Referrer-Policy', 'no-referrer')
     handler.send_header('X-Content-Type-Options', 'nosniff')

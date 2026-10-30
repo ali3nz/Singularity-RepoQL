@@ -133,11 +133,12 @@ test("the capture consumer is disabled by default and carries no identity", () =
 test("connector manifests grant exactly what the README claims", () => {
   const kanzo = read("connectors/kanzo/manifest.yaml");
   assert.match(kanzo, /^scheme: kanzo$/m);
-  const kanzoHosts = [...kanzo.matchAll(/^\s+- host: "([^"]+)"$/gm)].map((m) => m[1]);
-  assert.deepEqual(kanzoHosts, ["http://localhost:4242"], "one loopback host only");
+  const kanzoHosts = [...kanzo.matchAll(/^\s+- url: "([^"]+)"$/gm)].map((m) => m[1]);
+  assert.deepEqual(kanzoHosts, ["http://localhost:4242/api/**"], "one loopback host only");
   assert.match(kanzo, /local: true/);
   assert.match(kanzo, /requestsPerMinute: 6/);
-  assert.match(kanzo, /sweepIntervalSeconds: 900/);
+  assert.match(kanzo, /fetchIntervalSeconds: 900/);
+  assert.match(kanzo, /fullFetchIntervalSeconds: 900/);
 
   const memory = read("connectors/memorycore/manifest.yaml");
   assert.match(memory, /^scheme: memorycore$/m);

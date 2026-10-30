@@ -134,5 +134,42 @@
     "repoql_live": "tests/validate-repoql.sh",
     "memory_loop": "tests/validate-memory-loop.sh"
   },
-  "file_hashes": "SHA256SUMS"
+  "file_hashes": "SHA256SUMS",
+  "native_windows_gui_development": {
+    "status": "SOURCE_ONLY_NOT_PUBLIC_RELEASE",
+    "feature_contract": "native/windows/variants.json",
+    "rust_bridge": "native/desktop-bridge",
+    "dashboard_mode": "included_in_all_native_windows_variants",
+    "optional_features": "Ghost and Claude Office only options 2 and 4",
+    "native_windows_installer": "not_implemented",
+    "acceptance": "not_run_clean_windows_gui",
+    "limitations": "Rust compiler/build and Windows integration acceptance, native supervisor and installer, native Ghost server, ACL-secured credentials, live graph/indexing/GUI receipts still required",
+    "guide": "docs/WINDOWS-NATIVE-RELEASE.md"
+  },
+  "native_windows_wip": {
+    "status": "SOURCE_ONLY_NOT_RELEASE_READY",
+    "baseline": "4f3d0f971f09ec677e7d4e5e49147476c054b311",
+    "options": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "requires_no_wsl": true,
+    "rust_binary_compiled": false,
+    "repoql_required_version": "1.7.18",
+    "repoql_connector_abi": 1,
+    "public_acceptance": "BLOCKED",
+    "audit": "WINDOWS_NATIVE_RELEASE_MILESTONE9_20261029.md",
+    "doc_ledger_auto_reaper": false,
+    "added_sources": [
+      "native/desktop-bridge/src/windows_cpu.rs",
+      "native/desktop-bridge/src/ghost.rs",
+      "dashboard/native_readiness.py",
+      "dashboard/repoql_native_auth.py"
+    ],
+    "rollback": "docs/WINDOWS-OFFICE-AUTH-ROLLBACK.md",
+    "preflight": "native/windows/preflight.ps1",
+    "archive_security_gate": "native/windows/scan_source_archive.py"
+  }
 }

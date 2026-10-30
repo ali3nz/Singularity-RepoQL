@@ -19,7 +19,7 @@
 // keeps the session alive regardless of turn heartbeat age (legit
 // WAITING_FOR_OPERATOR can sit for hours); a stale heartbeat only matters
 // when process ownership cannot independently prove life.
-import { readFileSync, existsSync, writeFileSync, renameSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 
 const DEAD_STATES = new Set(["Z", "X", "x"]);
 
@@ -41,7 +41,11 @@ export function readProcStat(pid) {
 
 // 4-factor coordinator liveness (Sol fix plan item 1). Returns
 // { alive, reason, detail } — alive=false with a precise reason either way.
-export function coordinatorLiveness(pid, expect = {}) {
+export function coordinatorLiveness(pid, expect = {}, { platform = process.platform } = {}) {
+  // Only the Linux /proc four-factor identity verifier is implemented here.
+  // On native Windows, an absent /proc MUST NOT mean a recorded coordinator
+  // is dead. A trusted Rust owner check must provide that evidence instead.
+  if (platform !== "linux") return { alive: false, reason: "process-ownership-unverified" };
   if (!Number.isInteger(pid) || pid <= 0) return { alive: false, reason: "no-pid-recorded" };
   if (!existsSync(`/proc/${pid}`)) return { alive: false, reason: "pid-gone" };
   const st = readProcStat(pid);
@@ -84,21 +88,26 @@ export function stampMetaClosed(metaPath, note) {
 export function endOwnershipGuard({ openClass, explicitId }) {
   if (explicitId) return { action: "close", reason: "explicit --end-session targets its session (owner/operator override)" };
   if (openClass === "ALIVE") return { action: "refuse", reason: "LIVE open session — never close another workstream's live consult (V3.4.2 ticket 094)" };
+  if (openClass === "UNVERIFIED" || openClass === "UNKNOWN" || openClass == null)
+    return { action: "refuse", reason: "coordinator ownership unverified; native Rust authority proof required" };
   return { action: "close", reason: `non-live open session (${openClass ?? "unknown"}) — sanctioned stale-lane cleanup` };
 }
 
 // Classify one consult session. info = { state, lastAt, coordinatorPid,
 // coordinatorStarttime, ownerCaller }; now in ms; HEARTBEAT_STALE_MS bounds
 // the no-coordinator case only.
-export function classifySession(info, { now = Date.now(), heartbeatStaleMs = 15 * 60_000 } = {}) {
+export function classifySession(info, { now = Date.now(), heartbeatStaleMs = 15 * 60_000, platform = process.platform } = {}) {
   const lv = coordinatorLiveness(info.coordinatorPid, {
     cmdlineIncludes: "orchestrate.mjs",
     starttime: info.coordinatorStarttime,
-  });
+  }, { platform });
   const hbAge = now - (info.lastAt ?? 0);
   if (lv.alive) return { status: "ALIVE", reason: lv.reason, hbAge, lv };
   // No live coordinator: a completed/done session is simply CLOSED, not orphaned.
   if (info.state === "done" || info.state === "closed") return { status: "CLOSED", reason: `state=${info.state}`, hbAge, lv };
+  if (lv.reason === "process-ownership-unverified") {
+    return { status: "UNVERIFIED", reason: "Rust coordinator ownership proof required", hbAge, lv };
+  }
   // Coordinator gone right after a terminal turn -> completed normally, the
   // per-turn pattern exits between turns; only stale heartbeat marks orphan.
   if (hbAge <= heartbeatStaleMs) return { status: "IDLE-OPEN", reason: lv.reason, hbAge, lv };
@@ -108,6 +117,9 @@ export function classifySession(info, { now = Date.now(), heartbeatStaleMs = 15 
 // Stamp coordinator identity into a session's meta at ownership acquisition
 // (call right after acquirePidLock writes CONSULT.lock).
 export function stampCoordinator(metaPath, pid) {
+  // On Windows no reliable creation-time or executable identity is available
+  // from /proc, so do not persist an unauthenticated PID as proof of ownership.
+  if (process.platform !== "linux") return false;
   try {
     const meta = JSON.parse(readFileSync(metaPath, "utf8"));
     const st = readProcStat(pid);
@@ -131,7 +143,10 @@ export function beat(metaPath) {
 // () => classifySession(latest-on-disk meta) re-derived fresh; close via
 // tmp+rename so a racing writer's win is atomic and detectable. Returns
 // { closed, reason } — never closes when any recheck disagrees.
-export function closeOrphanedGuarded(metaPath, sessionDir, classify, note) {
+export function closeOrphanedGuarded(metaPath, sessionDir, classify, note, { platform = process.platform } = {}) {
+  // This legacy path does not hold a Rust authority lease or atomic compare-
+  // and-swap. Never perform an orphan-close mutation on native Windows.
+  if (platform !== "linux") return { closed: false, reason: "native-authority-proof-required" };
   // Re-read from disk INSIDE the guard (no stale closure over meta).
   let fresh;
   try { fresh = JSON.parse(readFileSync(metaPath, "utf8")); } catch { return { closed: false, reason: "meta-unreadable" }; }
@@ -151,8 +166,10 @@ export function closeOrphanedGuarded(metaPath, sessionDir, classify, note) {
     // but we detect the revision change and roll back.
     const onDisk = JSON.parse(readFileSync(metaPath, "utf8"));
     if ((onDisk.lastAt ?? 0) !== revBefore) {
-      renameSync(tmp, metaPath + ".lost-race"); // keep evidence, do not clobber
-      try { renameSync(metaPath + ".lost-race", metaPath); } catch { /* disk won */ }
+      // Preserve the newer writer's original bytes. Never rename our rejected
+      // candidate back over the live metadata (the old rollback did exactly
+      // that, destroying the update it had detected).
+      try { unlinkSync(tmp); } catch { /* leave forensic temp on failure */ }
       return { closed: false, reason: "concurrent-write-race - abort" };
     }
     renameSync(tmp, metaPath);

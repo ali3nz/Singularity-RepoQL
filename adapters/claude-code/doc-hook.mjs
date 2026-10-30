@@ -33,7 +33,7 @@
 //      always honouring stop_hook_active; chat/read-only sessions (no observed
 //      material change, no assessment) are never blocked. Non-git workspaces
 //      cannot observe changes, so no block is applied there (reported honestly).
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -43,6 +43,7 @@ import {
   collectEvidence,
   observeWorkspace,
   saveSessionBaseline,
+  acknowledgeResolvedDocs,
   ingestDocChange,
   MAX_DOC_INGEST_PER_PASS,
   classifyFiles,
@@ -68,7 +69,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 function bumpCounter(session, root) {
   try {
     const p = blockStatePath(session, root);
-    mkdirSync(p.slice(0, p.lastIndexOf("/")), { recursive: true });
+    mkdirSync(dirname(p), { recursive: true });
     const tmp = `${p}.${Date.now()}`;
     writeFileSync(tmp, String(readCounter(p) + 1));
     renameSync(tmp, p);
@@ -163,25 +164,23 @@ export async function runDocHook(argv, opts = {}) {
         observable = obs.observable;
         if (obs.baselineRec) {
           const targets = obs.changedDocs.slice(0, MAX_DOC_INGEST_PER_PASS);
-          let unresolved = false;
+          const processed = [];
           for (const doc of targets) {
             const res = await ingestDocChange(doc.path, doc.root, session, { env: opts.env || process.env });
+            processed.push({ doc, result: res });
             autoIngest.push({ file: doc.rel, ...res });
             if (res.status && res.status !== "DOC_INGEST_UNCHANGED") {
               stderr.push(`singularity doc hook: auto-ingest ${doc.rel} -> ${res.status}`);
             }
-            if (res.status && res.status !== "DOC_INGEST_INDEXED" && res.status !== "DOC_INGEST_UNCHANGED") {
-              unresolved = true;
-            }
           }
-          // Refresh the baseline only when this round's changes are resolved:
-          // an unresolved doc keeps its baseline slot so the next stop re-discovers
-          // it (and the ledger still drives `retry --all`).
-          if (!unresolved) {
-            try {
-              await saveSessionBaseline(session, root, { env: opts.env || process.env });
-            } catch { /* baseline refresh best effort; stale baseline only means a re-diff next stop */ }
+          if (obs.changedDocs.length > targets.length) {
+            stderr.push(`singularity doc hook: ${obs.changedDocs.length - targets.length} documentation change(s) remain queued for another pass`);
           }
+          // Acknowledge only revisions observed before ingestion began. A
+          // complete fresh census would swallow edits made during this pass.
+          try {
+            acknowledgeResolvedDocs(session, root, obs, processed);
+          } catch { /* stale baseline retries safely next pass */ }
         }
         // 4. observed material changes this session (never pre-existing dirt).
         if (observable) {

@@ -55,7 +55,13 @@ export function readHostLoad({ procLoadavgPath = "/proc/loadavg", readFile = (p)
 export function findLiveCoordinator(opts = {}) { return findLiveCoordinators(opts)[0] ?? null; }
 
 // Ticket 189 K3: every OTHER live `orchestrate.mjs start|resume` process (array).
-export function findLiveCoordinators({ selfPid = process.pid, listPids = null, readCmdline = (pid) => { try { return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " "); } catch { return ""; } }, readPpid = (pid) => { try { const s = readFileSync(`/proc/${pid}/stat`, "utf8"); return Number(s.slice(s.lastIndexOf(")") + 2).split(" ")[1]) || 0; } catch { return 0; } } } = {}) {
+export function findLiveCoordinators({ platform = process.platform, selfPid = process.pid, listPids = null, readCmdline = (pid) => { try { return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " "); } catch { return ""; } }, readPpid = (pid) => { try { const s = readFileSync(`/proc/${pid}/stat`, "utf8"); return Number(s.slice(s.lastIndexOf(")") + 2).split(" ")[1]) || 0; } catch { return 0; } } } = {}) {
+  // On Windows an unreadable Linux /proc is NOT evidence that no coordinator
+  // is running. Until the Rust named-pipe authority exposes verified process
+  // ownership, refuse concurrent launch rather than returning an empty list.
+  if (platform !== "linux") {
+    throw new Error("NATIVE_WINDOWS_COORDINATOR_PROBE_REQUIRED");
+  }
   let pids = listPids;
   if (!pids) {
     try { pids = readdirSync("/proc").filter((d) => /^\d+$/.test(d)).map(Number); } catch { return []; }

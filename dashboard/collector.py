@@ -64,7 +64,9 @@ def main() -> int:
     db_path = config.state_dir / "cpu.db"
     state_path = config.state_dir / "cpu-last.json"
     now = int(time.time())
-    hz = os.sysconf("SC_CLK_TCK")
+    # No Linux /proc on native Windows. Preserve a truthful absent/unsupported
+    # observation rather than fabricate CPU numbers or crash before insertion.
+    hz = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else None
     cores = os.cpu_count() or 1
     lock = rql.host_lock()
     pid = rql.host_pid()
@@ -73,7 +75,7 @@ def main() -> int:
     row = {"ts": now, "pid": pid, "cpu_pct": None, "host_pct": None, "num_cpus": cores,
            "load1": load1, "state": "absent", "host_started_at": lock.get("startedAt")}
 
-    if pid is not None:
+    if pid is not None and hz is not None:
         try:
             utime, stime = proc_ticks(pid)
             previous = None
@@ -97,6 +99,8 @@ def main() -> int:
         except OSError:
             row["state"] = "absent"
 
+    if hz is None:
+        row["state"] = "unsupported_native_windows_use_rust_telemetry"
     with sqlite3.connect(db_path, timeout=10) as conn:
         conn.executescript(SCHEMA)
         conn.execute(

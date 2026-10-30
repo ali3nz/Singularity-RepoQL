@@ -22,9 +22,7 @@
   "tasks": [
     {
       "id": 1,
-      "project": 1,
-      "project_slug": "demo",
-      "project_name": "Demo project",
+      "project": "demo",
       "title": "Seed the fixture board",
       "description": "Synthetic card. Nothing here is a real record.",
       "tags": [
@@ -39,9 +37,7 @@
     },
     {
       "id": 2,
-      "project": 1,
-      "project_slug": "demo",
-      "project_name": "Demo project",
+      "project": "demo",
       "title": "Read the second synthetic card",
       "description": "Synthetic card with no comments.",
       "tags": [],

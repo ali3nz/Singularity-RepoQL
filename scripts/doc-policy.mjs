@@ -55,7 +55,7 @@ export const SKIP_DIR_PARTS = new Set(["__pycache__", ".git", ".repoql", "node_m
 // queue, the documentation ledger and the installed runtime config all live in
 // the workspace, and counting them made a repeated lifecycle pass invent a
 // candidate about its own bookkeeping files.
-const RUNTIME_STATE_RE = /(^|[\\/])(data[\\/](selflearn|doc-policy|doc-index|opencode|attach-backups|acceptance)[\\/]|\.repoql[\\/])/;
+const RUNTIME_STATE_RE = /(^|[\\/])(data[\\/](selflearn|doc-policy|doc-index|opencode|agent-backups|attach-backups|acceptance)[\\/]|\.repoql[\\/])/;
 
 export function classifyFiles(files) {
   const material = [];
@@ -304,26 +304,43 @@ export function loadBaseline(session, root) {
 // baseline at session start means pre-existing dirty files are not attributed
 // to this task. No background polling service — nothing scans while idle.
 export const DOC_EXTS = new Set([".md", ".markdown", ".mdx"]);
-const DOC_NAME_REJECT = /(^|\/)(\.env[^/]*|id_rsa[^/]*|secrets?[^/]*|credentials.*|.*\.(pem|key))$/i;
+const DOC_NAME_REJECT = /(^|[\\/])(\.env[^/]*|id_rsa[^/]*|secrets?[^/]*|credentials.*|.*\.(pem|key))$/i;
 const MAX_DISCOVERY_FILES = 600;
 const MAX_DISCOVERY_DEPTH = 8;
 export const MAX_DOC_INGEST_PER_PASS = 8;
 
+/** An absolute Windows root contains `C:`; it is not a POSIX `:`
+ * delimiter. Use the native path-list separator so configured Windows hub
+ * roots are not silently discarded during automatic documentation discovery. */
+export function parseDocRootEntries(raw, platform = process.platform) {
+  return String(raw || '').split(platform === 'win32' ? ';' : ':')
+    .map(s => s.trim()).filter(Boolean);
+}
+
 export function docRootsFor(dir, env = process.env) {
   const raw = env && env.SINGULARITY_DOC_ROOTS;
   if (raw && String(raw).trim()) {
-    return String(raw).split(":").map((s) => resolve(s.trim(), dir))
+    return parseDocRootEntries(raw).map((s) => resolve(s.trim(), dir))
       .filter((r) => { try { return statSync(r).isDirectory(); } catch { return false; } });
   }
   return [resolve(dir)];
 }
 
 export function isEligibleDocPath(absPath, rootPath, { maxSizeBytes = 200 * 1024 } = {}) {
-  const base = (absPath.split("/").pop() || "");
+  // Split on both separators: on Windows `join()` yields backslashes, and a
+  // POSIX-only split silently disabled every directory-name exclusion there.
+  const parts = absPath.split(/[\\/]/);
+  const base = (parts.pop() || "");
   if (!DOC_EXTS.has(extname(base).toLowerCase())) return false;
   if (DOC_NAME_REJECT.test(absPath)) return false;
-  const parts = absPath.split("/");
   if (parts.some((p) => SKIP_DIR_PARTS.has(p))) return false;
+  // Runtime/backup state is never session documentation. The product writes
+  // data/agent-backups, data/attach-backups, the doc ledger/assessments and
+  // the selflearn queue inside the workspace; censusing those made an
+  // automatic pass ingest its own backup copies and record a false
+  // DOC_UPDATED (real .241 incident). Keep discovery and classifyFiles on the
+  // same exclusion set.
+  if (RUNTIME_STATE_RE.test(absPath)) return false;
   try {
     const st = statSync(absPath);
     if (!st.isFile() || st.size === 0 || st.size > maxSizeBytes) return false;
@@ -421,6 +438,28 @@ export async function saveSessionBaseline(session, dir, { execImpl = null, env =
   return writeBaselineAtomic(session, root, { created: new Date().toISOString(), files, dirty });
 }
 
+/** A bounded ingestion pass must acknowledge only verified/resolved files.
+ * Replacing the entire census while >8 files changed silently loses the
+ * unprocessed tail; preserving the old census wholesale retries the same
+ * first eight forever. Advance only successful entries, leaving failures and
+ * untouched files discoverable on the next lifecycle event. */
+export function acknowledgeResolvedDocs(session, dir, obs, processed) {
+  if (!obs.baselineRec) return 0;
+  // Preserve acknowledgements from another pass of this same session.
+  const current = loadBaseline(session, dir) || obs.baselineRec;
+  const updated = { ...current, files: { ...current.files } };
+  let advanced = 0;
+  for (const { doc, result } of processed) {
+    if (!INGEST_RESOLVED_STATES.has(result?.status)) continue;
+    const meta = obs.censusFiles.get(doc.path);
+    if (!meta) continue;
+    updated.files[doc.path] = { size: meta.size, mtimeMs: meta.mtimeMs, rel: meta.rel, root: meta.root };
+    advanced++;
+  }
+  if (advanced) writeBaselineAtomic(session, dir, updated);
+  return advanced;
+}
+
 export async function ingestDocChange(absDoc, docRoot, session, { execImpl = null, env = process.env } = {}) {
   // Default path: the in-process Node engine (same ledger, same statuses, no
   // Python runtime). An injected execImpl selects the legacy Python subprocess.
@@ -452,22 +491,28 @@ const CLAIM_STATUS = new Set(["CAPTURED", "NO_LESSON", "DEFERRED"]); // an expli
 // (content-hash dedup inside memory-doc-ingest renders repeats as
 // DOC_INGEST_UNCHANGED with no MemoryCore write).
 export async function autoIngestChangedDocs(dir, session, { execImpl = null, env = process.env } = {}) {
-  const obs = await observeWorkspace(dir, session, { execImpl, env });
+  let obs = await observeWorkspace(dir, session, { execImpl, env });
+  if (!obs.baselineRec) {
+    // Baseline-less first pass (discover CLI, fresh workspace): snapshot the
+    // present census and dirty set and ingest NOTHING. Installing or a first
+    // run must never mass-ingest a pre-existing tree, and pre-existing dirt is
+    // absorbed rather than attributed to this pass; the next pass diffs
+    // against this baseline.
+    await saveSessionBaseline(session, dir, { execImpl, env });
+    obs = { ...obs, baselineRec: loadBaseline(session, dir) || null, newDirty: [] };
+  }
   const results = [];
+  const processed = [];
   const targets = obs.changedDocs.slice(0, MAX_DOC_INGEST_PER_PASS);
   for (const doc of targets) {
     const res = await ingestDocChange(doc.path, doc.root, session, { execImpl, env });
+    processed.push({ doc, result: res });
     results.push({ file: doc.rel, ...res });
   }
-  // Refresh the baseline ONLY once every change this round is resolved.
-  // A PENDING/FAILED doc keeps its place vs the baseline so the next check
-  // re-discovers it (the ledger alone also drives `retry --all`, but an
-  // undiscovered future edit would otherwise be masked by a premature
-  // refresh). Concurrent sessions/hooks are safe: each session diffs against
-  // its own baseline and the ledger transaction is authoritative.
-  if (!results.some((r) => r.status && !INGEST_RESOLVED_STATES.has(r.status))) {
-    await saveSessionBaseline(session, dir, { execImpl, env });
-  }
+  // A full baseline refresh here can swallow a newer edit made while the
+  // ingestion call was running. Acknowledge only each successfully processed
+  // revision as observed BEFORE ingestion, including on a fully resolved pass.
+  acknowledgeResolvedDocs(session, dir, obs, processed);
   // ── automatic durable-learning assessment (§7) ─────────────────────────────
   // Runs on the SAME lifecycle events this pass already serves for both
   // clients (no new hook framework, no coordinator, no second store). It never
@@ -587,7 +632,18 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     }
   }
   if (verifiedDocs.length) {
-    const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map(() => "DOC_INGEST_VERIFIED"), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable documentation knowledge (lesson discovery runs independently)", automatic: true, recordedAt: new Date().toISOString() });
+    // `ingestion` is the PASS's claim and is evaluated against the ledger.
+    // Record what the ingest pass actually reported (INDEXED or UNCHANGED).
+    // DOC_INGEST_VERIFIED is the verify verdict, not a ledger revision status;
+    // writing it here made the automatic record contradict its own evaluator
+    // and block every GUI finish (real false block on .241). The verified
+    // disposition is already carried by docs + captureReason, which the
+    // evaluator re-derives from the ledger.
+    const passStatus = (file) => {
+      const r = (results || []).find((x) => x.file === file);
+      return r && INGEST_RESOLVED_STATES.has(r.status) ? r.status : "DOC_INGEST_INDEXED";
+    };
+    const rec = guarded({ files: verifiedDocs.map((r) => r.file), docStatus: "DOC_UPDATED", docReason: "automatic pass: this session's docs ingested and verified in the ledger", docs: verifiedDocs.map((r) => r.file), ingestion: verifiedDocs.map((r) => passStatus(r.file)), captureStatus: "CAPTURED", captureReason: "automatic: verified ingestion evidence is the durable documentation knowledge (lesson discovery runs independently)", automatic: true, recordedAt: new Date().toISOString() });
     if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})`, candidate: discovered?.record || null };
     return { status: "CAPTURED", assessment: rec.record, candidate: discovered?.record || null, evaluation: await evaluate(), detail: `automatic CAPTURED from ${verifiedDocs.length} ledger-verified ingestion record(s)` };
   }

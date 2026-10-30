@@ -7,7 +7,7 @@
 // is printed by the test itself.
 //
 // Run: node --test scripts/provision-secrets.test.mjs
-import { test } from "node:test";
+import { test as nodeTest } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -19,6 +19,25 @@ const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), "provision-secre
 const ADMIN = `TESTADMIN-${"0".repeat(40)}`;
 const SCOPED = `TESTSCOPED-${"1".repeat(40)}`;
 
+// The provisioner is a Python 3 script. POSIX hosts have `python3`; Windows
+// has no `python3` executable on PATH (the Store alias is not an interpreter),
+// but the launcher `py -3` is a real one. Resolve a working interpreter rather
+// than assuming the POSIX name, and skip with a reason if none exists.
+const PYTHON = (() => {
+  const candidates = process.platform === "win32"
+    ? [["py", ["-3"]], ["python", []], ["python3", []]]
+    : [["python3", []], ["python", []]];
+  for (const [cmd, prefix] of candidates) {
+    const r = spawnSync(cmd, [...prefix, "--version"], { encoding: "utf8" });
+    const v = `${r.stdout || ""}${r.stderr || ""}`;
+    if (r.status === 0 && /Python 3\./.test(v)) return { cmd, prefix };
+  }
+  return null;
+})();
+const PYTHON_SKIP = PYTHON ? false
+  : "no Python 3 interpreter is available on this host (provision-secrets.py is the POSIX provisioning path)";
+const test = (name, fn) => nodeTest(name, { skip: PYTHON_SKIP }, fn);
+
 /** A base directory holding a memory stack with a known administrative key. */
 function makeBase() {
   const b = mkdtempSync(join(tmpdir(), "provision-base-"));
@@ -27,7 +46,7 @@ function makeBase() {
   return b;
 }
 
-const run = (b, args) => spawnSync("python3", [SCRIPT, "--base-dir", b, ...args], { encoding: "utf8" });
+const run = (b, args) => spawnSync(PYTHON.cmd, [...PYTHON.prefix, SCRIPT, "--base-dir", b, ...args], { encoding: "utf8" });
 const memoryJson = (b) => join(b, "data", "opencode", "config", "product-secrets", "memory.json");
 const readMem = (b) => JSON.parse(readFileSync(memoryJson(b), "utf8"));
 const outputOf = (r) => `${r.stdout}\n${r.stderr}`;

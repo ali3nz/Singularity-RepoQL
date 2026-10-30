@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAuthorityClient, assertLocalWriteAllowed, requestAuthorityRollback, AuthorityError } from "../lib/rust-authority.mjs";
+import { createAuthorityClient, assertLocalWriteAllowed, requestAuthorityRollback, AuthorityError, isWindowsAuthorityPipe } from "../lib/rust-authority.mjs";
 
 const BIN = process.env.ORCHESTRA_BIN || join(import.meta.dirname, "..", "target", "release", "orchestra-observer");
 const LIVE = existsSync(BIN);
@@ -299,5 +299,42 @@ describe("authority adapter failure modes", () => {
 
   test("the adapter refuses a token that cannot be the authority token", () => {
     assert.throws(() => createAuthorityClient({ socketPath: "/tmp/x.sock", token: "short" }), (error) => error.code === "INVALID_TOKEN_SHAPE");
+  });
+});
+
+
+describe("native Windows named-pipe adapter (isolated contract)", () => {
+  const pipe = String.raw`\\.\pipe\singularity-repoql-authority`;
+  const token = "z".repeat(64);
+  test("accepts only a local simple pipe name, never UNC remote endpoints", () => {
+    assert.equal(isWindowsAuthorityPipe(pipe), true);
+    for (const invalid of [String.raw`\\server\pipe\name`, String.raw`\\.\pipe\..`, String.raw`\\.\pipe\sub\name`]) {
+      assert.equal(isWindowsAuthorityPipe(invalid), false);
+      assert.throws(() => createAuthorityClient({ socketPath: invalid, runsDir: String.raw`C:\runs`, token }),
+        error => error.code === "INVALID_PIPE_PATH");
+    }
+  });
+  test("requires an explicit local run tree and does not read pipe paths as files", () => {
+    assert.throws(() => createAuthorityClient({ socketPath: pipe, runsDir: "", token }),
+      error => error.code === "WINDOWS_RUNS_DIR_REQUIRED");
+    const calls = [];
+    const client = createAuthorityClient({
+      socketPath: pipe, runsDir: String.raw`C:\Singularity\runs`, token,
+      runner: (_cli, endpoint, request) => {
+        calls.push([endpoint, request]);
+        return { status: 0, stdout: JSON.stringify({ ok: true, protocol: 1, stateAuthority: "rust" }) + "\n" };
+      },
+    });
+    assert.equal(client.health().protocol, 1);
+    assert.deepEqual(calls.map(x => x[0]), [pipe]);
+    assert.equal(calls[0][1].token, token);
+  });
+  test("explicit operator rollback probes the named pipe rather than fs.existsSync", () => {
+    const env = { ORCHESTRA_RUST_AUTHORITY: pipe, ORCHESTRA_RUST_AUTHORITY_TOKEN: token };
+    assert.throws(() => requestAuthorityRollback({ runDir: String.raw`C:\Singularity\runs\case1`,
+      runId: "case1", env, runner: (_cli, endpoint) => {
+        assert.equal(endpoint, pipe);
+        return { status: 0, stdout: '{"ok":false,"reason":"OWNER_ALIVE"}\n' };
+      }}), error => error.code === "OWNER_ALIVE");
   });
 });

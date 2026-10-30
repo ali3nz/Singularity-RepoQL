@@ -17,8 +17,13 @@ use crate::run_state::{self, RunStore};
 use serde_json::{json, Value};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
+#[cfg(windows)]
+#[path = "authority_windows.rs"]
+mod windows;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -35,6 +40,7 @@ pub struct AuthorityConfig {
     pub socket_path: PathBuf,
     pub runs_dir: PathBuf,
     pub token: String,
+    #[cfg(unix)]
     pub expected_uid: u32,
 }
 
@@ -53,6 +59,7 @@ pub fn token_matches(expected: &str, presented: &str) -> bool {
 
 /// Kernel-attested peer uid. A missing credential is a hard failure, never an
 /// implicit allow.
+#[cfg(unix)]
 fn peer_uid(stream: &UnixStream) -> Option<u32> {
     use std::os::unix::io::AsRawFd;
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
@@ -178,7 +185,7 @@ fn snapshot_runs(runs_dir: &Path, limit: usize) -> Value {
     })
 }
 
-fn handle_op(config: &AuthorityConfig, request: &Value) -> Value {
+pub(super) fn handle_op(config: &AuthorityConfig, request: &Value) -> Value {
     let Some(obj) = request.as_object() else {
         return error_response("INVALID_REQUEST", json!({}));
     };
@@ -251,6 +258,7 @@ fn authority_schema() -> &'static str {
     "orchestra-authority/1"
 }
 
+#[cfg(unix)]
 fn handle_connection(mut stream: UnixStream, config: Arc<AuthorityConfig>) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
@@ -306,6 +314,7 @@ fn handle_connection(mut stream: UnixStream, config: Arc<AuthorityConfig>) {
     }
 }
 
+#[cfg(unix)]
 fn prepare_socket(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create socket dir: {e}"))?;
@@ -322,7 +331,7 @@ fn prepare_socket(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn write_status(config: &AuthorityConfig, socket_ready: bool) {
+pub(super) fn write_status(config: &AuthorityConfig, socket_ready: bool) {
     let meta = config.runs_dir.join(META_DIR);
     let _ = fs::create_dir_all(&meta);
     let body = json!({
@@ -369,6 +378,7 @@ pub fn recover_all(runs_dir: &Path) -> (usize, Vec<String>) {
     (recovered, failures)
 }
 
+#[cfg(unix)]
 pub fn serve(config: AuthorityConfig) -> Result<(), String> {
     if config.token.len() < 32 {
         return Err("ORCHESTRA_RUST_AUTHORITY_TOKEN must be at least 32 characters".into());
@@ -415,6 +425,11 @@ pub fn serve(config: AuthorityConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
+pub fn serve(config: AuthorityConfig) -> Result<(), String> {
+    windows::serve(config)
+}
+
 pub fn config_from_env() -> Result<AuthorityConfig, String> {
     let runs_dir = std::env::var("ORCHESTRA_RUNS_DIR")
         .map_err(|_| "ORCHESTRA_RUNS_DIR must be set explicitly".to_string())?;
@@ -422,9 +437,18 @@ pub fn config_from_env() -> Result<AuthorityConfig, String> {
     if !runs_dir.is_absolute() {
         return Err("ORCHESTRA_RUNS_DIR must be an absolute path".into());
     }
+    #[cfg(windows)]
+    if !windows::is_local_runs_dir(&runs_dir) {
+        return Err("ORCHESTRA_RUNS_DIR must be on a local Windows drive".into());
+    }
+    #[cfg(unix)]
     let socket_path = std::env::var("ORCHESTRA_RUST_AUTHORITY")
         .map(PathBuf::from)
         .unwrap_or_else(|_| runs_dir.join(META_DIR).join(SOCKET_NAME));
+    #[cfg(windows)]
+    let socket_path = PathBuf::from(windows::validated_pipe_path(
+        std::env::var("ORCHESTRA_RUST_AUTHORITY").ok().as_deref(),
+    )?);
     let token = std::env::var("ORCHESTRA_RUST_AUTHORITY_TOKEN")
         .ok()
         .filter(|t| !t.trim().is_empty())
@@ -435,6 +459,7 @@ pub fn config_from_env() -> Result<AuthorityConfig, String> {
                 .map(|t| t.trim().to_string())
         })
         .ok_or("set ORCHESTRA_RUST_AUTHORITY_TOKEN or ORCHESTRA_RUST_AUTHORITY_TOKEN_FILE")?;
+    #[cfg(unix)]
     let expected_uid = std::env::var("ORCHESTRA_RUST_AUTHORITY_UID")
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
@@ -443,12 +468,14 @@ pub fn config_from_env() -> Result<AuthorityConfig, String> {
         socket_path,
         runs_dir,
         token,
+        #[cfg(unix)]
         expected_uid,
     })
 }
 
 /// Test helper: run one request against a live socket.
 #[allow(dead_code)] // exercised by the module's socket tests
+#[cfg(unix)]
 pub fn request(socket: &Path, value: &Value) -> Result<Value, String> {
     let mut stream = UnixStream::connect(socket).map_err(|e| format!("connect: {e}"))?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
@@ -463,7 +490,13 @@ pub fn request(socket: &Path, value: &Value) -> Result<Value, String> {
     serde_json::from_str(&response).map_err(|e| format!("parse: {e}"))
 }
 
-#[cfg(test)]
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn request(socket: &Path, value: &Value) -> Result<Value, String> {
+    windows::request(socket, value)
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};

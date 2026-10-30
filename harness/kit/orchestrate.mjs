@@ -665,7 +665,9 @@ function runDir(id) { return join(RUNS, id); }
 // projection. There is no local fallback — an unavailable authority throws.
 const RUST_AUTHORITY_DIR = join(RUNS, ".rust-authority");
 const RUST_AUTHORITY_SOCKET = process.env.ORCHESTRA_RUST_AUTHORITY
-  || (existsSync(join(RUST_AUTHORITY_DIR, "enabled")) ? join(RUST_AUTHORITY_DIR, "authority.sock") : "");
+  || (existsSync(join(RUST_AUTHORITY_DIR, "enabled"))
+    ? (process.platform === "win32" ? "\\\\.\\pipe\\singularity-repoql-authority" : join(RUST_AUTHORITY_DIR, "authority.sock"))
+    : "");
 let rustAuthorityClient = null;
 function rustAuthority() {
   if (!RUST_AUTHORITY_SOCKET) return null;
@@ -2975,19 +2977,21 @@ async function runManagedSeatTurn(runId, w, prompt, { purpose = "implement", pha
   const sshHost = cfg?.managedSeat?.sshHost ?? "controller";
   const timeoutSec = (cfg.phaseTimeoutMinutes ?? 40) * 60;
   const model = w.model ?? MANAGED_MODEL;
-  const bad = validateManagedSeat(w);
+  const nativeConfig = process.platform === "win32" ? (cfg.nativeOpenCodeWorker ?? null) : null;
+  const bad = validateManagedSeat(w, { nativeConfig });
   let r;
   if (!bad.ok) {
     r = { ok: false, output: `managed seat config invalid: ${bad.why}`, durationMs: Date.now() - t0, failureClass: "UNKNOWN", rc: -1 };
   } else {
-    r = await callManagedSeat(model, full, { sshHost, timeoutSec });
+    r = await callManagedSeat(model, full, { sshHost, timeoutSec, nativeConfig });
   }
   recordInvocation({
     runId, component: "worker-seat", role: "IMPLEMENTATION", purpose,
-    engine: "opencode-managed", model, billingClass: "subscription",
+    engine: "opencode-managed", model, billingClass: nativeConfig?.billingClass ?? "subscription",
     success: !!r.ok, failureClass: r.failureClass ?? (r.ok ? "NONE" : "UNKNOWN"),
     rc: r.rc, paid: false, freebucksUsed: 0, durationMs: r.durationMs ?? (Date.now() - t0),
-    note: "transport=openchamber-managed (OpenChamber managed OpenAI OAuth; no metered dollar charge observable — not a zero-usage claim)",
+    note: nativeConfig ? "transport=native-opencode-http (configured billing class, verify provider receipt)" :
+      "transport=openchamber-managed (OpenChamber managed OpenAI OAuth; no metered dollar charge observable — not a zero-usage claim)",
   });
   // V3.5.4 (ticket 188 babysit fix, 2026-09-30): ALWAYS persist the managed
   // seat's raw output. The previous guard (skip when status is phase-done)

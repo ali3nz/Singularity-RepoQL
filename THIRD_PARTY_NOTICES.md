@@ -52,3 +52,8 @@ that come with the components you redistribute (notably
   **WSL2 with a POSIX shell and Node 22** for the harness launcher. Native
   `cmd`/PowerShell is not a supported shell for `bin/ai-orchestra`; the Docker
   stack assumes a Linux host with Docker Compose.
+
+## Licence texts
+
+The full GNU Affero General Public License v3 text for the AGPL components named above (Kanzo and, separately, OpenCode DCP) is included at [	hird-party/AGPL-3.0-only.txt](third-party/AGPL-3.0-only.txt). Kanzo itself is not bundled or modified; the text is included so a deployment that combines the two can satisfy AGPL-3.0 section 13.
+

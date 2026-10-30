@@ -8,10 +8,19 @@ import { join } from "node:path";
 import { coordinatorLiveness } from "./consult-liveness.mjs";
 
 export const DEFAULT_MAX_RUNS = 2;
+// The legacy PID-file lease protocol is Linux-specific. The named-pipe Rust
+// authority must own all Windows coordinator/seat mutations. In particular,
+// /proc-unavailable must NEVER be interpreted as proof that a lock is stale.
+export const NATIVE_OWNER_REQUIRED = "NATIVE_WINDOWS_AUTHORITY_REQUIRED";
+function requireLegacyLinuxOwner(platform = process.platform) {
+  if (process.platform !== "linux" || platform !== "linux") throw new Error(NATIVE_OWNER_REQUIRED);
+}
+
 export const LEGACY_LOCK = "COORDINATOR.lock";
 export const slotLockName = (n) => `COORDINATOR-${n}.lock`;
 
 const defaultAlive = (pid) => {
+  if (process.platform !== "linux") return false;
   try { return coordinatorLiveness(pid, { cmdlineIncludes: "orchestrate.mjs" }).alive; } catch { return false; }
 };
 
@@ -23,7 +32,8 @@ function readPid(file) {
 }
 
 // Snapshot of every slot: [{slot, file, pid, alive, legacy}]. Missing = pid null.
-export function listSlots(runsDir, { maxRuns = DEFAULT_MAX_RUNS, isAlive = defaultAlive } = {}) {
+export function listSlots(runsDir, { maxRuns = DEFAULT_MAX_RUNS, isAlive = defaultAlive, platform = process.platform } = {}) {
+  requireLegacyLinuxOwner(platform);
   const out = [];
   for (let n = 1; n <= maxRuns; n++) {
     const file = join(runsDir, slotLockName(n));
@@ -46,7 +56,8 @@ export function liveHolders(runsDir, opts = {}) {
 // Acquire the first free slot. Returns { ok, slot, file, release } or
 // { ok:false, reason:"max-runs", live:[...] }. A legacy lock held by a live
 // pre-upgrade coordinator occupies one slot of the budget.
-export function acquireSlot(runsDir, { maxRuns = DEFAULT_MAX_RUNS, pid = process.pid, isAlive = defaultAlive } = {}) {
+export function acquireSlot(runsDir, { maxRuns = DEFAULT_MAX_RUNS, pid = process.pid, isAlive = defaultAlive, platform = process.platform } = {}) {
+  requireLegacyLinuxOwner(platform);
   mkdirSync(runsDir, { recursive: true });
   const snap = listSlots(runsDir, { maxRuns, isAlive });
   const live = snap.filter((s) => s.alive && s.pid !== pid);
@@ -74,6 +85,7 @@ function mkResult(slot, file, pid) {
 export const activeDir = (runsDir) => join(runsDir, "ACTIVE");
 
 export function registerActive(runsDir, runId, meta = {}) {
+  requireLegacyLinuxOwner(meta.platform ?? process.platform);
   const dir = activeDir(runsDir);
   mkdirSync(dir, { recursive: true });
   const rec = { runId, pid: meta.pid ?? process.pid, slot: meta.slot ?? null, mode: meta.mode ?? null, roster: meta.roster ?? null, scope: meta.scope ?? null, startedAt: new Date().toISOString() };
@@ -81,12 +93,15 @@ export function registerActive(runsDir, runId, meta = {}) {
   return rec;
 }
 
-export function unregisterActive(runsDir, runId) {
+export function unregisterActive(runsDir, runId, { platform = process.platform } = {}) {
+  requireLegacyLinuxOwner(platform);
   try { rmSync(join(activeDir(runsDir), runId), { force: true }); } catch { /* best effort */ }
 }
 
 // Active runs whose recorded coordinator pid is alive; dead entries are pruned.
-export function listActive(runsDir, { isAlive = defaultAlive, prune = true } = {}) {
+export function listActive(runsDir, { isAlive = defaultAlive, prune = true, platform = process.platform } = {}) {
+  // No unverified Windows registry entry is safe to call live OR dead.
+  requireLegacyLinuxOwner(platform);
   const dir = activeDir(runsDir);
   let names = [];
   try { names = readdirSync(dir); } catch { return []; }
@@ -104,7 +119,10 @@ export function listActive(runsDir, { isAlive = defaultAlive, prune = true } = {
 // runs are active and no --run was given. Returns
 //   { ok, runId, runIds, reason?, message? }
 // read-only verbs with 2 runs return runIds (both) and runId=null.
-export function resolveTargetRun(runsDir, { explicit = null, mutating = false, currentPointer = null, isAlive = defaultAlive } = {}) {
+export function resolveTargetRun(runsDir, { explicit = null, mutating = false, currentPointer = null, isAlive = defaultAlive, platform = process.platform } = {}) {
+  if (process.platform !== "linux" || platform !== "linux") {
+    return { ok: false, runId: null, runIds: [], reason: "ownership-unverified", message: NATIVE_OWNER_REQUIRED };
+  }
   if (explicit) return { ok: true, runId: explicit, runIds: [explicit] };
   const active = listActive(runsDir, { isAlive }).map((r) => r.runId);
   if (active.length >= 2) {
@@ -155,7 +173,8 @@ function readSeatSlot(file) {
   try { const [pid, runId, seat] = readFileSync(file, "utf8").trim().split(/\s+/); return { pid: Number(pid) || null, runId, seat }; } catch { return null; }
 }
 
-export function seatSlotsInUse(runsDir, { isAlive = defaultAlive } = {}) {
+export function seatSlotsInUse(runsDir, { isAlive = defaultAlive, platform = process.platform } = {}) {
+  requireLegacyLinuxOwner(platform);
   const dir = seatsDir(runsDir);
   let names = [];
   try { names = readdirSync(dir); } catch { return []; }
@@ -168,7 +187,8 @@ export function seatSlotsInUse(runsDir, { isAlive = defaultAlive } = {}) {
 }
 
 // Try once. Returns { ok, release } or { ok:false }.
-export function tryAcquireSeatSlot(runsDir, { max = 8, pid = process.pid, runId = "?", seat = "?", isAlive = defaultAlive } = {}) {
+export function tryAcquireSeatSlot(runsDir, { max = 8, pid = process.pid, runId = "?", seat = "?", isAlive = defaultAlive, platform = process.platform } = {}) {
+  requireLegacyLinuxOwner(platform);
   const dir = seatsDir(runsDir);
   mkdirSync(dir, { recursive: true });
   for (let n = 1; n <= max; n++) {

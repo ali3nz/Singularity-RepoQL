@@ -53,21 +53,24 @@ function saveDedupe(runsDir, st) {
 // Returns advisory events for pooled worker sessions approaching/past the
 // reuse deadline. Deduped per worker per threshold via the state file so the
 // 5-min nanny cycle never repeats an alert.
-export function poolClockEvents(runsDir, { now = Date.now(), reuseMinutes = 55, dedupe = null } = {}) {
+export function poolClockEvents(runsDir, { now = Date.now(), reuseMinutes = 55, dedupe = null, platform = process.platform } = {}) {
   const events = [];
   let pool = {};
   try { pool = JSON.parse(readFileSync(join(runsDir, "pool.json"), "utf8")) ?? {}; } catch { return { events, st: dedupe ?? { sessions: {}, consults: {} } }; }
   let st = dedupe ?? { sessions: {}, consults: {} };
   let current = "";
   try { current = readFileSync(join(runsDir, "CURRENT"), "utf8").trim(); } catch { /* none */ }
-  let coordRunning = false;
+  // A Windows /proc miss is not evidence that another coordinator is idle.
+  // Advisory salvage must only be suggested when an authoritative platform
+  // check can say the coordinator is absent.
+  let coordRunning = process.platform !== "linux" || platform !== "linux";
   try {
     const lockPid = parseInt(readFileSync(join(runsDir, current ?? "", "COORDINATOR.lock"), "utf8").trim(), 10);
-    coordRunning = Number.isInteger(lockPid) && existsSync(`/proc/${lockPid}`);
-  } catch { coordRunning = false; }
+    if (process.platform === "linux" && platform === "linux") coordRunning = Number.isInteger(lockPid) && existsSync(`/proc/${lockPid}`);
+  } catch { /* unknown ownership stays non-idle on native Windows */ }
   // Ticket 189: with concurrent runs "a coordinator is running" means ANY live
   // slot/registry holder — pooled sessions are not idle while either run works.
-  try { if (!coordRunning && coordinatorStatus(runsDir).state === "RUNNING") coordRunning = true; } catch { /* keep legacy answer */ }
+  try { if (!coordRunning && coordinatorStatus(runsDir, { platform }).state === "RUNNING") coordRunning = true; } catch { /* keep legacy answer */ }
 
   for (const [workerId, e] of Object.entries(pool)) {
     if (!e || typeof e.spawnedAt !== "number") continue;

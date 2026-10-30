@@ -23,6 +23,7 @@ import {
   isPortFree,
   loadConfig,
   preparePlan,
+  parseCli,
   prepareStack,
   queryProcess,
   renderCoreConfig,
@@ -34,6 +35,7 @@ import {
   transformCorePackage,
   validateConfig,
   verifyArchive,
+  verifyOwnership,
 } from "./native-memory-supervisor.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -440,4 +442,26 @@ test("prepare dry-run plans core, panel and knowledge without touching disk", as
   } finally {
     cleanup(root);
   }
+});
+
+
+test("native supervisor refuses a guessed or incomplete process identity", () => {
+  const good = { pid: 18481, exe: "C:\\Program Files\\nodejs\\node.exe", startedAt: "2026-10-28T01:02:03.000Z" };
+  for (const record of [{ pid: 18481 }, { pid: 18481, exe: good.exe }, { pid: 18481, startedAt: good.startedAt }]) {
+    assert.equal(verifyOwnership(record, { query: () => good }).ok, false);
+  }
+  for (const live of [{ pid: 18481 }, { pid: 18481, exe: good.exe }, { pid: 18481, startedAt: good.startedAt }]) {
+    assert.equal(verifyOwnership(good, { query: () => live }).ok, false);
+  }
+  assert.equal(verifyOwnership(good, { query: () => good }).ok, true);
+  // A PID reused with the same executable within 2.5s used to be accepted.
+  assert.equal(verifyOwnership(good, { query: () => ({ ...good, startedAt: "2026-10-28T01:02:04.000Z" }) }).ok, false);
+});
+
+test("supervisor dry-run cannot start/stop/restart or mutate services", () => {
+  for (const verb of ["start", "stop", "restart", "status"]) {
+    assert.throws(() => parseCli([verb, "--config", "C:\\dummy.json", "--dry-run"]), /only for prepare/);
+  }
+  assert.equal(parseCli(["prepare", "--config", "C:\\dummy.json", "--dry-run"]).dryRun, true);
+  assert.throws(() => parseCli(["stop", "--config", "C:\\dummy.json", "--clean"]), /only for prepare/);
 });

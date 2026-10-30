@@ -31,13 +31,19 @@ export const HOOK_EVENTS = ["SubagentStart", "SubagentStop"];
 export const DOC_HOOK_SCRIPT = "doc-hook.mjs";
 export const DOC_HOOK_KINDS = ["session-start", "stop"];
 export const DOC_HOOK_EVENTS = ["SessionStart", "Stop"];
+// The parent conversation is captured by the SAME memory hook on Stop and
+// SessionEnd. These kinds belong to memory-hook.mjs but are opt-in: only the
+// native Complete installer binds them, so the POSIX installer's hook set (and
+// its verification contract) is unchanged.
+export const PARENT_HOOK_KINDS = ["conversation-turn", "session-end"];
+export const PARENT_HOOK_EVENTS = ["Stop", "SessionEnd"];
 export const HOOK_SCRIPTS = [HOOK_SCRIPT, DOC_HOOK_SCRIPT];
 export const ALL_HOOK_KINDS = [...HOOK_KINDS, ...DOC_HOOK_KINDS];
 export const ALL_HOOK_EVENTS = [...HOOK_EVENTS, ...DOC_HOOK_EVENTS];
 export const MEMORY_ENV_KEYS = ["SINGULARITY_REPO_ROOT", "SINGULARITY_MEMORY_CONFIG"];
 
 const KINDS_BY_SCRIPT = new Map([
-  [HOOK_SCRIPT, new Set(HOOK_KINDS)],
+  [HOOK_SCRIPT, new Set([...HOOK_KINDS, ...PARENT_HOOK_KINDS])],
   [DOC_HOOK_SCRIPT, new Set(DOC_HOOK_KINDS)],
 ]);
 
@@ -188,12 +194,17 @@ export function handlerSpec(scriptPath, kind, { platform = process.platform, nod
 
 /** The handler we want for a (script, kind) pair, plus what it supersedes. */
 function desiredHandlers(scriptPath, docScriptPath, opts) {
-  return [
+  const handlers = [
     { event: HOOK_EVENTS[0], kind: HOOK_KINDS[0], spec: handlerSpec(scriptPath, HOOK_KINDS[0], opts) },
     { event: HOOK_EVENTS[1], kind: HOOK_KINDS[1], spec: handlerSpec(scriptPath, HOOK_KINDS[1], opts) },
     { event: DOC_HOOK_EVENTS[0], kind: DOC_HOOK_KINDS[0], spec: handlerSpec(docScriptPath, DOC_HOOK_KINDS[0], opts) },
     { event: DOC_HOOK_EVENTS[1], kind: DOC_HOOK_KINDS[1], spec: handlerSpec(docScriptPath, DOC_HOOK_KINDS[1], opts) },
   ];
+  if (opts.parentConversation === true) {
+    handlers.push({ event: "Stop", kind: "conversation-turn", spec: handlerSpec(scriptPath, "conversation-turn", opts) });
+    handlers.push({ event: "SessionEnd", kind: "session-end", spec: handlerSpec(scriptPath, "session-end", opts) });
+  }
+  return handlers;
 }
 
 /**
@@ -202,6 +213,8 @@ function desiredHandlers(scriptPath, docScriptPath, opts) {
  * env keys are set. Second handler script (doc hook) is placed on the SAME
  * pre-existing group as the memory hook so owner grouping stays intact.
  * Existing non-empty env values are preserved (a user override wins).
+ * With opts.parentConversation, the same memory hook is additionally bound to
+ * Stop (conversation-turn) and SessionEnd (session-end) for parent capture.
  *
  * Upgrade behaviour: an OWNED handler of the same script+kind written in the
  * other form is REPLACED in place (that is how a legacy POSIX shell command is
@@ -221,7 +234,9 @@ export function ensureMemoryIntegration(input, opts) {
   settings.hooks = (settings.hooks && typeof settings.hooks === "object") ? settings.hooks : {};
   let changed = false;
 
-  for (const { event, spec } of desiredHandlers(scriptPath, docScriptPath, { platform, nodePath })) {
+  for (const { event, spec } of desiredHandlers(scriptPath, docScriptPath, {
+    platform, nodePath, parentConversation: opts.parentConversation,
+  })) {
     const groups = Array.isArray(settings.hooks[event]) ? settings.hooks[event] : [];
     const wanted = hookOwnership(spec);
 
@@ -247,10 +262,11 @@ export function ensureMemoryIntegration(input, opts) {
     }
     if (replaced) continue;
 
-    // Attach to an existing matcher group (we do not use matchers; ANY group works).
+    // Attach ONLY to a matcher-free group: a foreign matcher would suppress
+    // SessionStart/Stop or subagent events and silently disable our hooks.
     let placed = false;
     for (const g of groups) {
-      if (Array.isArray(g?.hooks) && !isSingularityHookPresent(g, ownedPaths)) {
+      if (Array.isArray(g?.hooks) && g.matcher === undefined && !isSingularityHookPresent(g, ownedPaths)) {
         g.hooks.push(spec);
         placed = true;
         break;
@@ -296,7 +312,7 @@ export function removeMemoryIntegration(input, opts) {
   let hooksChanged = false;
 
   if (settings.hooks && typeof settings.hooks === "object") {
-    for (const event of ALL_HOOK_EVENTS) {
+    for (const event of new Set([...ALL_HOOK_EVENTS, ...PARENT_HOOK_EVENTS])) {
       const groups = settings.hooks[event];
       if (!Array.isArray(groups)) continue;
       const next = [];

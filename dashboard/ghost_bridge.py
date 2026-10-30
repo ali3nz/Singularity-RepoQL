@@ -81,6 +81,9 @@ def control_request(method: str, body: dict | None = None,
     raw = json.dumps(body, separators=(',', ':')).encode() if method == 'POST' else b''
     if len(raw) > MAX_ACTION_BYTES:
         return 413, {'ok': False, 'error': 'request_too_large'}
+    if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
+        from native_ghost import control_request as native_control
+        return native_control(method, body)
     path = socket_path or os.environ.get('RQDASH_GHOST_CONTROL_SOCKET', CONTROL_SOCKET)
     if not path:
         return 503, {'ok': False, 'state': 'unknown', 'error': 'Ghost control is not configured.'}

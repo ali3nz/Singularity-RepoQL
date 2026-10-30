@@ -29,6 +29,8 @@
 // (verified live via `opencode run --help` 2026-09-30).
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { dispatchDecision, nativeOpenCodeClient } from "./native-opencode-worker.mjs";
 
 export const MANAGED_MODEL = "openai/gpt-6-luna#max";
 export const MANAGED_CONTAINER = process.env.OPENCHAMBER_CONTAINER || "openchamber";
@@ -94,10 +96,14 @@ export function buildManagedSeatScript({ model = MANAGED_MODEL, prompt, timeoutS
 export async function callManagedSeat(model, prompt, {
   container = MANAGED_CONTAINER, sshHost = "controller", timeoutSec = 2400,
   cwd = MANAGED_CWD, execInject = null, agent = null, sessionId = null, title = null,
+  platform = process.platform, nativeConfig = null,
 } = {}) {
   // S08 SUBAGENT_SPAWN is emitted by the seat-spawn sites in orchestrate.mjs
   // (once per parent run + agent), never by this per-turn transport.
   const t0 = Date.now();
+  // Native Windows MUST NOT shell out to SSH/Docker. The optional OpenChamber
+  // HTTP transport is enabled only with explicit model/workspace/billing proof.
+  if (platform === 'win32') return nativeManagedTurn(model, prompt, { nativeConfig, timeoutSec, t0, agent });
   const script = buildManagedSeatScript({ model, prompt, timeoutSec, cwd, agent, sessionId, title });
   const run = execInject || managedExec;
   try {
@@ -106,6 +112,42 @@ export async function callManagedSeat(model, prompt, {
   } catch (e) {
     return { ok: false, output: String(e?.message ?? e), durationMs: Date.now() - t0, failureClass: "UNKNOWN", rc: -1 };
   }
+}
+
+// Source-level native Windows execution adapter. The Rust authority must
+// eventually own admission leases, durable queueing and completion proof.
+async function nativeManagedTurn(model, prompt, { nativeConfig, timeoutSec, t0, agent }) {
+  const fail = (code) => ({ok:false,output:`native OpenCode worker unavailable: ${code}`,
+    failureClass:code==='NO_CAPACITY'?'QUOTA':'UNKNOWN',rc:-1,durationMs:Date.now()-t0});
+  const n=nativeConfig;
+  if (!n || typeof n !== 'object' || n.writeApproved !== true ||
+      typeof n.expectedDirectory !== 'string' || !n.expectedDirectory ||
+      typeof n.passwordEnv !== 'string' || !/^[A-Z][A-Z0-9_]{2,80}$/.test(n.passwordEnv)) return fail('CONFIG');
+  const expected=`${n.providerID}/${n.modelID}`;
+  if (typeof n.providerID !== 'string' || typeof n.modelID !== 'string' ||
+      model.split('#')[0] !== expected) return fail('MODEL_MISMATCH');
+  const decision=dispatchDecision({opencodeCapacity:n.capacity,activeOpenCode:n.active,
+    approvedModel:{providerID:n.providerID,modelID:n.modelID},billingClass:n.billingClass,
+    allowPaid:n.allowPaid === true});
+  if (decision.status !== 'READY') return fail(decision.code);
+  try {
+    const c=nativeOpenCodeClient({server:n.server,password:process.env[n.passwordEnv],
+      timeoutMs:Math.min(120_000, Math.max(100,Math.floor(timeoutSec*1000)))});
+    const health=await c.health();
+    if (!health.healthy) return fail('HEALTH_UNVERIFIED');
+    const directory=await c.projectDirectory();
+    // No write-capable worker may be dispatched into another GUI workspace.
+    const normalize=(x)=>String(x).replace(/\\/g,'/').replace(/\/$/,'').toLowerCase();
+    if (!directory || normalize(directory)!==normalize(n.expectedDirectory)) return fail('WORKSPACE_MISMATCH');
+    const taskId=`seat_${randomUUID().replaceAll('-','')}`;
+    const submission=await c.submit({taskId,prompt,decision,agent:agent||'build'});
+    if (submission.status!=='ACCEPTED') return fail(submission.status==='DELIVERY_UNCERTAIN' ?
+      `DELIVERY_UNCERTAIN_session_${submission.sessionId}` : submission.status);
+    const observed=await c.observeCompletion(submission.sessionId,{timeoutMs:Math.min(timeoutSec*1000,24*3600_000)});
+    if (observed.status!=='RESPONSE_OBSERVED') return fail(observed.status);
+    return {...finishManaged(observed.output,0,t0),sessionId:submission.sessionId,
+      completionVerified:false,transport:'native-opencode-http'};
+  } catch (error) { return fail(error?.code||'HTTP_UNAVAILABLE'); }
 }
 
 // Default executor: spawn ssh -> docker exec -i (script via STDIN). Bounded
@@ -168,10 +210,12 @@ export function managedSeatExitCode(r) {
 // Pure config validation (consult step: reject malformed config rather than
 // trim unpredictably). A quad subscription seat must declare its transport
 // explicitly; freeSeatEntriesInConfig() never classifies here.
-export function validateManagedSeat(seat) {
+export function validateManagedSeat(seat, { platform = process.platform, nativeConfig = null } = {}) {
   if (!seat || typeof seat !== "object") return { ok: false, why: "seat missing" };
   if (String(seat.transport ?? "") !== "openchamber-managed") return { ok: false, why: "transport must be openchamber-managed" };
   if (!/^[a-z0-9-]+\/[a-z0-9.#-]+$/i.test(String(seat.model ?? ""))) return { ok: false, why: "model missing/invalid" };
-  if (String(seat.billingClass ?? "") !== "subscription") return { ok: false, why: "billingClass must be subscription" };
+  const native = platform === 'win32' && nativeConfig && String(nativeConfig.billingClass ?? '') === String(seat.billingClass ?? '') &&
+    (seat.billingClass === 'free' || seat.billingClass === 'subscription');
+  if (!native && String(seat.billingClass ?? '') !== "subscription") return { ok: false, why: "billingClass must be subscription except explicitly configured Windows OpenCode transport" };
   return { ok: true, why: null };
 }

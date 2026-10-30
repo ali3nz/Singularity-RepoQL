@@ -16,7 +16,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const PROTOCOL_VERSION = 1;
 export const AUTHORITY_SCHEMA = "orchestra-authority/1";
@@ -32,6 +33,11 @@ export const AUTHORITY_ENV = Object.freeze({
 export const DEFAULT_LEASE_MS = Number(process.env.ORCHESTRA_RUST_AUTHORITY_LEASE_MS) || 60_000;
 const CLIENT_TIMEOUT_MS = 8_000;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const WINDOWS_PIPE_PREFIX = "\\\\.\\pipe\\";
+export function isWindowsAuthorityPipe(value) {
+  return typeof value === "string" && value.startsWith(WINDOWS_PIPE_PREFIX)
+    && /^[a-zA-Z0-9_-]{1,120}$/.test(value.slice(WINDOWS_PIPE_PREFIX.length));
+}
 
 export class AuthorityError extends Error {
   constructor(code, detail = "", extra = {}) {
@@ -64,14 +70,24 @@ function defaultRunner(cliPath, socketPath, request, { timeoutMs }) {
  */
 export function createAuthorityClient({
   socketPath,
+  runsDir = process.env.ORCHESTRA_RUNS_DIR,
   token,
   ownerId = `${hostname()}:${process.pid}`,
   leaseMs = DEFAULT_LEASE_MS,
   timeoutMs = CLIENT_TIMEOUT_MS,
   runner = defaultRunner,
-  cliPath = new URL("./rust-authority-cli.mjs", import.meta.url).pathname,
+  cliPath = fileURLToPath(new URL("./rust-authority-cli.mjs", import.meta.url)),
 } = {}) {
   if (!socketPath) throw new AuthorityError("MISSING_SOCKET");
+  if (socketPath.startsWith("\\\\") && !isWindowsAuthorityPipe(socketPath)) {
+    throw new AuthorityError("INVALID_PIPE_PATH");
+  }
+  // Windows named pipes are not filesystem paths. Never derive a credential
+  // directory or run-state root from their string representation.
+  const namedPipe = isWindowsAuthorityPipe(socketPath);
+  if (namedPipe && (!runsDir || !/^[a-zA-Z]:[\\/]/.test(runsDir))) {
+    throw new AuthorityError("WINDOWS_RUNS_DIR_REQUIRED");
+  }
   // The token lives next to the socket (0600, same uid). Callers may override
   // it explicitly; nothing is ever read from a public location.
   const resolvedToken =
@@ -79,6 +95,7 @@ export function createAuthorityClient({
     resolveAuthorityToken() ||
     (() => {
       try {
+        if (namedPipe) return "";
         return readFileSync(join(dirname(socketPath), "authority.token"), "utf8").trim();
       } catch {
         return "";
@@ -136,7 +153,9 @@ export function createAuthorityClient({
   }
 
   function statePath(runId) {
-    return join(dirname(socketPath), "..", runId, "state.json");
+    return namedPipe
+      ? win32.join(runsDir, runId, "state.json")
+      : join(dirname(socketPath), "..", runId, "state.json");
   }
 
   function remember(runId, payload) {
@@ -393,16 +412,24 @@ export function requestAuthorityRollback({
   runId,
   env = process.env,
   runner = defaultRunner,
-  cliPath = new URL("./rust-authority-cli.mjs", import.meta.url).pathname,
+  cliPath = fileURLToPath(new URL("./rust-authority-cli.mjs", import.meta.url)),
   timeoutMs = CLIENT_TIMEOUT_MS,
 } = {}) {
   const socketPath =
     env.ORCHESTRA_RUST_AUTHORITY ||
     join(dirname(runDir), ".rust-authority", "authority.sock");
-  if (!existsSync(socketPath)) throw new AuthorityError("AUTHORITY_UNAVAILABLE", socketPath);
+  // Windows named pipes are kernel IPC endpoints and cannot be probed using
+  // fs.existsSync. The authenticated request itself determines availability.
+  if (!isWindowsAuthorityPipe(socketPath) && !existsSync(socketPath)) {
+    throw new AuthorityError("AUTHORITY_UNAVAILABLE", socketPath);
+  }
+  if (socketPath.startsWith("\\\\") && !isWindowsAuthorityPipe(socketPath)) {
+    throw new AuthorityError("INVALID_PIPE_PATH");
+  }
   const token =
     resolveAuthorityToken(env) || (() => {
       try {
+        if (isWindowsAuthorityPipe(socketPath)) return "";
         return readFileSync(join(dirname(socketPath), "authority.token"), "utf8").trim();
       } catch {
         return "";

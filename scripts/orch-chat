@@ -24,7 +24,6 @@ and exits 4; every other command is unaffected.
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import re
@@ -33,6 +32,14 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+# Keep this existing Python mailbox CLI usable for basic native Windows inbox
+# inspection without importing Unix-only fcntl. The actual Windows relay and
+# durable delivery acceptance remain unverified.
+if os.name == 'nt':
+    import msvcrt
+else:
+    import fcntl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import orch_chat_office as office  # optional pixel-office pulses, walks, run token
@@ -46,8 +53,13 @@ GENERAL_CHAN_ID = "1551019049570541590"
 # thread PARENT moved. THREAD_CHAN_ID must be a type-0 text channel in the same guild.
 THREAD_CHAN_ID = "1551149160760086579"
 DISCORD_ENV = os.environ.get("AGENTCHAT_DISCORD_ENV", "")
-STATE_DIR = os.environ.get("AGENTCHAT_STATE_DIR",
-    os.path.join(os.path.expanduser("~"), ".local", "state", "orch-chat"))
+def default_state_dir():
+    if os.name == 'nt':
+        base = os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), 'AppData', 'Local')
+        return os.path.join(base, 'Singularity', 'AgentChat')
+    return os.path.join(os.path.expanduser('~'), '.local', 'state', 'orch-chat')
+
+STATE_DIR = os.environ.get("AGENTCHAT_STATE_DIR") or default_state_dir()
 INBOX_DIR = os.path.join(STATE_DIR, "inbox")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 LOCK_PATH = os.environ.get("AGENTCHAT_LOCK_PATH", "")
@@ -220,7 +232,7 @@ def save_state(st: dict) -> None:
 
 
 OBSERVED_PATH = os.path.join(STATE_DIR, "presence-observed.jsonl")
-STATE_LOCK_PATH = STATE_DIR + "/state.lock"
+STATE_LOCK_PATH = os.path.join(STATE_DIR, "state.lock")
 THREADS_PATH = os.path.join(STATE_DIR, "threads.json")
 
 
@@ -263,6 +275,11 @@ class dispatch_lock:
                 return (time.time() - os.path.getmtime(self.path)) > 2.0
             except OSError:
                 return True
+        if os.name == 'nt':
+            # Never use os.kill(pid, 0) on Windows: its semantics are not a
+            # safe nonmutating process ownership probe. A reused PID must not
+            # authorize reclaiming a dispatch claim. Manual recovery only.
+            return False
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -326,12 +343,35 @@ class state_lock:
     without it the daemon's stale nextId clobbered CLI allocations)."""
 
     def __enter__(self):
-        self._fd = open(STATE_LOCK_PATH, "w")
-        fcntl.flock(self._fd.fileno(), fcntl.LOCK_EX)
+        os.makedirs(STATE_DIR, exist_ok=True)
+        if os.name == 'nt':
+            self._fd = open(STATE_LOCK_PATH, 'a+b')
+            if os.fstat(self._fd.fileno()).st_size == 0:
+                self._fd.write(b'\0')
+                self._fd.flush()
+            self._fd.seek(0)
+            # Bounded Windows file lock. If another writer holds it, refuse
+            # rather than inventing an unlocked memory state.
+            for attempt in range(100):
+                try:
+                    msvcrt.locking(self._fd.fileno(), msvcrt.LK_NBLCK, 1)
+                    return self
+                except OSError:
+                    if attempt == 99:
+                        self._fd.close()
+                        raise DispatchBusy('Agent Chat state lock busy')
+                    time.sleep(.05)
+        else:
+            self._fd = open(STATE_LOCK_PATH, 'w')
+            fcntl.flock(self._fd.fileno(), fcntl.LOCK_EX)
         return self
 
     def __exit__(self, *exc):
-        fcntl.flock(self._fd.fileno(), fcntl.LOCK_UN)
+        if os.name == 'nt':
+            self._fd.seek(0)
+            msvcrt.locking(self._fd.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(self._fd.fileno(), fcntl.LOCK_UN)
         self._fd.close()
         return False
 
@@ -1117,6 +1157,10 @@ def cmd_sessions(args) -> int:
 
 
 def consult_lane_busy() -> tuple[bool, str]:
+    if os.name == 'nt':
+        # A Linux /proc check plus shell launcher is not a native Win32
+        # ownership proof. Do not dispatch until the Rust lane is installed.
+        return True, 'native Windows consult dispatch requires Rust owner verification'
     if not os.path.exists(LOCK_PATH):
         return False, "no lock"
     try:

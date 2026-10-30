@@ -24,7 +24,7 @@ a retrieval failure never overwrites the authoritative file, and a failed
 ingestion never deactivates a previously verified revision.
 
 State: data/doc-index/ledger.json (product-local runtime data, outside version
-control), protected by flock and atomic replacement.
+control), protected by a shared owner-tagged lock directory and atomic replacement.
 
 Identity: documentation knowledge lives under a DEDICATED shared scope
 (DOC_INDEX_TEAM/DOC_INDEX_USER, agent_id "docs-keeper") — never under the
@@ -48,6 +48,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import sys
 import time
@@ -126,39 +127,48 @@ def load_cfg():
 # ── ledger (the revision manifest; atomic + flock) ───────────────────────────
 
 LOCK_TIMEOUT_S = 10
-LOCK_STALE_S = 120
 
 
-def acquire_ledger_lock(lock_dir, timeout=LOCK_TIMEOUT_S, stale=LOCK_STALE_S):
-    """Atomic lock directory shared with scripts/doc-ingest-node.mjs.
+def acquire_ledger_lock(lock_dir, timeout=LOCK_TIMEOUT_S, stale=None):
+    """Shared Node/Python atomic lock. Never delete a live lock based on mtime.
 
-    mkdir is atomic on POSIX and Windows, so both runtimes serialise on the
-    same primitive. A crashed holder leaves a directory behind; it is reaped
-    once its mtime is older than `stale` seconds. The caller must release it.
+    An active ingestion may exceed two minutes. Automatic stale reaping can
+    race that writer and corrupt the shared ledger. A crashed owner requires
+    manual recovery after stopping ALL writers and examining its owner file.
+    The `stale` parameter is retained only for old callers; it is ignored.
     """
     lock_dir.parent.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
     while True:
         try:
             os.mkdir(lock_dir)
-            return
         except FileExistsError:
-            try:
-                if time.time() - os.stat(lock_dir).st_mtime > stale:
-                    shutil.rmtree(lock_dir, ignore_errors=True)
-                    continue
-            except FileNotFoundError:
-                continue  # holder released between mkdir and stat
             if time.monotonic() - start > timeout:
-                raise RuntimeError(f"ledger lock busy: {lock_dir}")
+                raise RuntimeError(f"ledger lock busy: {lock_dir} (never auto-reaped; stop both writers before manual recovery)")
             time.sleep(0.05)
+            continue
+        owner = secrets.token_hex(16)
+        try:
+            (lock_dir / "owner").write_text(owner, encoding="utf-8")
+        except Exception:
+            try:
+                lock_dir.rmdir()
+            except OSError:
+                pass  # no safe removal when owner is uncertain
+            raise
+        return owner
 
 
-def release_ledger_lock(lock_dir):
+def release_ledger_lock(lock_dir, owner):
+    owner_file = lock_dir / "owner"
     try:
-        shutil.rmtree(lock_dir)
-    except FileNotFoundError:
-        pass
+        recorded = owner_file.read_text(encoding="utf-8")
+    except OSError as e:
+        raise RuntimeError(f"ledger lock owner cannot be verified: {lock_dir}") from e
+    if recorded != owner:
+        raise RuntimeError(f"ledger lock ownership changed: {lock_dir}")
+    owner_file.unlink()
+    lock_dir.rmdir()
 
 
 def with_ledger(fn):
@@ -166,19 +176,16 @@ def with_ledger(fn):
     lp = _ledger()
     lp.parent.mkdir(parents=True, exist_ok=True)
     lock_dir = _lock()
-    acquire_ledger_lock(lock_dir)
+    owner = acquire_ledger_lock(lock_dir)
     try:
-        try:
-            ledger = json.loads(lp.read_text()) if lp.exists() else {"version": 1, "docs": {}}
-        except ValueError:
-            ledger = {"version": 1, "docs": {}}
+        ledger = _load_ledger()
         result = fn(ledger)
         tmp = lp.with_suffix(".tmp")
         tmp.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
         os.replace(tmp, lp)  # atomic: no torn ledger on crash
         return result
     finally:
-        release_ledger_lock(lock_dir)
+        release_ledger_lock(lock_dir, owner)
 
 
 # ── eligibility and safety ───────────────────────────────────────────────────
@@ -186,7 +193,7 @@ def with_ledger(fn):
 def doc_roots(root_arg):
     roots = []
     for item in ((root_arg,) if root_arg else ()) + tuple(
-            p for p in os.environ.get("SINGULARITY_DOC_ROOTS", "").split(":") if p):
+            p for p in os.environ.get("SINGULARITY_DOC_ROOTS", "").split(os.pathsep) if p):
         rp = Path(item).resolve()
         if rp not in roots:
             roots.append(rp)
@@ -432,7 +439,16 @@ def ingest_file(path, root_arg=None, session=None, now=None):
 # ── retry / status / verify / search (root-persisted path resolution) ────────
 
 def _load_ledger():
-    return json.loads(_ledger().read_text()) if _ledger().exists() else {"version": 1, "docs": {}}
+    lp = _ledger()
+    if not lp.exists():
+        return {"version": 1, "docs": {}}
+    try:
+        ledger = json.loads(lp.read_text())
+    except json.JSONDecodeError as exc:
+        raise Blocked("DOC_LEDGER_CORRUPT: invalid JSON; preserve the file and recover it manually") from exc
+    if not isinstance(ledger, dict) or type(ledger.get("version")) is not int or ledger["version"] != 1 or not isinstance(ledger.get("docs"), dict):
+        raise Blocked("DOC_LEDGER_CORRUPT: invalid ledger structure; preserve the file and recover it manually")
+    return ledger
 
 
 def _root_id_of(root_arg):

@@ -1,22 +1,26 @@
 {
   "schema": "native-memory-supervisor/v1",
-  "root": "C:\\Users\\Ben\\tools\\singularity-native-runtime",
-  "stateDir": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\scratch\\native-stack",
-  "logsDir": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\logs\\native-stack",
-  "node": "C:\\Users\\Ben\\tools\\node22\\node-v22.23.4-win-x64\\node.exe",
-  "npmCli": "C:\\Users\\Ben\\tools\\node22\\node-v22.23.4-win-x64\\node_modules\\npm\\bin\\npm-cli.js",
-  "npmCli11": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\tools\\npm11\\node_modules\\npm\\bin\\npm-cli.js",
-  "sourceRoot": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\source",
-  "buildRoot": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\build",
-  "archive": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\downloads\\TencentDB-Agent-Memory-99a1a2c.tar.gz",
+  "root": "C:\\Singularity\\memory-runtime",
+  "stateDir": "C:\\Singularity\\memory-runtime\\scratch\\native-stack",
+  "logsDir": "C:\\Singularity\\memory-runtime\\logs\\native-stack",
+  "node": "C:\\Tools\\node\\node.exe",
+  "npmCli": "C:\\Tools\\node\\node_modules\\npm\\bin\\npm-cli.js",
+  "npmCli11": "C:\\Singularity\\memory-runtime\\tools\\npm11\\node_modules\\npm\\bin\\npm-cli.js",
+  "sourceRoot": "C:\\Singularity\\memory-runtime\\source",
+  "buildRoot": "C:\\Singularity\\memory-runtime\\build",
+  "archive": "C:\\Singularity\\memory-runtime\\downloads\\TencentDB-Agent-Memory-99a1a2c.tar.gz",
   "archiveSha256": "11dab534e0a11ce69de2f9eef309fa85d297b63fbfa63df20742a15d0a6267e0",
   "pinnedCommit": "99a1a2c251741658917e3fa700bf8e337ad15a5f",
-  "patchFile": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\patches\\core-l1recordids.patch",
+  "patchFile": "C:\\Singularity\\memory-runtime\\patches\\core-l1recordids.patch",
   "components": {
     "core": {
       "kind": "core",
-      "cwd": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\build\\MemoryCore",
-      "command": ["--import", "tsx", "src/gateway/server.ts"],
+      "cwd": "C:\\Singularity\\memory-runtime\\build\\MemoryCore",
+      "command": [
+        "--import",
+        "tsx",
+        "src/gateway/server.ts"
+      ],
       "port": 18420,
       "healthPath": "/health",
       "readyTimeoutMs": 120000,
@@ -24,13 +28,18 @@
     },
     "panel": {
       "kind": "panel",
-      "cwd": "C:\\Users\\Ben\\tools\\singularity-native-runtime\\build\\MemoryPanel",
-      "command": ["dist/index.js"],
+      "cwd": "C:\\Singularity\\memory-runtime\\build\\MemoryPanel",
+      "command": [
+        "dist/index.js"
+      ],
       "port": 18125,
       "healthPath": "/",
       "readyTimeoutMs": 60000,
       "env": {}
     }
   },
-  "order": ["core", "panel"]
+  "order": [
+    "core",
+    "panel"
+  ]
 }

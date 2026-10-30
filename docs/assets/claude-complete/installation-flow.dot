@@ -1,0 +1,14 @@
+digraph Install {
+  graph [rankdir=LR bgcolor="#0B1220" pad=0.28 nodesep=0.25 ranksep=0.37 fontname="DejaVu Sans" fontcolor="#DAE8F2" label="FROM VERIFIED SOURCE TO EVIDENCED WINDOWS ACCEPTANCE" labelloc=t fontsize=20];
+  node [shape=box style="rounded,filled" fillcolor="#193049" color="#607F99" fontcolor="#F3F7FC" fontname="DejaVu Sans" fontsize=11 penwidth=1.2 margin="0.16,0.12"];
+  edge [color="#81A0BB" arrowsize=0.7 penwidth=1.4];
+  s [label="1  VERIFIED SOURCE\nSHA-256 + manifest"];
+  b [label="2  WINDOWS RUST BUILD\nBridge + supervisor"];
+  p [label="3  ACCEPTANCE ZIP\nSigned provenance pending"];
+  x [label="4  GUARDED PREVIEW\nNo services or settings changed"];
+  a [label="5  OPERATOR APPROVAL\nBackup + rollback plan" fillcolor="#69532C" color="#EFC470"];
+  i [label="6  NATIVE INSTALL\nServices + Claude Code" fillcolor="#275A47" color="#70D7AE"];
+  t [label="7  LIVE TESTS\nSkills, memory, MCP, Office, Ghost" fillcolor="#245E9C" color="#6ABBF2"];
+  g [label="8  RELEASE GATE\nBLOCKED until tests pass" fillcolor="#602F3C" color="#F297A7"];
+  s -> b -> p -> x -> a -> i -> t -> g;
+}

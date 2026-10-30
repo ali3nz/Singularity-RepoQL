@@ -1,0 +1,16 @@
+--- a/frontend/src/components/game/OfficeGame.tsx
++++ b/frontend/src/components/game/OfficeGame.tsx
+@@ -1253,7 +1253,12 @@
+                             y-sorted layer (they used to render after it, so
+                             they drew over their own occupants). */}
+                         <SolDesks present={presentPinned} />
+-                        {presentPinned.has("Sol Docker") && <BossDesk />}
++                        {/* B8 (operator): the boss desk is furniture too. It used to be
++                            gated on Sol Docker being present, so a Ghost-only roster lost
++                            the desk at the operator's saved "boss-desk" position (the
++                            right-hand counter by the printer). Render it unconditionally;
++                            identity seeding stays Ghost-only. */}
++                        <BossDesk />
+                         {/* Issue 246: operator-inserted sprites (persisted),
+                             z-sorted with the rest of the floor. */}
+                         {insertedEntities.map((entity) => (

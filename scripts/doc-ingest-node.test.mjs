@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   chunkMarkdown,
+  docRoots,
   classifySource,
   ingestFile,
   loadLedger,
@@ -75,6 +76,26 @@ const baseOpts = (box, gateway, extra = {}) => ({
   now: () => NOW,
   sleep: async () => {},
   ...extra,
+});
+
+test("malformed or invalid documentation ledgers are never overwritten by ingestion", async () => {
+  const box = sandbox();
+  const gateway = fakeGateway();
+  try {
+    const doc = box.doc("ledger-safe.md", "# Preserve verified history\n");
+    const lp = join(box.env.SINGULARITY_DOC_DATA, "doc-index", "ledger.json");
+    mkdirSync(dirname(lp), { recursive: true });
+    for (const bad of ["{not-json", "[]", '{"version":1,"docs":[]}', '{"version":2,"docs":{}}']) {
+      writeFileSync(lp, bad);
+      assert.throws(() => loadLedger(box.env), /DOC_LEDGER_CORRUPT/);
+      await assert.rejects(() => ingestFile(doc, baseOpts(box, gateway)), /DOC_LEDGER_CORRUPT/);
+      assert.equal(readFileSync(lp, "utf8"), bad);
+    }
+    assert.equal(gateway.calls.length, 0, "corrupt ledger must fail before external memory calls");
+    writeFileSync(lp, JSON.stringify({version:1,docs:{}}));
+    const ok = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(ok.status, "DOC_INGEST_INDEXED");
+  } finally { box.cleanup(); }
 });
 
 test("ingest → INDEXED, ledger evidence → VERIFIED, re-ingest → UNCHANGED (no extra write)", async () => {
@@ -288,4 +309,65 @@ test("the hook path has no Python or subprocess dependency left", () => {
     assert.equal(/python3?/i.test(text.replace(/\/\/.*$/gm, "")), false, `${name} must not invoke a Python runtime`);
     assert.equal(text.includes("node:child_process"), false, `${name} must not spawn a subprocess`);
   }
+});
+
+test("CRLF documents retain the verified LF revision across Windows checkouts", async () => {
+  const box = sandbox();
+  const gateway = fakeGateway();
+  try {
+    const lf = "# Runbook\n\nValid steps\n- Action\n";
+    const doc = box.doc("runbook.md", lf);
+    const first = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(first.status, "DOC_INGEST_INDEXED");
+    writeFileSync(doc, lf.replaceAll("\n", "\r\n"));
+    const second = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(second.rev, first.rev, "line-ending change is not a content revision");
+    assert.equal(second.status, "DOC_INGEST_UNCHANGED");
+    assert.equal(statusReport({root:box.root,env:box.env,all:true})[0].stale_source, false);
+    assert.equal(verifyFile("docs/runbook.md", {root:box.root,env:box.env}).status, "DOC_INGEST_VERIFIED");
+  } finally { box.cleanup(); }
+});
+
+test("a lock old enough to be called stale is never deleted by a competing Node writer", async () => {
+  const {utimesSync} = await import("node:fs");
+  const {withLedger} = await import("./doc-ingest-node.mjs");
+  const box = sandbox();
+  try {
+    const lock = join(box.env.SINGULARITY_DOC_DATA, "doc-index", ".ledger.lock.d");
+    mkdirSync(lock,{recursive:true});
+    writeFileSync(join(lock,"owner"),"holder-token");
+    utimesSync(lock,1,1);
+    await assert.rejects(withLedger(async () => {}, {env:box.env,lockTimeoutMs:90,lockStaleMs:1}),/ledger lock busy/);
+    assert.equal(readFileSync(join(lock,"owner"),"utf8"),"holder-token");
+  } finally {box.cleanup();}
+});
+
+
+test("configured documentation root lists use OS-specific path delimiter", () => {
+  const {delimiter} = requirePathDelimiter();
+  const root = mkdtempSync(join(tmpdir(), "doc-root-list-"));
+  try {
+    const a = join(root, "first"), b = join(root, "second");
+    mkdirSync(a); mkdirSync(b);
+    const result = docRoots(undefined, {SINGULARITY_DOC_ROOTS: [a,b].join(delimiter)});
+    assert.deepEqual(result, [resolve(a),resolve(b)]);
+  } finally {rmSync(root,{recursive:true,force:true});}
+});
+function requirePathDelimiter(){ return {delimiter: process.platform === "win32" ? ";" : ":"}; }
+
+test('native Claude hook memory config variable locates shared Tencent and configured host', async () => {
+  const box=sandbox(), gateway=fakeGateway();
+  try {
+    writeFileSync(join(box.dir,'memory.json'),JSON.stringify({gatewayKey:'test-secret',hostBaseUrl:'http://127.0.0.1:9532'}));
+    const env={...box.env};delete env.MEMORY_SECRETS;
+    env.SINGULARITY_MEMORY_CONFIG=join(box.dir,'memory.json');
+    const urls=[];
+    const source=box.doc('native.md','# Native Windows doc\n\nDocuments retained between runs.');
+    const result=await ingestFile(source,{...baseOpts(box,gateway),env,fetchImpl:async(url,init)=>{
+      urls.push(url);assert.equal(init.redirect,'error');return gateway.fetchImpl(url,init);
+    }});
+    assert.equal(result.status,'DOC_INGEST_INDEXED');
+    assert.ok(urls.length>0);
+    assert.ok(urls.every(x=>x.startsWith('http://127.0.0.1:9532/v3/')));
+  }finally{box.cleanup()}
 });

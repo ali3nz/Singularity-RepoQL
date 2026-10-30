@@ -20,7 +20,7 @@
 // Nothing prints, hashes or echoes key material, and nothing claims VERIFIED
 // for an untested capability.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, lstatSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -30,11 +30,12 @@ import {
   dreamOutcomeToday,
   readState as readInstallerState,
 } from "./install-claude-code.mjs";
-import { callMemoryCore, loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
+import { callMemoryCore, loadGhostMemoryConfig } from "./memory-config-loader.mjs";
 import { isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
 import { candidateSummary } from "./selflearn-candidates.mjs";
 import { auditComponentSet, CREDENTIAL_COMPONENTS, VARIANT_COMPONENTS } from "./bundle-classification.mjs";
 import { MANAGED_BEGIN, MANAGED_END, parseJsonc } from "./attach-openchamber.mjs";
+import { readRqlVersion } from "../native/windows/configure_project_mcp.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_STATE_FILE = join(ROOT, "data/claude-code-integration.json");
@@ -236,8 +237,13 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       // installation option installs, so a row here would imply a default
       // capability. Report it only when the operator points at an installed copy.
       if (env.SINGULARITY_DASHBOARD_DIR && existsSync(env.SINGULARITY_DASHBOARD_DIR)) {
-        out.push(section("dashboard", "VERIFIED",
-          `opt-in dashboard present at ${env.SINGULARITY_DASHBOARD_DIR} (not installed by any of the four options; doctor makes no capability claim beyond its presence)`));
+        let isDirectory = false;
+        try {
+          const st = lstatSync(env.SINGULARITY_DASHBOARD_DIR);
+          isDirectory = st.isDirectory() && !st.isSymbolicLink();
+        } catch { /* unknown/changed path is not a configured dashboard */ }
+        if (isDirectory) out.push(section("dashboard", "CONFIGURED",
+          `dashboard directory present at ${env.SINGULARITY_DASHBOARD_DIR}; listener, authentication, native startup and connector calls NOT verified`));
       }
       // ── required wiring for the SELECTED option (classification-driven) ──
       // Missing wiring is INCOMPLETE, never a pass; Ghost/Office wiring is only
@@ -252,8 +258,11 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
   {
     const rqlPath = env.SINGULARITY_RQL_PATH || "rql";
     const r = spawnSync(rqlPath, ["--version"], { encoding: "utf8", timeout: 15_000 });
-    out.push(section("repoql", r.status === 0 ? "VERIFIED" : "NOT_CONFIGURED",
-      r.status === 0 ? `rql answers: ${String(r.stdout || "").trim().slice(0, 60)}` : `rql (${rqlPath}) is not reachable: ${String(r.stderr || r.error?.message || "not found").split("\n")[0].slice(0, 80)}`));
+    const version = r.status === 0 && !r.error && !r.signal ? readRqlVersion(r.stdout) : null;
+    out.push(section("repoql", version === "1.7.18" ? "CONFIGURED" : (r.status === 0 ? "INCOMPLETE" : "NOT_CONFIGURED"),
+      version === "1.7.18" ? "native RepoQL 1.7.18 version output pinned; indexing and MCP calls still NOT tested"
+        : r.status === 0 ? "RepoQL version ambiguous or not pinned to 1.7.18; cannot claim verification"
+        : `rql (${rqlPath}) is not reachable: ${String(r.stderr || r.error?.message || "not found").split("\n")[0].slice(0, 80)}`));
   }
 
   // ── MemoryCore health + scoped identity (administrative key never used) ───

@@ -32,6 +32,12 @@ LOGIN_URL_PATTERN = re.compile(
     r"(?:login\?t=[^\s\"'<>]+|#[^\s\"'<>]*?k=[^\s\"'<>]+)"
 )
 _REFRESH_LOCK = threading.Lock()
+# Windows has no meaningful POSIX 0600 mode: keep short-lived issuer output only
+# in this dashboard process, never in a weakly protected cache file.
+_WINDOWS_LOGIN_CACHE: dict[str, tuple[float, str]] = {}
+
+def _is_windows() -> bool:
+    return os.name == "nt"
 
 
 def parse_native_login(raw: str) -> str | None:
@@ -79,6 +85,11 @@ def native_login_path(login_file: str | None = None) -> str | None:
     path = _login_file(login_file)
     if path is None:
         return None
+    if _is_windows():
+        cached = _WINDOWS_LOGIN_CACHE.get(str(path))
+        if cached and time.monotonic() - cached[0] < 30:
+            return parse_native_login(cached[1])
+        return None
     try:
         metadata = path.lstat()
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077 or metadata.st_size > 4096:
@@ -103,8 +114,12 @@ def refresh_native_login_path(*, force: bool = False, login_file: str | None = N
         return None
     with _REFRESH_LOCK:
         if not force:
+            if _is_windows():
+                cached = _WINDOWS_LOGIN_CACHE.get(str(path))
+                if cached and time.monotonic() - cached[0] < 30:
+                    return parse_native_login(cached[1])
             try:
-                if time.time() - path.stat().st_mtime < 30:
+                if not _is_windows() and time.time() - path.stat().st_mtime < 30:
                     existing = native_login_path(str(path))
                     if existing is not None:
                         return existing
@@ -134,6 +149,11 @@ def refresh_native_login_path(*, force: bool = False, login_file: str | None = N
                 break
         if issued is None:
             return None
+        if _is_windows():
+            # No file on Windows: the endpoint and dashboard run in one process.
+            # A process restart deliberately invalidates all pending launches.
+            _WINDOWS_LOGIN_CACHE[str(path)] = (time.monotonic(), issued)
+            return parse_native_login(issued)
         try:
             # Existing state directory is managed by the dashboard service;
             # no new directory hierarchy or permission changes needed.
@@ -170,16 +190,18 @@ def native_repoql_config(embed_url: str | None) -> dict:
 COOKIE_NAME = "repoql_native_launch"
 
 
-def create_launch_cookie(dashboard_secret: str, now: int | None = None) -> str:
+def create_launch_cookie(dashboard_secret: str, now: int | None = None, *, audience: str = "repoql") -> str:
     timestamp = int(time.time() if now is None else now)
     nonce = secrets.token_hex(12)
     data = f"{timestamp}.{nonce}"
-    digest = hmac.new(dashboard_secret.encode(), data.encode(), hashlib.sha256).hexdigest()
+    if audience not in ("repoql", "tencent", "office", "kanzo"):
+        raise ValueError("unsupported dashboard cookie audience")
+    digest = hmac.new(dashboard_secret.encode(), (audience + ":" + data).encode(), hashlib.sha256).hexdigest()
     return data + "." + digest
 
 
 def valid_launch_cookie(cookie_header: str, dashboard_secret: str, now: int | None = None,
-                        max_age: int = 60) -> bool:
+                        max_age: int = 60, *, audience: str = "repoql") -> bool:
     try:
         cookies = SimpleCookie()
         cookies.load(cookie_header)
@@ -189,8 +211,10 @@ def valid_launch_cookie(cookie_header: str, dashboard_secret: str, now: int | No
         current = int(time.time() if now is None else now)
         if not 0 <= current - timestamp <= max(1, int(max_age)) or not re.fullmatch(r"[a-f0-9]{24}", nonce):
             return False
+        if audience not in ("repoql", "tencent", "office", "kanzo"):
+            return False
         data = f"{timestamp}.{nonce}"
-        expected = hmac.new(dashboard_secret.encode(), data.encode(), hashlib.sha256).hexdigest()
+        expected = hmac.new(dashboard_secret.encode(), (audience + ":" + data).encode(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
     except (KeyError, ValueError, AttributeError):
         return False

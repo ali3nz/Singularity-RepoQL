@@ -1,9 +1,7 @@
 {
   "task": {
     "id": 1,
-    "project": 1,
-    "project_slug": "demo",
-    "project_name": "Demo project",
+    "project": "demo",
     "title": "Seed the fixture board",
     "description": "Synthetic card. Nothing here is a real record.",
     "tags": [

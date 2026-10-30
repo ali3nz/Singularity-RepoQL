@@ -10,7 +10,7 @@ processes** and are not copied, bundled, vendored or redistributed here.
 
 | Component | Role | Licence status |
 | --- | --- | --- |
-| RepoQL runtime (`rql`) | Reads the graph through the supported CLI | Not bundled. Installed and licensed by the user; the connector runtime tested is 1.7.15. |
+| RepoQL runtime (`rql`) | Reads the graph through the supported CLI | Not bundled. Installed and licensed by the user; the native Windows connector runtime target is 1.7.18, pending real compatibility acceptance. |
 | Kanzo (`emanuele-em/kanzo`) | Unmodified Kanban board embedded at `/embed/kanzo/`, version 0.1.3 | **AGPL-3.0-only**, separate process. Not redistributed. |
 | Tencent MemoryPanel | Optional panel proxied at `/embed/tencent/` | Not bundled. Operator/user supplies the service. |
 | Claude Office (`ali3nz/claude-office`) | Optional visualizer proxied at `/embed/office/` | Not bundled. See the product's Office documentation. |

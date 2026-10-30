@@ -9,7 +9,8 @@ deployed instance.
 - Setup, configuration and the security model: [docs/DASHBOARD-SETUP.md](../docs/DASHBOARD-SETUP.md)
 - Source provenance and licence notes: [PROVENANCE.md](PROVENANCE.md), [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 - Configuration template: `config.example.json`, `.env.example`
-- Container template: `docker-compose.yml`
+- Linux-only container template: `docker-compose.yml`
+- Windows source-only template: `.env.windows.example`; native Windows backend/service acceptance remains blocked.
 
 Run the portability test from the repository root:
 

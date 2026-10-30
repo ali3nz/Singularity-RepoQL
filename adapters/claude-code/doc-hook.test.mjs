@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { runDocHook } from "./doc-hook.mjs";
 
@@ -110,6 +110,38 @@ test("patient docs-only change does not demand a code assessment but still auto-
     // An unresolved ingestion keeps its baseline slot: the next stop re-discovers it.
     const baseline = JSON.parse(readFileSync(join(dir, "data", "doc-policy", "baseline-s-doc.json"), "utf8"));
     assert.equal(Object.keys(baseline.files).some((p) => p.includes("runbook.md")), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("stop never treats runtime backup copies as session documentation (regression: false DOC_UPDATED)", async () => {
+  const dir = workspace(true);
+  try {
+    writeFileSync(join(dir, "base.txt"), "base\n");
+    git(dir, "add", "-A"); git(dir, "commit", "-qm", "base");
+    const start = await runDocHook(["session-start"], { env: {}, stdin: JSON.stringify({ session_id: "s-backup", cwd: dir }) });
+    assert.equal(start.exitCode, 0);
+    // Exactly the artifacts the installer/attach path writes inside the
+    // workspace; the old census ingested them as the session's docs.
+    for (const rel of [
+      "data/agent-backups/2026-10-30T08-49-27-992Z/singularity-thinker.md",
+      "data/agent-backups/2026-10-30T08-49-28-001Z/singularity-board.md",
+      "data/attach-backups/2026-10-30T08-49-29-853Z/AGENTS.md",
+    ]) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
+      writeFileSync(join(dir, rel), "# backup copy\n");
+    }
+    const res = await runDocHook(["stop"], { env: {}, stdin: JSON.stringify({ session_id: "s-backup", cwd: dir }) });
+    assert.equal(res.exitCode, 0, res.stdout);
+    assert.doesNotMatch(res.stderr.join(" "), /auto-ingest/, "backup artifacts are not ingested as docs");
+    const rec = JSON.parse(readFileSync(join(dir, "data", "doc-policy", "s-backup.json"), "utf8"));
+    assert.equal(rec.docStatus, "DOC_NOT_REQUIRED", "a backup-only window is not a documentation update");
+    assert.deepEqual(rec.docs, []);
+    assert.equal(rec.ingestion.length, 0);
+    const lp = join(dir, "data", "doc-index", "ledger.json");
+    if (existsSync(lp)) {
+      const ledger = JSON.parse(readFileSync(lp, "utf8"));
+      assert.equal(Object.values(ledger.docs || {}).some((d) => /agent-backups|attach-backups/.test(d.rel)), false, "no backup entered the ledger");
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

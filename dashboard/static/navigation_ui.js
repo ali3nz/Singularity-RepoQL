@@ -100,7 +100,8 @@ export function initNavigationUI() {
       const groupName = (group.querySelector('h2')?.textContent || '').toLocaleLowerCase();
       let showGroup = false;
       group.querySelectorAll('[data-nav]').forEach(link => {
-        const show = !term || groupName.includes(term) || link.textContent.toLocaleLowerCase().includes(term);
+        const permitted = link.dataset.variantDisabled !== '1' && !(window.__SINGULARITY_VARIANT__?.features && ((link.dataset.nav === '/ghost' && !window.__SINGULARITY_VARIANT__.features.ghost) || (link.dataset.nav === '/office' && !window.__SINGULARITY_VARIANT__.features.office)));
+        const show = permitted && (!term || groupName.includes(term) || link.textContent.toLocaleLowerCase().includes(term));
         link.hidden = !show;
         if (show) { matches++; showGroup = true; }
       });

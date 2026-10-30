@@ -16,7 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,6 +29,24 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BUNDLE = join(ROOT, "openchamber");
+
+// The attach product invokes `python3` for credential provisioning. POSIX
+// hosts have it; Windows has only the Store alias (not an interpreter) while
+// the real Python lives behind `py`. The py launcher is a small standalone
+// executable that finds the installed interpreter, so a copy named
+// `python3.exe` is a real interpreter shim for this test process only.
+let PYTHON_SKIP = false;
+if (process.platform === "win32") {
+  const found = spawnSync("where", ["py"], { encoding: "utf8" });
+  const pyLauncher = String(found.stdout || "").trim().split(/\r?\n/)[0];
+  if (found.status === 0 && pyLauncher && existsSync(pyLauncher)) {
+    const shimDir = mkdtempSync(join(tmpdir(), "py3-shim-"));
+    copyFileSync(pyLauncher, join(shimDir, "python3.exe"));
+    process.env.PATH = `${shimDir};${process.env.PATH || ""}`;
+  } else {
+    PYTHON_SKIP = "no Python 3 interpreter is available on this host (the attach provisioner runs scripts/provision-secrets.py)";
+  }
+}
 
 function readdirRecursive(dir, base = "") {
   const out = [];
@@ -291,7 +309,7 @@ test("the admin key is recognised in process and refused as a plugin credential 
   assert.equal(isSameSecret("", "x"), false);
 });
 
-test("an explicit scoped key is provisioned into the target and never printed (B7)", async () => {
+test("an explicit scoped key is provisioned into the target and never printed (B7)", { skip: PYTHON_SKIP }, async () => {
   const dir = seededTarget();
   const scoped = "sk-scoped-business-key";
   const { rc, out } = await runAttach(["--config-dir", dir, "--variant", "3", "--memory-user-key", scoped]);
@@ -331,7 +349,7 @@ test("the ADMIN key is never written into a target (B7)", async () => {
 // package's own plugin credential") satisfies the key search and this test's
 // premise — "no scoped key is available" — is false. Isolate the test from
 // that ambient state for its duration; restored in every path.
-test("without a scoped key the attach reports INCOMPLETE and writes no credential (B7)", async () => {
+test("without a scoped key the attach reports INCOMPLETE and writes no credential (B7)", { skip: PYTHON_SKIP }, async () => {
   const PKG_MEM = join(ROOT, "data", "opencode", "config", "product-secrets", "memory.json");
   const PKG_MEM_BAK = PKG_MEM + ".test-absent-bak";
   const had = existsSync(PKG_MEM);
@@ -355,7 +373,7 @@ test("without a scoped key the attach reports INCOMPLETE and writes no credentia
 
 // ── N-g: the supported rollback ───────────────────────────────────────────────
 
-test("the attach records a manifest and the rollback restores exactly what the attach wrote (N-g)", async () => {
+test("the attach records a manifest and the rollback restores exactly what the attach wrote (N-g)", { skip: PYTHON_SKIP }, async () => {
   const dir = seededTarget();
   // a conflicting product file (not a preserved identity file) → a replace
   writeFileSync(join(dir, "package.json"), "{\"mine\":true}\n");
@@ -376,8 +394,8 @@ test("the attach records a manifest and the rollback restores exactly what the a
   // byte-identical copies land in <config>/singularity-runtime/scripts/ so the
   // plugin's deterministic import resolves in the FOREIGN target runtime.
   const runtimeFiles = manifest.files.filter((f) => f.rel.startsWith("plugins/singularity-runtime/scripts/"));
-  assert.equal(runtimeFiles.length, 4, "doc-policy.mjs, its selflearn-candidates.mjs dependency, memory-doc-ingest.py and its sibling memory_client.py are carried into the target");
-  for (const name of ["doc-policy.mjs", "selflearn-candidates.mjs", "memory-doc-ingest.py", "memory_client.py"]) {
+  assert.equal(runtimeFiles.length, 5, "doc-policy.mjs, selflearn-candidates.mjs, doc-ingest-node.mjs and the legacy Python ingestion/client pair are carried into the target");
+  for (const name of ["doc-policy.mjs", "selflearn-candidates.mjs", "doc-ingest-node.mjs", "memory-doc-ingest.py", "memory_client.py"]) {
     const dst = join(dir, "plugins", "singularity-runtime", "scripts", name);
     assert.ok(existsSync(dst), `${name} is installed into the target runtime`);
     assert.equal(
@@ -440,7 +458,7 @@ test("the attach records a manifest and the rollback restores exactly what the a
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("option 4 derives the target's ghost.json and the rollback undoes generated package secrets (job-3 findings 4-5)", async () => {
+test("option 4 derives the target's ghost.json and the rollback undoes generated package secrets (job-3 findings 4-5)", { skip: PYTHON_SKIP }, async () => {
   const pkgOffice = join(ROOT, "secrets", "claude-office.env");
   const pkgGhost = join(ROOT, "secrets", "ghost.env");
   const sentinel = "CLAUDE_OFFICE_TEST_SENTINEL=keep-me\n";

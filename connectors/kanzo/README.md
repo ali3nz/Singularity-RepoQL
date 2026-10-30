@@ -1,8 +1,9 @@
 # Kanzo board → RepoQL
 
 Copies the whole **Kanzo** board of this machine into a RepoQL workspace: one Markdown file for every task with its
-comment thread, one for every project, and an overview. Read-only — every request is a `GET`, and nothing is ever
-written back to the board.
+comment thread, one for every project, and an overview. `fetch` validates the complete listing and stores sanitized
+file records in the import database; `render` publishes from those records. Read-only — every request is a `GET`, and
+nothing is ever written back to the board.
 
 ## What it reads
 
@@ -12,8 +13,9 @@ written back to the board.
 | One task's comments | `GET http://localhost:4242/api/tasks/<id>` — only for a task that has comments and whose count, `updated_at` or the board's change counter moved |
 
 That is the Kanzo service's own loopback API: no authentication, no credential, nothing sent with a request, and
-nothing that leaves the machine. The manifest grants exactly `http://localhost:4242` and paces the connector at 6
-requests a minute. A sweep normally makes **one** request; the full board of 494 cards with its one comment costs two.
+nothing that leaves the machine. The manifest grants only `http://localhost:4242/api/**` and paces the connector at 6
+requests a minute. Each task's project slug is checked against the project slugs in the same validated listing, as
+the upstream Kanzo API defines it.
 
 ## What the import holds, field by field
 
@@ -54,11 +56,11 @@ backlog whose recorded outcome is `unknown_legacy`; the overview and the `kanzo_
 
 ## Freshness
 
-A sweep runs every 15 minutes and reads the **whole** board listing, so a title, column, tag or project change is at
-most 15 minutes old. A task's comment thread is re-read when its comment count, its `updated_at`, or the board's
-change counter moved; between those, the thread is as old as the last read. Because every sweep reads the whole board,
-every sweep that completes removes the file of a card the validated listing no longer names — a malformed,
-incomplete or contradictory answer publishes nothing, removes nothing, and is retried by the next sweep.
+A full sweep runs every 15 minutes and reads the **whole** board listing, so a title, column, tag or project change is
+at most 15 minutes old. A task's comment thread is re-read when its comment count, its `updated_at`, or the board's
+change counter moved; between those, the thread is as old as the last read. A complete pass removes a file only after
+every listed task's needed comments have been validated. A malformed, incomplete or contradictory listing fails
+before records are committed; a failed detail read does not complete the pass or remove unseen records.
 `complete_as_of` in `overview.md` is when the whole board was last compared.
 
 ## Grants it asks for, and why
@@ -71,19 +73,20 @@ incomplete or contradictory answer publishes nothing, removes nothing, and is re
 
 No secret, no source root, no inference: the connector never reads a credential and never asks a model.
 
-## Toolchain note — read this before installing
+## Windows release toolchain target (2026-10-29)
 
-The board's host runs **rql 1.7.15**. The connector is built for the 1.7.15 connector contract (`abi: 1`, `sync`,
-`sweepIntervalSeconds`). A later rql (1.7.17, the current `rql` on PATH) speaks a different, incompatible connector
-contract and refuses this manifest with *"Manifest abi names a connector contract an earlier RepoQL ran"*. Install,
-test and pack with the 1.7.15 client:
+The native Windows target is **RepoQL 1.7.18**, using the `parse`, `fetch` and `render` connector calls declared in `manifest.yaml`.
+1.7.17 was incompatible with these connector sources. The user reports the regression
+was fixed in 1.7.18; that claim still requires a live `rql.exe connector test`,
+`connector pack`, `connector install`, index and readback on Windows before release.
+Do not silently upgrade the production Docker host; its earlier build used 1.7.15.
 
-```sh
-/root/.repoql/versions/1.7.15/rql connector install <package> --allow-local-host http://localhost:4242
+Run only after verifying the native installed executable prints exactly 1.7.18:
+
+```powershell
+& $env:SINGULARITY_RQL_EXE --version
+& $env:SINGULARITY_RQL_EXE connector test connectors/kanzo/connector.ts --fixtures connectors/kanzo/suite.json
 ```
-
-Upgrading the host to 1.7.17 is a separate decision and would require every installed connector (including
-`memorycore`) to be rebuilt for the new contract.
 
 ## Ask it
 

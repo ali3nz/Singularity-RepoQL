@@ -1,5 +1,7 @@
 # Runtime parity — what the product now carries from the live system
 
+> **Windows release update (2026-10-29):** RepoQL 1.7.18 is now the required native Windows target. This document describes earlier production observations using 1.7.15; those observations must not be relabeled as 1.7.18 test evidence. See `docs/WINDOWS-NATIVE-M18-REPOQL-UPGRADE.md`.
+
 **Answer first.** This change ports the parts of the live fleet runtime that are
 *mechanism*, not someone's day: two pinned memory-stack overlays, the single
 capture writer, the two read-only RepoQL connectors, the Ghost prompt store and

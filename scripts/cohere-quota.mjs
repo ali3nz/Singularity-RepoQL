@@ -82,8 +82,13 @@ export function cohereQuota({ file, monthlyCap = 800, reserve = 200, now = Date.
       writeFileSync(fd, JSON.stringify(next), "utf8");
       fsyncSync(fd); closeSync(fd); fd = undefined;
       renameSync(tmp, file);
-      const dirFd = openSync(dirname(file), "r");
-      try { fsyncSync(dirFd); } finally { closeSync(dirFd); }
+      // Windows refuses directory handles through Node's openSync. The file
+      // was flushed above and renamed atomically; do not report a committed
+      // reservation as failed because POSIX directory fsync is unavailable.
+      if (process.platform !== "win32") {
+        const dirFd = openSync(dirname(file), "r");
+        try { fsyncSync(dirFd); } finally { closeSync(dirFd); }
+      }
     } catch {
       return { allowed: false, reason: "unwritable-ledger", attempts: state.attempts, limit };
     } finally {

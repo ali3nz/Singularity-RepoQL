@@ -74,18 +74,17 @@ def _stamp(value):
     return parsed
 
 
-def _import_row(imports, scheme):
-    """First connector import belonging to the registry scheme, if any."""
+def _import_rows(imports, scheme):
+    """Return all import rows for a scheme: duplicates are ambiguous evidence."""
+    matches = []
     for entry in imports:
-        if not isinstance(entry, dict):
-            continue
-        if _token(entry.get('kind')) != 'connector':
+        if not isinstance(entry, dict) or _token(entry.get('kind')) != 'connector':
             continue
         root = _text(entry.get('root'), 200)
         import_scheme = _token(entry.get('scheme'), 64)
         if import_scheme == scheme or root.lower().startswith(scheme + '://'):
-            return entry
-    return None
+            matches.append(entry)
+    return matches
 
 
 def _legacy_row(entry):
@@ -121,9 +120,19 @@ def _connector_row(entry, imports, now):
 
     registry_state = _token(entry.get('state')) or 'unknown'
     title = _text(entry.get('title'), 120) or scheme
-    row = _import_row(imports, scheme)
+    matched_imports = _import_rows(imports, scheme)
+    row = matched_imports[0] if len(matched_imports) == 1 else None
+    ambiguous = len(matched_imports) > 1
+    # Explicit scheme and root must agree; one malformed row must not
+    # simultaneously certify two different connector identities.
+    if row is not None:
+        named_scheme = _token(row.get('scheme'), 64)
+        root_scheme = _text(row.get('root'), 200).split('://', 1)[0].lower() if '://' in _text(row.get('root'), 200) else ''
+        if (named_scheme and named_scheme != scheme) or (root_scheme and root_scheme != scheme):
+            ambiguous = True
+            row = None
 
-    import_state = _token(row.get('state')) if row else ''
+    import_state = 'ambiguous' if ambiguous else (_token(row.get('state')) if row else '')
     fresh_as_of = _text(row.get('freshAsOf'), 40) if row else ''
     fresh_ts = _stamp(fresh_as_of) if row else None
     sweep = _count(row.get('sweepIntervalSeconds')) if row else None
@@ -131,17 +140,23 @@ def _connector_row(entry, imports, now):
     size = _count(row.get('bytes')) if row else None
     root = _text(row.get('root'), 200) if row else ''
 
-    if not row:
+    if ambiguous:
+        freshness = 'ambiguous'
+    elif not row:
         freshness = 'missing'
     elif fresh_ts is None:
         freshness = 'unknown'
     else:
         age = (now - fresh_ts).total_seconds()
         stale_after = max(300, 3 * (sweep or 900))
-        freshness = 'stale' if age > stale_after else 'fresh'
+        # A timestamp from the future is not freshness evidence. Allow a
+        # small clock skew, but never certify an unbounded future timestamp.
+        freshness = 'future' if age < -120 else ('stale' if age > stale_after else 'fresh')
 
     if registry_state != 'installed':
         status = registry_state
+    elif ambiguous:
+        status = 'ambiguous'
     elif not row:
         status = 'installed'
     elif import_state != 'current':
@@ -155,6 +170,8 @@ def _connector_row(entry, imports, now):
         status = 'active'
     elif freshness == 'stale':
         status = 'stale'
+    elif freshness == 'future':
+        status = 'clock_skew'
     else:
         status = 'current'
 

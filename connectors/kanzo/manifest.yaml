@@ -1,19 +1,19 @@
-abi: 1
 scheme: kanzo
 title: Kanzo board
 summary: Copies the whole Kanzo board into the workspace, as one file for each task with its comments, one for each project, and an overview. Read-only over the board's own loopback HTTP API; live claims and signed coordination envelopes are left out, and migration provenance is kept.
-calls: [sync, parse]
+calls: [parse, fetch, render]
+recordsVersion: 2
+fetchIntervalSeconds: 900
+fullFetchIntervalSeconds: 900
+maxValueBytes: 131072
 uri:
   example: kanzo://board
 network:
   hosts:
-    - host: "http://localhost:4242"
+    - url: "http://localhost:4242/api/**"
       local: true
       note: "The Kanzo service's own loopback address, and the only host this connector reaches. Every request is a GET: the whole board listing, and one task detail for a card whose comments changed. Nothing leaves the machine, and the board has no authentication, so nothing is sent with a request."
   requestsPerMinute: 6
 # The text of every file is sent to the embedding service the host is configured with, which is what lets a question
 # find a card in other words. This is the default, and README.md says so.
 embedding: full
-# A sweep runs every fifteen minutes. The whole board is compared every time; a card's comments are read only when
-# the card or the board's change counter moved.
-sweepIntervalSeconds: 900

@@ -5,6 +5,7 @@
 // Run: node --test scripts/install-claude-code.profiles.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +23,20 @@ const repoFixture = () => {
   writeFileSync(join(configDir, "memory.json"), JSON.stringify({ baseUrl: "http://memory.test", userKey: "test-key" }));
   return root;
 };
+
+/**
+ * Windows has no POSIX mode bits: "private" means the file's ACL grants no
+ * access to the broad built-in principals. This is the Windows equivalent of
+ * the 0600 check and is never a weaker assertion (Users/Everyone are refused).
+ */
+function assertPrivateOnWindows(path) {
+  const r = spawnSync("icacls", [path], { encoding: "utf8" });
+  assert.equal(r.status, 0, `icacls must read the ledger ACL: ${r.stderr}`);
+  const acl = `${r.stdout}${r.stderr}`;
+  for (const principal of ["BUILTIN\\Users", "Everyone", "Authenticated Users"]) {
+    assert.ok(!acl.includes(`${principal}:(`), `ledger ACL must not grant ${principal}: ${acl}`);
+  }
+}
 
 test("profiles bind to one shared identity per role; ghost stays excluded; ledger records all passes", async () => {
   const root = repoFixture();
@@ -63,7 +78,8 @@ test("profiles bind to one shared identity per role; ghost stays excluded; ledge
   // ledger is private and records the binding
   const ledgerPath = join(root, "data/agent-profiles/ledger.json");
   assert.ok(existsSync(ledgerPath));
-  assert.equal(statSync(ledgerPath).mode & 0o777, 0o600, "ledger with recorded identities is private");
+  if (process.platform === "win32") assertPrivateOnWindows(ledgerPath);
+  else assert.equal(statSync(ledgerPath).mode & 0o777, 0o600, "ledger with recorded identities is private");
 });
 
 test("identity overrides apply (team/user flags route profiles to the mapped scope)", async () => {

@@ -23,6 +23,15 @@ both clients; there is no second policy text and no second ingestion engine.
   without sharing private experience.
 - **RepoQL** — code intelligence and verified engineering concepts (undamaged).
 
+**Windows source audit (Milestone 32):** the Node ingester now resolves
+`SINGULARITY_MEMORY_CONFIG` set by the native Claude installer (with
+`MEMORY_SECRETS` as an explicit legacy fallback), and it rejects memory gateway
+redirects. Its `DOC_INGEST_INDEXED` status is evidence **only of Tencent
+MemoryCore**, not of RepoQL. RepoQL independently indexes watched workspaces
+and imported folders; real Windows release acceptance must verify that each
+hub-doc root belongs to RepoQL's indexed workspace/imports and query/read back
+the updated revision. No atomic two-store acknowledgment exists here.
+
 ## Ingestion pipeline
 
 ```

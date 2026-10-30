@@ -1,0 +1,18 @@
+[package]
+name = "singularity-desktop-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Windows-native, read-only MemoryCore MCP adapter for desktop coding GUIs"
+license = "MIT"
+
+# Optional Office is excluded from options 1 and 3. Build those with
+# --no-default-features; options 2 and 4 use --features office.
+[features]
+default = []
+office = []
+ghost = []
+
+[dependencies]
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

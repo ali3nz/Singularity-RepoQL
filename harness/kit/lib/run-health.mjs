@@ -15,7 +15,7 @@
 //   generatedAt, runId
 // }
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 function readJson(p) {
@@ -97,7 +97,6 @@ export function deriveRunHealth({ runId = null, runDir = null, state = null, lea
 
 // Batch view for OpenChamber/Pixel: one summary per run dir, newest first.
 export function deriveFleetHealth(runsRoot, { limit = 20 } = {}) {
-  const { readdirSync, statSync } = require("node:fs");
   let dirs = [];
   try { dirs = readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
   dirs.sort().reverse();

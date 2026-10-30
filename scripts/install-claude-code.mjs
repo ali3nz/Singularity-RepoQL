@@ -41,7 +41,7 @@ import {
   classifyMainMemoryState,
   probeMainProxy,
 } from "../adapters/claude-code/main-memory.mjs";
-import { loadGhostMemoryConfig } from "../ghost/ghost-memory.mjs";
+import { loadGhostMemoryConfig } from "./memory-config-loader.mjs";
 import { auditComponentSet, COMPONENT, VARIANT_COMPONENTS } from "./bundle-classification.mjs";
 import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs";
 // Shared OpenChamber discovery: the installer and the attach flow must resolve
@@ -50,7 +50,7 @@ import { identityFor, provisionAgentProfiles } from "./setup-agent-profiles.mjs"
 import { discoverOpenchamber, resolveConfigDir, MANAGED_BEGIN, MANAGED_END } from "./attach-openchamber.mjs";
 // Native Office payload contract: the gate ingests an event produced by the
 // SHIPPED plugin mapper, not a hand-written shape.
-import { mapOfficeEvent } from "../openchamber/plugins/product-office/office-events.js";
+// Office mapper is imported lazily only by the 2/4 functional probe.
 // The canonical model lane (derived, never a hardcoded route) and the
 // FUNCTIONALLY VERIFIED proof layer: the gate separates CONFIGURED facts from
 // runtime proofs, and a proof that cannot run is a FAIL-CLOSED MISSING.
@@ -671,6 +671,7 @@ export async function probeOfficeFunctional(officeConfigPath = join(ROOT, "data/
       const url = hostOfficeEndpoint(cfg.endpoint);
       const base = url.replace(/\/api\/v1\/events$/, "");
       const sessionID = `ses_verify${Date.now().toString(36)}`;
+      const {mapOfficeEvent} = await import("../openchamber/plugins/product-office/office-events.js");
       const mapped = mapOfficeEvent(
         { type: "session.created", created: Date.now(), data: { sessionID } },
         { location: { directory: "/home/openchamber/workspaces/install-verify" }, parentID: null }
@@ -1240,6 +1241,10 @@ async function readLine(prompt) {
 }
 
 export async function runInstall(flags) {
+  if (process.platform === "win32") {
+    warn("NATIVE_WINDOWS_INSTALLER_INCOMPLETE: legacy Docker/Ubuntu installer is not supported on Windows; no files changed.");
+    return 5;
+  }
   log(`installing the Singularity Claude Code integration (${flags.scope} scope)${flags.dryRun ? " — dry run" : ""}`);
 
   // Option validation: mandatory capabilities are verified BEFORE any files
@@ -1468,6 +1473,10 @@ const AGENT_ACTION_LOG = {
 };
 
 export function runUninstall(flags) {
+  if (process.platform === "win32") {
+    warn("NATIVE_WINDOWS_INSTALLER_INCOMPLETE: legacy Docker/Ubuntu installer is not supported on Windows; no files changed.");
+    return 5;
+  }
   const record = readState().installs.find((r) => r.settingsPath === flags.settingsPath);
   if (!record) {
     log(`no recorded install for ${flags.settingsPath} — nothing to uninstall`);
@@ -1671,6 +1680,13 @@ export async function runGate(argv) {
 
 export async function main(argv) {
   const [command, ...rest] = argv;
+  // This is the established Linux/Docker installer. Do not let its discover,
+  // Docker exec, shell provisioning or status probes modify a Windows GUI.
+  // The Windows staging workflow is source-only until full acceptance exists.
+  if (process.platform === "win32") {
+    warn("NATIVE_WINDOWS_INSTALLER_INCOMPLETE: legacy Docker/Ubuntu installer is not supported on Windows; see docs/WINDOWS-NATIVE-RELEASE.md. No changes made.");
+    return 5;
+  }
   if (!["install", "uninstall", "status", "gate"].includes(command)) {
     log(usageText());
     return 2;

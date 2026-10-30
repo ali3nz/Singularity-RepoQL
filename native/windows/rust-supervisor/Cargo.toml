@@ -1,0 +1,10 @@
+[package]
+name = "singularity-windows-supervisor"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Fail-closed Windows-native process ownership for Singularity source review"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

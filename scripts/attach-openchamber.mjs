@@ -711,9 +711,10 @@ async function main(argv) {
   if (dryRun) log("(dry run — nothing written)");
 
   // ── shared policy runtime (a first-class plugin dependency) ────────────────
-  // The plugin runtime imports the SHARED documentation policy module, which in
-  // turn drives scripts/memory-doc-ingest.py (whose own sibling import needs
-  // scripts/memory_client.py). A foreign target's config does not reach this
+  // The plugin runtime imports the SHARED documentation policy module, which
+  // imports BOTH selflearn-candidates.mjs and doc-ingest-node.mjs. The legacy
+  // memory-doc-ingest.py separately imports sibling memory_client.py.
+  // A foreign target's config does not reach this
   // repository's scripts/, so the attach carries the WHOLE non-stdlib closure
   // into <config>/plugins/singularity-runtime/scripts/ — byte-identical copies,
   // recorded in the same manifest, restorable by the same rollback. The
@@ -723,6 +724,7 @@ async function main(argv) {
   const sharedRuntimePlan = [
     "doc-policy.mjs",
     "selflearn-candidates.mjs", // the shared automatic lesson pipeline doc-policy imports
+    "doc-ingest-node.mjs", // required direct import of doc-policy: missing it silently disables shared discovery
     "memory-doc-ingest.py",
     "memory_client.py", // sibling import of memory-doc-ingest (its ONLY non-stdlib import) — without it the attached runtime cannot ingest at all
   ].map((name) => {

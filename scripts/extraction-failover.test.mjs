@@ -78,8 +78,8 @@ async function ready() {
   throw new Error("router did not become ready: " + lastErr);
 }
 
-function post(body) {
-  return fetch(`http://127.0.0.1:${routerPort}/chat/completions`, {
+function post(body, path = "/chat/completions") {
+  return fetch(`http://127.0.0.1:${routerPort}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -93,6 +93,27 @@ test("healthy provider is proxied through end-to-end", async () => {
   assert.equal(res.status, 200);
   const doc = await res.json();
   assert.equal(doc.choices[0].message.content, "synthetic extraction answer");
+});
+
+// Regression: the memory core's OpenAI client posts to `<baseUrl>/chat/completions`
+// with baseUrl ending in `/v1`, so the router must serve `/v1/chat/completions`.
+// Serving only the bare path 404'd every L1 extraction call.
+test("the /v1-prefixed OpenAI path is served like the bare path", async () => {
+  await ready();
+  MODE.behaviour = "complete";
+  const res = await post({ messages: [{ role: "user", content: "prefixed path" }] }, "/v1/chat/completions");
+  assert.equal(res.status, 200);
+  const doc = await res.json();
+  assert.equal(doc.choices[0].message.content, "synthetic extraction answer");
+  const qs = await post({ messages: [{ role: "user", content: "prefixed path with query" }] }, "/v1/chat/completions?trace=1");
+  assert.equal(qs.status, 200);
+});
+
+test("an unrelated path is still 404", async () => {
+  await ready();
+  MODE.behaviour = "complete";
+  const res = await post({ messages: [{ role: "user", content: "wrong path" }] }, "/v2/chat/completions");
+  assert.equal(res.status, 404);
 });
 
 test("oversized request bodies are rejected with 413 before any provider call", async () => {

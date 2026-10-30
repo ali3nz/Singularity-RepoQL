@@ -15,7 +15,6 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
-const LOCK_STALE: Duration = Duration::from_secs(30);
 const LOCK_RETRIES: u32 = 40;
 
 fn now_ms() -> u128 {
@@ -44,6 +43,50 @@ fn sync_parent(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// On Windows, std::fs::rename cannot replace an existing destination. Use
+// the Win32 ReplaceFileW primitive for existing journal/state projections.
+// No remove-then-rename gap is permitted: if replacement fails, keep the old
+// authoritative file intact and return an error to the caller.
+#[cfg(windows)]
+fn commit_temp(temp: &Path, path: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn ReplaceFileW(
+            replaced: *const u16,
+            replacement: *const u16,
+            backup: *const u16,
+            flags: u32,
+            exclude: *mut std::ffi::c_void,
+            reserved: *mut std::ffi::c_void,
+        ) -> i32;
+    }
+    if !path.exists() {
+        // First creation is exclusive: concurrent appearance of a target
+        // fails rather than destroying a file we have not inspected.
+        return fs::rename(temp, path).map_err(|e| e.to_string());
+    }
+    let wide = |p: &Path| -> Vec<u16> {
+        p.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+    };
+    let target = wide(path);
+    let source = wide(temp);
+    let rc = unsafe {
+        ReplaceFileW(target.as_ptr(), source.as_ptr(), std::ptr::null(),
+                     0, std::ptr::null_mut(), std::ptr::null_mut())
+    };
+    if rc == 0 {
+        Err(format!("STATE_ATOMIC_REPLACE_FAILED: {}", std::io::Error::last_os_error()))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn commit_temp(temp: &Path, path: &Path) -> Result<(), String> {
+    fs::rename(temp, path).map_err(|e| e.to_string())
+}
+
 pub(crate) fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     let temp = temp_path(path);
     let result = (|| -> Result<(), String> {
@@ -54,7 +97,7 @@ pub(crate) fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         file.write_all(data).map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
-        fs::rename(&temp, path).map_err(|e| e.to_string())?;
+        commit_temp(&temp, path)?;
         sync_parent(path)
     })();
     if result.is_err() {
@@ -63,44 +106,10 @@ pub(crate) fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     result
 }
 
-fn owner_alive(pid: u64) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        Path::new(&format!("/proc/{pid}/cmdline")).exists()
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = pid;
-        true
-    }
-}
-
-fn stale(lock_dir: &Path) -> bool {
-    let modified_old = fs::metadata(lock_dir)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|m| SystemTime::now().duration_since(m).ok())
-        .is_some_and(|age| age > LOCK_STALE);
-    let owner = fs::read_to_string(lock_dir.join("owner"))
-        .ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok());
-    match owner {
-        Some(v) => {
-            let pid = v.get("pid").and_then(Value::as_u64);
-            let age_old = v
-                .get("at")
-                .and_then(Value::as_u64)
-                .is_some_and(|at| now_ms().saturating_sub(at as u128) > LOCK_STALE.as_millis());
-            match pid {
-                Some(p) => !owner_alive(p) || age_old,
-                None => modified_old,
-            }
-        }
-        // A newly created lock directory may not yet have an owner file.
-        // Do not steal it until it is definitely stale.
-        None => modified_old,
-    }
-}
+// Intentionally no timestamp-based lock stealing. A suspended live writer can
+// outlast any arbitrary stale threshold; deleting its lock lets two writers
+// mutate the same journal. Recovery requires external ownership verification
+// and an operator-led action, never a guessed PID or file age.
 
 struct CaseLock {
     path: PathBuf,
@@ -129,12 +138,8 @@ fn acquire_lock(dir: &Path) -> Result<CaseLock, String> {
                 return Ok(CaseLock { path, owner_bytes });
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                if stale(&path) {
-                    // This is a compatibility implementation of JS stale lock reclaim.
-                    // Avoid deleting a newly created but uninitialized lock.
-                    let _ = fs::remove_dir_all(&path);
-                    continue;
-                }
+                // Fail closed even if the lock is old or its reported PID is
+                // absent: neither fact proves this lock is safe to delete.
                 thread::sleep(Duration::from_millis(50 * (i + 1).min(10) as u64));
             }
             Err(error) => return Err(error.to_string()),

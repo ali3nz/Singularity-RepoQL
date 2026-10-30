@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { runMemoryHook, redactSecrets } from "./memory-hook.mjs";
 
 // A stub MemoryCore that records calls and answers like the shipped core.
@@ -187,4 +188,180 @@ test("WSL2-style Windows drive paths as config targets still resolve (config is 
 test("redactSecrets covers common key shapes", () => {
   assert.equal(redactSecrets("sk-abcd1234-AAAA-bbbb token ghp_abcdefghijklmnopqrstuvwxyz AKIAIOSFODNN7EXAMPLE api_key=secretvalue1234").includes("sk-abcd1234"), false);
   assert.ok(redactSecrets("token: ghp_xxxxxxxxxxxxxxxxxxxx").includes("[REDACTED]"));
+});
+
+test('SubagentStop: separate invocations at different times do not duplicate the same lesson', async () => {
+  const mem = stubMemoryCore();
+  const payload = stopPayload('singularity-code-reviewer', {session_id:'restart-unique'});
+  const first = await runMemoryHook(['subagent-stop'], {env:env(),stdin:payload,fetchImpl:mem.fetchImpl,now:()=> '2026-10-29T01:00:00.000Z'});
+  const second = await runMemoryHook(['subagent-stop'], {env:env(),stdin:payload,fetchImpl:mem.fetchImpl,now:()=> '2026-10-30T01:00:00.000Z'});
+  assert.match(first.stderr.join(' '),/reconciled 1/);
+  assert.match(second.stderr.join(' '),/reconciled 0/);
+  const writes=mem.calls.filter(c=>c.url.endsWith('/v3/conversation/add'));
+  assert.equal(writes.length,1,'a fresh process clock must not generate a new memory task');
+  assert.match(writes[0].body.task_id,/^cc-[a-f0-9]{16}$/);
+});
+
+test('SubagentStop: conflicting row for the stable task identity never counts as proof of persistence', async () => {
+  const mem = stubMemoryCore();
+  const base=mem.fetchImpl;
+  mem.fetchImpl = async (url, init) => url.endsWith('/v3/conversation/query')
+    ? new Response(JSON.stringify({code:0,data:{messages:[{task_id:JSON.parse(init.body).task_id,role:'assistant',content:'foreign content'}],total:1}}))
+    : base(url,init);
+  const res=await runMemoryHook(['subagent-stop'],{env:env(),stdin:stopPayload('singularity-board'),fetchImpl:mem.fetchImpl,now:NOW});
+  assert.match(res.stderr.join(' '),/continuing without memory/);
+  assert.equal(mem.calls.filter(c=>c.url.endsWith('/v3/conversation/add')).length,0);
+});
+
+test('SubagentStart: HTTP-success application error cannot be reported as recalled', async () => {
+  const mem=stubMemoryCore();
+  mem.fetchImpl=async ()=>new Response(JSON.stringify({code:403,message:'denied',data:{messages:[{content:'forged'}]}}),{status:200});
+  const res=await runMemoryHook(['subagent-start'],{env:env(),stdin:startPayload('singularity-board'),fetchImpl:mem.fetchImpl,now:NOW});
+  assert.equal(res.stdout,null);
+  assert.match(res.stderr.join(' '),/recall degraded/);
+});
+
+test('explicit mapped Tencent scope is reused for subagent recall and capture', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'cc-agent-map-'));
+  try {
+    const map=join(dir,'identities.json');
+    writeFileSync(map,JSON.stringify({agents:{board:{team_id:'fleet',user_id:'shared-user',agent_id:'review-board'}}}));
+    const e=env({AGENT_PROFILE_IDENTITY_MAP:map,AGENT_PROFILE_TEAM:'wrong-team'});
+    const core=stubMemoryCore();
+    const res=await runMemoryHook(['subagent-start'],{env:e,stdin:startPayload('singularity-board'),fetchImpl:core.fetchImpl,now:NOW});
+    assert.equal(res.exitCode,0);
+    assert.equal(core.calls[0].body.team_id,'fleet');
+    assert.equal(core.calls[0].body.user_id,'shared-user');
+    assert.equal(core.calls[0].body.agent_id,'review-board');
+  }finally{rmSync(dir,{recursive:true,force:true})}
+});
+test('missing mapped role refuses fallback and does not query wrong memory', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'cc-agent-map-'));
+  try {
+    const map=join(dir,'identities.json');writeFileSync(map,JSON.stringify({agents:{}}));
+    const core=stubMemoryCore();
+    const res=await runMemoryHook(['subagent-start'],{env:env({AGENT_PROFILE_IDENTITY_MAP:map}),stdin:startPayload('singularity-board'),fetchImpl:core.fetchImpl,now:NOW});
+    assert.equal(core.calls.length,0);
+    assert.equal(res.stdout,null);
+    assert.match(res.stderr.join(' '),/identity map invalid/);
+  }finally{rmSync(dir,{recursive:true,force:true})}
+});
+
+// ---- Parent (main GUI) conversation capture: conversation-turn / session-end ----
+
+const userEntry = (text) => ({ type: "user", message: { role: "user", content: text } });
+const assistantEntry = (text) => ({
+  type: "assistant",
+  message: { role: "assistant", content: [{ type: "thinking", thinking: "internal" }, { type: "text", text }] },
+});
+function transcriptFixture(lines) {
+  const dir = mkdtempSync(join(tmpdir(), "cc-parent-turn-"));
+  const file = join(dir, "session.jsonl");
+  writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  return { dir, file };
+}
+const parentPayload = (transcriptPath, extra = {}) => JSON.stringify({
+  hook_event_name: "Stop", session_id: "parent-session-1",
+  transcript_path: transcriptPath, cwd: "C:/work", ...extra,
+});
+const sha8hex = (s) => createHash("sha256").update(s).digest("hex").slice(0, 8);
+
+test("conversation-turn: the parent Stop captures the last real prompt and assistant reply as one unit", async () => {
+  const mem = stubMemoryCore();
+  const t = transcriptFixture([
+    userEntry("earlier prompt"),
+    assistantEntry("earlier reply"),
+    // A tool result is a `user` entry but not an operator prompt.
+    { type: "user", message: { role: "user", content: [{ type: "tool_result", content: "tool output" }] }, toolUseResult: {} },
+    userEntry("C1-PARENT-PROOF prompt"),
+    assistantEntry("C1-PARENT-PROOF reply"),
+  ]);
+  try {
+    const res = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW });
+    assert.equal(res.exitCode, 0);
+    const add = mem.calls.find((c) => c.url.endsWith("/v3/conversation/add"));
+    assert.ok(add, "parent turn was written");
+    assert.equal(add.body.agent_id, "claude-code-main");
+    assert.equal(add.body.team_id, "openchamber-agents");
+    assert.equal(add.body.user_id, "pilot-operator");
+    assert.equal(add.body.session_id, `claude-code-main-${sha8hex("parent-session-1")}`);
+    assert.match(add.body.task_id, /^cc-[a-f0-9]{16}$/);
+    assert.deepEqual(add.body.messages.map((m) => m.role), ["user", "assistant"]);
+    assert.equal(add.body.messages[0].content, "C1-PARENT-PROOF prompt");
+    assert.equal(add.body.messages[1].content, "C1-PARENT-PROOF reply");
+    assert.match(res.stderr.join(" "), /reconciled 2 message\(s\) for claude-code-main/);
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("conversation-turn: a retry and a SessionEnd of the same turn write no duplicate", async () => {
+  const mem = stubMemoryCore();
+  const t = transcriptFixture([userEntry("same prompt"), assistantEntry("same reply")]);
+  try {
+    const first = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW });
+    const second = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: () => "2026-10-21T10:00:00Z" });
+    const third = await runMemoryHook(["session-end"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW });
+    assert.match(first.stderr.join(" "), /reconciled 2/);
+    assert.match(second.stderr.join(" "), /reconciled 0/);
+    assert.match(third.stderr.join(" "), /reconciled 0/);
+    assert.equal(mem.calls.filter((c) => c.url.endsWith("/v3/conversation/add")).length, 1);
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("conversation-turn: short turns are captured and secrets are redacted", async () => {
+  const mem = stubMemoryCore();
+  const t = transcriptFixture([
+    userEntry("key sk-abcdef1234567"),
+    assistantEntry("used token: ghp_abcdefghijklmnopqrstuvwxyz"),
+  ]);
+  try {
+    const res = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW });
+    assert.equal(res.exitCode, 0);
+    const add = mem.calls.find((c) => c.url.endsWith("/v3/conversation/add"));
+    const body = add.body.messages.map((m) => m.content).join("\n");
+    assert.equal(body.includes("sk-abcdef1234567"), false);
+    assert.equal(body.includes("ghp_abcdefghijklmnopqrstuvwxyz"), false);
+    assert.ok(body.includes("[REDACTED]"));
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("conversation-turn: an empty assistant reply produces no write", async () => {
+  const mem = stubMemoryCore();
+  const t = transcriptFixture([userEntry("unanswered prompt")]);
+  const t2 = transcriptFixture([userEntry("prompt"), { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "   " }] } }]);
+  try {
+    const a = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW });
+    const b = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t2.file), fetchImpl: mem.fetchImpl, now: NOW });
+    assert.equal(a.exitCode, 0);
+    assert.equal(b.exitCode, 0);
+    assert.equal(mem.calls.length, 0, "no memory request at all");
+  } finally {
+    rmSync(t.dir, { recursive: true, force: true });
+    rmSync(t2.dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation-turn: a memory failure still exits 0 and is reported on stderr", async () => {
+  const mem = stubMemoryCore();
+  mem.fetchImpl = async () => { throw new TypeError("fetch failed"); };
+  const t = transcriptFixture([userEntry("prompt"), assistantEntry("reply")]);
+  try {
+    const res = await runMemoryHook(["conversation-turn"], { env: env(), stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW });
+    assert.equal(res.exitCode, 0);
+    assert.ok(res.stderr.join(" ").includes("continuing without memory"));
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("conversation-turn: main identity can be overridden without touching subagent mapping", async () => {
+  const mem = stubMemoryCore();
+  const t = transcriptFixture([userEntry("prompt"), assistantEntry("reply")]);
+  try {
+    await runMemoryHook(["conversation-turn"], {
+      env: env({ AGENT_PROFILE_MAIN_AGENT: "claude-main-custom", AGENT_PROFILE_TEAM: "team-z", AGENT_PROFILE_USER: "usr-z" }),
+      stdin: parentPayload(t.file), fetchImpl: mem.fetchImpl, now: NOW,
+    });
+    const add = mem.calls.find((c) => c.url.endsWith("/v3/conversation/add"));
+    assert.equal(add.body.agent_id, "claude-main-custom");
+    assert.equal(add.body.team_id, "team-z");
+    assert.equal(add.body.user_id, "usr-z");
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
 });

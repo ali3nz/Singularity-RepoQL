@@ -7,9 +7,9 @@ existing Singularity loop, and RepoQL code intelligence over MCP. This page
 documents the Claude Code integration; the memory-stack bring-up itself is in
 [`MEMORY-SETUP.md`](MEMORY-SETUP.md).
 
-Windows 11 note: everything below runs in WSL2 (the Linux `claude`, and — when
-RepoQL is connected — the Linux `rql` binary). Paths and commands are WSL2
-paths; there is no Windows-native build.
+**Scope:** the installation instructions below apply only to the legacy Linux/WSL workflow. They are **not** the Windows-native Option 2 installer. For the native Windows Claude Desktop Code tab, use [`WINDOWS-NATIVE-M27-CLAUDE-CONFIGURATION.md`](WINDOWS-NATIVE-M27-CLAUDE-CONFIGURATION.md) and its `native/windows/configure_claude_code_windows.mjs` plan/apply/verify flow. The native Complete variant additionally requires `--office-config` with an existing protected JSON file containing `endpoint` and `ingestKey`. The source ZIP is not a native service installer: Office and Ghost remain separate, unverified runtimes.
+
+Legacy Windows users following this page run Linux Claude Code and RepoQL in WSL2; those commands must not be used to install the native Windows Complete package.
 
 ## What gets installed
 

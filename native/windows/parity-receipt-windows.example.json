@@ -1,0 +1,136 @@
+{
+  "schema": "singularity-runtime-parity/v1",
+  "product": "Singularity RepoQL",
+  "runtime": "native-windows-no-wsl",
+  "variant": 1,
+  "repoql_version": "1.7.18",
+  "connector_abi": 1,
+  "checks": {
+    "clean_install": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "upgrade_rollback": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "service_restart": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "gui_native_session": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "automatic_capture": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "new_session_recall": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "agent_identity_isolation": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "memory_extraction": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "documentation_assessment": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "documentation_update": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "verified_doc_ingestion": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "knowledge_candidate_evaluation": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "gated_knowledge_promotion": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "conflict_correction": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "two_provider_failover": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "repoql_cli_connector_compatibility": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "repoql_mcp_query": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "repoql_index_and_retrieve": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "tencent_connector_abi1": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "agent_chat_durable_delivery": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "kanban_create_update_readback": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "dashboard_embedded_login": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "live_memory_graph_refresh": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "windows_cpu_attribution": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    },
+    "gui_subscription_usage_source": {
+      "result": "NOT_RUN",
+      "evidence_id": null,
+      "observed_at": null
+    }
+  },
+  "note": "TEMPLATE ONLY \u2014 do not treat any unexecuted check as PASS."
+}
