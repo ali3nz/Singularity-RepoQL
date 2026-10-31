@@ -23,7 +23,8 @@ param(
   [string]$OfficeSource='',
   [string]$OfficeWheelhouse='',
   [switch]$OfficeAllowNetwork,
-  [switch]$InstallProduct
+  [switch]$InstallProduct,
+  [switch]$ProvisionConnectors
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -218,6 +219,45 @@ if ($problems.Count -eq 0) {
   $installResult=$null
 }
 
+$connectorProvisioning=$null
+if ($ProvisionConnectors) {
+  $connectorProvisioning=[ordered]@{requested=$true;invoked=$false;action='build';state='planned';exitCode=$null;result=$null;error='';installCommand=''}
+  if ($repoql.state -eq 'missing') {
+    $connectorProvisioning.state='blocked'
+    $connectorProvisioning.error='REPOQL_MISSING'
+  }
+  elseif ($py312.state -eq 'missing') {
+    $connectorProvisioning.state='blocked'
+    $connectorProvisioning.error='PYTHON_312_REQUIRED'
+  }
+  else {
+    $manager=Join-Path $scriptDir 'manage_native_windows.ps1'
+    if (-not (Test-Path -LiteralPath $manager -PathType Leaf)) {
+      $connectorProvisioning.state='blocked'
+      $connectorProvisioning.error='NATIVE_CONNECTOR_MANAGER_MISSING'
+    }
+    else {
+      $connectorProvisioning.installCommand='powershell -NoProfile -ExecutionPolicy Bypass -File "' + $manager + '" -ConnectorAction install -Apply -RepoqlExe "' + [string]$repoql.path + '" -PythonExe "' + [string]$py312.path + '"'
+      if ($Apply) {
+        $argv=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$manager,'-ConnectorAction','build','-RepoqlExe',[string]$repoql.path,'-PythonExe',[string]$py312.path,'-Apply')
+        $raw=& powershell @argv 2>&1
+        $connectorExit=$LASTEXITCODE
+        $connectorProvisioning.invoked=$true
+        $connectorProvisioning.action='build'
+        $connectorProvisioning.exitCode=$connectorExit
+        $text=($raw -join "`n").Trim()
+        try {
+          $connectorProvisioning.result=$text | ConvertFrom-Json -ErrorAction Stop
+          $connectorProvisioning.state=if ($connectorExit -eq 0) {'reported'} else {'failed'}
+        } catch {
+          $connectorProvisioning.state='failed'
+          $connectorProvisioning.error='CONNECTOR_PROVISION_INVALID'
+        }
+      }
+    }
+  }
+}
+
 [ordered]@{
   schema='singularity-runtime-bootstrap/v1'
   mode=$(if ($Apply) {'apply'} else {'plan'})
@@ -232,5 +272,6 @@ if ($problems.Count -eq 0) {
   installCommand=$installCommand
   installInvoked=[bool]($Apply -and $InstallProduct -and $problems.Count -eq 0)
   installResult=$installResult
+  connectorProvisioning=$connectorProvisioning
   releaseReady=$false
 } | ConvertTo-Json -Depth 8

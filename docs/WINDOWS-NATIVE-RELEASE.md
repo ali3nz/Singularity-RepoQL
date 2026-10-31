@@ -46,11 +46,13 @@ still unfinished**. Enabling a route in JavaScript alone is not a security gate.
    references, native dashboard iframe login and cookie restrictions. Verify
    licence, version and the connector runtime ABI. Never include a third-party
    RepoQL executable in public packages without permission.
-6. **Tencent connector:** pack/install/test `connectors/memorycore` with the
-   actual installed rql version. Verify read-only roots, redaction, L1/L2/L3
-   freshness, identity isolation, no raw conversation import, and removal.
+6. **Tencent connector:** the product setup builds and fixture-tests the pinned
+   `connectors/memorycore` 1.7.18 package; installation requires local consent
+   and a chosen data folder. Do not grant a folder silently. Verify read-only
+   roots, redaction, L1/L2/L3 freshness, identity isolation, no raw conversation
+   import, and removal against the actual installed rql version.
 7. **Kanban / Agent Chat:** run local Kanzo board, install/test Kanzo RepoQL
-   connector, observe real card changes and comments, session inbox cursor
+   connector with the local consent page, observe real card changes and comments, session inbox cursor
    integrity, cross-session isolation, concurrent authors, restart durability
    and the difference between board state and verified task completion.
 8. **Dashboard:** confirm variant-specific nav and disabled backend endpoints,
@@ -76,8 +78,12 @@ still unfinished**. Enabling a route in JavaScript alone is not a security gate.
   for the Python host temporarily. It is **not** a Rust Windows supervisor.
 - The native dashboard's `/proc` CPU collector does not yet have a Windows
   Rust process telemetry implementation and intentionally reports unsupported.
-- **RepoQL compatibility now pinned:** only `rql.exe 1.7.18` with `abi: 1` is
-  allowed for both Kanzo and Tencent connectors. `native/windows/repoql_compat.py`
+- **RepoQL compatibility now pinned:** only `rql.exe 1.7.18` with connector ABI
+  1 is allowed for both Kanzo and Tencent connectors. The product setup now
+  builds both 1.0.0 packages and pins their exact bytes in
+  `connectors/packages.lock.json`; the source and package fixture suites pass.
+  This still does not prove a live install, index or readback on Windows.
+  `native/windows/repoql_compat.py`
   and Rust `singularity-desktop-bridge repoql-preflight --rql <absolute-rql.exe>`
   fail closed for 1.7.17, missing executables, failed probes and ABI drift.
   Release packaging records the pin and prohibits bundling third-party RepoQL.

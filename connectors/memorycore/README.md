@@ -37,13 +37,13 @@ That list is the only guard: a shape it does not name is written as it stands. A
 
 ## Where it reads from
 
-One folder of this machine, the store's data folder, chosen at install as the source root `data`:
+One folder of this machine, the store's data folder, chosen on RepoQL's local install review page:
 
 ```
-rql connector install Tencent.MemoryCore.<version>.nupkg --source-root data=~/tencent-memory/data
+rql connector install Tencent.MemoryCore.<version>.nupkg
 ```
 
-The manifest suggests `~/tencent-memory/data`; keep it or write your own. The connector may read any file under that folder, and the folder is never written to by anything but the store's service.
+The page asks for the source root `data`; choose the folder the store's own service writes. The manifest suggests `~/tencent-memory/data`; keep it or choose your own. Do not pre-grant a folder. The connector may read any file under that folder, and the folder is never written to by anything but the store's service.
 
 ## What it needs
 
@@ -57,10 +57,10 @@ The default is `embedding: full`: each file's text is sent to the embedding serv
 
 ```
 rql connector test connectors/memorycore/connector.ts --fixtures connectors/memorycore/suite.json  # offline fixture generations
-rql connector pack connector.ts --id Tencent.MemoryCore --version 1.0.0 --authors <you>
-rql connector install Tencent.MemoryCore.1.0.0.nupkg --source-root data=<the data folder>
+# The product setup builds and pins the 1.0.0 package; do not commit .nupkg bytes.
+rql connector install Tencent.MemoryCore.1.0.0.nupkg
 rql import memorycore://data
 rql connector status
 ```
 
-Then read `memorycore://data/overview.md` for what the copy holds, and `memorycore://data/records/<day>/<id>.md` for one memory. The suite's fixtures are shaped after the store's real files as of 2026-10-27, with invented content.
+The install command opens RepoQL's local review page for the `data` source root; choose the store's folder there. Then read `memorycore://data/overview.md` for what the copy holds, and `memorycore://data/records/<day>/<id>.md` for one memory. The suite's fixtures are shaped after the store's real files as of 2026-10-27, with invented content.

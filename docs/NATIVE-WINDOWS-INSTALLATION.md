@@ -1,3 +1,8 @@
+---
+description: Supported per-user native Windows installation, lifecycle, and source-only recovery procedure for the Singularity stack.
+tags: [windows, native-installation, lifecycle, source-refresh, rollback]
+---
+
 # Native Windows installation (Claude Code + Ghost + Office + RepoQL)
 
 This is the single supported install path for the native Windows build. It
@@ -40,8 +45,9 @@ unpinned Python.
 # Review what would happen (default; writes nothing)
 powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_runtime.ps1
 
-# Resolve or install runtimes, then run the full supervisor install
-powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_runtime.ps1 -Apply
+# Resolve or install runtimes, then run the full supervisor install and
+# build the two pinned connector packages
+powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_runtime.ps1 -Apply -InstallProduct -ProvisionConnectors
 ```
 
 `bootstrap_runtime.ps1`:
@@ -52,7 +58,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_r
    `runtime-pins.json`, verifying SHA256 (or the official signature where a
    hash is not published);
 3. calls `manage_native_windows.ps1 -Mode Install -Apply` with the resolved
-   paths, so the user runs one command rather than filling every parameter.
+   paths, so the user runs one command rather than filling every parameter;
+4. with `-ProvisionConnectors`, builds both bundled RepoQL connector packages
+   with 1.7.18, verifies their pinned bytes, and reports each connector as
+   installed or missing. It does not install a connector or grant a host or
+   folder; the output's `connectorProvisioning.installCommand` is the exact
+   local consent command.
 
 Use `-SourceRoot <path>` only when installing from a copied staging directory.
 Use `-Python312Exe` / `-Python313Exe` to point at existing interpreters.
@@ -75,6 +86,109 @@ powershell -NoProfile -ExecutionPolicy Bypass -File $m -Mode Uninstall -Apply
 Registering the tasks needs a logon token for the current user. If the machine
 is sitting at the sign-in screen, log in and rerun `-Mode Install -Apply`; the
 tasks are logon-triggered, not boot services.
+
+## Source-only refresh and rollback
+
+`RefreshSource` replaces only `current\source` and the two source-manifest SHA256 pins. It keeps both staged binaries, every other receipt field, task configuration, and external state unchanged. The manager does not stop or start tasks. It refuses to proceed while a known source consumer is running or its state cannot be verified.
+
+The first successful refresh stores the old source and exact receipt bytes in `source-refresh-snapshot`. That snapshot enables one rollback and blocks another refresh until rollback succeeds. Do not remove or rename the snapshot by hand.
+
+**Limit:** Static source identifies the supervisor, dashboard, and Ghost scheduler as consumers of `current\source`. Runtime consumer mapping has not been confirmed on Windows, so this procedure is not deployment authorization. Complete an independent review and native Windows validation before deployment.
+
+### Prerequisites
+
+- Use a prepared source export with `NATIVE_WINDOWS_SOURCE_MANIFEST.json`; the manager checks the profile, complete file inventory, file sizes, and SHA256 hashes.
+- The install receipt must say `installed_not_started`. The current stage must pass its source, binary, and receipt checks.
+- Stop the supervisor, dashboard, and Ghost consumers before applying the refresh. The manager verifies task ownership and state and scans process metadata. It does not stop them for you.
+- Resolve any existing candidate, snapshot, reparse path, receipt mismatch, or unmanifested file before proceeding. The manager refuses unmanifested files, including `.pyc`; it never removes them.
+
+### Refresh
+
+First review the read-only plan:
+
+```powershell
+$m = '.\native\windows\manage_native_windows.ps1'
+$source = 'C:\path\to\prepared-source-export'
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -Mode RefreshSource -SourceRoot $source
+```
+
+Proceed only if the output reports `source_refresh_planned`, the expected option and source count, `willModify: false`, and `binariesTouched: false`. Then apply the refresh:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -Mode RefreshSource -SourceRoot $source -Apply
+```
+
+Verify that the result reports `source_refreshed`, `binariesPreserved: true`, `taskConfigurationPreserved: true`, and `rollbackAvailable: true`. The manager verifies the installed source and receipts before returning.
+
+### Rollback
+
+Review the rollback plan, then apply it only if the output names the expected source file count and `willModify: false`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -Mode RollbackSource
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -Mode RollbackSource -Apply
+```
+
+Verify that the result reports `source_rolled_back`, `binariesPreserved: true`, `taskConfigurationPreserved: true`, `userStatePreserved: true`, and `rollbackAvailable: false`. A successful rollback restores the exact source and receipt preimages, then removes only the verified refresh snapshot contents.
+
+### Failure handling
+
+- If a precondition fails, do not bypass it. Restore the expected stopped state or resolve the reported ownership, drift, or inventory mismatch first.
+- `NATIVE_SOURCE_REFRESH_FAILED_RECOVERED` and `NATIVE_SOURCE_ROLLBACK_FAILED_RECOVERED` mean the manager restored the prior active source and exact receipt bytes after a failed operation. The retained snapshot blocks another attempt; inspect it and resolve the failure before asking an operator to retry.
+- `NATIVE_SOURCE_REFRESH_RECOVERY_INCOMPLETE` or `NATIVE_SOURCE_ROLLBACK_RECOVERY_INCOMPLETE` means readback could not prove full recovery. Do not rerun refresh or delete anything. Preserve the install and snapshot for operator review.
+- If rollback fails while cleaning its verified snapshot, the old source and receipts may already be active even though cleanup did not finish. Preserve the remaining snapshot and ask an operator to inspect it before retrying.
+- Never delete an unmanifested file or a pending transaction artifact to make a check pass. The manager does not rebuild binaries, register tasks, change task arguments, or deploy the refreshed source.
+
+## RepoQL connectors
+
+The product ships the `kanzo` and `memorycore` connector source and a pinned
+1.7.18 package recipe, not committed `.nupkg` bytes. A fresh source install can
+build and verify both packages through the same bootstrap path:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_runtime.ps1 -Apply -InstallProduct -ProvisionConnectors
+```
+
+The packages are written under
+`%LOCALAPPDATA%\Singularity\connectors\packages`; the build receipt and the
+scratch RepoQL workspace stay beside them. If both pinned release packages are
+already there, setup verifies their exact hashes and contents against
+`connectors\packages.lock.json` and reuses them. Otherwise it runs the real
+`rql connector test` and `rql connector pack` commands, tests the compiled
+package as well as the TypeScript source, and fails closed on any mismatch.
+
+A source build needs a healthy RepoQL host. On a machine with many configured
+MCP bridge servers, RepoQL can spend several minutes starting them before the
+host is ready for `connector pack`; the pinned release-artifact path avoids that
+host startup work.
+
+Connector installation is deliberately separate, because it needs the operator.
+Run it with the operator present:
+
+```powershell
+$m = '.\native\windows\manage_native_windows.ps1'
+# read-only discovery
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction status `
+  -RepoqlExe "$env:LOCALAPPDATA\rql\rql.exe" `
+  -PythonExe "$env:LOCALAPPDATA\Singularity\runtime\python312\python.exe"
+
+# build/verify packages only (no connector installation)
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction build -Apply `
+  -RepoqlExe "$env:LOCALAPPDATA\rql\rql.exe" `
+  -PythonExe "$env:LOCALAPPDATA\Singularity\runtime\python312\python.exe"
+
+# approve each local install page, one connector at a time
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction install -Apply `
+  -RepoqlExe "$env:LOCALAPPDATA\rql\rql.exe" `
+  -PythonExe "$env:LOCALAPPDATA\Singularity\runtime\python312\python.exe"
+```
+
+The install action passes no envelope flags. RepoQL opens its local review page:
+approve the Kanzo loopback host `http://localhost:4242` and the 6 requests/minute
+rate, and choose the Tencent MemoryCore data folder. If the page is closed,
+declined, or times out, the result says `waiting_for_consent` or `declined`
+instead of claiming success. Run `-ConnectorAction status` afterwards. The
+dashboard stays read-only and never installs a connector from a click.
 
 ### Dashboard desktop shortcut
 
@@ -136,8 +250,9 @@ Get-ScheduledTask | Where-Object TaskName -like 'Singularity*'
 ```
 
 Expected: both health responses are `{"status":"ok"}`; the supervisor and Office
-tasks are `Running`; the source suite is `283 passed, 11 skipped` with zero
-failures and zero errors.
+tasks are `Running`; the source suite finishes with zero failures and zero
+errors. Do not treat a healthy listener or a built connector package as proof of
+a live connector index or readback; that remains an operator-consented step.
 
 ## Ghost scheduler (A4)
 

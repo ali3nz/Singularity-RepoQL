@@ -148,7 +148,11 @@ test("connector manifests grant exactly what the README claims", () => {
   for (const value of defaultRoot) assert.doesNotMatch(value, /^\/home\//, `absolute host path leaked: ${value}`);
 
   const readme = read("connectors/README.md");
-  assert.match(readme, /--allow-local-host http:\/\/localhost:4242/, "README states the loopback grant");
+  assert.match(readme, /http:\/\/localhost:4242/, "README states the loopback grant");
+  assert.match(readme, /local install review page/i, "README states the consent step");
+  const installLines = readme.split("\n").filter((line) => line.includes("rql connector install"));
+  assert.ok(installLines.length >= 2, "README shows both package install commands");
+  assert.ok(installLines.every((line) => !line.includes("--allow-local-host")), "README does not pre-grant the loopback host");
   assert.match(readme, /AGPL-3\.0-only/, "Kanzo licence is recorded");
 });
 
@@ -162,6 +166,19 @@ test("connector source hashes match the committed files", () => {
       assert.match(expected, /^[0-9a-f]{64}$/);
       assert.equal(sha(join(dir, rel)), expected, `${pkg}/${rel} drifted`);
     }
+  }
+});
+
+test("the connector package lock pins both packages and no package bytes are committed", () => {
+  const lock = JSON.parse(read("connectors/packages.lock.json"));
+  assert.equal(lock.schema, "singularity-connector-packages/v1");
+  assert.equal(lock.repoqlVersion, "1.7.18");
+  assert.equal(lock.connectorAbi, 1);
+  assert.deepEqual(lock.packages.map((p) => p.scheme).sort(), ["kanzo", "memorycore"]);
+  for (const pkg of lock.packages) {
+    assert.match(pkg.sha256, /^[0-9a-f]{64}$/);
+    assert.ok(Number.isInteger(pkg.bytes) && pkg.bytes > 0, `${pkg.scheme}: bytes`);
+    assert.ok(!existsSync(join(ROOT, "connectors", pkg.package)), `${pkg.package} must not be committed`);
   }
 });
 

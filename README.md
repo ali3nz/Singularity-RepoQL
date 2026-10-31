@@ -23,12 +23,12 @@ You need a **Windows PC**, an internet connection, and **Claude Code installed a
 
 1. Open Claude Code on the PC where you want to install Singularity.
 2. Copy the whole prompt below into its chat.
-3. Let your agent do the setup. Approve permission requests you understand, and sign in if it asks you to connect an account.
+3. Let your agent do the setup. Approve permission requests you understand, and sign in if it asks you to connect an account. When the connector review pages open, approve the Kanzo loopback host and choose your MemoryCore data folder; do not grant any other host or folder.
 
 ```text
 Install Singularity RepoQL from https://github.com/ali3nz/Singularity-RepoQL on this Windows PC.
 
-Read DETAILS-FOR-NERDS.md and docs/NATIVE-WINDOWS-INSTALLATION.md, then follow the supported native installation. Check my computer, install all missing dependencies from the documented official sources, and build anything required. Do the setup work for me.
+Read DETAILS-FOR-NERDS.md and docs/NATIVE-WINDOWS-INSTALLATION.md, then follow the supported native installation. Check my computer, install all missing dependencies from the documented official sources, and build anything required. Build and install the two bundled RepoQL connectors, Kanzo and MemoryCore, through the product's supported setup. Do the setup work for me.
 
 Connect all included tools to Claude Code in my chosen project: code search, memory, task tracking, Ghost scheduling, the dashboard, and Claude Office. Configure startup when I sign in. Preserve my existing files, settings, and other apps. Keep passwords and API keys private; ask before adding paid services or making system-wide changes.
 

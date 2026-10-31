@@ -35,7 +35,7 @@ Dependencies include Windows x64, RepoQL **1.7.18**, Python with timezone data, 
 
 ## Components
 
-- **RepoQL** indexes code and approved knowledge. The bundled MemoryCore and Kanzo connectors use the RepoQL 1.7.18 `parse` / `fetch` / `render` contract. Earlier experimental `abi: 1` manifests are incompatible with this supported runtime.
+- **RepoQL** indexes code and approved knowledge. The bundled MemoryCore and Kanzo connectors use the RepoQL 1.7.18 `parse` / `fetch` / `render` contract. A fresh source install builds and pins both 1.0.0 packages; installing them still requires the operator's local consent page. Earlier experimental `abi: 1` manifests are incompatible with this supported runtime.
 - **Tencent MemoryCore** stores scoped conversations and extracted memories. The connector reads L1 record shards and L2/L3 profile files without modifying the source store. Capture, extraction, and recall require their runtime and identity configuration; a healthy listener alone verifies none of them.
 - **Ghost** keeps planning drafts separate from registered Windows schedules. Activation rereads the exact draft revision, persists the prompt revision, registers a real task, and verifies its action, principal, trigger, and enabled state before displaying it as active. Updates and cancellation also require independent readback. Execution receipts survive host restart.
 - **Dashboard** provides authenticated schedule editing and native integration panels. A per-user capability binds local scheduler requests to the configured Windows owner. Cloudflare identity alone does not authorize that owner's tasks.

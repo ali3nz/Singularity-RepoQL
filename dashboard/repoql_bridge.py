@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -155,6 +156,8 @@ class RepoQL:
 
     def run(self, args: Iterable[str], timeout: float = 120.0) -> subprocess.CompletedProcess:
         cmd = [str(self.config.rql), *args]
+        if os.name == "nt":
+            return self._run_windows(cmd, timeout)
         return subprocess.run(
             cmd,
             cwd=str(self.config.workspace),
@@ -163,6 +166,36 @@ class RepoQL:
             timeout=timeout,
             check=False,
         )
+
+    def _run_windows(self, cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
+        # A RepoQL host/MCP descendant can retain the CLI's output handles.
+        # Windows subprocess.run waits for those pipe readers without a timeout
+        # after killing the CLI. Files let us wait for just our own client;
+        # never kill a shared RepoQL host to release inherited output handles.
+        with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+            proc = subprocess.Popen(
+                cmd, cwd=str(self.config.workspace), stdin=subprocess.DEVNULL,
+                stdout=stdout, stderr=stderr,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+                raise
+
+            def snapshot(handle) -> str:
+                handle.seek(0, 2)
+                size = handle.tell()
+                handle.seek(0)
+                return handle.read(size).decode("utf-8", "replace")
+
+            return subprocess.CompletedProcess(cmd, proc.returncode,
+                                               snapshot(stdout), snapshot(stderr))
 
     def query(self, sql: str, timeout: float = 120.0) -> list[dict]:
         """Run SQL against the indexed graph and return rows."""

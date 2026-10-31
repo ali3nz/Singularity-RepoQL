@@ -5,7 +5,7 @@ repository. `SOURCE-SHA256` in each connector directory lists the sha256 of ever
 file **as committed here**; it is generated from the files themselves and
 re-checked by `tests/runtime-parity.test.mjs`, so it cannot drift silently.
 
-**Windows release target:** RepoQL 1.7.18, connector ABI 1, pending real connector build/load verification. The 1.7.15 entry below is historical provenance for the production package, not the Windows release pin.
+**Windows release target:** RepoQL 1.7.18, connector ABI 1. The product setup builds both `1.0.0` packages with that CLI and pins their exact bytes in [`packages.lock.json`](packages.lock.json); the source and package fixture suites pass. A live install, index and readback still requires operator consent and is not claimed here. The 1.7.15 entry below is historical provenance for the production package, not the Windows release pin.
 
 ## Kanzo (`kanzo/`)
 

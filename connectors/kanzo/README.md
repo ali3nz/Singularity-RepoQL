@@ -73,15 +73,17 @@ before records are committed; a failed detail read does not complete the pass or
 
 No secret, no source root, no inference: the connector never reads a credential and never asks a model.
 
-## Windows release toolchain target (2026-10-29)
+## Windows release toolchain target (2026-10-31)
 
 The native Windows target is **RepoQL 1.7.18**, using the `parse`, `fetch` and `render` connector calls declared in `manifest.yaml`.
-1.7.17 was incompatible with these connector sources. The user reports the regression
-was fixed in 1.7.18; that claim still requires a live `rql.exe connector test`,
-`connector pack`, `connector install`, index and readback on Windows before release.
+1.7.17 was incompatible with these connector sources. The supported product setup
+builds and pins this connector's 1.7.18 package; the fixture suite passes against
+the built package. A live install, index and readback on the operator's machine
+still requires the local consent page; the product reports
+`waiting_for_consent` rather than installing silently.
 Do not silently upgrade the production Docker host; its earlier build used 1.7.15.
 
-Run only after verifying the native installed executable prints exactly 1.7.18:
+The package is built by the product setup. For a manual author check, run only after verifying the native installed executable prints exactly 1.7.18:
 
 ```powershell
 & $env:SINGULARITY_RQL_EXE --version

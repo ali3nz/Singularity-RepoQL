@@ -3,7 +3,11 @@
 These checks inspect the installer path without registering or starting tasks.
 Live Task Scheduler acceptance is a separate receipt.
 """
+import base64
+import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,8 +16,10 @@ import unittest
 
 HERE = Path(__file__).resolve().parent
 POWERSHELL = shutil.which("powershell.exe")
+SOURCE_POWERSHELL = shutil.which("pwsh") or POWERSHELL
 BEHAVIOUR = HERE / "test_native_install_lifecycle_behaviour.ps1"
 MANAGER = (HERE / "manage_native_windows.ps1").read_text(encoding="utf-8")
+STAGE = (HERE / "stage-native.ps1").read_text(encoding="utf-8")
 GHOST = (HERE / "manage_ghost_scheduler.ps1").read_text(encoding="utf-8")
 DASHBOARD = (HERE / "manage_claude_complete_dashboard.ps1").read_text(encoding="utf-8")
 GHOST_TASK_ADAPTER = (HERE / "ghost_task_scheduler.ps1").read_text(encoding="utf-8")
@@ -44,11 +50,54 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
         self.assertIn("--variant '+$Variant", DASHBOARD)
 
     def test_install_registers_without_start_and_lifecycle_requires_apply(self):
-        self.assertIn("$mutating=$Mode -in @('Install','Start','Stop','Uninstall','Reinstall')", MANAGER)
-        self.assertIn("if (($mutating -or ($MemoryAction -and -not $memoryReadOnly)) -and -not $Apply) { throw 'NATIVE_LIFECYCLE_EXPLICIT_APPLY_REQUIRED' }", MANAGER)
+        self.assertIn("$mutating=$Mode -in @('Install','Start','Stop','Uninstall','Reinstall','RefreshSource','RollbackSource')", MANAGER)
+        self.assertIn("$sourceRefreshMode=$Mode -in @('RefreshSource','RollbackSource')", MANAGER)
+        self.assertIn("$connectorMutating=$ConnectorAction -in @('build','install')", MANAGER)
+        self.assertIn("if (($mutating -or ($MemoryAction -and -not $memoryReadOnly) -or $connectorMutating) -and -not $Apply -and -not $sourceRefreshMode)", MANAGER)
+        self.assertIn("if (-not $mutating -and -not $MemoryAction -and -not $ConnectorAction -and $Apply) { throw 'NATIVE_LIFECYCLE_READ_ONLY_REFUSES_APPLY' }", MANAGER)
         register = section(MANAGER, "function Register-Components", "function Get-SupervisorTask")
         self.assertNotIn("Start-ScheduledTask", register)
         self.assertIn("servicesStarted=$false", MANAGER)
+
+    def test_source_refresh_modes_are_source_only_and_fail_closed(self):
+        refresh = section(MANAGER, "function Invoke-SourceRefreshTransaction", "function Remove-VerifiedSourceTree")
+        rollback = section(MANAGER, "function Invoke-SourceRollbackTransaction", "function Remove-VerifiedStage")
+        consumers = section(MANAGER, "function Assert-SourceConsumersStopped", "function Read-SourceRefreshSnapshot")
+        snapshot = section(MANAGER, "function Read-SourceRefreshSnapshot", "function Invoke-SourceRefreshTransaction")
+        self.assertIn("'RefreshSource','RollbackSource'", MANAGER)
+        self.assertIn("PrepareSource=$true", MANAGER)
+        self.assertIn("Get-SourceTree $SourceRoot $selected", MANAGER)
+        self.assertIn("NATIVE_SOURCE_CANDIDATE_DRIFT_REFUSED", MANAGER)
+        self.assertIn("NATIVE_SOURCE_SNAPSHOT_EXISTS", MANAGER)
+        self.assertIn("Assert-ExactFileInventory", MANAGER)
+        self.assertIn("NATIVE_SOURCE_UNOWNED_FILE_REFUSED", MANAGER)
+        self.assertIn("Assert-SourceConsumersStopped", refresh)
+        self.assertIn("Assert-SourceConsumersStopped", rollback)
+        self.assertIn("Get-CimInstance -ClassName Win32_Process -ErrorAction Stop", consumers)
+        self.assertIn("NATIVE_SOURCE_CONSUMER_STATE_UNKNOWN", consumers)
+        self.assertIn("NATIVE_SOURCE_CONSUMER_RUNNING", consumers)
+        self.assertIn("$pathHit=($command -and $command.IndexOf($sourceNeedle", consumers)
+        self.assertIn("if (-not $command) { throw 'NATIVE_SOURCE_CONSUMER_STATE_UNKNOWN' }", consumers)
+        self.assertIn("Assert-ReceiptNonSourceFieldsEqual", refresh)
+        self.assertIn("Assert-ReceiptNonSourceFieldsEqual", snapshot)
+        self.assertIn("[IO.File]::Replace($temp,$Path,$backup)", MANAGER)
+        self.assertIn("STAGING_RECEIPT.preimage.json", MANAGER)
+        self.assertIn("INSTALLATION_RECEIPT.preimage.json", MANAGER)
+        self.assertIn("NATIVE_SOURCE_REFRESH_FAILED_RECOVERED", MANAGER)
+        self.assertIn("NATIVE_SOURCE_ROLLBACK_FAILED_RECOVERED", MANAGER)
+        for forbidden in ("Start-ScheduledTask", "Stop-ScheduledTask", "Register-ScheduledTask", "Unregister-ScheduledTask"):
+            self.assertNotIn(forbidden, refresh + rollback)
+        self.assertNotIn("Remove-Item -Recurse", refresh + rollback)
+
+    def test_source_only_staging_does_not_take_binary_inputs_or_change_the_current_stage(self):
+        prepare = section(STAGE, "if ($PrepareSource) {", "Assert-LocalExistingFile $BridgeExe")
+        self.assertIn("SOURCE_PREPARATION_BINARY_INPUTS_REFUSED", STAGE)
+        self.assertIn("SOURCE_PREPARATION_CANDIDATE_EXISTS", prepare)
+        self.assertIn("SOURCE_UNMANIFESTED_FILE_REFUSED", STAGE)
+        self.assertIn("Set-PrivateDirectoryAcl $sourceCandidate", prepare)
+        self.assertIn("binariesTouched=$false", prepare)
+        self.assertNotIn("$current", prepare)
+        self.assertNotIn("Move-Item", prepare)
 
     def test_uninstall_and_reinstall_remove_only_verified_owned_tasks(self):
         remove = section(MANAGER, "function Remove-Components", "function Emit-Result")
@@ -91,7 +140,7 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
 
     def test_stage_inventory_is_hash_exact_and_deletion_is_manifest_owned(self):
         read_stage = section(MANAGER, "function Read-Stage", "function Remove-VerifiedStage")
-        self.assertIn("Get-FileHash", read_stage)
+        self.assertIn("Get-FileSha256", read_stage)
         self.assertIn("Compare-Object", read_stage)
         self.assertIn("NATIVE_STAGE_UNOWNED_FILE_REFUSED", read_stage)
         remove_stage = section(MANAGER, "function Remove-VerifiedStage", "function Get-Task")
@@ -308,14 +357,89 @@ class OfficeRestageContracts(unittest.TestCase):
         self.assertNotIn("Restage", start)
 
 
-@unittest.skipUnless(POWERSHELL and BEHAVIOUR.is_file(), "Windows PowerShell lifecycle harness unavailable")
+@unittest.skipUnless(POWERSHELL, "Native Windows PowerShell unavailable")
+class NativeWhatIfHashTests(unittest.TestCase):
+    """Real -File invocation: hash validation must not inherit WhatIf suppression."""
+
+    def test_prepare_source_file_whatif_validates_without_writing(self):
+        with tempfile.TemporaryDirectory(prefix="singularity-whatif-") as folder:
+            root = Path(folder)
+            local = root / "LocalAppData"
+            install = local / "Singularity" / "WindowsNative"
+            install.mkdir(parents=True)
+            marker = install / "untouched.bin"
+            marker.write_bytes(b"existing installation sentinel")
+            source = root / "source"
+            source.mkdir()
+            rows = []
+            for i in range(200):
+                name = f"fixture-{i:03}.txt"
+                data = f"source {i}\n".encode()
+                (source / name).write_bytes(data)
+                rows.append(dict(path=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
+            manifest = dict(schema=1, variant=2, release_status="SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER",
+                            repoql=dict(requiredVersion="1.7.18", connectorContract="fetch-render"),
+                            features=dict(office=True, ghost=True), rustOfficeFeature=True,
+                            rustGhostFeature=True, gui="claude-desktop-code", files=rows)
+            (source / "NATIVE_WINDOWS_SOURCE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+            before = {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+            args = [POWERSHELL, "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+                    str(HERE / "stage-native.ps1"), "-PrepareSource", "-Option", "2",
+                    "-SourceRoot", str(source), "-InstallRoot", str(install), "-Apply", "-WhatIf"]
+            env = dict(os.environ, LOCALAPPDATA=str(local))
+            result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("SOURCE_REFRESH_CANDIDATE_PREVIEW", result.stdout)
+            self.assertIn("What if:", result.stdout)
+            self.assertFalse((install / ".source-refresh-candidate").exists())
+            self.assertEqual(before, {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()})
+            # Dry runs must still reject changed bytes, not merely skip validation.
+            (source / rows[0]["path"]).write_bytes(b"changed!\n")
+            result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("SOURCE_HASH_MISMATCH", result.stderr)
+            self.assertFalse((install / ".source-refresh-candidate").exists())
+            self.assertEqual(marker.read_bytes(), b"existing installation sentinel")
+
+    def test_both_read_only_hash_helpers_work_under_global_whatif(self):
+        with tempfile.TemporaryDirectory(prefix="singularity-hash-") as folder:
+            root = Path(folder)
+            probe = root / "probe.bin"
+            probe.write_bytes(b"read-only hash regression\x00\xff")
+            expected = hashlib.sha256(probe.read_bytes()).hexdigest()
+            def quote(value):
+                return "'" + str(value).replace("'", "''") + "'"
+            for name in ("stage-native.ps1", "manage_native_windows.ps1"):
+                script = r"""$ErrorActionPreference='Stop';$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile(__SCRIPT__,[ref]$tokens,[ref]$errors)
+if($errors.Count){throw 'PARSE_ERROR'}
+$defs=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Get-FileSha256'},$true))
+if($defs.Count -ne 1){throw 'HASH_HELPER_NOT_UNIQUE'}
+. ([scriptblock]::Create($defs[0].Extent.Text))
+$WhatIfPreference=$true
+$actual=Get-FileSha256 __PROBE__
+if($actual -cne '__EXPECTED__'){throw 'HASH_MISMATCH'}
+$missingRefused=$false
+try{$null=Get-FileSha256 (__PROBE__+'.missing')}catch{$missingRefused=$true}
+if(-not $missingRefused){throw 'MISSING_FILE_NOT_REFUSED'}
+$stream=[IO.File]::Open(__PROBE__,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$stream.Dispose()
+'HASH_WHATIF_PASS'
+""".replace("__SCRIPT__", quote(HERE / name)).replace("__PROBE__", quote(probe)).replace("__EXPECTED__", expected)
+                result = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                                         base64.b64encode(script.encode("utf-16le")).decode()],
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, name + result.stdout + result.stderr)
+                self.assertIn("HASH_WHATIF_PASS", result.stdout)
+
+
+@unittest.skipUnless(SOURCE_POWERSHELL and BEHAVIOUR.is_file(), "PowerShell lifecycle harness unavailable")
 class NativeInstallLifecycleBehaviourTests(unittest.TestCase):
     """Execute the real manager functions with stubbed scheduler/child managers."""
 
     def run_scenario(self, scenario: str) -> dict:
         result = subprocess.run(
             [
-                POWERSHELL,
+                SOURCE_POWERSHELL,
                 "-NoLogo",
                 "-NoProfile",
                 "-NonInteractive",
@@ -372,6 +496,59 @@ class NativeInstallLifecycleBehaviourTests(unittest.TestCase):
         self.assertEqual(result["officeState"], "Ready")
         self.assertEqual(result["decoyState"], "Running")
         self.assertEqual(result["unrelatedState"], "Running")
+
+    def test_source_refresh_and_rollback_round_trip_exact_preimages(self):
+        result = self.run_scenario("SourceRefreshRoundTrip")
+        self.assertTrue(result["roundTrip"], result)
+        self.assertTrue(result["sourceRefreshSucceeded"], result)
+        self.assertGreaterEqual(result["consumerChecks"], 2, result)
+        self.assertFalse(result["releaseReady"], result)
+
+    def test_source_refresh_failures_restore_exact_source_and_receipts(self):
+        for scenario in ("SourceRefreshMoveFailure", "SourceRefreshStageReceiptFailure", "SourceRefreshReceiptFailure"):
+            with self.subTest(scenario=scenario):
+                result = self.run_scenario(scenario)
+                self.assertTrue(result["refreshRecovered"], result)
+                self.assertIn("NATIVE_SOURCE_REFRESH_FAILED_RECOVERED:", result["refreshError"])
+
+    def test_source_rollback_failures_restore_refreshed_source_and_receipts(self):
+        for scenario in ("SourceRollbackMoveFailure", "SourceRollbackStageReceiptFailure", "SourceRollbackReceiptFailure"):
+            with self.subTest(scenario=scenario):
+                result = self.run_scenario(scenario)
+                self.assertTrue(result["rollbackRecovered"], result)
+                self.assertIn("NATIVE_SOURCE_ROLLBACK_FAILED_RECOVERED:", result["rollbackError"])
+
+    def test_unmanifested_pyc_is_refused_and_never_deleted(self):
+        for scenario, expected in (
+            ("SourceCandidateUnownedPycacheRefused", "NATIVE_SOURCE_UNOWNED_FILE_REFUSED"),
+            ("SourceCurrentUnownedPycacheRefused", "NATIVE_STAGE_UNOWNED_FILE_REFUSED"),
+        ):
+            with self.subTest(scenario=scenario):
+                result = self.run_scenario(scenario)
+                self.assertTrue(result["unownedRefused"], result)
+                self.assertTrue(result["unownedFilePreserved"], result)
+                self.assertEqual(result["refusalError"], expected)
+
+    def test_source_refresh_refuses_binary_owner_and_receipt_pin_mismatch(self):
+        scenarios = (
+            ("SourceCurrentBinaryMismatchRefused", "binaryMismatchRefused"),
+            ("SourceInstallReceiptOwnerMismatchRefused", "ownerMismatchRefused"),
+            ("SourceReceiptPinMismatchRefused", "receiptPinMismatchRefused"),
+        )
+        for scenario, key in scenarios:
+            with self.subTest(scenario=scenario):
+                result = self.run_scenario(scenario)
+                self.assertTrue(result[key], result)
+
+    def test_source_consumer_process_and_unknown_state_block_refresh(self):
+        for scenario, key, error in (
+            ("SourceConsumerProcessRefused", "consumerProcessRefused", "NATIVE_SOURCE_CONSUMER_RUNNING"),
+            ("SourceConsumerProcessStateUnknown", "consumerProcessStateUnknown", "NATIVE_SOURCE_CONSUMER_STATE_UNKNOWN"),
+        ):
+            with self.subTest(scenario=scenario):
+                result = self.run_scenario(scenario)
+                self.assertTrue(result[key], result)
+                self.assertEqual(result["refusalError"], error)
 
 
 @unittest.skipUnless(POWERSHELL and OFFICE_BEHAVIOUR.is_file(), "Windows PowerShell Office Restage fixture unavailable")

@@ -30,46 +30,85 @@ The grant is part of the package, not a setting a reader has to discover.
 - **Rate:** `requestsPerMinute: 6`. A sweep is every 900 s and compares the whole
   board; a card's comments are fetched only when the card or the board's change
   counter moved.
-- **Install needs the loopback allowance made explicit:**
+- **Install needs the loopback allowance approved:**
 
   ```bash
-  rql connector install RepoQL.Connectors.Kanzo.1.0.0.nupkg \
-      --allow-local-host http://localhost:4242
+  rql connector install RepoQL.Connectors.Kanzo.1.0.0.nupkg
   ```
 
-  A connector that reaches localhost without that flag is refused by the host,
-  which is the behaviour we want: the grant is stated at install time.
+  With no envelope flags, RepoQL opens its local install review page. It states
+  the loopback host `http://localhost:4242` and the 6 requests/minute limit;
+  approve that page only when it is the board you mean. The host refuses a
+  connector that reaches loopback without this approval.
 
 ### MemoryCore
 
 - **Network:** none. It reads files under one configured source root.
-- **Source root:** `--source-root data=<folder>`. The manifest's default is a
-  suggestion (`~/tencent-memory/data`), not a requirement; the installer sets
-  the folder the store's own service writes.
+- **Source root:** chosen on RepoQL's local install review page. The manifest's
+  default is a suggestion (`~/tencent-memory/data`), not a requirement; choose
+  the folder the store's own service writes. Do not pre-grant a folder.
+
+  ```bash
+  rql connector install Tencent.MemoryCore.1.0.0.nupkg
+  ```
+
 - **Read-only:** it never writes to the source root and the store's service stays
   the folder's only writer. Raw conversations, vectors and checkpoints are
   deliberately left out; one file per L1 record, L2 scene block and L3 persona is
   copied, with the store's own ids and provenance.
 
-## Building
+## Building and installing
 
-Windows release target: build both connectors with RepoQL CLI **1.7.18** (connector ABI 1). The user reports that 1.7.18 fixes the 1.7.17 compatibility regression; this is **not yet verified against the actual Windows CLI**. Production may remain on its previously proven 1.7.15. Do not reuse connector packages across CLI versions without a real install, indexing and readback test:
+The supported product setup builds both packages with the pinned RepoQL CLI
+**1.7.18** and verifies the exact package bytes against
+[`packages.lock.json`](packages.lock.json):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_runtime.ps1 -Apply -InstallProduct -ProvisionConnectors
+```
+
+That writes the packages under `%LOCALAPPDATA%\Singularity\connectors\packages`
+and reports each connector as installed or missing. If pinned release packages
+are already in that folder, the same command verifies their exact hashes and
+package contents against `packages.lock.json` and reuses them instead of running
+`connector pack`. It does not install a connector. To approve the two local
+install pages, with the operator present:
+
+```powershell
+$m = '.\native\windows\manage_native_windows.ps1'
+$repoqlExe = "$env:LOCALAPPDATA\rql\rql.exe"
+$pythonExe = "$env:LOCALAPPDATA\Singularity\runtime\python312\python.exe"
+
+# Read-only connector inventory
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction status `
+  -RepoqlExe $repoqlExe `
+  -PythonExe $pythonExe
+
+# Approve each local install page, one connector at a time
+powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction install -Apply `
+  -RepoqlExe $repoqlExe `
+  -PythonExe $pythonExe
+```
+
+The command opens RepoQL's local review page for each missing connector, one at
+a time. Kanzo shows its loopback host and rate; MemoryCore asks for the data
+folder. No `--allow-host`, `--allow-local-host`, `--rate` or `--source-root`
+flag is passed by the product. A closed page, a declined page or a timeout is
+reported as `waiting_for_consent` or `declined`; rerun the command after
+choosing. `-ConnectorAction status` is read-only and reports installed/missing.
+
+For a manual author check (no package is committed):
 
 ```bash
-cd connectors/kanzo
-rql connector types .                       # writes/refreshes repoql-connector.d.ts
-rql connector test connector.ts --fixtures <suite>   # offline, no host, no network
-rql connector pack connector.ts --id RepoQL.Connectors.Kanzo --version 1.0.0 --authors <you>
-
-cd ../memorycore
-rql connector test connector.ts --fixtures lifecycle.json
-rql connector pack connector.ts --id Tencent.MemoryCore --version 1.0.0 --authors <you>
+rql connector test connectors/kanzo/connector.ts --fixtures connectors/kanzo/suite.json
+rql connector test connectors/memorycore/connector.ts --fixtures connectors/memorycore/suite.json
 ```
 
 `.nupkg` output is deliberately **not** committed: a package is a build artifact
 whose bytes depend on the builder's CLI. `SOURCE-SHA256` next to each connector
 pins the source that produced the live `1.0.0` package, and
-`tests/runtime-parity.test.mjs` re-checks it.
+`tests/runtime-parity.test.mjs` re-checks it. `packages.lock.json` pins the
+1.7.18 package bytes built from that source.
 
 ## Fixtures
 

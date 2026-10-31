@@ -10,6 +10,8 @@ exist. A GUI executable may be supplied for a later optional integration, but
 is not required and staging never configures it. Does not alter Claude/OpenChamber
 settings, install services, read secrets, or start any service. -Rollback
 restores a single previous snapshot without touching external service data.
+-PrepareSource validates and stages only a manifest-owned source candidate for
+a manager-owned source refresh transaction. It does not change binaries.
 Neither operation implies any of the four profiles passed GUI acceptance.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
@@ -22,13 +24,15 @@ param(
   [string]$GuiExe = '',
   [string]$InstallRoot = '',
   [switch]$Apply,
-  [switch]$Rollback
+  [switch]$Rollback,
+  [switch]$PrepareSource
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'NATIVE_WINDOWS_REQUIRED: WSL or POSIX not supported' }
-if ($Apply -and $Rollback) { throw 'Choose either -Apply or -Rollback' }
+if (($Apply -and $Rollback) -or ($Rollback -and $PrepareSource)) { throw 'Choose one staging operation' }
 if (-not $Rollback -and $Option -notin @(1,2,3,4)) { throw 'OPTION_1_THROUGH_4_REQUIRED' }
+if ($PrepareSource -and ($BridgeExe -or $SupervisorExe -or $RepoqlExe -or $GuiExe)) { throw 'SOURCE_PREPARATION_BINARY_INPUTS_REFUSED' }
 if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { throw 'LOCALAPPDATA_REQUIRED' }
 $localRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Singularity'))
 if (-not $InstallRoot) { $InstallRoot = Join-Path $localRoot 'WindowsNative' }
@@ -37,6 +41,16 @@ if (-not $targetRoot.StartsWith($localRoot + [IO.Path]::DirectorySeparatorChar, 
   throw 'INSTALL_ROOT_MUST_BE_INSIDE_CURRENT_USERS_LOCALAPPDATA_SINGULARITY'
 }
 # Never follow symlinks/reparse points anywhere along the installation chain.
+function Get-FileSha256([string]$PathValue) {
+  # Hash validation is read-only even under powershell.exe -File -WhatIf.
+  # Windows PowerShell Get-FileHash can suppress output via ForEach-Object.
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try {
+    $stream=[IO.File]::OpenRead($PathValue)
+    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant() }
+    finally { $stream.Dispose() }
+  } finally { $sha.Dispose() }
+}
 function Assert-NoReparse([string]$PathValue) {
   $cursor = [IO.Path]::GetFullPath($PathValue)
   while ($cursor) {
@@ -143,7 +157,7 @@ function Assert-Manifest([string]$Root, [int]$Selected) {
   $reserved = '^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9]|LPT[1-9])($|\.)'
   foreach ($row in $m.files) {
     $name = [string]$row.path
-    if (-not $name -or $name.Contains('\\') -or $name.Contains(':') -or $name.StartsWith('/') -or $name.Split('/') -contains '..' -or $name.Split('/') -contains '.' -or $name.Split('/') -contains '' -or $seen.ContainsKey($name)) { throw 'SOURCE_PATH_INVALID' }
+    if (-not $name -or $name.Contains('\') -or $name.Contains(':') -or $name.StartsWith('/') -or $name.Split('/') -contains '..' -or $name.Split('/') -contains '.' -or $name.Split('/') -contains '' -or $seen.ContainsKey($name)) { throw 'SOURCE_PATH_INVALID' }
     if ($name.Length -gt 240 -or $seenWindows.ContainsKey($name.ToUpperInvariant())) { throw 'WINDOWS_SOURCE_NAME_COLLISION' }
     $seenWindows[$name.ToUpperInvariant()] = $true
     foreach ($segment in $name.Split('/')) {
@@ -163,10 +177,28 @@ function Assert-Manifest([string]$Root, [int]$Selected) {
     if (-not [IO.File]::Exists($path)) { throw 'SOURCE_FILE_MISSING' }
     $info = Get-Item -LiteralPath $path
     if ($info.Length -ne [long]$row.bytes) { throw 'SOURCE_SIZE_MISMATCH' }
-    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne [string]$row.sha256) { throw 'SOURCE_HASH_MISMATCH' }
+    if ((Get-FileSha256 $path) -ne [string]$row.sha256) { throw 'SOURCE_HASH_MISMATCH' }
   }
   if ($seen.Count -lt 200) { throw 'SOURCE_INVENTORY_TOO_SMALL' }
   return $m
+}
+function Assert-SourceInventory([string]$Root, $Manifest) {
+  $Root=[IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+  $expected=@{}
+  foreach ($row in @($Manifest.files)) { $expected[([string]$row.path).ToUpperInvariant()]=$true }
+  $expected['NATIVE_WINDOWS_SOURCE_MANIFEST.JSON']=$true
+  $actual=@(); $stack=New-Object 'System.Collections.Generic.Stack[string]'; $stack.Push($Root)
+  while ($stack.Count -gt 0) {
+    $directory=$stack.Pop()
+    foreach ($item in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)) {
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'SOURCE_REPARSE_REFUSED' }
+      if ($item.PSIsContainer) { $stack.Push($item.FullName) }
+      else { $actual += $item.FullName.Substring($Root.Length+1).Replace('\','/').ToUpperInvariant() }
+    }
+    if ($actual.Count -gt 30000) { throw 'SOURCE_INVENTORY_LIMIT' }
+  }
+  $diff=Compare-Object -ReferenceObject @($expected.Keys | Sort-Object) -DifferenceObject @($actual | Sort-Object)
+  if ($diff) { throw 'SOURCE_UNMANIFESTED_FILE_REFUSED' }
 }
 function Set-PrivateDirectoryAcl([string]$Dir) {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -187,6 +219,7 @@ function Set-PrivateDirectoryAcl([string]$Dir) {
 Assert-NoReparse $targetRoot
 $current = Join-Path $targetRoot 'current'
 $previous = Join-Path $targetRoot 'previous'
+$sourceCandidate = Join-Path $targetRoot '.source-refresh-candidate'
 if ($Rollback) {
   $held = Join-Path $targetRoot 'held-current'
   Assert-NoReparse $previous
@@ -210,7 +243,7 @@ if ($Rollback) {
   $previousBridge = Join-Path $previous 'bin/singularity-desktop-bridge.exe'
   Assert-LocalExistingFile $previousBridge 'Previous Rust bridge'
   Assert-PortableExecutable $previousBridge
-  if ((Get-FileHash -LiteralPath $previousBridge -Algorithm SHA256).Hash -ne [string]$receipt.bridgeSha256) {
+  if ((Get-FileSha256 $previousBridge) -ne [string]$receipt.bridgeSha256) {
     throw 'ROLLBACK_BRIDGE_HASH_MISMATCH'
   }
   $previousSupervisor = Join-Path $previous 'bin/singularity-windows-supervisor.exe'
@@ -218,7 +251,7 @@ if ($Rollback) {
     if (-not ([string]$receipt.supervisorSha256 -match '^[0-9a-fA-F]{64}$')) { throw 'ROLLBACK_SUPERVISOR_HASH_INVALID' }
     Assert-LocalExistingFile $previousSupervisor 'Previous Rust supervisor'
     Assert-PortableExecutable $previousSupervisor
-    if ((Get-FileHash -LiteralPath $previousSupervisor -Algorithm SHA256).Hash -ne [string]$receipt.supervisorSha256) {
+    if ((Get-FileSha256 $previousSupervisor) -ne [string]$receipt.supervisorSha256) {
       throw 'ROLLBACK_SUPERVISOR_HASH_MISMATCH'
     }
   } elseif (Test-Path -LiteralPath $previousSupervisor) { throw 'ROLLBACK_UNRECORDED_SUPERVISOR_REFUSED' }
@@ -241,6 +274,36 @@ if ($Rollback) {
       throw
     }
   }
+  return
+}
+
+if ($PrepareSource) {
+  $manifest = Assert-Manifest $SourceRoot $Option
+  Assert-NoReparse $sourceCandidate
+  if (-not (Test-Path -LiteralPath $targetRoot -PathType Container)) { throw 'SOURCE_PREPARATION_INSTALL_ROOT_MISSING' }
+  Assert-SourceInventory $SourceRoot $manifest
+  if (Test-Path -LiteralPath $sourceCandidate) { throw 'SOURCE_PREPARATION_CANDIDATE_EXISTS' }
+  $preview=[ordered]@{schema=1;state='SOURCE_REFRESH_CANDIDATE_PREVIEW';option=$Option;file_count=$manifest.files.Count;
+    candidateRoot=$sourceCandidate;willModify=$Apply.IsPresent;releaseReady=$false}
+  $preview | ConvertTo-Json -Compress
+  if (-not $Apply) { return }
+  if (-not $PSCmdlet.ShouldProcess($sourceCandidate,'Prepare manifest-owned source candidate only')) { return }
+  New-Item -ItemType Directory -Path $sourceCandidate -ErrorAction Stop | Out-Null
+  Set-PrivateDirectoryAcl $sourceCandidate
+  foreach ($row in $manifest.files) {
+    $relative=([string]$row.path) -replace '/', [IO.Path]::DirectorySeparatorChar
+    $destination=Join-Path $sourceCandidate $relative
+    $parent=Split-Path -Parent $destination
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) { New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null }
+    Copy-Item -LiteralPath (Join-Path $SourceRoot $relative) -Destination $destination -ErrorAction Stop
+    if ((Get-FileSha256 $destination) -ine [string]$row.sha256) { throw 'SOURCE_CANDIDATE_COPY_HASH_MISMATCH' }
+  }
+  Copy-Item -LiteralPath (Join-Path $SourceRoot 'NATIVE_WINDOWS_SOURCE_MANIFEST.json') -Destination $sourceCandidate -ErrorAction Stop
+  $candidateManifest=Assert-Manifest $sourceCandidate $Option
+  Assert-SourceInventory $sourceCandidate $candidateManifest
+  [ordered]@{schema=1;state='SOURCE_REFRESH_CANDIDATE_PREPARED';option=$Option;file_count=$manifest.files.Count;
+    candidateRoot=$sourceCandidate;manifestSha256=(Get-FileSha256 (Join-Path $sourceCandidate 'NATIVE_WINDOWS_SOURCE_MANIFEST.json'));
+    binariesTouched=$false;releaseReady=$false} | ConvertTo-Json -Compress
   return
 }
 
@@ -319,14 +382,14 @@ try {
     $destParent = Split-Path -Parent $destination
     New-Item -ItemType Directory -Path $destParent -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $SourceRoot $relative) -Destination $destination
-    if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne [string]$row.sha256) { throw 'STAGED_COPY_HASH_MISMATCH' }
+    if ((Get-FileSha256 $destination) -ne [string]$row.sha256) { throw 'STAGED_COPY_HASH_MISMATCH' }
   }
   Copy-Item -LiteralPath (Join-Path $SourceRoot 'NATIVE_WINDOWS_SOURCE_MANIFEST.json') -Destination $sourceDestination
   $receipt = @{ schema=1; state='STAGED_UNVERIFIED'; option=$Option; repoqlVersion='1.7.18';
     bridgePackageVersion=$bridgeInfo.packageVersion; bridgeFeatureOffice=$bridgeInfo.featureOffice; bridgeFeatureGhost=$bridgeInfo.featureGhost;
-    sourceManifestSha256=(Get-FileHash -LiteralPath (Join-Path $staging 'source/NATIVE_WINDOWS_SOURCE_MANIFEST.json') -Algorithm SHA256).Hash.ToLowerInvariant();
-    bridgeSha256=(Get-FileHash -LiteralPath (Join-Path $staging 'bin/singularity-desktop-bridge.exe') -Algorithm SHA256).Hash.ToLowerInvariant();
-    supervisorSha256=$(if ($SupervisorExe) { (Get-FileHash -LiteralPath (Join-Path $staging 'bin/singularity-windows-supervisor.exe') -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null });
+    sourceManifestSha256=(Get-FileSha256 (Join-Path $staging 'source/NATIVE_WINDOWS_SOURCE_MANIFEST.json'));
+    bridgeSha256=(Get-FileSha256 (Join-Path $staging 'bin/singularity-desktop-bridge.exe'));
+    supervisorSha256=$(if ($SupervisorExe) { (Get-FileSha256 (Join-Path $staging 'bin/singularity-windows-supervisor.exe')) } else { $null });
     guiExecutableProvided=[bool]$GuiExe; guiConfigured=$false; servicesInstalled=$false; acceptedOnWindows=$false }
   $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $staging 'STAGING_RECEIPT.json') -Encoding UTF8
   if (Test-Path -LiteralPath $current) {
