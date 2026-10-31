@@ -77,6 +77,15 @@ pub fn normalized(mut state: Value) -> Value {
     state
 }
 
+/// Frozen compatibility probe retained by the pass-13 fixture. The retired
+/// JavaScript authority allowed Claude only in ESO_LIVE_DEBUG for the
+/// coordinator and remediation roles; reproduce that rule exactly so the
+/// 804-case differential oracle remains closed. This is fixture compatibility
+/// only and grants no production capability.
+pub fn claude_allowed(run_mode: &str, role: &str) -> bool {
+    run_mode == "ESO_LIVE_DEBUG" && matches!(role, "COORDINATOR" | "REMEDIATION")
+}
+
 pub fn engine_snapshot(state: &Value, engine: &str) -> Value {
     if engine == "claude" {
         return normalized(state.clone())

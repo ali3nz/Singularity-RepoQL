@@ -1,7 +1,7 @@
 // Ticket 799 I3: fixture-only tests for relevance resolution and universal aliasing.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureConcept, queryGlobMatchCount, resolveRelevanceGlobs, mapCandidatesToConcepts } from "../lib/concept-capture.mjs";
@@ -15,37 +15,42 @@ const candidate = (extra = {}) => ({
   ...extra,
 });
 const opts = (dir, extra = {}) => {
-  // A local tombstone store is an EXISTING directory; authority is never
-  // inferred from a local parent. An empty store is the "no tombstones" case.
+  // Use real empty local directories. An absent path is intentionally treated
+  // as a remote host path by the production loader; on a native Windows host
+  // that makes DNS wait for a host that does not exist. The fixture is still
+  // empty, so every assertion exercises the same local no-tombstone path.
   const tombstonesDir = join(dir, "tombstones");
+  const lineageDir = join(dir, "lineage");
   mkdirSync(tombstonesDir, { recursive: true });
-  return {
-    dryRun: true,
-    conceptsDir: dir,
-    tombstonesDir,
-    lineageDir: join(dir, "absent-lineage"),
-    ...extra,
-  };
+  mkdirSync(lineageDir, { recursive: true });
+  return { dryRun: true, conceptsDir: dir, tombstonesDir, lineageDir, ...extra };
 };
 function fakeRql(dir, count) {
-  const bin = join(dir, "rql-fixture.sh");
+  // Portable stub: the production code spawns RQL_BIN with the RepoQL verb as
+  // argv[2]. Set RQL_BIN to node and run the test from a directory containing
+  // an extensionless "query" script, so `node query <sql> ...` works on POSIX
+  // and native Windows without a shell or an executable bit.
   const argsFile = join(dir, "rql-args.txt");
-  writeFileSync(bin, `#!/bin/sh\nprintf '%s\\n' "$*" > '${argsFile}'\nprintf '[{"matches":${count}}]\\n'\n`);
-  chmodSync(bin, 0o755);
-  return { bin, argsFile };
+  const payload = JSON.stringify([{ matches: count }]);
+  writeFileSync(join(dir, "query"),
+    `require("node:fs").writeFileSync(${JSON.stringify(argsFile)}, process.argv.slice(2).join(" ") + "\\n"); process.stdout.write(${JSON.stringify(payload)}); process.exit(0);\n`);
+  return { bin: process.execPath, argsFile, cwd: dir };
 }
 
 test("RepoQL glob resolver queries glob_files and parses a zero-match count", async () => {
   const dir = mkdtempSync(join(tmpdir(), "i3-rql-zero-"));
-  const { bin, argsFile } = fakeRql(dir, 0);
+  const { bin, argsFile, cwd } = fakeRql(dir, 0);
   const saved = process.env.RQL_BIN;
+  const previousCwd = process.cwd();
   process.env.RQL_BIN = bin;
+  process.chdir(cwd);
   try {
     const r = await queryGlobMatchCount("**/ai-orchestration/kit/**");
     assert.deepEqual(r, { ok: true, count: 0 });
     assert.match((await import("node:fs")).readFileSync(argsFile, "utf8"), /glob_files/);
     assert.match((await import("node:fs")).readFileSync(argsFile, "utf8"), /ai-orchestration\/kit/);
   } finally {
+    process.chdir(previousCwd);
     if (saved === undefined) delete process.env.RQL_BIN; else process.env.RQL_BIN = saved;
   }
 });

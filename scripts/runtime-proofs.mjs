@@ -300,8 +300,11 @@ export async function probeDocIngestion({ root, memoryConfigPath, memoryBaseUrl,
  */
 export async function runControlledFailoverProof({ root, mockPorts = null, overallTimeout = 120000 } = {}) {
   const http = await import("node:http");
-  const { randomFillSync } = await import("node:crypto");
-  const pickPort = () => (mockPorts && mockPorts.length ? mockPorts.pop() : 10000 + (randomFillSync(new Uint32Array(1))[0] % 45000));
+  // 0 asks the OS for an ephemeral port. Windows returns EACCES for ports in
+  // a reserved/excluded range, so a random high port is not portable for the
+  // mock upstreams or the router; the OS assignment avoids that class
+  // entirely. Explicit mockPorts remain honoured.
+  const pickMockPort = () => (mockPorts && mockPorts.length ? mockPorts.pop() : 0);
   const mockServer = (tag, port) => new Promise((res_, rej_) => {
     const s = http.createServer((req, rsp) => {
       let _b = ""; req.on("data", (d) => { _b += d.length; });
@@ -312,7 +315,7 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
       });
     });
     s.on("error", rej_);
-    s.listen(port, "127.0.0.1", () => res_(s));
+    s.listen(port, "127.0.0.1", () => res_({ srv: s, port: s.address().port }));
   });
 
   // The router file is THIS module's sibling in the shipped scripts/ directory
@@ -328,9 +331,9 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
   const openMock = async (tag) => {
     let lastErr = null;
     for (let attempt = 0; attempt < 25; attempt++) {
-      const port = pickPort();
-      try { return { port, srv: await mockServer(tag, port) }; }
-      catch (e) { lastErr = e; if (e?.code !== "EADDRINUSE") break; }
+      const port = pickMockPort();
+      try { return await mockServer(tag, port); }
+      catch (e) { lastErr = e; if (!["EADDRINUSE", "EACCES"].includes(e?.code)) break; }
     }
     throw lastErr || new Error("no free port for a mock upstream");
   };
@@ -367,10 +370,37 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
-    c.stdout.on("data", () => {});
+    // EXTRACTION_FAILOVER_PORT=0 asks the OS for a free loopback port. The
+    // router prints the actual bound port in its READY line; read that instead
+    // of guessing a random high port that Windows may reserve.
+    let stdout = "";
+    let readySettled = false;
+    const ready = new Promise((resolveReady, rejectReady) => {
+      const timer = setTimeout(() => {
+        if (readySettled) return;
+        readySettled = true;
+        rejectReady(new Error(`the failover router did not report READY: ${childErr.slice(-3).join(" | ")}`));
+      }, Math.max(5000, Math.floor(overallTimeout / 2)));
+      const settle = (fn, value) => {
+        if (readySettled) return;
+        readySettled = true;
+        clearTimeout(timer);
+        fn(value);
+      };
+      c.stdout.setEncoding("utf8");
+      c.stdout.on("data", (d) => {
+        stdout += d;
+        const m = /EXTRACTION_FAILOVER_READY port=(\d+)/.exec(stdout);
+        if (m) settle(resolveReady, Number(m[1]));
+      });
+      c.once("error", (e) => settle(rejectReady, e));
+      c.once("exit", (code, signal) => {
+        if (!readySettled) settle(rejectReady, new Error(`the failover router exited before READY (code ${code}, signal ${signal})`));
+      });
+    });
     c.stderr?.on("data", (d) => { childErr.push(String(d).trim()); if (childErr.length > 12) childErr.shift(); });
     children.push(c);
-    return c;
+    return { child: c, ready };
   };
 
   const post = async (port, body = { messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }, signal = AbortSignal.timeout(15000)) => {
@@ -394,13 +424,13 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
 
   try {
     // ── phase 1: UNDER INJECTION — the controlled primary failure ────────
-    const portC = pickPort();
-    const child1 = routerChild(portC, "groq-120b:503");
-    const start1 = await waitReady(child1, portC);
+    const first = routerChild(0, "groq-120b:503");
+    const portC1 = await first.ready;
+    const start1 = await waitReady(first.child, portC1);
     if ((start1.ladder || []).length < 2) throw new Error(`the ladder holds ${start1.ladder?.length || 0} provider(s) — two are required`);
-    const h0 = await health(portC);
-    const inj = await post(portC);
-    const h1 = await health(portC);
+    const h0 = await health(portC1);
+    const inj = await post(portC1);
+    const h1 = await health(portC1);
     if (inj.status !== 200 || inj.j?.choices?.[0]?.message?.content !== "B")
       throw new Error(`the fallback did not serve the request (status ${inj.status}, content ${JSON.stringify(inj.j?.choices?.[0]?.message?.content || null)})`);
     if (h1.lastModel !== "cohere-a+") throw new Error(`the response was NOT served by the secondary (lastModel=${h1.lastModel})`);
@@ -411,25 +441,27 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
     if (!h1.inject || !String(h1.inject).startsWith("groq-120b:")) throw new Error("the injection knob was not part of the controlled run");
 
     // ── phase 2: PERMANENT FAILURE — never retried, never masked ────────
-    child1.kill("SIGKILL");
-    const child2 = routerChild(portC, "groq-120b:401");
-    const start2 = await waitReady(child2, portC);
-    const perm = await post(portC);
-    const h2 = await health(portC);
+    first.child.kill("SIGKILL");
+    const second = routerChild(0, "groq-120b:401");
+    const portC2 = await second.ready;
+    const start2 = await waitReady(second.child, portC2);
+    const perm = await post(portC2);
+    const h2 = await health(portC2);
     if (perm.status !== 401) throw new Error(`a permanent 401 was NOT surfaced to the caller (status ${perm.status})`);
     if ((h2.failovers || 0) !== (start2.failovers || 0)) throw new Error("a permanent 401 was silently masked by fallback — auth failures must surface");
     if ((h2.attempts || 0) - (start2.attempts || 0) !== 1) throw new Error(`a permanent 401 was retried (attempt delta != 1)`);
 
     // ── phase 3: RESTART WITHOUT THE KNOB — selection survives, knob gone ─
-    child2.kill("SIGKILL");
-    const child3 = routerChild(portC, null);
-    const start3 = await waitReady(child3, portC);
+    second.child.kill("SIGKILL");
+    const third = routerChild(0, null);
+    const portC3 = await third.ready;
+    const start3 = await waitReady(third.child, portC3);
     if (start3.inject !== null) throw new Error(`the test injection knob is STILL active after the restart (${start3.inject}) — it must be removed after verification`);
-    const clean = await post(portC);
-    const h3 = await health(portC);
+    const clean = await post(portC3);
+    const h3 = await health(portC3);
     if (clean.status !== 200 || h3.lastModel !== "groq-120b") throw new Error(`after the restart the PRIMARY did not serve again (status ${clean.status}, lastModel=${h3.lastModel})`);
     if ((h3.failovers || 0) !== (start3.failovers || 0)) throw new Error("a healthy primary-injected router produced a failover — bad selection");
-    child3.kill("SIGKILL");
+    third.child.kill("SIGKILL");
 
     return { ok: true, state: "VERIFIED",
       detail: `failover proven deterministically: both providers completed a real minimal request; the controlled primary failure (authorized test injection) failed over exactly once to the secondary (lastModel=cohere-a+), attempts moved by exactly 2 (no duplicate completion effects); a permanent 401 surfaced without retry; after a normal restart the knob was gone (inject=null) and the primary served again — routing is separate from the interactive coding lane` };

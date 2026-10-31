@@ -1,0 +1,21 @@
+{
+  "sourceArchiveSha256": "a69f8bd4081f5538ac038dc004075a1564a751067ded629d00256c8419656336",
+  "modules": {
+    "gate-parser": "593d694aab49f71100ba454f1ad8cbb083cfd82fecc67f0223c5ca29f24cfc51",
+    "bridge-result": "5ec49903d08321c6cc4ad44e70173c11ef0a92ea398885a3aa5c3d3f38c9f61d",
+    "effort": "0fb09e455ad52fbe16f8c965a943da3ce2401969f154f3f72c1e9530b480ae92",
+    "payload-budget": "c314996b2f04eee07b2abb1a3693a08e976399f3992b996d943abb8e1d4c5cfb",
+    "worker-completion": "8ae33e3f287aff40fcdd4ba23de9d71f694c56fd53faad8ce7ebee5cd50baa56",
+    "run-slots": "84ec0c6bd7ab00d8d2822fee7587ef23c93d1db2bdc75bea1e6bfeec23af01a3",
+    "no-change": "f5bbcf0faefc7e7c8df3ef39f54ff50f1e0cd44afdce2f5bcc6aab12e9f73706",
+    "deviation-ledger": "5ac05e4245357faefe0a741744f294389bc28a25d7a25c24102e5b483f06f4fc",
+    "doc-impact": "89d895c9127b91305490ec7b8963e8a6974b5a7ec9e3c38ec72e75d99bfb8321",
+    "run-summary": "98e63c6f67b77a275212e04ca2bffa060e050474ed292cae473b685f4872d0b9",
+    "engine-router": "567c4f9d3ebaabb5618cf43a1e127949f420ba37980f80184fe938401eb10978",
+    "case-store": "add0b243288dc5719958a603c4086e1fd4a7955407fcbb6722bb160fefd378ec",
+    "engine-state": "11211903b7a67f7319dfc3f434547b901953d735a282a8501ab75b2ebb4ecea6",
+    "resource-lease": "d322b3a2ff4779f747a73eeb2eee17ead9708ba7a7c4accdc941ba73692a3a4d",
+    "phase-driver": "a84ee9bf8310b9428bffd065ac637a20437b40c00ec5fec01676ce5bdb11b5aa",
+    "nanny": "8acbd74b004b0bc666092d1bd7a50c8c5ee8402efd477378403edcc38ec14adf"
+  }
+}

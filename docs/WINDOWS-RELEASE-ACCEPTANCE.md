@@ -22,9 +22,9 @@ The complete native package has been exercised on one Windows x64 workstation. R
 
 ## Test results and remaining limits
 
-Focused validation included 76 parent-hook tests, a Python discovery run of 248 tests with three skips, and an installed-Node run of 532 tests with 526 passing and six explicit skips. The later Office lifecycle regression run passed all 27 tests. Each result applies to its tested scope, not to the whole product.
+Focused validation included 76 parent-hook tests, a Python discovery run of 248 tests with three skips, and an installed-Node run of 532 tests with 526 passing and six explicit skips. The later Office lifecycle regression run passed all 27 tests. The full Node diagnostic discovery on the repaired tree completed **868 tests with 831 passes, 0 failures, and 37 explicit skips**; the native Python discovery completed **266 tests with 3 skips**. A Linux source-control run on Node 22.14 completed **868 tests with 844 passes, 0 failures, and 24 explicit skips**. The parser overlay's separate image-integration suite ran inside the pinned image: **21 tests, 19 passes, 2 skips** because the archived failure dumps were not available. The new dashboard shortcut contract suite ran on Windows with **5 tests, 5 passes, no skips**, using temporary Desktop and asset directories; no shortcut was created on the real Desktop. The 37 skips are labelled prerequisites, not silently disabled assertions: pinned memory-hub image artifacts, Python 3 differential cases, the legacy Docker/Ubuntu installer path, absent compiled native Rust binaries, the POSIX Claude CLI shell-stub fixture, and POSIX-only mode checks. Each result applies to its tested scope, not to the whole product.
 
-The broader Windows diagnostic run was **not green**: 821 tests included 773 passes, 32 failures, and 16 skips. Focused fixes and successful live checks do not turn that earlier result into a full regression pass. A new full diagnostic run was not performed for publication of this source candidate.
+The earlier pre-fix diagnostic run was **not green**: 821 tests included 776 passes, 29 failures, and 16 skips. The diagnosed mechanisms were repaired and the repaired tree's final full run is the 868-test result above. The earlier result remains historical; it is not converted into a pass.
 
 The following remain outside this acceptance:
 

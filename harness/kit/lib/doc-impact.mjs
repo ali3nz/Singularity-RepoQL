@@ -45,7 +45,7 @@ export function classifyDocImpact(changedFiles) {
 
 // Serialize the classification for the closeout receipt / hub update.
 export function renderDocImpactReport(classification) {
-  const lines = ["## Source-to-doc impact classification (ticket 085 D17)"];
+  const lines = ["## Source-to-doc impact classification"];
   for (const e of classification.entries) {
     lines.push(`- ${e.path} -> ${e.docs.join(", ")} [${e.disposition}]`);
   }

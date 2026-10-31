@@ -84,7 +84,15 @@ test("no verb is refused the same way (never a silent success)", () => {
 test("status on an empty state root reports honestly instead of inventing a run", () => {
   const r = runLauncher(["status"]);
   assert.notEqual(r.status, 0);
-  assert.match(`${r.stdout}${r.stderr}`, /No current run/i);
+  const output = `${r.stdout}${r.stderr}`;
+  if (process.platform === "win32") {
+    // Native Windows has no POSIX owner probe: the launcher must fail closed
+    // rather than pretend an empty state root is a clean status.
+    assert.match(output, /NATIVE_WINDOWS_AUTHORITY_REQUIRED/);
+    assert.doesNotMatch(output, /current run:\s*\S+|run id\s*[:=]\s*\S+/i);
+  } else {
+    assert.match(output, /No current run/i);
+  }
   rmSync(r.home, { recursive: true, force: true });
 });
 

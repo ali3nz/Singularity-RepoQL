@@ -1,4 +1,4 @@
-# Provenance — memory-hub `751` parser overlay
+# Provenance — memory-hub parser overlay
 
 | Field | Value |
 |---|---|
@@ -12,9 +12,9 @@
 ## What this is
 
 The hub's knowledge-ingest parser is a compiled bundle inside a published
-image. Upstream #751 (wiki re-ingest of a failed raw source) is fixed by
-replacing that one bundle, not by rebuilding the hub from source — the base
-image is used unmodified and pinned by digest.
+image. The upstream parser defect (wiki re-ingest of a failed raw source) is
+fixed by replacing that one bundle, not by rebuilding the hub from source — the
+base image is used unmodified and pinned by digest.
 
 The `Dockerfile` is deliberately paranoid, and it is the acceptance test:
 
@@ -53,6 +53,25 @@ calls a fleet endpoint, and it publishes nothing.
 against the overlay bundle inside the built image:
 
 ```bash
-docker run --rm --entrypoint sh tencent-memory-hub:751-parser-fix \
-  -lc 'cd /app/knowledge && node tests/parse.test.mjs'
+docker run --rm --network none \
+  -v "$PWD/memory/patches/hub-751/patch:/patch:ro" \
+  -v "$PWD/memory/patches/hub-751/tests:/tests:ro" \
+  --entrypoint sh tencent-memory-hub:751-parser-fix \
+  -lc 'sh /tests/run-tests.sh'
 ```
+
+The base image has no test tree of its own; the two bind mounts supply the
+overlay and the suite. `run-tests.sh` builds `dist-test`/`dist-base` inside the
+container. If the archived failure dumps are available, mount them at `/dumps`
+to run cases 17 and 18 as well; otherwise those two cases skip explicitly.
+
+## Source-checkout behaviour
+
+`tests/parse.test.mjs` imports the compiled bundles from the pinned image
+(`/app/knowledge/dist-test`, `/app/knowledge/dist-base`) and the archived
+failure dumps (`/dumps`). A plain source checkout does not contain those
+artifacts, so the suite reports the prerequisite as skipped with that reason
+instead of failing at import or pretending to cover the image. The
+`docker run ... tests/parse.test.mjs` command above is the real integration
+run; `MEMORY_HUB_KNOWLEDGE_DIR` and `MEMORY_HUB_DUMPS_DIR` can point at an
+extracted image tree for the same run outside a container.

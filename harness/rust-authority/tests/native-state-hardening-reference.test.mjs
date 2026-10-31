@@ -6,8 +6,8 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-const kit = process.env.ORCHESTRA_REFERENCE_KIT;
-if (!kit) throw Error('ORCHESTRA_REFERENCE_KIT is required');
+import { REFERENCE_KIT } from "./reference-kit.mjs";
+const kit = REFERENCE_KIT;
 const caseStore = await import(pathToFileURL(resolve(kit, 'lib/case-store.mjs')).href);
 const {EngineState} = await import(pathToFileURL(resolve(kit, 'lib/engine-state.mjs')).href);
 const isolated = fn => {

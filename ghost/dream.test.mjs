@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, utimesSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, utimesSync, renameSync, readdirSync, unlinkSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   acquireDreamLock,
   releaseDreamLock,
@@ -22,6 +22,18 @@ import {
   DEFAULT_STEP_TIMEOUT_MIN,
   DREAM_CALL_DEFAULT_MS,
 } from "./dream.mjs";
+
+/** Assert that a child PID returned by spawnSync is no longer present. */
+function assertPidAbsent(pid) {
+  assert.ok(Number.isInteger(pid) && pid > 0, "spawnSync returned a child PID");
+  try {
+    process.kill(pid, 0);
+  } catch (e) {
+    if (e?.code === "ESRCH") return;
+    throw e;
+  }
+  assert.fail(`the child PID ${pid} is still present`);
+}
 
 test("DREAM_STEPS has the 6-step reflection pipeline", () => {
   assert.deepEqual(DREAM_STEPS, [
@@ -213,28 +225,64 @@ test("dream lock is exclusive and releases on the owning handle only", () => {
   }
 });
 
-test("stale lock takeover: a dead owner and an expired mtime are reclaimed", () => {
+test("stale lock takeover: a dead owner is reclaimed, an expired unknown owner is reclaimed", () => {
   const tmp = mkdtempSync(join(tmpdir(), "dream-lock-stale-"));
   const agentDir = join(tmp, "data", "ghost");
   const lockPath = join(agentDir, "dreams", ".dream.lock");
   try {
     mkdirSync(join(agentDir, "dreams"), { recursive: true });
 
-    // 1. the recorded owner is dead -> the lock is taken over
-    writeFileSync(lockPath, JSON.stringify({ pid: 999999, createdAt: new Date().toISOString() }), { mode: 0o600 });
+    // 1. a confirmed-dead child PID -> the lock is taken over immediately,
+    // without waiting for the 45-minute mtime window.
+    const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"], { stdio: "ignore" });
+    const deadPid = dead.pid;
+    assertPidAbsent(deadPid);
+    writeFileSync(lockPath, JSON.stringify({ pid: deadPid, createdAt: new Date().toISOString() }), { mode: 0o600 });
     const h1 = acquireDreamLock(agentDir);
     assert.equal(h1.acquired, true, "a lock whose owner is dead is taken over");
     assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, process.pid, "the new owner is recorded");
     releaseDreamLock(h1);
 
-    // 2. the lock file is older than the stale window -> taken over
-    writeFileSync(lockPath, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), { mode: 0o600 });
+    // 2. an expired record whose owner identity is unknown is reclaimed by age.
+    // (A known live owner is not reclaimed by age: see the next test.)
+    writeFileSync(lockPath, JSON.stringify({ pid: 0, createdAt: new Date().toISOString() }), { mode: 0o600 });
     const old = new Date(Date.now() - 60 * 60 * 1000);
     utimesSync(lockPath, old, old);
     const h2 = acquireDreamLock(agentDir, { staleMs: 1000 });
-    assert.equal(h2.acquired, true, "an expired lock is taken over");
+    assert.equal(h2.acquired, true, "an expired unknown-owner lock is taken over");
     releaseDreamLock(h2);
   } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a live owner is never displaced by an expired mtime", async () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-live-age-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  const live = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { stdio: "ignore" });
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    await new Promise((resolveSpawn, rejectSpawn) => {
+      live.once("spawn", resolveSpawn);
+      live.once("error", rejectSpawn);
+    });
+    assert.equal(process.kill(live.pid, 0), true, "the live child is present");
+    writeFileSync(lockPath, JSON.stringify({ pid: live.pid, createdAt: new Date().toISOString() }), { mode: 0o600 });
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    utimesSync(lockPath, old, old);
+    const h = acquireDreamLock(agentDir, { staleMs: 1000 });
+    assert.equal(h.acquired, false, "a live owner is never displaced by age");
+    assert.equal(h.busy, true);
+    assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, live.pid, "the live owner record is preserved");
+  } finally {
+    if (live.exitCode === null && live.signalCode === null) {
+      live.kill("SIGKILL");
+      await new Promise((resolveExit) => {
+        live.once("exit", resolveExit);
+        setTimeout(resolveExit, 1000);
+      });
+    }
     rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -271,6 +319,126 @@ test("a newer owner that appears during a takeover is restored, never destroyed"
     assert.ok(existsSync(lockPath), "the newer owner's lock is back in place");
     assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, 9999, "the newer owner's record is intact");
     assert.ok(!existsSync(taken), "the renamed copy is cleaned up");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("an unexpected restore error retains the newer owner instead of unlinking it", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-restore-fail-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  const taken = `${lockPath}.take-test`;
+  const eacces = Object.assign(new Error("injected restore failure"), { code: "EACCES" });
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    writeFileSync(taken, JSON.stringify({ pid: 9999, token: "newer" }), { mode: 0o600 });
+    const restored = restoreNewerOwner(taken, lockPath, {
+      link() { throw eacces; }, rename() { throw eacces; }, copy() { throw eacces; },
+      exists() { return false; }, unlink() { throw eacces; },
+    });
+    assert.equal(restored, false, "a failed restoration is not reported as success");
+    assert.ok(existsSync(taken), "the newer owner record is retained");
+    assert.equal(JSON.parse(readFileSync(taken, "utf8")).pid, 9999, "the retained record is intact");
+    assert.ok(!existsSync(lockPath), "the path was not falsely recreated");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("an empty record that appears during a stale takeover is restored, never unlinked", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-empty-race-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ pid: 999999, token: "stale" }), { mode: 0o600 });
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lockPath, old, old);
+    // The newer owner replaces the lock with an empty record between the
+    // staleness read and our rename. The empty file must be restored exactly;
+    // it must never be treated as the stale record and unlinked.
+    const h = acquireDreamLock(agentDir, {
+      staleMs: 1000,
+      fs: {
+        rename(from, to) {
+          unlinkSync(from);
+          writeFileSync(from, "", { mode: 0o600 });
+          renameSync(from, to);
+        },
+      },
+    });
+    assert.equal(h.acquired, false, "the contender stands down for the newer owner");
+    assert.equal(h.busy, true);
+    assert.ok(existsSync(lockPath), "the empty newer record is back at the authoritative path");
+    assert.equal(readFileSync(lockPath, "utf8"), "", "the empty record is preserved byte for byte");
+    assert.deepEqual(readdirSync(join(agentDir, "dreams")).filter((n) => n.includes(".take-")), [],
+      "no takeover file is left behind after a successful restore");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("an owner appearing during restore is never overwritten by the fallback create", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-restore-race-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  const taken = `${lockPath}.take-test`;
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    writeFileSync(taken, JSON.stringify({ pid: 9999, token: "renamed" }), { mode: 0o600 });
+    const restored = restoreNewerOwner(taken, lockPath, {
+      link() { throw Object.assign(new Error("link unavailable"), { code: "EPERM" }); },
+      copy(src, dest, flags) {
+        // Simulate the exact race: a newer owner creates the authoritative
+        // path after the guard but before our exclusive create.
+        writeFileSync(dest, JSON.stringify({ pid: 7777, token: "authoritative" }), { flag: "wx", mode: 0o600 });
+        return copyFileSync(src, dest, flags); // EEXIST, never overwrite
+      },
+    });
+    assert.equal(restored, true, "the already-present verified owner is accepted");
+    assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, 7777,
+      "the newer owner that won the race is untouched");
+    assert.ok(!existsSync(taken), "the now-redundant preserved copy is cleaned up");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a link failure falls back to an atomic exclusive create instead of dropping the newer owner", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-restore-rename-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  const taken = `${lockPath}.take-test`;
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    writeFileSync(taken, JSON.stringify({ pid: 9999, token: "newer" }), { mode: 0o600 });
+    const restored = restoreNewerOwner(taken, lockPath, {
+      link() { throw Object.assign(new Error("link unavailable"), { code: "EPERM" }); },
+    });
+    assert.equal(restored, true);
+    assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, 9999, "the exact newer record is restored");
+    assert.ok(!existsSync(taken), "the temporary copy is cleaned up");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("an EEXIST restore never clobbers the record already at the path", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "dream-lock-restore-exists-"));
+  const agentDir = join(tmp, "data", "ghost");
+  const lockPath = join(agentDir, "dreams", ".dream.lock");
+  const taken = `${lockPath}.take-test`;
+  try {
+    mkdirSync(join(agentDir, "dreams"), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ pid: 7777, token: "authoritative" }), { mode: 0o600 });
+    writeFileSync(taken, JSON.stringify({ pid: 9999, token: "renamed" }), { mode: 0o600 });
+    const restored = restoreNewerOwner(taken, lockPath, {
+      link() { throw Object.assign(new Error("exists"), { code: "EEXIST" }); },
+    });
+    assert.equal(restored, true);
+    assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).pid, 7777, "the authoritative path is untouched");
+    assert.ok(!existsSync(taken), "the redundant copy is cleaned up");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

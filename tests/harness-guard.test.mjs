@@ -94,6 +94,27 @@ test("the launcher accepts a state dir outside the engine home and says whose it
   assert.match(r.stderr, /is another harness lane/);
 });
 
+test("the launcher treats dot-prefixed child names as inside, and a true sibling as outside", () => {
+  const kit = join(ROOT, "harness", "kit");
+  for (const stateDir of [join(kit, "portable-runs"), join(kit, "..state"), join(kit, "...")]) {
+    const r = spawnSync(process.execPath, [LAUNCHER, "status"], {
+      encoding: "utf8",
+      timeout: 60_000,
+      env: { ...process.env, ORCHESTRA_KIT_HOME: kit, ORCH_STATE_DIR: stateDir },
+    });
+    assert.equal(r.status, 2, `${stateDir}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /run ids from different harnesses must not overlap/);
+  }
+  const sibling = join(ROOT, "harness", "kit-sibling");
+  const r = spawnSync(process.execPath, [LAUNCHER, "status"], {
+    encoding: "utf8",
+    timeout: 60_000,
+    env: { ...process.env, ORCHESTRA_KIT_HOME: kit, ORCH_STATE_DIR: sibling },
+  });
+  assert.notEqual(r.status, 2, r.stderr);
+  assert.match(r.stderr, /is another harness lane/);
+});
+
 test("the exported path authority carries no fleet literal at all", () => {
   const text = readFileSync(join(KIT, "lib", "kit-paths.mjs"), "utf8");
   for (const forbidden of ["/home/operator", "controller", "webserver", "/workspace/work/"]) {

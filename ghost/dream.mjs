@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node ghost/dream.mjs [--agent ghost] [--agent-dir data/ghost] [--fresh] [--force]
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, linkSync, openSync, writeSync, fsyncSync, closeSync, copyFileSync } from "node:fs";import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync, rmSync, statSync, linkSync, openSync, writeSync, fsyncSync, closeSync, copyFileSync, constants as fsConstants } from "node:fs";import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -261,9 +261,21 @@ function dreamLockPath(agentDir) {
   return join(dreamsDirFor(agentDir), ".dream.lock");
 }
 
-function processAlive(pid, platform = process.platform) {
-  if (platform === "win32") return true; // no POSIX signal probe: rely on staleness
-  try { process.kill(pid, 0); return true; } catch (e) { return e?.code === "EPERM"; }
+function processAlive(pid, _platform = process.platform) {
+  // A PID is valid only as a positive integer. A malformed/unknown owner is
+  // treated as alive here; the mtime staleness rule below is the only path
+  // that may reclaim such a record.
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    // ESRCH is the only proof that the owner is gone. EPERM (or any other
+    // platform-specific failure) means the process may still exist, so never
+    // displace it on a permission guess. Windows uses the same probe: Node's
+    // kill(pid, 0) returns ESRCH for a dead PID there.
+    return e?.code !== "ESRCH";
+  }
 }
 
 function safeReadJson(p) {
@@ -319,7 +331,10 @@ export function createOwnerRecord(path, record, {
   return { created, mode };
 }
 
-export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowMs = Date.now() } = {}) {
+export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowMs = Date.now(), fs = {} } = {}) {
+  const stat = fs.stat ?? statSync;
+  const rename = fs.rename ?? renameSync;
+  const unlink = fs.unlink ?? unlinkSync;
   const path = dreamLockPath(agentDir);
   mkdirSync(dreamsDirFor(agentDir), { recursive: true });
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -345,57 +360,101 @@ export function acquireDreamLock(agentDir, { staleMs = DREAM_LOCK_STALE_MS, nowM
     if (created) return { path, acquired: true, mode, token, released: () => releaseDreamLockAgent(agentDir, path, token) };
 
     const rec = safeReadJson(path);
-    let mtimeMs = 0;
-    try { mtimeMs = statSync(path).mtimeMs; } catch { /* gone mid-read: retry */ }
+    let pathStat = null;
+    try { pathStat = stat(path); } catch { /* gone mid-read: retry */ }
+    const mtimeMs = pathStat?.mtimeMs ?? 0;
     if (!rec && mtimeMs && nowMs - mtimeMs < DREAM_LOCK_WRITE_GRACE_MS) {
       // The owner is still writing its record: wait briefly, never take over.
       sleepSync(50);
       continue;
     }
+    // A live owner is never displaced, even when its record is old: a
+    // long-running dream must not become two writers. Only a record whose
+    // owner is provably dead, or whose owner identity is unknown and whose
+    // mtime is older than the stale window, may be reclaimed.
+    const ownerAlive = rec && Number.isInteger(rec.pid) && rec.pid > 0
+      ? processAlive(rec.pid)
+      : null;
+    if (ownerAlive === true) return { path, acquired: false, busy: true };
     const stale = !rec
-      || (rec.pid && !processAlive(rec.pid))
-      || (mtimeMs && nowMs - mtimeMs > staleMs);
+      || ownerAlive === false
+      || (ownerAlive === null && mtimeMs && nowMs - mtimeMs > staleMs);
     if (!stale) return { path, acquired: false, busy: true };
     // Serialised stale takeover: rename first, then delete only the record
     // we actually judged stale; restore a newer owner that appeared meanwhile.
     const taken = `${path}.take-${process.pid}-${randomUUID()}`;
-    try { renameSync(path, taken); } catch { return { path, acquired: false, busy: true }; }
-    const observed = safeReadJson(taken);
-    if (!rec || (observed && observed.pid === rec.pid)) {
-      try { unlinkSync(taken); } catch { /* best-effort */ }
-      continue; // retry the exclusive create
+    try { rename(path, taken); } catch { return { path, acquired: false, busy: true }; }
+    // Decide by FILE IDENTITY, never by parsed content. An empty or partial
+    // record may be a newer owner mid-write, and JSON parsing cannot tell that
+    // apart from the stale record we judged. If the renamed inode is not the
+    // exact file we statted before the rename, a newer owner appeared in the
+    // gap: restore it and never unlink it. Only the same inode (same dev/ino,
+    // size and timestamps) is provably the record we judged stale.
+    let takenStat = null;
+    try { takenStat = stat(taken); } catch { /* unprovable: retain, never unlink */ }
+    if (!sameFileIdentity(pathStat, takenStat)) {
+      restoreNewerOwner(taken, path);
+      return { path, acquired: false, busy: true };
     }
-    // A newer owner exists: restore instead of destroying it.
-    restoreNewerOwner(taken, path);
-    return { path, acquired: false, busy: true };
+    try { unlink(taken); } catch { /* best-effort */ }
+    continue; // retry the exclusive create
   }
   return { path, acquired: false, busy: true };
+}
+
+function sameFileIdentity(a, b) {
+  return Boolean(a && b
+    && a.dev === b.dev
+    && a.ino === b.ino
+    && a.size === b.size
+    && a.mtimeMs === b.mtimeMs
+    && a.birthtimeMs === b.birthtimeMs);
+}
+
+function verifiedOwnerAt(path) {
+  const rec = safeReadJson(path);
+  // A valid owner record is not merely a positive PID: that would accept a
+  // partial or foreign record and let the preserved takeover copy be deleted.
+  // The writer always records a token (and createdAt); require one of them.
+  return Boolean(rec
+    && Number.isInteger(rec.pid) && rec.pid > 0
+    && ((typeof rec.token === "string" && rec.token.length > 0)
+      || (typeof rec.createdAt === "string" && rec.createdAt.length > 0)));
 }
 
 /**
  * Put a newer owner back in place after a stale takeover judged a record
  * stale: the record that appeared meanwhile is RESTORED, never destroyed.
- * Exported for the race regression.
+ * The fallback create is EXCLUSIVE, so it can never overwrite an owner that
+ * appears between the check and the restore. Exported for the race regression.
  */
-export function restoreNewerOwner(taken, path) {
+export function restoreNewerOwner(taken, path, {
+  link = linkSync, copy = copyFileSync, exists = existsSync, unlink = unlinkSync,
+} = {}) {
+  let restored = false;
   try {
-    linkSync(taken, path);
+    link(taken, path);
+    restored = true;
   } catch (e) {
-    if (e?.code === "EEXIST") { /* the newer owner is already back in place */ }
-    else if (linkUnsupported(e)) {
-      // Portable restore: copy the record into place (temp file + rename) and
-      // never clobber a newer owner that is already there.
+    if (e?.code === "EEXIST") {
+      // A newer owner is already at the authoritative path; never clobber it.
+      restored = verifiedOwnerAt(path);
+    } else {
+      // Link may be unsupported (for example WSL /mnt/c) or fail for another
+      // reason. COPYFILE_EXCL is an atomic exclusive create: it restores the
+      // exact bytes and still cannot replace a newer owner that wins the race.
       try {
-        if (!existsSync(path)) {
-          const tmp = `${path}.restore-${process.pid}-${randomUUID()}`;
-          copyFileSync(taken, tmp);
-          renameSync(tmp, path);
-        }
-      } catch { /* best-effort */ }
+        copy(taken, path, fsConstants.COPYFILE_EXCL);
+        restored = true;
+      } catch (copyError) {
+        restored = copyError?.code === "EEXIST" && verifiedOwnerAt(path);
+      }
     }
   }
-  try { unlinkSync(taken); } catch { /* best-effort */ }
-  return true;
+  // Delete the preserved copy only after restoration itself succeeded. On any
+  // failure retain `taken`: losing a lock record is worse than a recovery file.
+  if (restored && exists(path)) { try { unlink(taken); } catch { /* best-effort */ } }
+  return restored;
 }
 
 function releaseDreamLockAgent(agentDir, path, token = null) {

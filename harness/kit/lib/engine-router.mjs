@@ -13,7 +13,7 @@ import { tryParseGateV2, tryParseLegacyGate, explainParseFailure } from "./gate-
 import { readSolOutfile } from "./sol-outfile.mjs"; // V3.3.1: Sol output is file-based
 import { recordInvocation, initTelemetry } from "./invocation-telemetry.mjs";
 
-// V3.3.30 (ticket 076, Option A — layered enforcement, Sol-approved consult
+// V3.3.30 (layered enforcement, Sol-approved consult
 // 2026-09-24T02-15-15): caller-class fail-closed boundary on premium engines.
 // The coordinator layer must be a LAUNCHER/WATCHER/NARRATOR only; it may not
 // spend premium quota or own technical-approval calls. Enforcement lives in
@@ -45,7 +45,7 @@ export function callerAuthorityCheck(engine, caller = resolveCaller()) {
   engine = normalizeEngineId(engine);
   if (caller !== "coordinator") return { allowed: true, caller };
   if (COORDINATOR_DENIED_ENGINES.has(engine)) {
-    return { allowed: false, caller, rc: RC.CONFIG, error: `authority denied: caller=coordinator may not invoke premium engine "${engine}" (ticket 076 Option A) — route technical consultation through the requester` };
+    return { allowed: false, caller, rc: RC.CONFIG, error: `authority denied: caller=coordinator may not invoke premium engine "${engine}" — route technical consultation through the requester` };
   }
   return { allowed: true, caller };
 }
@@ -265,7 +265,7 @@ export class EngineRouter {
           engine, model: null, billingClass: "premium_quota", attempt: 1,
           success: false, failureClass: FAILURE_CLASS.CONFIG_ERROR, rc: RC.CONFIG,
           paid: false, visionUsed: false, durationMs: 0, fallbackFrom: null,
-          note: "caller=coordinator premium denied (ticket 076 Option A)",
+          note: "caller=coordinator premium engine denied",
         });
       } catch { /* never break routing */ }
       return out;
@@ -585,7 +585,7 @@ export class EngineRouter {
     const _phase7Caller = resolveCaller();
     if (AUTHORITY_STAGES.has(stage) && _phase7Caller === "coordinator") {
       auditCallerDeny({ at: new Date().toISOString(), caller: _phase7Caller, engine: requestedEngine, stage, denied: true, reason: "coordinator-authority-stage-denied" });
-      const err = new Error(`authority denied: caller=coordinator may not invoke the ${stage} gate (ticket 076 Phase 7) — technical approval is the requester's authority`);
+      const err = new Error(`authority denied: caller=coordinator may not invoke the ${stage} gate — technical approval is the requester's authority`);
       err.rc = RC.CONFIG;
       throw err;
     }

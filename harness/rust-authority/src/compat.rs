@@ -19,6 +19,10 @@ pub fn execute(request: &Value) -> Value {
             request.get("b").unwrap_or(&Value::Null)
         )),
         "phase_driver.evaluate" => phase_driver::evaluate(request),
+        "engine_state.claude_allowed" => json!(engine_state::claude_allowed(
+            request.get("runMode").and_then(Value::as_str).unwrap_or(""),
+            request.get("role").and_then(Value::as_str).unwrap_or("")
+        )),
         "engine_router.normalize" => json!(engine_router::normalize_engine(
             request.get("engine").and_then(Value::as_str).unwrap_or("")
         )),

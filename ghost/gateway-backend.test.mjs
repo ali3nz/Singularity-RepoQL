@@ -20,7 +20,11 @@ async function post(port, payload) {
   });
 }
 
-test("claude-code backend serves turns via the claude CLI and parses result JSON", { skip: process.platform === "win32" }, async () => {
+test("claude-code backend serves turns via the claude CLI and parses result JSON", {
+  skip: process.platform === "win32"
+    ? "the test fixture is a POSIX #!/bin/sh stub, which Windows cannot execute"
+    : false,
+}, async () => {
   const dir = mkdtempSync(join(tmpdir(), "ghost-backend-"));
   try {
     const stub = join(dir, "claude");

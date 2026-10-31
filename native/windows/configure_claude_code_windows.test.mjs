@@ -732,7 +732,7 @@ test('resumes unchanged-settings rollback from a receipt-owned restore temporary
  }finally{f.cleanup()}
 });
 
-test('node hooks resolve the bootstrap runtime, then PATH, and reject machine-local tools copies',()=>{
+test('node hooks resolve the bootstrap runtime, then PATH, and reject machine-local tools copies',{skip:process.platform!=='win32'?'win32 node.exe PATH resolution is Windows-only; the LOCALAPPDATA branch is covered separately':false},()=>{
  const base=mkdtempSync(join(tmpdir(),'claude-native-node-'));
  try{
   const runtime=join(base,'Singularity','runtime','node-v24.22.2');mkdirSync(runtime,{recursive:true});

@@ -107,7 +107,7 @@ test("an equivalent existing capsule is a DUPLICATE, not a second authoritative 
     const res = await evaluateCandidates({ root: dir, provider: PROVIDER, runRql: OK_RQL, modelCall: modelReturning(lesson()) });
     assert.equal(res.outcomes[0].state, "DUPLICATE");
     const rec = loadCandidate(res.outcomes[0].id, dir);
-    assert.match(rec.dedup.duplicateOf, /\.repoql\/concepts\/InitialiseBeforeQuery\.md$/);
+    assert.match(rec.dedup.duplicateOf.replaceAll("\\", "/"), /\.repoql\/concepts\/InitialiseBeforeQuery\.md$/);
     assert.equal(rec.promotion.eligible, false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

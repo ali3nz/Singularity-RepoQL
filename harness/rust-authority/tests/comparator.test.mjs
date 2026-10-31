@@ -2,7 +2,7 @@
 // This deliberately does NOT establish Rust parity or execute Rust code.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, chmodSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -14,14 +14,18 @@ const comparator = resolve(root, 'scripts/compare-fixtures.mjs');
 
 function checkResponse(mode) {
   const folder = mkdtempSync(join(tmpdir(), 'orchestra-diff-selftest-'));
+  const previousCwd = process.cwd();
   try {
-    const runner = join(folder, 'mock-compat-lines.mjs');
-    writeFileSync(runner, `#!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+    // The verifier accepts an executable path. Use the current Node binary as
+    // that executable and an extensionless CommonJS entry script as the fake
+    // response generator: native Windows cannot execute a shebang script, but
+    // `node compat-lines` works on every platform without a shell or chmod.
+    writeFileSync(join(folder, 'compat-lines'), `
+const { readFileSync } = require('node:fs');
 const cases = JSON.parse(readFileSync(${JSON.stringify(fixtures)}, 'utf8')).cases;
+const lines = readFileSync(0, 'utf8').split(String.fromCharCode(10)).map(line => line.endsWith(String.fromCharCode(13)) ? line.slice(0, -1) : line).filter((line, index, all) => line !== '' || index !== all.length - 1);
 let index = 0;
-for await (const line of createInterface({input:process.stdin})) {
+for (const line of lines) {
   const received = JSON.parse(line);
   if (JSON.stringify(received) !== JSON.stringify(cases[index]?.request)) process.exit(7);
   const expected = cases[index].expected;
@@ -30,11 +34,12 @@ for await (const line of createInterface({input:process.stdin})) {
   index++;
 }
 `);
-    chmodSync(runner, 0o700);
-    const result = spawnSync(process.execPath, [comparator, runner], { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024, timeout: 10000 });
+    process.chdir(folder);
+    const result = spawnSync(process.execPath, [comparator, process.execPath], { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024, timeout: 10000 });
     if (result.error) throw result.error;
     return result;
   } finally {
+    process.chdir(previousCwd);
     rmSync(folder, {recursive:true,force:true});
   }
 }

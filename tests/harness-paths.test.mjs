@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -20,7 +20,7 @@ function resolveWith(config, env = {}) {
   const cfg = join(dir, "harness.config.json");
   writeFileSync(cfg, JSON.stringify(config, null, 2));
   const script = `
-    const m = await import(${JSON.stringify(MODULE)});
+    const m = await import(${JSON.stringify(pathToFileURL(MODULE).href)});
     const p = m.HARNESS_PATHS;
     process.stdout.write(JSON.stringify({
       kitRoot: p.kitRoot,
@@ -36,6 +36,9 @@ function resolveWith(config, env = {}) {
       openchamber: p.openchamber,
       repoqlProbe: p.repoqlStatusProbe(),
       validateInside: p.validateStateDir(${JSON.stringify(join(ROOT, "harness", "kit", "runs"))}),
+      validateDotState: p.validateStateDir(${JSON.stringify(join(ROOT, "harness", "kit", "..state"))}),
+      validateDots: p.validateStateDir(${JSON.stringify(join(ROOT, "harness", "kit", "..."))}),
+      validateSibling: p.validateStateDir(${JSON.stringify(join(ROOT, "harness", "kit-sibling"))}),
       validateOutside: p.validateStateDir("/var/tmp/other-harness-runs"),
     }));`;
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
@@ -82,7 +85,7 @@ test("a mapped host translates both ways", () => {
   assert.equal(p.hubDocsDir, "/srv/docs");
   assert.equal(p.toContainer, "/workspace/work");
   assert.equal(p.toContainerMiss, "/unmapped/path");
-  assert.equal(p.toHost, "/srv/host-kit/lib/kit-paths.mjs");
+  assert.equal(p.toHost.replaceAll("\\", "/"), "/srv/host-kit/lib/kit-paths.mjs");
 });
 
 test("the engine owns its state root under the kit home", () => {
@@ -91,6 +94,15 @@ test("the engine owns its state root under the kit home", () => {
   assert.equal(p.validateInside.ok, false);
   assert.equal(p.validateInside.code, "STATE_DIR_INSIDE_KIT");
   assert.equal(p.validateOutside.ok, true);
+});
+
+test("dot-prefixed child names stay inside, and only a true sibling is outside", () => {
+  const p = resolveWith(SYNTHETIC);
+  for (const [name, result] of [["..state", p.validateDotState], ["...", p.validateDots]]) {
+    assert.equal(result.ok, false, `${name} is a child name inside the kit`);
+    assert.equal(result.code, "STATE_DIR_INSIDE_KIT", `${name} must use the inside guard`);
+  }
+  assert.equal(p.validateSibling.ok, true, "../kit-sibling is a true sibling lane, not a child name");
 });
 
 test("unconfigured optional features report unavailable, without probing", () => {
@@ -110,5 +122,5 @@ test("a configured-but-missing binary is still unavailable, not an attempted cal
 test("the shipped harness config is the one the engine actually loads", () => {
   const p = resolveWith(SYNTHETIC);
   assert.match(p.configPath, /harness\.config\.json$/);
-  assert.match(p.kitRoot, /harness\/kit$/);
+  assert.match(p.kitRoot, /harness[\\/]kit$/);
 });

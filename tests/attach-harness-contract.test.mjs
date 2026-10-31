@@ -31,6 +31,8 @@ test("the attach harness rolls back from the manifest the attach reported", () =
 });
 
 test("the attach harness is syntactically valid bash", () => {
-  const r = spawnSync("bash", ["-n", HARNESS], { encoding: "utf8" });
+  // Feed the script over stdin: this never asks a WSL bash to translate a
+  // native Windows path, and still syntax-checks the exact harness bytes.
+  const r = spawnSync("bash", ["-n"], { input: readFileSync(HARNESS, "utf8"), encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
 });

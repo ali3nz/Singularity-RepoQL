@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { GATE_SCHEMA } from "./gate-parser.mjs";
 
-const CACHE_VERSION = 3; // ticket 085 D15: fingerprint now includes policy identity + tool contracts (invalidates all v2 entries conservatively)
+const CACHE_VERSION = 3; // D15: fingerprint now includes policy identity + tool contracts (invalidates all v2 entries conservatively)
 
 // V3.2 §5.9: the old fingerprint covered orchestration metadata (task text,
 // kit config hashes) but NOT the target project's state — so a repeated task
@@ -27,7 +27,7 @@ export function targetStateFingerprint(targetPath, { maxFiles = 200 } = {}) {
       const porcelain = (st.stdout ?? "");
       const dirtyHash = createHash("sha256").update(porcelain).digest("hex").slice(0, 16);
       h.update(`git:${head.stdout.trim()}:${dirtyHash}\n`);
-      // Relevant changed-file hashes. Ticket 085 D15: the old cap of 50 dirty
+      // Relevant changed-file hashes. D15: the old cap of 50 dirty
       // files permitted false reuse in a heavily-dirty tree — hash ALL dirty
       // files up to a conservative 500-file bound instead (path+content).
       const files = porcelain.split("\n").map((l) => l.slice(3).trim()).filter(Boolean).slice(0, 500);
@@ -81,7 +81,7 @@ export function planFingerprint({ task, target, risk, confidential, evidenceMani
   h.update(String(!!confidential) + "\n");
   h.update(String(evidenceManifest?.digest ?? "") + "\n");
   for (const fh of fileHashes) h.update(`${fh.path}:${fh.sha256}\n`);
-  // Ticket 085 D15: canonical rules/policy identity + planner/prompt/tool
+  // D15: canonical rules/policy identity + planner/prompt/tool
   // contract identity participate in the fingerprint. A rules edit, config
   // change, or protocol change now invalidates cached plans (conservative).
   h.update(`policy:${policySha256}\n`);

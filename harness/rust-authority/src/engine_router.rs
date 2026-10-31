@@ -75,7 +75,7 @@ pub fn caller_authority(engine: &str, caller: &str) -> Value {
     }
     if is_premium_raw(engine) {
         return json!({"allowed":false,"caller":caller,"rc":49,
-          "error":format!("authority denied: caller=coordinator may not invoke premium engine \"{engine}\" (ticket 076 Option A) — route technical consultation through the requester")});
+          "error":format!("authority denied: caller=coordinator may not invoke premium engine \"{engine}\" — route technical consultation through the requester")});
     }
     json!({"allowed":true,"caller":caller})
 }

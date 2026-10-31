@@ -40,28 +40,36 @@ test("injection knob: retryable status fails over, permanent status surfaces and
     s.listen(0, "127.0.0.1", () => res({ s, port: s.address().port }));
   });
   const a = await mk("A"), b = await mk("B");
-  const frePort = () => new Promise((res) => {
-    const probe = http.createServer();
-    probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); });
-  });
   const children = [];
   const spawnRouter = async (inject) => {
-    const port = await frePort();
+    // Port 0 lets the OS choose the port; the router reports the actual bound
+    // port on its READY line. Never probe-and-close a port first: another
+    // process can claim it between the probe and the router bind.
     const c = spawn(process.execPath, [join(ROOT, "scripts", "extraction-failover.mjs")], {
       env: {
         ...process.env,
         EXTRACTION_FAILOVER_SECRETS_DIR: secrets,
         EXTRACTION_FAILOVER_GROQ_BASE: `http://127.0.0.1:${a.port}/v1`,
         EXTRACTION_FAILOVER_COHERE_BASE: `http://127.0.0.1:${b.port}/v1`,
-        EXTRACTION_FAILOVER_PORT: String(port),
+        EXTRACTION_FAILOVER_PORT: "0",
         EXTRACTION_FAILOVER_TIMEOUT_MS: "3000",
         EXTRACTION_FAILOVER_SKIP: "groq-20b",
         COHERE_QUOTA_FILE: join(tmpdir(), "knob-cohere-quota.json"),
         ...(inject ? { EXTRACTION_FAILOVER_INJECT: inject } : {}),
       },
-      stdio: ["ignore", "ignore", "ignore"],
+      stdio: ["ignore", "pipe", "ignore"],
     });
     children.push(c);
+    let ready = "";
+    const port = await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error("router did not report READY")), 10_000);
+      c.stdout.on("data", (d) => {
+        ready += String(d);
+        const m = /EXTRACTION_FAILOVER_READY port=(\d+)/.exec(ready);
+        if (m) { clearTimeout(t); res(Number(m[1])); }
+      });
+      c.on("exit", (code) => { clearTimeout(t); rej(new Error("router exited " + code)); });
+    });
     for (let i = 0; i < 50; i++) {
       try {
         const h = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
@@ -148,7 +156,10 @@ test("provider onboarding: a valid provider pair becomes a hop, an invalid one n
       });
       c.on("close", (code) => { if (code) { clearTimeout(t); rej(new Error("router exited " + code)); } });
     });
-    // on port 0 the real port is not printed; the READY line lists the ladder
+    // The router must report the actual OS-assigned port, not the requested 0.
+    const readyPort = /EXTRACTION_FAILOVER_READY port=(\d+)/.exec(ready);
+    assert.ok(readyPort, "the READY line carries the bound port");
+    assert.ok(Number(readyPort[1]) > 0, "the OS-assigned port is reported, not 0");
     assert.match(ready, /\bnvidia-test\b/, "the onboarded provider is a hop");
     assert.doesNotMatch(ready, /\binsecure\b/, "a plain-http provider base is refused");
     assert.doesNotMatch(ready, /\bunblessed\b/, "a key without a provider definition file is not a hop");

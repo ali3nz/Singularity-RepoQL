@@ -302,4 +302,8 @@ export const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: { message: "extraction ladder exhausted" } }));
 });
 
-server.listen(LISTEN_PORT, LISTEN_HOST, () => console.log("EXTRACTION_FAILOVER_READY port=" + LISTEN_PORT + " ladder=" + LADDER.map(l => l.name).join(">")));
+server.listen(LISTEN_PORT, LISTEN_HOST, () => {
+  const address = server.address();
+  const actualPort = address && typeof address === "object" ? address.port : LISTEN_PORT;
+  console.log("EXTRACTION_FAILOVER_READY port=" + actualPort + " ladder=" + LADDER.map(l => l.name).join(">"));
+});

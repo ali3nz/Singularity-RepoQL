@@ -241,7 +241,7 @@ export function applyTerminalCompliance(cs, runDir) {
   return cs;
 }
 
-// ---- V3.3.35 (ticket 085, D05/D06): supported case writes go through
+// ---- V3.3.35 (D05/D06): supported case writes go through
 // lib/case-store.writeCase (per-case lock + monotonic revision CAS). Legacy
 // saveCase remains ONLY for first-creation (initConsultCase / upsertRunCase
 // before any concurrency exists) and legacy callers; concurrent writers must

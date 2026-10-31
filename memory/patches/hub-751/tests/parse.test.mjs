@@ -1,11 +1,41 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { parseFileBlocks, extractSource } from "/app/knowledge/dist-test/ingest-v2-CSw_7GGw.mjs";
-import { parseFileBlocks as baselineParseFileBlocks } from "/app/knowledge/dist-base/ingest-v2-CSw_7GGw.mjs";
-import { n as parseFrontmatter } from "/app/knowledge/dist-test/frontmatter-Ce2kZn6q.mjs";
+import { pathToFileURL } from "node:url";
+
+// This is an image-integration regression: it runs against the parser bundles
+// that the pinned memory-hub base image builds into /app/knowledge. A plain
+// source checkout does not contain those compiled bundles or the archived
+// failure dumps, so the suite reports the prerequisite honestly instead of
+// importing a hardcoded container path and failing at module load. Run it for
+// real with tests/run-tests.sh inside the built image (or point the two
+// environment variables at an extracted image tree).
+const KNOWLEDGE_ROOT = process.env.MEMORY_HUB_KNOWLEDGE_DIR || "/app/knowledge";
+const DUMPS = process.env.MEMORY_HUB_DUMPS_DIR || "/dumps";
+const DIST_TEST = join(KNOWLEDGE_ROOT, "dist-test", "ingest-v2-CSw_7GGw.mjs");
+const DIST_BASE = join(KNOWLEDGE_ROOT, "dist-base", "ingest-v2-CSw_7GGw.mjs");
+const FRONTMATTER = join(KNOWLEDGE_ROOT, "dist-test", "frontmatter-Ce2kZn6q.mjs");
+const artifactsPresent = existsSync(DIST_TEST) && existsSync(DIST_BASE) && existsSync(FRONTMATTER);
+const dumpsPresent = existsSync(DUMPS);
+const why = "requires the pinned memory-hub image artifacts; run memory/patches/hub-751/tests/run-tests.sh inside the built image, or set MEMORY_HUB_KNOWLEDGE_DIR to an extracted image tree";
+const dumpsWhy = artifactsPresent
+  ? `requires the archived failure dumps at ${DUMPS}; mount them when running the image integration suite`
+  : why;
+const run = artifactsPresent
+  ? test
+  : (name, fn) => test(name, { skip: why }, fn);
+const dumpRun = artifactsPresent && dumpsPresent
+  ? test
+  : (name, fn) => test(name, { skip: dumpsWhy }, fn);
+
+let parseFileBlocks, extractSource, baselineParseFileBlocks, parseFrontmatter;
+if (artifactsPresent) {
+  ({ parseFileBlocks, extractSource } = await import(pathToFileURL(DIST_TEST).href));
+  ({ parseFileBlocks: baselineParseFileBlocks } = await import(pathToFileURL(DIST_BASE).href));
+  ({ n: parseFrontmatter } = await import(pathToFileURL(FRONTMATTER).href));
+}
 
 const SRC = (title) => `---\ntype: source\ntitle: ${title}\n---\n\n# ${title}\n\nBody for ${title}.\n`;
 const OPEN = (p) => `<<<FILE path="${p}">>>\n`;
@@ -15,48 +45,48 @@ const isSource = (content) => {
   return p.hasFrontmatter && p.frontmatter.type === "source";
 };
 
-test("1 canonical END terminators", () => {
+run("1 canonical END terminators", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + END + OPEN("wiki/concepts/b.md") + SRC("B") + END);
   assert.deepEqual(r.files.map((f) => f.path), ["wiki/sources/a.md", "wiki/concepts/b.md"]);
 });
 
-test("2 blocks separated by --- without END are both recovered", () => {
+run("2 blocks separated by --- without END are both recovered", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + "---\n" + OPEN("wiki/sources/b.md") + SRC("B") + "---\n");
   assert.equal(r.files.length, 2);
 });
 
-test("3 ---END terminators", () => {
+run("3 ---END terminators", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + "---END\n" + OPEN("wiki/sources/b.md") + SRC("B") + "---END\n");
   assert.equal(r.files.length, 2);
 });
 
-test("4 trailing '--- ' terminator and '--- ' frontmatter delimiters are normalized", () => {
+run("4 trailing '--- ' terminator and '--- ' frontmatter delimiters are normalized", () => {
   const fm = "--- \ntype: source\ntitle: A\n--- \n\n# A\n\nBody.\n";
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + fm + "--- \n" + OPEN("wiki/sources/b.md") + SRC("B") + END);
   assert.equal(r.files.length, 2);
   assert.ok(r.files[0].content.startsWith("---\ntype: source\ntitle: A\n---\n"));
 });
 
-test("5 frontmatter-only block whose closing --- is the last line is kept", () => {
+run("5 frontmatter-only block whose closing --- is the last line is kept", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + "---\ntype: source\ntitle: Only FM\n---");
   assert.equal(r.files.length, 1);
   assert.match(r.files[0].content, /title: Only FM/);
 });
 
-test("6 unclosed A followed by closed B: A never contains B", () => {
+run("6 unclosed A followed by closed B: A never contains B", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + OPEN("wiki/sources/b.md") + SRC("B") + END);
   assert.equal(r.files.length, 2);
   assert.ok(!r.files[0].content.includes("Body for B"));
   assert.ok(r.files[1].content.includes("Body for B"));
 });
 
-test("7 single bare-EOF final block yields zero files with a warning", () => {
+run("7 single bare-EOF final block yields zero files with a warning", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A"));
   assert.equal(r.files.length, 0);
   assert.equal(r.warnings.length, 1);
 });
 
-test("8 <<<<FILE typo is a boundary; invalid stub rejected; no leak into previous page", () => {
+run("8 <<<<FILE typo is a boundary; invalid stub rejected; no leak into previous page", () => {
   const stub = "<<<<FILE path=\"wiki/concepts/stub.md\">>>\n---\ntitle: broken";
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + END + stub);
   assert.equal(r.files.length, 1);
@@ -64,37 +94,37 @@ test("8 <<<<FILE typo is a boundary; invalid stub rejected; no leak into previou
   assert.ok(!r.files[0].content.includes("stub"));
 });
 
-test("9 invalid paths are rejected", () => {
+run("9 invalid paths are rejected", () => {
   for (const p of ["/etc/passwd", "../x.md", "notes/x.md"]) {
     assert.equal(parseFileBlocks(OPEN(p) + SRC("X") + END).files.length, 0, p);
   }
 });
 
-test("10 missing frontmatter is rejected", () => {
+run("10 missing frontmatter is rejected", () => {
   const r = parseFileBlocks(OPEN("wiki/concepts/x.md") + "# just body\n" + END);
   assert.equal(r.files.length, 0);
 });
 
-test("11 CRLF input", () => {
+run("11 CRLF input", () => {
   const text = "<<<FILE path=\"wiki/sources/a.md\">>>\r\n---\r\ntype: source\r\ntitle: A\r\n---\r\n\r\n# A\r\nBody.\r\n<<<END>>>\r\n";
   const r = parseFileBlocks(text);
   assert.equal(r.files.length, 1);
   assert.equal(parseFrontmatter(r.files[0].content).frontmatter.title, "A");
 });
 
-test("12 text after END is dropped", () => {
+run("12 text after END is dropped", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + END + "TRAILING COMMENTARY\n");
   assert.equal(r.files.length, 1);
   assert.ok(!r.files[0].content.includes("TRAILING"));
 });
 
-test("13 horizontal rule inside body is preserved", () => {
+run("13 horizontal rule inside body is preserved", () => {
   const body = "---\ntype: source\ntitle: A\n---\n\n# A\n\nSection one.\n\n---\n\nSection two.\n";
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + body + END);
   assert.match(r.files[0].content, /---\n\nSection two\./);
 });
 
-test("14 source page with unquoted colons in title/description is repaired, not dropped", () => {
+run("14 source page with unquoted colons in title/description is repaired, not dropped", () => {
   const page = "---\ntype: source\ntitle: Skill: mail sink \u2014 how to send\ndescription: Use: carefully\n---\n\n# Mail sink\n\nBody.\n";
   const r = parseFileBlocks(OPEN("wiki/sources/mail.md") + page + END);
   assert.equal(r.files.length, 1);
@@ -102,7 +132,7 @@ test("14 source page with unquoted colons in title/description is repaired, not 
   assert.ok(r.warnings.some((w) => w.includes("已修复")));
 });
 
-test("15 extractSource retries once when the first response has no source page", async () => {
+run("15 extractSource retries once when the first response has no source page", async () => {
   const dir = mkdtempSync(join(tmpdir(), "p751-"));
   const src = join(dir, "src.md");
   writeFileSync(src, "Some source text.\n");
@@ -120,7 +150,7 @@ test("15 extractSource retries once when the first response has no source page",
   assert.ok(keys.some((k) => k.startsWith("wiki/concepts/")), keys.join(","));
 });
 
-test("16 extractSource throws when no source page exists after the retry", async () => {
+run("16 extractSource throws when no source page exists after the retry", async () => {
   const dir = mkdtempSync(join(tmpdir(), "p751-"));
   const src = join(dir, "src.md");
   writeFileSync(src, "Some source text.\n");
@@ -129,8 +159,8 @@ test("16 extractSource throws when no source page exists after the retry", async
   await assert.rejects(extractSource(dir, src, {}, [], { llm, mode: "single" }), /未生成 source 摘要页/);
 });
 
-test("17 archived failure dumps: patched recovers at least as much as baseline; no leaks; all pages valid", () => {
-  const dir = "/dumps";
+dumpRun("17 archived failure dumps: patched recovers at least as much as baseline; no leaks; all pages valid", () => {
+  const dir = DUMPS;
   const names = readdirSync(dir).filter((n) => n.endsWith(".txt")).sort();
   const stats = {
     dumps: names.length,
@@ -160,28 +190,28 @@ test("17 archived failure dumps: patched recovers at least as much as baseline; 
   assert.ok(stats.patched.sourcePage >= stats.base.sourcePage);
 });
 
-test("19 malformed <<<END>> closer is recognized; trailing --- separators are not kept", () => {
+run("19 malformed <<<END>> closer is recognized; trailing --- separators are not kept", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + "--- \n---\n\n<<<END>>\n");
   assert.equal(r.files.length, 1);
   assert.ok(!r.files[0].content.includes("END"));
   assert.ok(r.files[0].content.trimEnd().endsWith("Body for A."), JSON.stringify(r.files[0].content.slice(-60)));
 });
 
-test("20 unterminated <<<END (no closing >) after a ---END line is recognized and trailer removed", () => {
+run("20 unterminated <<<END (no closing >) after a ---END line is recognized and trailer removed", () => {
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + SRC("A") + "\n---END\n<<<END\n");
   assert.equal(r.files.length, 1);
   assert.ok(!/END/.test(r.files[0].content) && !/^---END$/m.test(r.files[0].content), JSON.stringify(r.files[0].content.slice(-60)));
   assert.ok(r.files[0].content.trimEnd().endsWith("Body for A."));
 });
 
-test("21 <<<ENDPOINT inside body is NOT treated as a terminator", () => {
+run("21 <<<ENDPOINT inside body is NOT treated as a terminator", () => {
   const body = "---\ntype: source\ntitle: A\n---\n\n# A\n\nThe <<<ENDPOINT>>> value is documented here.\n";
   const r = parseFileBlocks(OPEN("wiki/sources/a.md") + body + END);
   assert.equal(r.files.length, 1);
   assert.ok(r.files[0].content.includes("<<<ENDPOINT>>>"));
 });
 
-test("18 informational: latest dump of each of the five current failures", () => {
+dumpRun("18 informational: latest dump of each of the five current failures", () => {
   const five = [
     "services-ai-orchestra-guard.md",
     "services-freebuff-desktop.md",
@@ -189,7 +219,7 @@ test("18 informational: latest dump of each of the five current failures", () =>
     "skills-mail-sink.md",
     "skills-vision.md",
   ];
-  const names = readdirSync("/dumps").filter((n) => n.endsWith(".txt")).sort();
+  const names = readdirSync(DUMPS).filter((n) => n.endsWith(".txt")).sort();
   const out = {};
   for (const s of five) {
     const latest = names.filter((n) => n.startsWith(`generate-fail-${s}-`)).pop();

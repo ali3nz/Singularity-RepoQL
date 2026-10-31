@@ -76,6 +76,33 @@ Registering the tasks needs a logon token for the current user. If the machine
 is sitting at the sign-in screen, log in and rerun `-Mode Install -Apply`; the
 tasks are logon-triggered, not boot services.
 
+### Dashboard desktop shortcut
+
+Create the per-user shortcut after `Install`, and remove it before `Uninstall`:
+
+```powershell
+$s = '.\native\windows\manage_dashboard_shortcut.ps1'
+powershell -NoProfile -ExecutionPolicy Bypass -File $s -Mode Create
+powershell -NoProfile -ExecutionPolicy Bypass -File $s -Mode Status
+# before -Mode Uninstall:
+powershell -NoProfile -ExecutionPolicy Bypass -File $s -Mode Remove
+```
+
+`Create` is idempotent, needs no Administrator rights, and writes only
+`Singularity Dashboard.lnk` on the Desktop plus the bundled icon and
+`open_dashboard.ps1` under `%LOCALAPPDATA%\Singularity\DashboardShortcut`. It
+refuses to overwrite a shortcut it does not own (marked in the shortcut
+description); `Remove` deletes only the owned shortcut and its two supporting
+files in that folder. The shortcut runs the launcher, which reads the dashboard
+capability key from `<state dir>\token` (default
+`%LOCALAPPDATA%\Singularity\Dashboard`) and opens
+`http://127.0.0.1:18100/#k=<key>` in the default browser. The key is never
+printed or logged; if no key file exists, the plain dashboard address is opened
+and shows how to get a fresh link. `-DashboardPort` selects another dashboard
+port and `-StateDir` another state folder. `Status` reports the path, URL,
+ownership and supporting-file presence without writing anything. Never paste the
+key or a link containing it into chat, logs or issues.
+
 ### Office only
 
 ```powershell

@@ -5,9 +5,9 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {fromInvocation,fromObserver,SUPPORTED_OBSERVER_TRANSITIONS} from '../adapter/source-telemetry.mjs';
+import {REFERENCE_KIT} from './reference-kit.mjs';
 
-const src=process.env.ORCHESTRA_REFERENCE_KIT;
-if(!src) throw Error('ORCHESTRA_REFERENCE_KIT required for source-derived tests');
+const src=REFERENCE_KIT;
 const usage=await import(pathToFileURL(join(src,'lib','invocation-telemetry.mjs')).href);
 const observer=await import(pathToFileURL(join(src,'lib','observer-sink.mjs')).href);
 

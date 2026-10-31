@@ -4,8 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { evaluateWorkerShadow } from '../adapter/worker-shadow.mjs';
 
-const base = process.env.ORCHESTRA_REFERENCE_KIT;
-if (!base) throw Error('Set ORCHESTRA_REFERENCE_KIT to the extracted original JS kit root');
+import { REFERENCE_KIT } from './reference-kit.mjs';
+
+const base = REFERENCE_KIT;
 const worker = await import(pathToFileURL(resolve(base, 'lib/worker-completion.mjs')).href);
 
 test('prose-only completion cannot be approved', () => {

@@ -1,55 +1,68 @@
 ---
-description: Install and evaluate the Singularity RepoQL native Windows source release candidate.
-tags: [singularity, repoql, windows, claude-code, installation, release]
+description: Give Claude Code project memory, code search, task tracking, scheduled work, and a dashboard on Windows.
+tags: [singularity, repoql, claude-code, windows, getting-started]
 ---
 
-# Singularity RepoQL — Claude Code Complete for Windows
+# Singularity RepoQL
 
-One native Windows package brings together RepoQL code intelligence, Tencent MemoryCore, Ghost scheduling, an authenticated dashboard, and the Claude Office activity viewer. The installer targets the complete package only.
+Give Claude Code a better way to keep track of your projects. Singularity brings together saved conversations, code search, a task list, scheduled work, and a dashboard on your Windows PC.
 
-Codex can build, install, test, and operate the native components without a local Claude application. Claude Code agent definitions, skills, rules, and lifecycle hooks are included for users who choose that integration. Installing those files alone does not establish that a Claude session captured or recalled memory.
+You don't need to set up each part yourself. Give Claude Code the prompt below and ask it to handle the installation for you.
 
-**Release status: Windows-native source release candidate.** Native reboot/logon startup, Claude desktop Code-mode RepoQL and Kanzo discovery, parent-conversation capture, and a scripted automatic documentation-ingestion smoke test have been verified on one Windows x64 workstation. This is not a signed, turnkey binary installer or full release certification. See the [acceptance results and remaining limits](docs/WINDOWS-RELEASE-ACCEPTANCE.md). Historical milestone receipts verify only their own checkpoints.
+## What does it do?
 
-## Install the complete package
+- **Keep useful context.** Save conversations and project notes so your agent can look them up when you return to your work.
+- **Find the right code.** Help Claude search your project and understand how its files fit together.
+- **Keep track of tasks.** Give your agent a place to record work and check what still needs doing.
+- **Schedule work.** Set up jobs for your agent to run later using Ghost, the built-in scheduler.
+- **See what's happening.** Use the dashboard to manage scheduled work, and Claude Office to view agent activity in a virtual office.
 
-Follow [Native Windows installation](docs/NATIVE-WINDOWS-INSTALLATION.md). The native lifecycle entrypoint is `native/windows/manage_native_windows.ps1`. It provides Plan, Install, Start, Status, Stop, Uninstall, and Reinstall operations; mutations require `-Apply`. The public entrypoint selects the complete package internally and presents no option menu.
+## Get started
 
-The package uses native Windows executables and per-user scheduled tasks. Its dashboard and control services bind to loopback. Keep private configuration and credentials in the protected per-user state directory. Never paste keys into issues, logs, command arguments, or Git.
+You need a **Windows PC**, an internet connection, and **Claude Code installed and signed in**. Your agent will check for the other software it needs and install what's missing.
 
-Dependencies include Windows x64, RepoQL **1.7.18**, Python with timezone data, and the runtimes described in the installation guide. Building the Rust binaries also needs the MSVC toolchain and Windows SDK. Docker and WSL are not prerequisites for the native path. A configured runner executable is required for Ghost work; installing the scheduler does not provision a model account or bypass its limits.
+1. Open Claude Code on the PC where you want to install Singularity.
+2. Copy the whole prompt below into its chat.
+3. Let your agent do the setup. Approve permission requests you understand, and sign in if it asks you to connect an account.
 
-## Components
+```text
+Install Singularity RepoQL from https://github.com/ali3nz/Singularity-RepoQL on this Windows PC.
 
-- **RepoQL** indexes code and approved knowledge. The bundled MemoryCore and Kanzo connectors use the RepoQL 1.7.18 `parse` / `fetch` / `render` contract. Earlier experimental `abi: 1` manifests are incompatible with this supported runtime.
-- **Tencent MemoryCore** stores scoped conversations and extracted memories. The connector reads L1 record shards and L2/L3 profile files without modifying the source store. Capture, extraction, and recall require their runtime and identity configuration; a healthy listener alone verifies none of them.
-- **Ghost** keeps planning drafts separate from registered Windows schedules. Activation rereads the exact draft revision, persists the prompt revision, registers a real task, and verifies its action, principal, trigger, and enabled state before displaying it as active. Updates and cancellation also require independent readback. Execution receipts survive host restart.
-- **Dashboard** provides authenticated schedule editing and native integration panels. A per-user capability binds local scheduler requests to the configured Windows owner. Cloudflare identity alone does not authorize that owner's tasks.
-- **Claude Office** visualizes actual agent events. Its upstream code has separate provenance and license notices. Office presence is event evidence, not proof that a model request, memory extraction, or scheduled job succeeded.
-- **Claude Code integration** includes seventeen role definitions and ten Singularity skills. The official RepoQL plugin owns RepoQL MCP; the project MCP entry owns Kanzo. Existing unrelated settings and credentials are preserved.
+Read DETAILS-FOR-NERDS.md and docs/NATIVE-WINDOWS-INSTALLATION.md, then follow the supported native installation. Check my computer, install all missing dependencies from the documented official sources, and build anything required. Do the setup work for me.
 
-## Use Claude desktop Code mode
+Connect all included tools to Claude Code in my chosen project: code search, memory, task tracking, Ghost scheduling, the dashboard, and Claude Office. Configure startup when I sign in. Preserve my existing files, settings, and other apps. Keep passwords and API keys private; ask before adding paid services or making system-wide changes.
 
-Open the workspace selected during installation. Kanzo is registered in that workspace's `.mcp.json`, not globally and not automatically in another repository. Approve the project MCP server when Claude prompts. A successful `list_projects` response saying there are no projects is a valid connection test; it does not create a project.
+Test the connections in a fresh Claude Code session, including saving and finding a harmless memory and running a harmless scheduled job. Fix setup problems yourself. Only ask me for permissions, account sign-ins, or choices you cannot make for me. Tell me clearly if anything could not be tested.
 
-The official RepoQL plugin supplies code-intelligence tools. Point it at an actual repository rather than a home or Documents directory. The parent-session Stop and SessionEnd hooks capture user and assistant messages into their own MemoryCore identity. Documentation hooks baseline eligible Markdown at SessionStart and discover changes at Stop. [Document ingestion](docs/DOC-INGESTION.md) distinguishes a verified searchable revision from a pending or failed write.
+Create the "Singularity Dashboard" desktop shortcut with native/windows/manage_dashboard_shortcut.ps1 and check that it opens the dashboard.
 
-## Providers
+Finish by telling me where the dashboard shortcut is (never show me the dashboard's private key or any link that contains it), the project folder to open, and simple instructions for everyday use, stopping, and uninstalling. Don't call the setup complete until the required checks pass.
+```
 
-Use provider credentials you own. The extraction router supports Cohere and additional OpenAI-compatible providers configured with a private key file and provider descriptor. Provider availability, quotas, and models can change. A controlled provider failure must reach a second real provider before failover is accepted.
+Your usual Claude account or API costs still apply. If another part needs an account or API key, your agent should explain what it's for before asking you to connect it.
 
-On Windows the router binds only to loopback. Enable its local bearer requirement and keep the access key in the private secrets directory. Router health is not a successful completion test.
+## Open your dashboard
 
-## Development and acceptance
+The dashboard is the control panel for Singularity. It runs only on your own PC and is protected by a private key that stays on your computer.
 
-Build and test directly on Windows. Inspect existing product ownership before changing tasks, files, or services. Clean-install tests remove only project-owned resources and preserve unrelated software, user data, and Codex.
+- **Easiest way:** double-click the **Singularity Dashboard** icon (a glowing ring on a purple tile) on your Windows Desktop. Your agent creates it during setup. It opens the dashboard in your browser and signs you in automatically.
+- **Address:** the dashboard lives at <http://127.0.0.1:18100/>. Typing it in by hand shows a page asking for a fresh link, so use the Desktop icon.
+- **Can't see the icon, or the page won't open?** Tell your agent: “Open my Singularity dashboard and fix the shortcut if it is missing.” Don't ask it to show you the private key; it can open the dashboard for you without displaying it.
 
-Native Rust compilation, focused source tests, live browser tests, actual scheduler execution, memory/provider integration, install/restart/uninstall/reinstall, and reboot recovery are separate checks. Report untested checks explicitly. Do not label a source archive as a usable installer or a successful test as proof of a different advertised capability.
+## After setup
 
-The [acceptance report](docs/WINDOWS-RELEASE-ACCEPTANCE.md) records the verified native path. Legacy Linux/container instructions and historical four-profile source tools remain for provenance and compatibility work. They are not additional installer choices in this Windows release candidate.
+Open the project folder your agent gives you and start a new Claude Code conversation. You can ask things like:
 
-## Documentation and license
+- “Find the code that handles signing in.”
+- “Show me the tasks we still need to finish.”
+- “Open my Singularity dashboard.”
 
-[Architecture](docs/ARCHITECTURE.md), [memory](docs/MEMORY-SETUP.md), [Claude Code integration](docs/CLAUDE-CODE-SETUP.md), [Office](docs/OFFICE-SETUP.md), and [tagged-release gates](docs/RELEASE.md).
+If something isn't working, tell your agent what happened and ask it to check the installation. You don't need to diagnose it yourself.
 
-This repository is MIT licensed. Preserve separate upstream and third-party notices when distributing Tencent, Office, Kanzo, and other dependencies.
+## Want the technical details?
+
+[Details for Nerds](DETAILS-FOR-NERDS.md) covers how the parts work, installation requirements, security, and testing limits.
+
+## License
+
+[MIT](LICENSE), with [separate notices for included third-party software](THIRD_PARTY_NOTICES.md).

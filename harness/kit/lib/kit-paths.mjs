@@ -16,7 +16,7 @@
 //     harness's state.
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const KIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -194,7 +194,13 @@ export function resolvePathEnvironment(env = process.env, config = HARNESS_CONFI
       if (!target) return { ok: true };
       const abs = resolve(target);
       const kit = resolve(KIT_ROOT);
-      if (abs === kit || abs.startsWith(`${kit}/`)) {
+      // path.relative handles both POSIX and Windows separators/drive roots;
+      // comparing with a hardcoded "/" would treat a Windows child as outside.
+      const rel = relative(kit, abs);
+      // A sibling entry such as "..state" is a child name, not a parent path:
+      // only the exact ".." segment may cross the kit boundary.
+      const inside = rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+      if (inside) {
         return { ok: false, code: "STATE_DIR_INSIDE_KIT", detail: `ORCH_STATE_DIR ${abs} is inside the engine home ${kit}; run ids from different harnesses must not overlap` };
       }
       return { ok: true };

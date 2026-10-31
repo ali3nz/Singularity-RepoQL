@@ -7,14 +7,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
 const harnessConfig = JSON.parse(read("harness/harness.config.json"));
 
 test("the Rust authority protocol version is frozen at 1", async () => {
-  const mod = await import(join(ROOT, "harness", "kit", "lib", "rust-authority.mjs"));
+  const mod = await import(pathToFileURL(join(ROOT, "harness", "kit", "lib", "rust-authority.mjs")).href);
   assert.equal(mod.PROTOCOL_VERSION, 1);
   assert.equal(harnessConfig.rustAuthority.protocolVersion, 1);
 });

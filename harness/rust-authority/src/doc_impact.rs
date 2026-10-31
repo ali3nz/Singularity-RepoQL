@@ -58,7 +58,7 @@ pub fn render(classification: &Value) -> Value {
     let Some(unmapped) = classification.get("unmapped").and_then(Value::as_array) else {
         return json!({"error":"missing unmapped"});
     };
-    let mut lines = vec!["## Source-to-doc impact classification (ticket 085 D17)".to_owned()];
+    let mut lines = vec!["## Source-to-doc impact classification".to_owned()];
     for e in entries {
         let path = js_text(e.get("path"));
         let docs = e

@@ -590,7 +590,7 @@ async function acquireWorker(workerId, runId, { forceNew = false, task = "" } = 
     if (authority) endEffects(scopePrev);
   }
   if (legacyOpId) journalComplete(RUNS, legacyOpId, { state: "done", remoteId: t.id });
-  // V3.3.35 (ticket 085, D14): exclusive cross-case lease on the new thread —
+  // V3.3.35 (D14): exclusive cross-case lease on the new thread —
   // expiry alone never authorises takeover (owner-pid heartbeat proof only).
   const lease = acquireLease({ workerId, caseId: runId, threadId: t.id });
   if (!lease.ok) log(`${workerId}: LEASE WARNING — ${lease.reason} (holder: ${JSON.stringify(lease.holder ?? {})})`);
@@ -1199,13 +1199,13 @@ async function cmdConsult(argv) {
       "Use --codex, --engine <name>, or omit flags for the default chain (openai-sol → opencode → openrouter-free; Sol-only premium per ticket 206 — cursor/codex pin-only). Auto routing is NOT re-enabled by this flag.");
     process.exit(2);
   }
-  // V3.3.30 (ticket 076, Option A): early consult refusal for coordinator-tagged
+  // V3.3.30: early consult refusal for coordinator-tagged
   // callers BEFORE any session/state mutation — a coordinator is a
   // launcher/watcher/narrator, never a consultant owner. The requester (untagged) is
   // unaffected. Fire on --end too: closing/steering a session is consult
   // ownership, not narration.
   if (resolveCaller() === "coordinator") {
-    console.error("consult: authority denied — caller=coordinator may not own or steer duo-consult sessions (ticket 076 Option A). Ask the requester to run the consult; the coordinator narrates via the deterministic watcher.");
+    console.error("consult: authority denied — caller=coordinator may not own or steer duo-consult sessions. Ask the requester to run the consult; the coordinator narrates via the deterministic watcher.");
     process.exit(49);
   }
   const grabVal = (idx) => (idx >= 0 && argv[idx + 1] && !argv[idx + 1].startsWith("--") ? argv[idx + 1] : null);
@@ -2137,7 +2137,7 @@ async function buildPlan(task, workerCount = 1, { visionRequired = false, runId 
   const fileHashes = ["config.json", "prompts/worker-protocol.md"].map((rel) => {
     try { return { path: rel, sha256: sha256File(join(HERE, rel)) }; } catch { return null; }
   }).filter(Boolean);
-  // V3.3.35 (ticket 085, D15): canonical rules/policy identity + the full tool
+  // V3.3.35 (D15): canonical rules/policy identity + the full tool
   // contract (planner prompt + worker protocol + orchestrator source) join the
   // fingerprint — a rules/config/prompt edit now invalidates cached plans.
   const policySha = policyIdentity({ rulesPath: RULES_FILE, configPath: join(HERE, "config.json") });
@@ -3437,7 +3437,7 @@ async function applyReviewFeedback(runId, st, phase, review) {
     // then waits on. Only deliver-then-reset when the postMessage succeeded;
     // with fix items for a dead worker, record the failure honestly (the
     // review gate still sees the current state).
-    // V3.3.35 (ticket 085, D07): durable intent before the consequential
+    // V3.3.35 (D07): durable intent before the consequential
     // remote effect (a delivered review packet changes worker state).
     const fbOpId = `phase-deliver:${runId}:${phase.n}:${w.id}:${Date.now()}`;
     try { journalIntent(RUNS, { opId: fbOpId, op: "phase-message-deliver", caseId: runId, phase: String(phase.n), requestDigest: requestDigestOf({ worker: w.id, msg: msg.slice(0, 500) }) }); }
@@ -3910,7 +3910,7 @@ async function solFinalAcceptance(runId, st, { attempt, prior = null }) {
       log(`final acceptance ${attempt}: no parseable verdict — recording NEEDS_HUMAN_REVIEW (${out})`);
       return { verdict: "NEEDS_HUMAN_REVIEW", file: out, raw: r.output };
     }
-    // V3.3.35 (ticket 085, D02): freeze an immutable subject manifest for the
+    // V3.3.35 (D02): freeze an immutable subject manifest for the
     // EXACT reviewed subject (source/kit state, validation evidence, config
     // identity). A carried verdict is INVALIDATED by verifyAcceptanceSubject()
     // when the subject changes afterwards (acceptance matrix #3).
@@ -4265,7 +4265,7 @@ async function cmdStart(argv) {
   // preWrite compliance shape, built ONLY from machine evidence the
   // coordinator already has (plan artifact + rules hash + evidence ref). The
   // gate verifies presence/shape/authority — it never judges the plan.
-  // V3.3.35 (ticket 085, D01/D04): the gate now consumes a DIGEST-BOUND launch
+  // V3.3.35 (D01/D04): the gate now consumes a DIGEST-BOUND launch
   // approval artifact (plan content sha256 + rules/policy identity + case
   // id/rev + approver). The artifact is created ONLY by non-coordinator
   // callers (library enforces); the coordinator (and a V3.3.34.1-repaired
@@ -4291,7 +4291,7 @@ async function cmdStart(argv) {
     // LIVE plan content — a mutated plan fails verification here (D01).
     const approval = loadApprovalArtifact(runCaseDir);
     if (!approval) {
-      console.error("PRE-WRITE GATE DENIED (ticket 085 D01): no digest-bound launch approval artifact in the run dir.\n  The approver (operator/agent actor, NOT the coordinator) must create one via lib/approval-artifact.mjs createApprovalArtifact (bound to plan.md content + rules/policy identity + case rev).");
+      console.error("PRE-WRITE GATE DENIED: no digest-bound launch approval artifact in the run dir.\n  The approver (operator/agent actor, NOT the coordinator) must create one via lib/approval-artifact.mjs createApprovalArtifact (bound to plan.md content + rules/policy identity + case rev).");
       process.exit(5);
     }
     const policySha = policyIdentity({ rulesPath: RULES_FILE, configPath: join(HERE, "config.json") });
@@ -4301,14 +4301,14 @@ async function cmdStart(argv) {
     });
     if (isRevoked(approval.artifactSha256, HERE)) verdict.reasons.push("approval artifact is operator-REVOKED (policy-revocations.json)");
     if (!verdict.ok) {
-      console.error(`PRE-WRITE GATE DENIED (ticket 085 D01/D03/D08): launch approval failed verification:\n  - ${verdict.reasons.join("\n  - ")}`);
+      console.error(`PRE-WRITE GATE DENIED: launch approval failed verification:\n  - ${verdict.reasons.join("\n  - ")}`);
       process.exit(5);
     }
     const pw = preWriteCheck(runCase, {
       consultCaseResolver: (ref) => { try { return loadCase(join(CONSULT_DIR, ref)); } catch { return null; } },
     });
     if (!pw.ok) {
-      console.error(`PRE-WRITE GATE DENIED (ticket 076 Phase 5): write-capable worker launch requires a passing case.json preWrite compliance state:\n  - ${pw.reasons.join("\n  - ")}`);
+      console.error(`PRE-WRITE GATE DENIED: write-capable worker launch requires a passing case.json preWrite compliance state:\n  - ${pw.reasons.join("\n  - ")}`);
       process.exit(5);
     }
     log("pre-write gate: PASS (digest-bound approval verified — plan/rules/policy/case-rev identities intact; presence/shape/authority only)");

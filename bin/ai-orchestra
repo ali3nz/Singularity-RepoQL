@@ -12,7 +12,7 @@
 "use strict";
 
 const { existsSync } = require("node:fs");
-const { dirname, isAbsolute, join, relative, resolve } = require("node:path");
+const { dirname, isAbsolute, join, relative, resolve, sep } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 function fail(message) {
@@ -35,8 +35,8 @@ if (externalState) {
   // resolve() returns backslashes (so `${kitHome}/` never matches), and a
   // prefix check would also accept a sibling such as `<kitHome>-other`.
   const rel = relative(kitHome, abs);
-  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-  if (abs === kitHome || inside) {
+  const inside = rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+  if (inside) {
     fail(`ORCH_STATE_DIR (${abs}) is inside the engine home (${kitHome}); run ids from different harnesses must not overlap (engine state root: ${engineRuns})`);
   }
   process.stderr.write(`ai-orchestra: ORCH_STATE_DIR=${abs} is another harness lane; this engine keeps its state in ${engineRuns}\n`);

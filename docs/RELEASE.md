@@ -59,16 +59,29 @@ capability text is in `README.md` and `office/README.md`.
 
 ## Checksum procedure
 
-Order matters. Add new files to the index first, then regenerate:
+Order matters. Regenerate only after every other edit. Use a temporary
+index so every path is hashed exactly as Git would store it.
+This covers new untracked files, applies `.gitattributes` (including
+`eol=crlf`), and never stages anything in the real index:
 
 ```bash
-git add -A                       # new files must be TRACKED before summing
-git ls-files | grep -v '^SHA256SUMS$' | sort | xargs sha256sum > SHA256SUMS
+tmp_index="$(mktemp)"; rm -f "$tmp_index"
+GIT_INDEX_FILE="$tmp_index" git add -A
+{
+  GIT_INDEX_FILE="$tmp_index" git ls-files | grep -v '^SHA256SUMS$' | sort |
+  while IFS= read -r f; do
+    h="$(GIT_INDEX_FILE="$tmp_index" git cat-file blob ":$f" | sha256sum | cut -d' ' -f1)"
+    printf '%s  %s\n' "$h" "$f"
+  done
+} > SHA256SUMS
+rm -f "$tmp_index"
 bash tests/validate-manifest.sh  # must print DRIFT GATE OK
 ```
 
-Regenerating while a file is still untracked produces a manifest that omits it,
-and the drift gate fails on the next clone. That is the gate doing its job.
+The gate uses the same temporary-index/blob method when `.git` is present. In a
+zip/source checkout without `.git` it verifies the listed worktree files with
+CRLF-to-LF normalisation for the patterns `.gitattributes` marks `eol=crlf`, so
+a Windows checkout validates the same canonical manifest as the repository.
 
 ## Before the tag
 

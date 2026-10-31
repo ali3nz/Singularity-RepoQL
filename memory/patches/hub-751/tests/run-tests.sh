@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs inside a throwaway container from the pinned base image (see #751). Read-only mounts:
+# Runs inside a throwaway container from the pinned base image. Read-only mounts:
 #   /patch (patched bundle), /tests (suite), /dumps (archived failure dumps).
 set -e
 cd /app/knowledge
