@@ -337,5 +337,93 @@ class Fixtures(unittest.TestCase):
         # diagnosis depending on which check trips first — both refuse.
         self.assertRegex(v["reason"], r"never indexed successfully|newer unresolved")
 
+
+    # ── freshness: current retrieval requires the source to still match ──────
+    def test_search_refuses_changed_source_until_reingested(self):
+        p = self.make_runbook("runbook-fresh-changed.md",
+                              "Original stable guidance for the coolant manifold.")
+        stub, report = self.run_ingest("docs/runbook-fresh-changed.md", searchable_after=0.3)
+        self.assertEqual(report["status"], "DOC_INGEST_INDEXED", report)
+        p.write_text(p.read_text() + "\nChanged procedure, never reingested.\n")
+        self.assertEqual(mdi.search_docs("Original stable guidance for the coolant manifold"), [],
+                         "a changed source without successful reingestion must not be current")
+        stale = [it for it in mdi.search_docs("Original stable guidance for the coolant manifold", include_stale=True) if it.get("root")]
+        self.assertEqual(len(stale), 1, stale)
+        self.assertEqual(stale[0]["revision"], report["rev"])
+        # Restoring the exact verified source revision makes it current again.
+        p.write_text("# runbook-fresh-changed.md\nPurpose: synthetic test runbook.\n\n"
+                     "Original stable guidance for the coolant manifold.\n")
+        current = mdi.search_docs("Original stable guidance for the coolant manifold")
+        self.assertEqual(len(current), 1, current)
+        self.assertEqual(current[0]["revision"], report["rev"])
+
+    def test_search_refuses_missing_source_and_failed_replacement(self):
+        p = self.make_runbook("runbook-fresh-failed.md",
+                              "Stable pump guidance for the coolant manifold.")
+        stub, report = self.run_ingest("docs/runbook-fresh-failed.md", searchable_after=0.3)
+        self.assertEqual(report["status"], "DOC_INGEST_INDEXED", report)
+        old_rev = report["rev"]
+        p.write_text("# runbook-fresh-failed.md\nPurpose: synthetic test runbook.\n\n"
+                     "Replacement pump guidance for the coolant manifold.\n")
+        stub.fail_paths = {"/v3/conversation/add"}
+        self.set_gateway(stub)
+        failed = mdi.ingest_file(p, root_arg=str(self.root / "docs"), session="test")
+        self.assertEqual(failed["status"], "DOC_INGEST_FAILED", failed)
+        self.assertEqual(mdi.search_docs("Stable pump guidance for the coolant manifold"), [],
+                         "a failed replacement must not leave obsolete content current")
+        stale = [it for it in mdi.search_docs("Stable pump guidance for the coolant manifold", include_stale=True) if it.get("root")]
+        self.assertEqual(len(stale), 1, stale)
+        self.assertEqual(stale[0]["revision"], old_rev)
+        # A successful replacement becomes current.
+        stub.fail_paths = set()
+        self.set_gateway(stub)
+        replacement = mdi.ingest_file(p, root_arg=str(self.root / "docs"), session="test")
+        self.assertEqual(replacement["status"], "DOC_INGEST_INDEXED", replacement)
+        current_new = mdi.search_docs("Replacement pump guidance for the coolant manifold")
+        self.assertEqual(len(current_new), 1, current_new)
+        self.assertEqual(current_new[0]["revision"], replacement["rev"])
+        old_current = mdi.search_docs("Stable pump guidance for the coolant manifold")
+        self.assertTrue(all(it.get("revision") != old_rev for it in old_current), old_current)
+        # Missing source is not current, but history remains retrievable.
+        p.unlink()
+        self.assertEqual(mdi.search_docs("Replacement pump guidance for the coolant manifold"), [])
+        missing_stale = [it for it in mdi.search_docs("Replacement pump guidance for the coolant manifold", include_stale=True) if it.get("root")]
+        self.assertTrue(any(it.get("revision") == replacement["rev"] for it in missing_stale), missing_stale)
+
+    def test_search_scope_limits_current_and_stale_to_requested_root(self):
+        ws_a = self.root / "wsA"
+        ws_b = self.root / "wsB"
+        (ws_a / "docs").mkdir(parents=True, exist_ok=True)
+        (ws_b / "docs").mkdir(parents=True, exist_ok=True)
+        pa = ws_a / "docs" / "alpha.md"
+        pb = ws_b / "docs" / "beta.md"
+        pa.write_text("# alpha.md\nPurpose: synthetic test runbook.\n\nAlpha coolant guidance.\n")
+        pb.write_text("# beta.md\nPurpose: synthetic test runbook.\n\nBeta coolant guidance.\n")
+        stub = StubMemory(searchable_after=0)
+        stub.start()
+        stub.started.wait(2)
+        self.set_gateway(stub)
+        a = mdi.ingest_file(pa, root_arg=str(ws_a), session="test")
+        b = mdi.ingest_file(pb, root_arg=str(ws_b), session="test")
+        self.assertEqual(a["status"], "DOC_INGEST_INDEXED", a)
+        self.assertEqual(b["status"], "DOC_INGEST_INDEXED", b)
+        previous = os.environ.get("SINGULARITY_DOC_ROOTS")
+        os.environ["SINGULARITY_DOC_ROOTS"] = os.pathsep.join([str(ws_a), str(ws_b)])
+        try:
+            current_a = mdi.search_docs("coolant guidance", root_arg=str(ws_a))
+            self.assertTrue(current_a)
+            self.assertTrue(all(it["root"] == a["root"] for it in current_a), current_a)
+            stale_a = mdi.search_docs("coolant guidance", include_stale=True, root_arg=str(ws_a))
+            self.assertTrue(stale_a)
+            self.assertTrue(all(it["root"] == a["root"] for it in stale_a), stale_a)
+            env_both = mdi.search_docs("coolant guidance")
+            roots = {it["root"] for it in env_both}
+            self.assertTrue({a["root"], b["root"]}.issubset(roots), env_both)
+        finally:
+            if previous is None:
+                os.environ.pop("SINGULARITY_DOC_ROOTS", None)
+            else:
+                os.environ["SINGULARITY_DOC_ROOTS"] = previous
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

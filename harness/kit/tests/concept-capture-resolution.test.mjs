@@ -1,7 +1,7 @@
 // Ticket 799 I3: fixture-only tests for relevance resolution and universal aliasing.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureConcept, queryGlobMatchCount, resolveRelevanceGlobs, mapCandidatesToConcepts } from "../lib/concept-capture.mjs";
@@ -14,13 +14,19 @@ const candidate = (extra = {}) => ({
   relevance: "**/services/tencent-memorycore.md",
   ...extra,
 });
-const opts = (dir, extra = {}) => ({
-  dryRun: true,
-  conceptsDir: dir,
-  tombstonesDir: join(dir, "absent-tombstones"),
-  lineageDir: join(dir, "absent-lineage"),
-  ...extra,
-});
+const opts = (dir, extra = {}) => {
+  // A local tombstone store is an EXISTING directory; authority is never
+  // inferred from a local parent. An empty store is the "no tombstones" case.
+  const tombstonesDir = join(dir, "tombstones");
+  mkdirSync(tombstonesDir, { recursive: true });
+  return {
+    dryRun: true,
+    conceptsDir: dir,
+    tombstonesDir,
+    lineageDir: join(dir, "absent-lineage"),
+    ...extra,
+  };
+};
 function fakeRql(dir, count) {
   const bin = join(dir, "rql-fixture.sh");
   const argsFile = join(dir, "rql-args.txt");

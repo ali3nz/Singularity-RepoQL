@@ -167,54 +167,93 @@ function renderTombstone(spec) {
 }
 
 // ---- IO: local dir or controller-backed (same SSH fallback as concept-capture)
-function isRemote(dir) { return !existsSync(dir); }
+// A trailing slash changes shell `test` semantics on files and dangling links,
+// so every store operation uses one normalized path.
+function normalizeTombstoneDir(dir) {
+  const raw = String(dir ?? "");
+  if (!raw) return raw;
+  return raw.replace(/\/+$/, "") || "/";
+}
+// Authority is never inferred from a parent directory. A path that exists
+// locally is read locally; every other path is resolved through the controller
+// and must be proven absent there before it may yield an empty index. A local
+// parent therefore cannot turn a controller-backed store into a local one.
+function isRemote(dir) { return !existsSync(normalizeTombstoneDir(dir)); }
 function listRemote(dir) {
+  dir = normalizeTombstoneDir(dir);
   // Quote the -name pattern INSIDE the remote command: passed unquoted, ssh
   // argv delivers `*.md` to the remote shell, which glob-expands it against
   // controller's CWD (live 2026-10-01: `find: paths must precede
   // expression` + phantom capsule paths — the same latent bug exists in
   // concept-capture.mjs listConceptFilesRemote, fixed same-session).
-  // Ticket 719 (Sol F3 amended): an absent dir (no tombstones yet) is an
-  // ALLOWED empty result, not an error: branch remotely so find never runs
-  // (and never prints ENOENT noise) when the dir is missing; exit 7 maps to
-  // []. Any other failure still returns null so loadTombstones keeps its
-  // fail-closed distinction (no blanket stderr suppression).
+  // Ticket 719 (Sol F3 amended): branch remotely so find never runs (and
+  // never prints ENOENT noise) when the dir is missing. Absence is NOT
+  // concluded here from an exit status; every failure returns null and the
+  // caller's explicit probe decides absent/unreadable/unreachable.
   const q = dir.replace(/'/g, "'\\''");
   try {
     return execFileSync("ssh", [SSH_HOST, `if [ -d '${q}' ]; then find '${q}' -maxdepth 2 -type f -name '*.md'; else exit 7; fi`], { encoding: "utf8", timeout: 8000 })
       .split("\n").map((s) => s.trim()).filter(Boolean);
-  } catch (e) {
-    if (e?.status === 7) return [];
+  } catch {
     return null;
   }
 }
 function readRemote(path) {
   try { return execFileSync("ssh", [SSH_HOST, "cat", path], { encoding: "utf8", timeout: 8000 }); } catch { return null; }
 }
+// Explicit probe. The remote shell must PRINT the state; a transport,
+// permission or unexpected-answer failure is never mistaken for absence.
+// ABSENT additionally requires the immediate parent to be a traversable
+// directory, so a regular file, dangling symlink or inaccessible ancestor is
+// never reported as an empty store.
+export function tombstoneProbeCommand(dir) {
+  const q = normalizeTombstoneDir(dir).replace(/'/g, "'\\''");
+  return `d='${q}'; p=$(dirname -- "$d"); if [ -e "$d" ] || [ -L "$d" ]; then `
+    + `if [ -d "$d" ]; then echo PRESENT; else echo NOT_A_DIRECTORY; fi; `
+    + `else if [ -d "$p" ] && [ -x "$p" ]; then echo ABSENT; else echo UNVERIFIABLE; fi; fi`;
+}
+function probeRemoteDir(dir) {
+  dir = normalizeTombstoneDir(dir);
+  try {
+    const out = execFileSync("ssh", [SSH_HOST, tombstoneProbeCommand(dir)], {
+      encoding: "utf8", timeout: 8000, stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    if (out === "PRESENT") return { state: "present" };
+    if (out === "ABSENT") return { state: "absent" };
+    if (out === "NOT_A_DIRECTORY") return { state: "invalid", detail: "path exists but is not a directory" };
+    if (out === "UNVERIFIABLE") return { state: "unverifiable", detail: "parent directory is missing or not traversable" };
+    return { state: "unreachable", detail: `unexpected controller answer: ${out.slice(0, 80)}` };
+  } catch (e) {
+    return { state: "unreachable", detail: `ssh status ${e?.status ?? "unknown"}` };
+  }
+}
 function tombstoneFilePath(dir, name) {
   return isRemote(dir) ? `${dir.replace(/\/+$/, "")}/${name}.md` : `${dir.replace(/\/+$/, "")}/${name}.md`;
 }
 
 // Load the tombstone index. Contract:
-//   absent dir          -> { ok: true, tombstones: [] } (remote: the exit-7 branch
-//                          maps to []; local: absent: true. No consumer reads the flag.)
-//   infra-unreachable   -> { ok: true, tombstones: [], absent: true } (documented
-//                          deviation: an unreachable controller degrades to the
-//                          pre-191 behaviour instead of adding a new availability
-//                          dependency to capture; the rql effect itself fails in
-//                          that state anyway. An EXISTING but unreadable index
-//                          still fails closed.)
+//   absent dir          -> { ok: true, tombstones: [] } (local readdir ENOENT, or an
+//                          explicit ABSENT answer from the controller; no consumer
+//                          reads the absent flag.)
+//   infra-unreachable   -> { ok: false, code: "TOMBSTONE_INDEX_UNREACHABLE" }
+//                          (fail closed: rejected-value evidence must not be
+//                          silently treated as "no tombstones")
 //   unreadable existing -> { ok: false, code: "TOMBSTONE_INDEX_UNREADABLE" }   (fail closed)
 //   unparsable entry    -> { ok: false, code: "TOMBSTONE_PARSE_FAILED", file }  (fail closed)
 //   digest mismatch     -> { ok: false, code: "TOMBSTONE_DIGEST_MISMATCH", file } (tampered/corrupt)
 export function loadTombstones(dir = TOMBSTONES_DIR_DEFAULT) {
+  dir = normalizeTombstoneDir(dir);
   if (isRemote(dir)) {
     const files = listRemote(dir);
     if (files === null) {
-      // Cannot distinguish "absent remotely" from "unreachable" -> fail closed.
-      try { execFileSync("ssh", [SSH_HOST, "test", "-d", dir], { timeout: 8000 }); }
-      catch { return { ok: true, tombstones: [], absent: true }; }
-      return { ok: false, code: "TOMBSTONE_INDEX_UNREADABLE", detail: `${dir} exists on ${SSH_HOST} but is unreadable` };
+      // A failed listing is not absence. Only an explicit ABSENT answer from
+      // the controller may yield an empty index; PRESENT-but-unlistable is
+      // unreadable, and every transport/unexpected answer fails closed.
+      const probe = probeRemoteDir(dir);
+      if (probe.state === "absent") return { ok: true, tombstones: [], absent: true };
+      if (probe.state === "present") return { ok: false, code: "TOMBSTONE_INDEX_UNREADABLE", detail: `${dir} exists on ${SSH_HOST} but is unlistable` };
+      if (probe.state === "invalid") return { ok: false, code: "TOMBSTONE_INDEX_UNREADABLE", detail: `${dir} on ${SSH_HOST} is ${probe.detail}` };
+      return { ok: false, code: "TOMBSTONE_INDEX_UNREACHABLE", detail: `cannot verify ${dir} on ${SSH_HOST} (${probe.detail})` };
     }
     const tombstones = [];
     for (const p of files) {

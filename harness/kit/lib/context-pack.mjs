@@ -275,7 +275,18 @@ export function createBuildContextPack({ qmdBaseUrl = "http://127.0.0.1:8181", q
           }
           manifest.lineageFilter = { enabled: true, excluded: excludedSet.size };
         } else manifest.lineageFilter = { enabled: false };
-      } catch (e) { manifest.lineageFilter = { enabled: true, error: String(e?.message ?? e).slice(0, 140) }; }
+      } catch (e) {
+        // Current-truth reads are fail-closed: without lineage evidence an
+        // invalidated or stale concept must not be promoted into the pack.
+        // Drop only concept hits (non-concept history is unaffected) and
+        // record every omission instead of silently keeping them.
+        const blocked = ranked.filter((h) => /^concept:\/\//.test(String(h.uri ?? "")));
+        for (const hit of blocked) manifest.omitted.push({ item: hit.uri, omissionReason: "lineage filter unavailable (fail-closed current retrieval)" });
+        for (let i = ranked.length - 1; i >= 0; i--) {
+          if (/^concept:\/\//.test(String(ranked[i].uri ?? ""))) ranked.splice(i, 1);
+        }
+        manifest.lineageFilter = { enabled: true, error: String(e?.message ?? e).slice(0, 140), excluded: blocked.length, failClosed: true };
+      }
 
       if (repoqlPrimary) {
         for (const hit of ranked) {

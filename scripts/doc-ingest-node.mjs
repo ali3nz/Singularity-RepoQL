@@ -307,7 +307,11 @@ function isInside(parent, child) {
 
 export function docRoots(rootArg, env = process.env) {
   const roots = [];
-  const candidates = [...(rootArg ? [rootArg] : []), ...String(env.SINGULARITY_DOC_ROOTS || "").split(delimiter).filter(Boolean)];
+  // An explicit --root is an exclusive scope: environment roots are a default
+  // only when the invocation did not choose a workspace.
+  const candidates = rootArg
+    ? [rootArg]
+    : String(env.SINGULARITY_DOC_ROOTS || "").split(delimiter).filter(Boolean);
   for (const item of candidates) {
     const rp = resolve(item);
     if (!roots.includes(rp)) roots.push(rp);
@@ -797,8 +801,13 @@ export function verifyFile(rel, opts = {}) {
   if (candidates.length > 1) {
     return { status: "DOC_INGEST_NOT_VERIFIED", file: rel, reason: "ambiguous: the same relative path is recorded under several roots; pass --root" };
   }
-  const [key, entry] = candidates[0];
-  const relE = entry?.rel || key.split("::").slice(1).join("::");
+  const [, entry] = candidates[0];
+  const relE = entry?.rel || candidates[0][0].split("::").slice(1).join("::");
+  return entryEvidence(entry, relE);
+}
+
+/** Re-derive completion evidence for one exact ledger entry. */
+function entryEvidence(entry, relE) {
   let target;
   try {
     target = resolveEntryTarget(entry);
@@ -853,9 +862,11 @@ export async function searchDocs(query, opts = {}) {
   const ctx = ctxOf({ ...opts, env: envForRoot(opts.env, opts.root) });
   const limit = opts.limit ?? SEARCH_LIMIT_DEFAULT;
   const includeStale = Boolean(opts.stale);
+  const root = opts.root;
   const cfg = loadConfig(ctx.env);
   const messages = await searchOnce(cfg, query, includeStale ? limit * 4 : limit * 2, ctx);
   const ledger = loadLedger(ctx.env);
+  const authorisedRoots = docRoots(root, ctx.env);
   const entries = new Map();
   for (const [key, entry] of Object.entries(ledger.docs || {})) {
     entries.set(`${entry?.root_id ?? ""}\u0000${entry?.rel || key.split("::").slice(1).join("::")}`, entry);
@@ -870,9 +881,15 @@ export async function searchDocs(query, opts = {}) {
     const [, dRel, dRev] = ref;
     const rootHit = content.match(/^root-id: ([0-9a-f]{8})$/m)?.[1] ?? null;
     const entry = entries.get(`${rootHit ?? ""}\u0000${dRel}`);
+    // Workspace scope applies to BOTH current and historical retrieval: an
+    // explicit --root (or configured allowlist) must not leak another
+    // workspace's history.
+    if (authorisedRoots.length && (!entry || !rootIsCurrentlyAuthorised(entry.root, authorisedRoots))) continue;
     if (!includeStale) {
       if (!entry || !entry.active_rev) continue;
       if (entry.active_rev !== dRev) continue;
+      const evidence = entryEvidence(entry, dRel);
+      if (evidence.status !== "DOC_INGEST_VERIFIED" || evidence.revision !== dRev) continue;
     }
     const dedupe = `${rootHit ?? ""}\u0000${dRel}\u0000${dRev}`;
     if (seen.has(dedupe)) continue;

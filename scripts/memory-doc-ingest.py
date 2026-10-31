@@ -192,8 +192,11 @@ def with_ledger(fn):
 
 def doc_roots(root_arg):
     roots = []
-    for item in ((root_arg,) if root_arg else ()) + tuple(
-            p for p in os.environ.get("SINGULARITY_DOC_ROOTS", "").split(os.pathsep) if p):
+    # An explicit --root is an exclusive scope: environment roots are a default
+    # only when the invocation did not choose a workspace.
+    candidates = (root_arg,) if root_arg else tuple(
+        p for p in os.environ.get("SINGULARITY_DOC_ROOTS", "").split(os.pathsep) if p)
+    for item in candidates:
         rp = Path(item).resolve()
         if rp not in roots:
             roots.append(rp)
@@ -636,8 +639,13 @@ def verify_file(rel, root_arg=None):
     if len(candidates) > 1:
         return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel,
                 "reason": "ambiguous: the same relative path is recorded under several roots; pass --root"}
-    key, entry = candidates[0]
-    rel_e = entry.get("rel") or key.split("::", 1)[-1]
+    _key, entry = candidates[0]
+    rel_e = entry.get("rel") or _key.split("::", 1)[-1]
+    return _entry_evidence(entry, rel_e)
+
+
+def _entry_evidence(entry, rel_e):
+    """Re-derive completion evidence for one exact ledger entry."""
     try:
         target = resolve_entry_target(entry)
     except Blocked as e:
@@ -675,7 +683,7 @@ def verify_file(rel, root_arg=None):
             "revision": active, "chunks": chunks, "verified_at": rec.get("verified_at")}
 
 
-def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False):
+def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False, root_arg=None):
     """Bounded search of the shared documentation knowledge for agents.
 
     Only records whose document identity AND revision match a verified active
@@ -685,6 +693,7 @@ def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False):
     cfg = load_cfg()
     msgs = search_once(cfg, query, limit * 2 if not include_stale else limit * 4)
     ledger = _load_ledger()
+    roots = doc_roots(root_arg)
     entries = {}
     for key, e in ledger.get("docs", {}).items():
         entries[(e.get("root_id"), e.get("rel") or key.split("::", 1)[-1])] = e
@@ -701,11 +710,20 @@ def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False):
         root_hit = m_root.group(1) if m_root else None
         matching_entry = entries.get((root_hit, d_rel))
         active_rev = matching_entry.get("active_rev") if matching_entry else None
+        # Workspace scope applies to BOTH current and historical retrieval: an
+        # explicit --root (or configured allowlist) must not leak another
+        # workspace's history.
+        if roots and (matching_entry is None
+                      or not root_is_currently_authorised(matching_entry.get("root"), roots)):
+            continue
         if not include_stale:
             if active_rev is None:
                 continue  # record not present in the active revision ledger: not current
             if active_rev != d_rev:
                 continue  # old revision: excluded from current retrieval
+            evidence = _entry_evidence(matching_entry, d_rel)
+            if evidence.get("status") != "DOC_INGEST_VERIFIED" or evidence.get("revision") != d_rev:
+                continue  # changed/missing/unverified source is not current guidance
         dkey = (root_hit or "", d_rel, d_rev)
         if dkey in seen:
             continue
@@ -759,7 +777,7 @@ def main():
         elif args.cmd == "verify":
             print(json.dumps(verify_file(args.file, root_arg=args.root)))
         else:
-            print(json.dumps({"items": search_docs(args.query, args.limit, args.stale)}))
+            print(json.dumps({"items": search_docs(args.query, args.limit, args.stale, root_arg=args.root)}))
     except Blocked as e:
         print(json.dumps({"status": "DOC_INGEST_BLOCKED", "reason": str(e)}))
         sys.exit(1)

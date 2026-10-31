@@ -144,17 +144,32 @@ export function listJsonFiles(dir) {
 // Remote-ness is a property of the CONTAINING DIR (the lineage dir may be local
 // tmp or controller-backed), never of one file: a missing file inside a LOCAL
 // dir is simply absent (no sidecar = legacy_unknown), not a remote read.
-function readJsonFile(p) {
+function readJsonFile(p, strict = false) {
   try {
     // Local when the parent directory exists locally (tmp tests, or a locally
     // mounted lineage dir); otherwise controller-backed.
     const parent = p.replace(/\/[^/]+$/, "");
-    const body = existsSync(parent) ? (existsSync(p) ? readFileSync(p, "utf8") : null) : remoteReadOrAbsent(p);
+    let body;
+    if (existsSync(parent)) {
+      if (strict) {
+        // A missing sidecar is legacy_unknown; a sidecar that exists but
+        // cannot be read or parsed is NOT absence. Current-truth callers pass
+        // strict=true so a corrupt/unreadable provenance record cannot become
+        // a clean legacy_unknown verdict.
+        try { body = readFileSync(p, "utf8"); }
+        catch (e) { if (e?.code === "ENOENT") body = null; else throw e; }
+      } else {
+        body = existsSync(p) ? readFileSync(p, "utf8") : null;
+      }
+    } else {
+      body = remoteReadOrAbsent(p);
+    }
     return body == null ? null : JSON.parse(body);
   } catch (e) {
     // A real remote read failure is not absence and must not become a clean
-    // verdict; only parse errors degrade to null, and they say so on stderr.
-    if (String(e?.message ?? "").startsWith("LINEAGE_REMOTE_READ_FAILED")) throw e;
+    // verdict; current-truth reads are strict for the same reason. Other
+    // callers retain the historical parse-error degradation.
+    if (strict || String(e?.message ?? "").startsWith("LINEAGE_REMOTE_READ_FAILED")) throw e;
     console.error(`LINEAGE_SIDECAR_UNPARSABLE: ${p}: ${String(e?.message ?? e).slice(0, 120)}`);
     return null;
   }
@@ -199,8 +214,8 @@ function eventsDir(lineageDir) { return `${lineageDir.replace(/\/+$/, "")}/.even
 //   invalidation: null|{eventId, invalidatedAt, invalidatedBy},
 //   supersession: null|{markedStaleAt, supersedingClaimId},
 // }
-export function recordLineageState(dir, recordId) {
-  const side = readJsonFile(`${dir.replace(/\/+$/, "")}/${recordId}.json`);
+export function recordLineageState(dir, recordId, strict = false) {
+  const side = readJsonFile(`${dir.replace(/\/+$/, "")}/${recordId}.json`, strict);
   if (!side) return "legacy_unknown"; // no sidecar = predates lineage (plan §4.2)
   return LINEAGE_STATES.has(side.lineageState) ? side.lineageState : "legacy_unknown";
 }
@@ -689,7 +704,7 @@ export function excludeInvalidFromCurrentRetrieval(recordNames, lineageDir = res
   const excluded = [];
   const kept = [];
   for (const n of recordNames ?? []) {
-    const st = recordLineageState(lineageDir, n);
+    const st = recordLineageState(lineageDir, n, true);
     if (st === "invalid" || st === "stale") excluded.push({ name: n, state: st });
     else kept.push(n);
   }

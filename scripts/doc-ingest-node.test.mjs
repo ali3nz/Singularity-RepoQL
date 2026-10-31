@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   chunkMarkdown,
@@ -370,4 +370,104 @@ test('native Claude hook memory config variable locates shared Tencent and confi
     assert.ok(urls.length>0);
     assert.ok(urls.every(x=>x.startsWith('http://127.0.0.1:9532/v3/')));
   }finally{box.cleanup()}
+});
+
+test("search refuses a changed source that was never reingested", async () => {
+  const box = sandbox();
+  const gateway = fakeGateway();
+  try {
+    const original = "# Runbook\n\nOriginal stable guidance for the coolant loop.\n";
+    const doc = box.doc("runbook.md", original);
+    const first = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(first.status, "DOC_INGEST_INDEXED", JSON.stringify(first));
+
+    writeFileSync(doc, "# Runbook\n\nChanged guidance for the coolant loop, not reingested.\n");
+    const current = await searchDocs("Original stable guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl });
+    assert.equal(current.length, 0, "a changed source without successful reingestion must not be current guidance");
+
+    const stale = await searchDocs("Original stable guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl, stale: true });
+    assert.equal(stale.length, 1, "the historical indexed revision must remain retrievable with --stale");
+
+    writeFileSync(doc, original);
+    const restored = await searchDocs("Original stable guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl });
+    assert.equal(restored.length, 1, "restoring the exact verified source revision makes it current again");
+  } finally { box.cleanup(); }
+});
+
+test("search refuses a missing source and a failed replacement, preserving history under --stale", async () => {
+  const box = sandbox();
+  const gateway = fakeGateway();
+  try {
+    const original = "# Runbook\n\nStable pump guidance for the coolant loop.\n";
+    const doc = box.doc("runbook.md", original);
+    const first = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(first.status, "DOC_INGEST_INDEXED", JSON.stringify(first));
+
+    writeFileSync(doc, "# Runbook\n\nReplacement pump guidance for the coolant loop.\n");
+    gateway.state.failAdds = true;
+    const failed = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(failed.status, "DOC_INGEST_FAILED", JSON.stringify(failed));
+
+    const failedCurrent = await searchDocs("Stable pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl });
+    assert.equal(failedCurrent.length, 0, "a failed replacement must not leave the obsolete revision current");
+    const failedStale = await searchDocs("Stable pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl, stale: true });
+    assert.equal(failedStale.length, 1);
+    assert.equal(failedStale[0].revision, first.rev, "historical retrieval keeps the old indexed revision");
+
+    gateway.state.failAdds = false;
+    const replacement = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(replacement.status, "DOC_INGEST_INDEXED", JSON.stringify(replacement));
+    const newCurrent = await searchDocs("Replacement pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl });
+    assert.equal(newCurrent.length, 1);
+    assert.equal(newCurrent[0].revision, replacement.rev);
+    const oldCurrent = await searchDocs("Stable pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl });
+    assert.equal(oldCurrent.length, 0, "a superseded revision is not current after successful replacement");
+    const oldStale = await searchDocs("Stable pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl, stale: true });
+    assert.equal(oldStale.length, 1);
+    assert.equal(oldStale[0].revision, first.rev);
+
+    rmSync(doc, { force: true });
+    const missingCurrent = await searchDocs("Replacement pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl });
+    assert.equal(missingCurrent.length, 0, "a missing source must not be current guidance");
+    const missingStale = await searchDocs("Replacement pump guidance", { root: box.root, env: box.env, fetchImpl: gateway.fetchImpl, stale: true });
+    assert.equal(missingStale.length, 1);
+  } finally { box.cleanup(); }
+});
+
+test("explicit workspace root scopes current and historical retrieval", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "doc-ingest-scope-"));
+  const wsA = join(dir, "wsA");
+  const wsB = join(dir, "wsB");
+  for (const [ws, name, body] of [[wsA, "alpha.md", "Alpha coolant guidance."], [wsB, "beta.md", "Beta coolant guidance."]]) {
+    mkdirSync(join(ws, "docs"), { recursive: true });
+    writeFileSync(join(ws, "docs", name), `# ${name}\nPurpose: synthetic test runbook.\n\n${body}\n`);
+  }
+  writeFileSync(join(dir, "memory.json"), JSON.stringify({ gatewayKey: "gw-test", serviceId: "svc", userKey: "usr", authPrefix: "Bearer " }));
+  const env = {
+    SINGULARITY_DOC_DATA: join(dir, "data"),
+    MEMORY_SECRETS: join(dir, "memory.json"),
+    DOC_INDEX_TEAM: "singularity-docs",
+    DOC_INDEX_USER: "shared",
+  };
+  const gateway = fakeGateway();
+  const opts = { env, fetchImpl: gateway.fetchImpl, now: () => NOW, sleep: async () => {} };
+  try {
+    const a = await ingestFile(join(wsA, "docs", "alpha.md"), { ...opts, root: wsA });
+    const b = await ingestFile(join(wsB, "docs", "beta.md"), { ...opts, root: wsB });
+    assert.equal(a.status, "DOC_INGEST_INDEXED", JSON.stringify(a));
+    assert.equal(b.status, "DOC_INGEST_INDEXED", JSON.stringify(b));
+    const scopedEnv = { ...env, SINGULARITY_DOC_ROOTS: [wsA, wsB].join(delimiter) };
+    assert.deepEqual(docRoots(wsA, scopedEnv), [resolve(wsA)], "an explicit --root is exclusive");
+    const currentA = await searchDocs("coolant guidance", { ...opts, root: wsA, env: scopedEnv });
+    assert.ok(currentA.length > 0, JSON.stringify(currentA));
+    assert.ok(currentA.every((it) => it.root === a.root), JSON.stringify(currentA));
+    const staleA = await searchDocs("coolant guidance", { ...opts, root: wsA, env: scopedEnv, stale: true });
+    assert.ok(staleA.length > 0, JSON.stringify(staleA));
+    assert.ok(staleA.every((it) => it.root === a.root), JSON.stringify(staleA));
+    const envBoth = await searchDocs("coolant guidance", { ...opts, env: scopedEnv });
+    const roots = new Set(envBoth.map((it) => it.root));
+    assert.ok(roots.has(a.root) && roots.has(b.root), JSON.stringify(envBoth));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
