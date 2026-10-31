@@ -128,7 +128,7 @@ Stated here rather than hidden behind a "parity" claim.
    and free-seat path translation must be identity. Set
    `ORCHESTRA_SELFTEST_PROFILE=fleet` on a fleet host to run the skipped pins
    too; a `FAIL` is always a failure in either profile.
-2. **Portability debt: 39 files (162 occurrences)** still name a fleet host in
+2. **Portability debt: 40 files (169 occurrences)** still name a fleet host in
    comments or in `ssh <host>` calls — the Discord/HA narration, session watcher
    and memory modules. Their verbs report unavailable or fail at the point of
    use. Absolute fleet **paths** are gone: every default now resolves from
