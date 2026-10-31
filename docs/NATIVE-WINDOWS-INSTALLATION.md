@@ -63,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_r
    with 1.7.18, verifies their pinned bytes, and reports each connector as
    installed or missing. It does not install a connector or grant a host or
    folder; the output's `connectorProvisioning.installCommand` is the exact
-   local consent command.
+   automatic install command.
 
 Use `-SourceRoot <path>` only when installing from a copied staging directory.
 Use `-Python312Exe` / `-Python313Exe` to point at existing interpreters.
@@ -177,17 +177,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction build -A
   -RepoqlExe "$env:LOCALAPPDATA\rql\rql.exe" `
   -PythonExe "$env:LOCALAPPDATA\Singularity\runtime\python312\python.exe"
 
-# approve each local install page, one connector at a time
+# installs both bundled connectors with their fixed access
 powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction install -Apply `
   -RepoqlExe "$env:LOCALAPPDATA\rql\rql.exe" `
   -PythonExe "$env:LOCALAPPDATA\Singularity\runtime\python312\python.exe"
 ```
 
-The install action passes no envelope flags. RepoQL opens its local review page:
-approve the Kanzo loopback host `http://localhost:4242` and the 6 requests/minute
-rate, and choose the Tencent MemoryCore data folder. If the page is closed,
-declined, or times out, the result says `waiting_for_consent` or `declined`
-instead of claiming success. Run `-ConnectorAction status` afterwards. The
+The install action approves the two bundled connectors for you, with exactly the
+access their manifests ask for and nothing more: Kanzo may reach only
+`http://localhost:4242` at 6 requests/minute, and MemoryCore may read only the
+product's own data folder (`memory\state\data\core` under the install root).
+No page opens. Calling the helper without `--auto-approve` still shows RepoQL's
+local install review page, and a closed, declined or timed-out page is reported
+as `waiting_for_consent` or `declined` instead of claiming success. Run `-ConnectorAction status` afterwards. The
 dashboard stays read-only and never installs a connector from a click.
 
 ### Dashboard desktop shortcut

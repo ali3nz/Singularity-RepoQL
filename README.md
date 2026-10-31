@@ -23,7 +23,7 @@ You need a **Windows PC**, an internet connection, and **Claude Code installed a
 
 1. Open Claude Code on the PC where you want to install Singularity.
 2. Copy the whole prompt below into its chat.
-3. Let your agent do the setup. Approve permission requests you understand, and sign in if it asks you to connect an account. When the connector review pages open, approve the Kanzo loopback host and choose your MemoryCore data folder; do not grant any other host or folder.
+3. Let your agent do the setup. Approve permission requests you understand, and sign in if it asks you to connect an account. The two bundled connectors (Kanzo and MemoryCore) install automatically with only the access they need; there are no extra pages to approve and no folder to pick.
 
 ```text
 Install Singularity RepoQL from https://github.com/ali3nz/Singularity-RepoQL on this Windows PC.

@@ -1071,7 +1071,7 @@ if ($ConnectorAction) {
   $connectorBuildRoot=Assert-LocalPath $connectorBuildRoot 'NATIVE_CONNECTOR_BUILD_ROOT_INVALID' $false $true
   if (-not $connectorBuildRoot.StartsWith($base+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'NATIVE_CONNECTOR_BUILD_ROOT_OUTSIDE_LOCALAPPDATA_SINGULARITY' }
   $argv=@($helper,'--action',$ConnectorAction,'--rql-exe',$repoqlPath,'--build-root',$connectorBuildRoot)
-  if ($ConnectorAction -eq 'install') { $argv += @('--install-timeout','660') }
+  if ($ConnectorAction -eq 'install') { $argv += @('--install-timeout','660','--auto-approve','--memory-data-root',(Join-Path $installRoot 'memory\state\data\core')) }
   $raw=& $pythonPath @argv 2>&1
   $text=($raw -join "`n").Trim()
   $exitCode=$LASTEXITCODE

@@ -30,13 +30,13 @@ The grant is part of the package, not a setting a reader has to discover.
 - **Rate:** `requestsPerMinute: 6`. A sweep is every 900 s and compares the whole
   board; a card's comments are fetched only when the card or the board's change
   counter moved.
-- **Install needs the loopback allowance approved:**
+- **Install needs the loopback allowance (the installer grants it for you; manual fallback below):**
 
   ```bash
   rql connector install RepoQL.Connectors.Kanzo.1.0.0.nupkg
   ```
 
-  With no envelope flags, RepoQL opens its local install review page. It states
+  Manual path only: with no envelope flags, RepoQL opens its local install review page. It states
   the loopback host `http://localhost:4242` and the 6 requests/minute limit;
   approve that page only when it is the board you mean. The host refuses a
   connector that reaches loopback without this approval.
@@ -44,9 +44,9 @@ The grant is part of the package, not a setting a reader has to discover.
 ### MemoryCore
 
 - **Network:** none. It reads files under one configured source root.
-- **Source root:** chosen on RepoQL's local install review page. The manifest's
-  default is a suggestion (`~/tencent-memory/data`), not a requirement; choose
-  the folder the store's own service writes. Do not pre-grant a folder.
+- **Source root:** the installer grants the product's own memory data folder
+  automatically. Only a manual `rql connector install` shows RepoQL's local
+  install review page, where you would choose the store's own folder.
 
   ```bash
   rql connector install Tencent.MemoryCore.1.0.0.nupkg
@@ -71,8 +71,8 @@ That writes the packages under `%LOCALAPPDATA%\Singularity\connectors\packages`
 and reports each connector as installed or missing. If pinned release packages
 are already in that folder, the same command verifies their exact hashes and
 package contents against `packages.lock.json` and reuses them instead of running
-`connector pack`. It does not install a connector. To approve the two local
-install pages, with the operator present:
+`connector pack`. It does not install a connector. To install both connectors
+automatically with their fixed access:
 
 ```powershell
 $m = '.\native\windows\manage_native_windows.ps1'
@@ -84,18 +84,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction status `
   -RepoqlExe $repoqlExe `
   -PythonExe $pythonExe
 
-# Approve each local install page, one connector at a time
+# Install both connectors (automatic, fixed access)
 powershell -NoProfile -ExecutionPolicy Bypass -File $m -ConnectorAction install -Apply `
   -RepoqlExe $repoqlExe `
   -PythonExe $pythonExe
 ```
 
-The command opens RepoQL's local review page for each missing connector, one at
-a time. Kanzo shows its loopback host and rate; MemoryCore asks for the data
-folder. No `--allow-host`, `--allow-local-host`, `--rate` or `--source-root`
-flag is passed by the product. A closed page, a declined page or a timeout is
-reported as `waiting_for_consent` or `declined`; rerun the command after
-choosing. `-ConnectorAction status` is read-only and reports installed/missing.
+The command installs each missing connector automatically with the fixed access
+its manifest asks for: Kanzo reaches only its loopback board address at 6
+requests/minute, and MemoryCore reads only the product's own data folder. The
+installer, not the operator, states that access, so no page opens. Without
+`--auto-approve` the helper falls back to RepoQL's local install review page; a
+closed page, a declined page or a timeout is reported as `waiting_for_consent`
+or `declined`. `-ConnectorAction status` is read-only and reports installed/missing.
 
 For a manual author check (no package is committed):
 

@@ -47,12 +47,12 @@ still unfinished**. Enabling a route in JavaScript alone is not a security gate.
    licence, version and the connector runtime ABI. Never include a third-party
    RepoQL executable in public packages without permission.
 6. **Tencent connector:** the product setup builds and fixture-tests the pinned
-   `connectors/memorycore` 1.7.18 package; installation requires local consent
-   and a chosen data folder. Do not grant a folder silently. Verify read-only
+   `connectors/memorycore` 1.7.18 package; installation grants the fixed
+   product data-folder envelope automatically; nothing else is granted. Verify read-only
    roots, redaction, L1/L2/L3 freshness, identity isolation, no raw conversation
    import, and removal against the actual installed rql version.
 7. **Kanban / Agent Chat:** run local Kanzo board, install/test Kanzo RepoQL
-   connector with the local consent page, observe real card changes and comments, session inbox cursor
+   connector with the installer's fixed envelope, observe real card changes and comments, session inbox cursor
    integrity, cross-session isolation, concurrent authors, restart durability
    and the difference between board state and verified task completion.
 8. **Dashboard:** confirm variant-specific nav and disabled backend endpoints,

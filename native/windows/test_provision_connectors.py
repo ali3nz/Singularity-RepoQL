@@ -414,6 +414,38 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(command[1:3], ["connector", "install"])
             self.assertFalse(set(command) & {"--allow-host", "--allow-local-host", "--rate", "--source-root"})
 
+    def test_auto_approve_passes_only_the_bundled_envelope(self):
+        commands = []
+        queue = [{}, {"kanzo": {"state": "installed", "version": "1.0.0"}},
+                 {"kanzo": {"state": "installed", "version": "1.0.0"}, "memorycore": {"state": "installed", "version": "1.0.0"}}]
+        def runner(cmd, **kwargs):
+            commands.append(list(cmd))
+            return completed()
+        data = self.build_root / "memdata"
+        pc.install_connectors(self.rql, self.lock, self.build_root, builder=lambda *a, **k: self._builder(),
+                              inventory_reader=lambda *a, **k: queue.pop(0) if len(queue) > 1 else queue[0],
+                              runner=runner, auto_approve=True, memory_data_root=data)
+        flat = [part for c in commands for part in c]
+        by_pkg = {("kanzo" if "Kanzo" in c[3] else "memorycore"): c[4:] for c in commands}
+        self.assertEqual(by_pkg["kanzo"], ["--allow-local-host", "http://localhost:4242", "--rate", "6"])
+        self.assertEqual(by_pkg["memorycore"], ["--source-root", f"data={data}"])
+        self.assertNotIn("--allow-host", flat)
+        self.assertTrue(data.is_dir())
+
+    def test_digest_version_from_repoql_counts_as_installed(self):
+        self.assertTrue(pc._is_installed({"state": "installed", "version": "sha256:" + "a" * 64}, "1.0.0"))
+        self.assertFalse(pc._is_installed({"state": "installed", "version": "sha256:abc"}, "1.0.0"))
+        self.assertTrue(pc._is_installed({"state": "installed", "version": "1.0.0"}, "1.0.0"))
+        self.assertFalse(pc._is_installed({"state": "installed", "version": "0.9.0"}, "1.0.0"))
+        self.assertFalse(pc._is_installed({"state": "failed", "version": "sha256:abc"}, "1.0.0"))
+        self.assertFalse(pc._is_installed(None, "1.0.0"))
+
+    def test_memorycore_envelope_requires_a_folder(self):
+        with self.assertRaises(pc.ProvisionError):
+            pc.bundled_envelope("memorycore", None)
+        with self.assertRaises(pc.ProvisionError):
+            pc.bundled_envelope("other", None)
+
     def test_declined_and_pending_and_failed_paths_are_reported(self):
         cases = [
             ("declined", completed(1, stderr="operator declined"), "declined"),

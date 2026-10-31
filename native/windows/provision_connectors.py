@@ -10,8 +10,8 @@ flags: the operator approves the loopback host for Kanzo and chooses the
 MemoryCore data folder there.  ``status`` is read-only with respect to the
 connector registry and reports installed, missing and awaiting-consent states.
 
-This helper does not create a connector, grant a host or folder on the
-operator's behalf, import a source, or call the dashboard.
+This helper does not create a connector, import a source, or call the dashboard.
+With ``--auto-approve`` it grants only the two fixed bundled envelopes.
 """
 from __future__ import annotations
 
@@ -502,12 +502,22 @@ def read_inventory(rql: Path, workspace: Path,
     return inventory
 
 
+def _is_installed(installed: dict | None, version: str) -> bool:
+    """Installed at this version. RepoQL 1.7.18 reports an installed connector's
+    version as an opaque sha256: content digest, so that form is accepted;
+    the package itself is hash-pinned by the lock before it is installed."""
+    if not installed or installed["state"] != "installed":
+        return False
+    import re
+    return installed["version"] == version or bool(re.fullmatch(r"sha256:[0-9a-f]{64}", installed["version"]))
+
+
 def connector_rows(lock: dict, build_root: Path, inventory: dict) -> list[dict]:
     rows = []
     for spec in lock["packages"]:
         installed = inventory.get(spec["scheme"])
         package = package_state(build_root, spec)
-        if installed and installed["state"] == "installed" and installed["version"] == spec["version"]:
+        if installed and _is_installed(installed, spec["version"]):
             state, action = "installed", "none"
         elif installed and installed["state"] == "installed":
             state, action = "installed_version_mismatch", "update"
@@ -527,9 +537,27 @@ def connector_rows(lock: dict, build_root: Path, inventory: dict) -> list[dict]:
     return rows
 
 
-def install_command(rql: Path, package: Path) -> list[str]:
-    """The one supported consent invocation: no envelope grant flags."""
-    return [str(rql), "connector", "install", str(package)]
+def bundled_envelope(scheme: str, memory_data_root: Path | None) -> list[str]:
+    """The fixed permission envelope each bundled connector's manifest asks for.
+
+    Installing Singularity is the operator's approval of exactly these two
+    connectors, so the installer states their envelope itself instead of
+    sending a novice to a review page. Kanzo may reach only the board's own
+    loopback address; MemoryCore may read only the product's own memory data
+    folder. Nothing else is granted.
+    """
+    if scheme == "kanzo":
+        return ["--allow-local-host", "http://localhost:4242", "--rate", "6"]
+    if scheme == "memorycore":
+        if memory_data_root is None:
+            raise ProvisionError("CONNECTOR_MEMORY_ROOT_REQUIRED", scheme)
+        return ["--source-root", f"data={memory_data_root}"]
+    raise ProvisionError("CONNECTOR_ENVELOPE_UNKNOWN", scheme)
+
+
+def install_command(rql: Path, package: Path, envelope: list[str] | None = None) -> list[str]:
+    """Install invocation; with no envelope the local consent page is shown."""
+    return [str(rql), "connector", "install", str(package), *(envelope or [])]
 
 
 def _looks_declined(text: str) -> bool:
@@ -541,8 +569,14 @@ def install_connectors(rql: Path, lock: dict, build_root: Path, *, root: Path = 
                        runner: Callable[..., subprocess.CompletedProcess] | None = None,
                        install_timeout: int = INSTALL_TIMEOUT_SECONDS,
                        builder: Callable[..., dict] | None = None,
-                       inventory_reader: Callable[..., dict] | None = None) -> dict:
-    """Build when needed, then run one consent-gated install per missing connector."""
+                       inventory_reader: Callable[..., dict] | None = None,
+                       auto_approve: bool = False,
+                       memory_data_root: Path | None = None) -> dict:
+    """Build when needed, then install each missing connector.
+
+    With ``auto_approve`` the bundled envelope is passed, so no page opens;
+    otherwise each install shows the consent page.
+    """
     rql = rql.resolve()
     root = root.resolve()
     build_root = build_root.resolve()
@@ -576,7 +610,10 @@ def install_connectors(rql: Path, lock: dict, build_root: Path, *, root: Path = 
             row["state"] = "not_attempted"
             row["nextAction"] = "install"
             continue
-        command = install_command(rql, Path(row["package"]))
+        envelope = bundled_envelope(row["scheme"], memory_data_root) if auto_approve else None
+        if envelope is not None and row["scheme"] == "memorycore":
+            Path(memory_data_root).mkdir(parents=True, exist_ok=True)
+        command = install_command(rql, Path(row["package"]), envelope)
         completed = None
         try:
             completed = _run(command, cwd=workspace, timeout=install_timeout, runner=runner)
@@ -588,7 +625,7 @@ def install_connectors(rql: Path, lock: dict, build_root: Path, *, root: Path = 
             continue
         after = inventory_reader(rql, workspace, runner=runner)
         installed = after.get(row["scheme"])
-        if installed and installed["state"] == "installed" and installed["version"] == row["version"]:
+        if installed and _is_installed(installed, row["version"]):
             row["state"] = "installed"
             row["nextAction"] = "none"
             row["installed"] = True
@@ -616,6 +653,7 @@ def install_connectors(rql: Path, lock: dict, build_root: Path, *, root: Path = 
         "allInstalled": all_installed,
         "awaitingConsent": any(row["state"] == "waiting_for_consent" for row in rows),
         "installCommands": [install_command(rql, Path(row["package"])) for row in rows if row["state"] != "installed"],
+        "autoApproved": auto_approve,
     }
 
 
@@ -652,6 +690,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rql-exe", required=True, type=Path)
     parser.add_argument("--build-root", type=Path)
     parser.add_argument("--install-timeout", type=int, default=INSTALL_TIMEOUT_SECONDS)
+    parser.add_argument("--auto-approve", action="store_true",
+                        help="install the two bundled connectors with their fixed envelope; no review page")
+    parser.add_argument("--memory-data-root", type=Path,
+                        help="MemoryCore data folder the memorycore connector may read (with --auto-approve)")
     args = parser.parse_args(argv)
     if os.name != "nt":
         print(json.dumps({"schema": REPORT_SCHEMA, "action": args.action, "ok": False,
@@ -683,7 +725,9 @@ def main(argv: list[str] | None = None) -> int:
             data["ok"] = True
             print(json.dumps(data, indent=2, ensure_ascii=False))
             return 0
-        install = install_connectors(args.rql_exe, lock, build_root, install_timeout=max(60, args.install_timeout))
+        install = install_connectors(args.rql_exe, lock, build_root, install_timeout=max(60, args.install_timeout),
+                                   auto_approve=args.auto_approve,
+                                   memory_data_root=args.memory_data_root.resolve() if args.memory_data_root else None)
         data = report("install", lock, build_root, install["packages"])
         data["packageBuild"] = install.get("build")
         data["installCommands"] = [{"scheme": row["scheme"], "command": command}

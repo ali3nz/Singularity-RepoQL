@@ -40,6 +40,7 @@ class ConnectorWiringContract(unittest.TestCase):
         route = text[text.index("$argv=@($helper"):text.index("$raw=& $pythonPath @argv")]
         for forbidden in ("--allow-local-host", "--allow-host", "--source-root", "--rate"):
             self.assertNotIn(forbidden, route)
+        self.assertIn("'--auto-approve','--memory-data-root',(Join-Path $installRoot 'memory\\state\\data\\core')", text)
 
     def test_bootstrap_builds_but_does_not_install_a_connector(self):
         text = (WINDOWS / "bootstrap_runtime.ps1").read_text(encoding="utf-8")
@@ -82,9 +83,9 @@ class ConnectorWiringContract(unittest.TestCase):
         self.assertIn("rql connector install Tencent.MemoryCore.1.0.0.nupkg", connectors)
         self.assertNotIn("rql connector install --allow-local-host", connectors)
         status_example = connectors.split("# Read-only connector inventory", 1)[1].split(
-            "# Approve each local install page", 1
+            "# Install both connectors (automatic, fixed access)", 1
         )[0]
-        install_example = connectors.split("# Approve each local install page", 1)[1].split(
+        install_example = connectors.split("# Install both connectors (automatic, fixed access)", 1)[1].split(
             "```", 1
         )[0]
         self.assertIn("-ConnectorAction status", status_example)
