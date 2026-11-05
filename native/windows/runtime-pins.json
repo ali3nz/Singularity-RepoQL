@@ -1,0 +1,35 @@
+{
+  "schema": "singularity-runtime-pins/v1",
+  "recordedAtUtc": "2026-10-30T02:00:00Z",
+  "node": {
+    "version": "24.22.2",
+    "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-win-x64.zip",
+    "sha256": "ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2",
+    "verified": "node --version printed v24.22.2 after extraction; npm 11.19.1"
+  },
+  "ghostRunner": {
+    "kind": "npm",
+    "package": "@openai/codex",
+    "version": "0.166.0",
+    "installPrefix": "%LOCALAPPDATA%\\Singularity\\runtime\\npm-global",
+    "binaryRelPath": "node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
+    "verified": "codex-cli 0.166.0 printed on .241 after npm install -g with --prefix"
+  },
+  "repoql": {
+    "version": "1.7.18",
+    "installerUrl": "https://downloads.repoql.ai/latest/install-rql.ps1",
+    "installerSha256": "99ae82334eef2d74c8c51cc47af6502aad51861e5f3845e102ca5746b3c7ae69",
+    "binaryRelPath": "%LOCALAPPDATA%\\rql\\rql.exe",
+    "verified": "rql --version printed 1.7.18; install.json recorded installedVersion 1.7.18"
+  },
+  "python312": {
+    "minimum": "3.12",
+    "download": null,
+    "note": "Resolved from an existing interpreter (py -3.12 or %LOCALAPPDATA%\\Programs\\Python\\Python312). No official SHA256-pinned download is recorded yet; bootstrap fails closed instead of installing an unpinned Python."
+  },
+  "python313": {
+    "minimum": "3.13",
+    "download": null,
+    "note": "Required for Office. Resolved from an explicit -Python313Exe or an existing portable/runtime interpreter; fail-closed when absent."
+  }
+}

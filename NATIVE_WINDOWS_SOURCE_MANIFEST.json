@@ -1,0 +1,4697 @@
+{
+  "schema": 1,
+  "product": "Singularity RepoQL native Windows SOURCE review",
+  "variant": 2,
+  "gui": "claude-desktop-code",
+  "features": {
+    "repoql_dashboard": true,
+    "tencent_connector": true,
+    "kanban": true,
+    "agent_chat": true,
+    "ghost": true,
+    "office": true,
+    "memory": true,
+    "repoql_mcp": true
+  },
+  "rustOfficeFeature": true,
+  "rustGhostFeature": true,
+  "repoql": {
+    "requiredVersion": "1.7.18",
+    "connectorContract": "fetch-render",
+    "binary": "externally-installed-native-rql.exe",
+    "versionPolicy": "exact-match-fail-closed",
+    "upgradePolicy": "explicit-connector-migration-and-acceptance"
+  },
+  "release_status": "SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER",
+  "no_wsl_required_for_intended_runtime": "UNVERIFIED_NATIVE_ACCEPTANCE_REQUIRED",
+  "production_feature_parity": "UNVERIFIED",
+  "linux_deployment_assets_excluded": true,
+  "acceptance": "NOT_RUN_ON_NATIVE_WINDOWS",
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "798d0b6b8d4b78edf369c2cbe690a6804bbc7e36e5973b38055be96b5146c8f2",
+      "bytes": 1975
+    },
+    {
+      "path": ".github/workflows/native-desktop-rust.yml",
+      "sha256": "155594e3ddf7729d89682b1d107a35cdf6c7ead2f81a42f2069e498b6a469d5a",
+      "bytes": 32882
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "dd37371cea49b976eb7b3190723d32863e76e132a6282851bd8215505637b0a4",
+      "bytes": 1095
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "f4478ac5181ac0d99fa5c31ff6d399f20480ff393934070092955e64db3c5508",
+      "bytes": 8517
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "add24c5511b8ac827e99fcb14619b2f1fe5ba333fa4c307c0388a82c9931f707",
+      "bytes": 21942
+    },
+    {
+      "path": "INSTRUCTIONS.md",
+      "sha256": "80b45bc1b7a43641c7ee18f3b56f3fd590cd7a648ca272bb89fc3784dac85685",
+      "bytes": 18536
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "5b7837017b32cc70e856046a4a5e9813306eea4d1c2babe1df5787cad64fe4cc",
+      "bytes": 1077
+    },
+    {
+      "path": "MANIFEST.json",
+      "sha256": "1b84412fe68ec63a88150202e27ac964c9627d1fb0e5eee6f0b8e058fdb8328b",
+      "bytes": 10385
+    },
+    {
+      "path": "README.md",
+      "sha256": "709436837a9d5b9f6e8acce099be19da37796f534e88a0e7fba9c19dc90fdbd0",
+      "bytes": 7359
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "0f5221e39cc43641388ff5ca955aec504fbb87a98c04933cbcf86a20959d8f49",
+      "bytes": 5916
+    },
+    {
+      "path": "WINDOWS_GUI_PORT_STATUS.md",
+      "sha256": "fe7d313a5b67fd6ecfc6d8f2629dbe61ab59493a5c2a2466421aa6e83117f5a5",
+      "bytes": 6294
+    },
+    {
+      "path": "WINDOWS_NATIVE_RELEASE_MILESTONE10_20261029.md",
+      "sha256": "404fdfe2902d1f63180f3b109f99df25f27e34579a74a596db13c8541a48ace3",
+      "bytes": 8216
+    },
+    {
+      "path": "WINDOWS_NATIVE_RELEASE_MILESTONE6_20261029.md",
+      "sha256": "f65277effe9c62604cafded655c585c590f73f9626410b3932f36cb9fc1426bc",
+      "bytes": 10427
+    },
+    {
+      "path": "WINDOWS_NATIVE_RELEASE_MILESTONE7_20261029.md",
+      "sha256": "d20cc617749e9c6c531e8790c394f48e3281a237e791f26490bdf34250c1ff79",
+      "bytes": 4617
+    },
+    {
+      "path": "WINDOWS_NATIVE_RELEASE_MILESTONE8_20261029.md",
+      "sha256": "4bd5d02a00aa6f07a2fbc5a4d7f202073d9bafd96d22008950b75faf532379e8",
+      "bytes": 9955
+    },
+    {
+      "path": "WINDOWS_NATIVE_RELEASE_MILESTONE9_20261029.md",
+      "sha256": "631222ebb6811d77d0536dbaf5a7a23469db4ae6a91fe33844f3b4680dda9776",
+      "bytes": 8292
+    },
+    {
+      "path": "WINDOWS_NATIVE_RELEASE_PROGRESS_20261029.md",
+      "sha256": "79a0ccb185f60609c3f5906b5c50be590cba96aff7421201545dfba3971ac2c5",
+      "bytes": 6305
+    },
+    {
+      "path": "adapters/claude-code/README.md",
+      "sha256": "6bbddfe69c63b29b74cc4e056a918507e887d726d4e852ac4946569c2904f2b3",
+      "bytes": 2624
+    },
+    {
+      "path": "adapters/claude-code/agent-map.mjs",
+      "sha256": "d042ee6d918d93098d83f5b704ee43691bc08ddd5a02df7936afeea92337816a",
+      "bytes": 4790
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-board.md",
+      "sha256": "171f9023cf6f5e674b97c1225bb0c708fdfa68cf39870e7ceed35333981ad206",
+      "bytes": 3095
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-code-reviewer.md",
+      "sha256": "1f619ca06a9274affe26c8c54f13cc713affeb3bb18b24e7b7e534507553433a",
+      "bytes": 5137
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-duel-coordinator.md",
+      "sha256": "cdfae3d96deda718aaa9a5d01fa05b49f1375c6c31831568fdaf3481851174f9",
+      "bytes": 4188
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-duo.md",
+      "sha256": "0e7325b7657868da3d916986d484561755561047553521fd4417247fce84bb48",
+      "bytes": 4298
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-explore.md",
+      "sha256": "263c92cb509971cc186d2d41e81a14fc764c7c20a325299f6083c49dbc3d3a29",
+      "bytes": 1219
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-fleet-reviewer.md",
+      "sha256": "39de133df56c214cc3cdc790f1ba519914bfbdd2d3828a85e8e70fed51666051",
+      "bytes": 3023
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-free-mode.md",
+      "sha256": "fbfc38abc2181c230076678e20b3497ca1ab2c03e81363688713c264a1fdbd33",
+      "bytes": 3863
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-general.md",
+      "sha256": "efaf2a556f1ff0f04818c59a34951343d88531d9352ef9f2c03a9d3f9795a994",
+      "bytes": 2310
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-ghost.md",
+      "sha256": "35a9a1b168be4fb8e03c6b4518c57d7002f1d0ce7135fd38db5443a19c6722bd",
+      "bytes": 5924
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-orchestrator.md",
+      "sha256": "eee7e8b83e776894da5443bd2532aa491c5143ca347b62675dcf2dcd62f8b4c5",
+      "bytes": 7845
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-quad-coordinator.md",
+      "sha256": "068734e031736de0bd3c313e8f18e49c3d4a6b33901323924acd9ad23ea864c3",
+      "bytes": 3327
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-quality-fixer.md",
+      "sha256": "dc3b71c2f151d7861f0a7b2c0d445aae863ce7209bf32e5d02c1266cd0acacae",
+      "bytes": 1411
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-researcher-web.md",
+      "sha256": "8519f96f5ece46b1ce07ef22536f1c02f9bb6906620b03f06f15bfa07fd30d49",
+      "bytes": 1439
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-solo-coordinator.md",
+      "sha256": "b295f7c7548269633bbe8325805ee0e7e3869cb7b6e3a8c55f235b308d500bf7",
+      "bytes": 5584
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-standalone.md",
+      "sha256": "aff6a2e5e00b81dee48b520322da0614d00b4a9806939da3e8655e8c6a8df4c8",
+      "bytes": 5470
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-super.md",
+      "sha256": "c5cd53d92bfa71b9aa08df58e52c5a65f74ce8a207f7f6cd88ce8e489a96f84a",
+      "bytes": 6048
+    },
+    {
+      "path": "adapters/claude-code/agents/singularity-thinker.md",
+      "sha256": "75460ab87c2b218fd4fc1a2af22d10f45cb2af54f687ec6e90049d16f32f954d",
+      "bytes": 1489
+    },
+    {
+      "path": "adapters/claude-code/doc-hook.mjs",
+      "sha256": "98dc92fc2b6be06f744e3c79a5bd26592c7108f2a73a68e94613cde668b78bd9",
+      "bytes": 14854
+    },
+    {
+      "path": "adapters/claude-code/doc-hook.test.mjs",
+      "sha256": "5262bb1ffa743ff23843fd3cfde177b33d1625ecb66e8bd1eb4fa3641356a435",
+      "bytes": 11350
+    },
+    {
+      "path": "adapters/claude-code/installer.test.mjs",
+      "sha256": "141d0200de6e4b0243e26d7308f5c3667610b1cc7dae7b967ada808143b15626",
+      "bytes": 30051
+    },
+    {
+      "path": "adapters/claude-code/integration.test.mjs",
+      "sha256": "dbe8306a75d2b335a0767b7afb1642e813df11a587ade588f9605091268e58f2",
+      "bytes": 10399
+    },
+    {
+      "path": "adapters/claude-code/main-memory.mjs",
+      "sha256": "5cd41fa1be3b68ddc257a5f8080ef6520f5783a7944ad6b8f6de1722a646551c",
+      "bytes": 11789
+    },
+    {
+      "path": "adapters/claude-code/main-memory.test.mjs",
+      "sha256": "45e9eec1ad09234a81e0fa194226afb4c4ac3e12c684887c7b65bfad621259d5",
+      "bytes": 11204
+    },
+    {
+      "path": "adapters/claude-code/memory-hook-process.test.mjs",
+      "sha256": "e5bbd0dde1fc156789c169ddae22984f67f43312d016d3b09ec9db772a551b5d",
+      "bytes": 5261
+    },
+    {
+      "path": "adapters/claude-code/memory-hook.mjs",
+      "sha256": "7c25ebc0819a7725ad56a3ad650416b70df5ee9292761af430080bde48d25bfe",
+      "bytes": 19977
+    },
+    {
+      "path": "adapters/claude-code/memory-hook.test.mjs",
+      "sha256": "a29be0fda79f1f072e96ea66f46498a8551e07ea438acc34bfedea037b4ca42c",
+      "bytes": 22361
+    },
+    {
+      "path": "adapters/claude-code/office-hook.mjs",
+      "sha256": "31e5c83a6f4613bdbd24408ab91b19099422b615245d58173cfd824e1c4417d2",
+      "bytes": 2970
+    },
+    {
+      "path": "adapters/claude-code/office-hook.test.mjs",
+      "sha256": "23e4e6d2434c74ec73322cf1413e623fdf6d305b883c7153aaebe88eff6db630",
+      "bytes": 2925
+    },
+    {
+      "path": "adapters/claude-code/settings-merge.mjs",
+      "sha256": "4a4a9184847adee39864e7355dd7166f9b036ffa3320a000f92cc0405bff9568",
+      "bytes": 15149
+    },
+    {
+      "path": "adapters/claude-code/settings-snippet.json",
+      "sha256": "5458229d9edb73977171054c89bfe4611567b806d31f09bf2e8f810a4b1b279e",
+      "bytes": 1546
+    },
+    {
+      "path": "adapters/claude-code/settings-windows.test.mjs",
+      "sha256": "f3ab3ed92dcf89acce9c6dc3bd88bdc05826d73cd898fab46b5a2ab01e983762",
+      "bytes": 16871
+    },
+    {
+      "path": "adapters/claude-code/singularity-workflow.md",
+      "sha256": "3d0e05911134b6b5b14c60cb98cc4e902ba8028144a2efae52aeff614cef0f4b",
+      "bytes": 8930
+    },
+    {
+      "path": "bin/ai-orchestra",
+      "sha256": "78b985eb6549ba8431239f69fe25ab0a71a90563d2e36996f4d1c5de322470cc",
+      "bytes": 2650
+    },
+    {
+      "path": "bin/ai-orchestra.cmd",
+      "sha256": "6b67f9642742fdc356ff61f539acc90d3e82ecdce2c60aec230e5f5ee8bb40ea",
+      "bytes": 327
+    },
+    {
+      "path": "connectors/PROVENANCE.md",
+      "sha256": "c0d330a28c80debaf6586953d8432cb51a22fed582cf4e0002a6950698fbe4bd",
+      "bytes": 2934
+    },
+    {
+      "path": "connectors/README.md",
+      "sha256": "6dc0b32638b192b09ecb7429a6857d9f401370bc432c632810017eab1b7f7da2",
+      "bytes": 6309
+    },
+    {
+      "path": "connectors/kanzo/README.md",
+      "sha256": "68ef3fe1965b47171cb534f44c2dbd4242308bb86be2f8104bb43c6f7fc3798b",
+      "bytes": 6323
+    },
+    {
+      "path": "connectors/kanzo/SOURCE-SHA256",
+      "sha256": "ea60a1d6694eeeb14543fcf9fe38861edf678a298fc58d72a04660ee4a158304",
+      "bytes": 1772
+    },
+    {
+      "path": "connectors/kanzo/connector.ts",
+      "sha256": "3e16987f551a2adfd452c187469bbefd1540dd736ab57d5774f31ce0dbdebea3",
+      "bytes": 55670
+    },
+    {
+      "path": "connectors/kanzo/fixtures/README.md",
+      "sha256": "d7d437e2314ebdb354eb6d9213a2f1430474b72f30fd6813b2369a97f99c1a56",
+      "bytes": 996
+    },
+    {
+      "path": "connectors/kanzo/fixtures/board.json",
+      "sha256": "e32dede7414af8181f259e95acebd48a0f1263924a323b313a02f4fe7016f136",
+      "bytes": 1112
+    },
+    {
+      "path": "connectors/kanzo/fixtures/task-1.json",
+      "sha256": "f9cbc07bd8b50209997de32f941c4599ae4b5301788f8519b3075be5cecf46c5",
+      "bytes": 576
+    },
+    {
+      "path": "connectors/kanzo/help/layout.md",
+      "sha256": "4e597eee2bae3cdf8cbc1b392a0e895383b5922663f93033280d43cb64099d53",
+      "bytes": 2474
+    },
+    {
+      "path": "connectors/kanzo/manifest.yaml",
+      "sha256": "1992920cc9732483faa31b75acab5894eccbc6cf71c1911e25c645cb2571d90a",
+      "bytes": 1085
+    },
+    {
+      "path": "connectors/kanzo/repoql-connector.d.ts",
+      "sha256": "fb6586c0aec50db2f5c739e331e02ee4c76d82d4a4c7a464367173872ffe0986",
+      "bytes": 28801
+    },
+    {
+      "path": "connectors/kanzo/sql/imported_tasks.sql",
+      "sha256": "6e8cb05e441a6ba79c9a6b36e89ddb1385609bef5202fa0ff6d1b2dc1887a33c",
+      "bytes": 1281
+    },
+    {
+      "path": "connectors/kanzo/sql/open_tasks.sql",
+      "sha256": "20e46fdb5f96224261f3b5a9a2c17f11ec2920e576714af4a917b60328b0de65",
+      "bytes": 358
+    },
+    {
+      "path": "connectors/kanzo/sql/projects.sql",
+      "sha256": "d77718db35952ebddcf9cfd1e2cead0590baaf354befe21e2b3406f6f39645f7",
+      "bytes": 749
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks.sql",
+      "sha256": "80cf1908b62fdd5d93da74131b69e2f3fd85fd51709a776bf9ac3bc177b7978f",
+      "bytes": 1388
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks_by_project.sql",
+      "sha256": "2018456cfa0d23929204758e617339e65d535fd73167d330fd3200a2ebc52577",
+      "bytes": 401
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks_by_status.sql",
+      "sha256": "3e120dfdf77f18da2dd8fd1a0bcc7534e041d2c8e42dfd35bccb3879765f5fd8",
+      "bytes": 297
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks_with_comments.sql",
+      "sha256": "e8cf98f560ecc1e5a7e1eccd5a986c8c030f14521dafcf26a5ebf948c3da45a7",
+      "bytes": 304
+    },
+    {
+      "path": "connectors/kanzo/suite.json",
+      "sha256": "c4c4bf58e279398340a42468dc778675132af5a826f7061775b4438304839c88",
+      "bytes": 13564
+    },
+    {
+      "path": "connectors/kanzo/tools/build_multicall.py",
+      "sha256": "a7bde9d8104fb953e23ba3ba967302b622bd37e3a681e6892b01760cb5b49c7d",
+      "bytes": 3980
+    },
+    {
+      "path": "connectors/kanzo/tools/build_suite.py",
+      "sha256": "ef4dd936e0f608d715f9a468fb7dbb47bc485f3586d591b695eec9396ea10bae",
+      "bytes": 12016
+    },
+    {
+      "path": "connectors/kanzo/tools/pin.py",
+      "sha256": "6cd1c2265d6776c228e61fbe6554a61eca826fe904d06376fd1de25b238dde9d",
+      "bytes": 5083
+    },
+    {
+      "path": "connectors/kanzo/tools/truncate.py",
+      "sha256": "130569511a65d7dba59f53e1c1d8e90476a4fb9640c59341e674745c11288f38",
+      "bytes": 506
+    },
+    {
+      "path": "connectors/kanzo/tsconfig.json",
+      "sha256": "01fcba600354c7fb0acd0692d79b7ef1d44627ec8301cc1174698eb358004ea0",
+      "bytes": 216
+    },
+    {
+      "path": "connectors/memorycore/README.md",
+      "sha256": "c9e02ebefae8f28d6f8df3edb90d498ea1739e4257c48e4c958a52976b401b16",
+      "bytes": 5423
+    },
+    {
+      "path": "connectors/memorycore/SOURCE-SHA256",
+      "sha256": "db8ec6959743597873060020e6d08749ee2dba04fffe548b226afb0fc5e02424",
+      "bytes": 6526
+    },
+    {
+      "path": "connectors/memorycore/connector.ts",
+      "sha256": "bf546cd539e95eb04aa5e2e5b7a1967f1a1649463bc39a73613b8506e9075f22",
+      "bytes": 30547
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/.backup/old.jsonl",
+      "sha256": "0d9e0bcf49c4ccbf922a03af2bbb91ee9a4b4b8f4d4b19c38f1f0b1dff743e61",
+      "bytes": 24
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/conversations/2026-01-07.jsonl",
+      "sha256": "1575d740e179b6d41ca87f375cb5d3d90556ab17b3cd8679d5494b0270cc20f7",
+      "bytes": 59
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/metadata/instance.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "bytes": 3
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/loose-folder/persona.md",
+      "sha256": "2dd3d45ad78e698db67e5aba6e791fe8f12eaaae464e61c274f15aef9938cd2e",
+      "bytes": 23
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/checkpoint.json",
+      "sha256": "4e93d02d6042938ff7d37ec1207e8b41775246cff411cc47e2d9121109a002ab",
+      "bytes": 31
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/scene_index.json",
+      "sha256": "6521d824b1ac110647e96028c3f4e090f020a80f45df1e30e7e768c5641482ee",
+      "bytes": 131
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.label-plane.md",
+      "sha256": "214688ae335ac0dfd35a30a5bfe7d354cb184d3a01f372cc6f471d4c6089ef39",
+      "bytes": 160
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.md",
+      "sha256": "d3d5527ec7d874d145cd0639753fd685a9a8145298c506401ec40edf8e7924ac",
+      "bytes": 266
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/scene_blocks/Old-Scene.md",
+      "sha256": "529588baa7d08f7d42248d3805c3f69f7ee3d6915fe5368572bdad6c5e33ee87",
+      "bytes": 248
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/scene_blocks/Setup-Session.md",
+      "sha256": "16f18682a2b223a982187ed46ee55b2c68c709ed4b143c0d3a8c31b4fc6ed12a",
+      "bytes": 261
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-1/records/2026-01-07.jsonl",
+      "sha256": "baecc69926903897327daf0d52c390e4f25a185e72907c9e04713effa4c6aabc",
+      "bytes": 2267
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/.backup/old.jsonl",
+      "sha256": "0d9e0bcf49c4ccbf922a03af2bbb91ee9a4b4b8f4d4b19c38f1f0b1dff743e61",
+      "bytes": 24
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/conversations/2026-01-07.jsonl",
+      "sha256": "1575d740e179b6d41ca87f375cb5d3d90556ab17b3cd8679d5494b0270cc20f7",
+      "bytes": 59
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/metadata/instance.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "bytes": 3
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/loose-folder/persona.md",
+      "sha256": "2dd3d45ad78e698db67e5aba6e791fe8f12eaaae464e61c274f15aef9938cd2e",
+      "bytes": 23
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/checkpoint.json",
+      "sha256": "4e93d02d6042938ff7d37ec1207e8b41775246cff411cc47e2d9121109a002ab",
+      "bytes": 31
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/scene_index.json",
+      "sha256": "6521d824b1ac110647e96028c3f4e090f020a80f45df1e30e7e768c5641482ee",
+      "bytes": 131
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.label-plane.md",
+      "sha256": "214688ae335ac0dfd35a30a5bfe7d354cb184d3a01f372cc6f471d4c6089ef39",
+      "bytes": 160
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.md",
+      "sha256": "f1c25bd384069a1871c24032c5d906fee09565802ca9c0e7100b01855a1f149d",
+      "bytes": 280
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/scene_blocks/Second-Scene.md",
+      "sha256": "53ae0aad0dc8a8b67373dd5cfab05d95f4de060a98aa39b76a4a092bfbbcd0af",
+      "bytes": 230
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/scene_blocks/Setup-Session.md",
+      "sha256": "65579450cce0b9277922138442b3976351603cac7d3b077901e40859fee23253",
+      "bytes": 312
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-2/records/2026-01-07.jsonl",
+      "sha256": "ea8e3fe55defb47b5e69387c60bdd610c0603231f27a1781f96e58f3b015fff1",
+      "bytes": 2800
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/.backup/old.jsonl",
+      "sha256": "0d9e0bcf49c4ccbf922a03af2bbb91ee9a4b4b8f4d4b19c38f1f0b1dff743e61",
+      "bytes": 24
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/conversations/2026-01-07.jsonl",
+      "sha256": "1575d740e179b6d41ca87f375cb5d3d90556ab17b3cd8679d5494b0270cc20f7",
+      "bytes": 59
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/metadata/instance.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "bytes": 3
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/profiles/loose-folder/persona.md",
+      "sha256": "2dd3d45ad78e698db67e5aba6e791fe8f12eaaae464e61c274f15aef9938cd2e",
+      "bytes": 23
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/checkpoint.json",
+      "sha256": "4e93d02d6042938ff7d37ec1207e8b41775246cff411cc47e2d9121109a002ab",
+      "bytes": 31
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/scene_index.json",
+      "sha256": "6521d824b1ac110647e96028c3f4e090f020a80f45df1e30e7e768c5641482ee",
+      "bytes": 131
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.label-plane.md",
+      "sha256": "214688ae335ac0dfd35a30a5bfe7d354cb184d3a01f372cc6f471d4c6089ef39",
+      "bytes": 160
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.md",
+      "sha256": "f1c25bd384069a1871c24032c5d906fee09565802ca9c0e7100b01855a1f149d",
+      "bytes": 280
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/scene_blocks/Setup-Session.md",
+      "sha256": "65579450cce0b9277922138442b3976351603cac7d3b077901e40859fee23253",
+      "bytes": 312
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-3/records/2026-01-07.jsonl",
+      "sha256": "8c26a4bd5a6fdea7b450f7282fb13d4104a6fb570ed64aec29b323826134fbca",
+      "bytes": 2277
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/.backup/old.jsonl",
+      "sha256": "0d9e0bcf49c4ccbf922a03af2bbb91ee9a4b4b8f4d4b19c38f1f0b1dff743e61",
+      "bytes": 24
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/conversations/2026-01-07.jsonl",
+      "sha256": "1575d740e179b6d41ca87f375cb5d3d90556ab17b3cd8679d5494b0270cc20f7",
+      "bytes": 59
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/metadata/instance.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "bytes": 3
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/profiles/loose-folder/persona.md",
+      "sha256": "2dd3d45ad78e698db67e5aba6e791fe8f12eaaae464e61c274f15aef9938cd2e",
+      "bytes": 23
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/checkpoint.json",
+      "sha256": "4e93d02d6042938ff7d37ec1207e8b41775246cff411cc47e2d9121109a002ab",
+      "bytes": 31
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/.metadata/scene_index.json",
+      "sha256": "6521d824b1ac110647e96028c3f4e090f020a80f45df1e30e7e768c5641482ee",
+      "bytes": 131
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.label-plane.md",
+      "sha256": "214688ae335ac0dfd35a30a5bfe7d354cb184d3a01f372cc6f471d4c6089ef39",
+      "bytes": 160
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/persona.md",
+      "sha256": "f1c25bd384069a1871c24032c5d906fee09565802ca9c0e7100b01855a1f149d",
+      "bytes": 280
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/profiles/team%3Ateam-fixture%7Cagent%3Aagt-fixture/scene_blocks/Setup-Session.md",
+      "sha256": "65579450cce0b9277922138442b3976351603cac7d3b077901e40859fee23253",
+      "bytes": 312
+    },
+    {
+      "path": "connectors/memorycore/fixtures/live-torn/records/2026-01-07.jsonl",
+      "sha256": "0667a86ecfff51f58290808227980b3541f30c9e87ddf672d57eb274bba95c2c",
+      "bytes": 1593
+    },
+    {
+      "path": "connectors/memorycore/help/layout.md",
+      "sha256": "44c9c28d142574feb0c9b7535d1046eec33a56bda8f720eaa28151dbe828528f",
+      "bytes": 5437
+    },
+    {
+      "path": "connectors/memorycore/manifest.yaml",
+      "sha256": "1c08b13182a8ca2fc94baaac661a76f61682f50ced577df915c05a55764ce673",
+      "bytes": 829
+    },
+    {
+      "path": "connectors/memorycore/repoql-connector.d.ts",
+      "sha256": "fb6586c0aec50db2f5c739e331e02ee4c76d82d4a4c7a464367173872ffe0986",
+      "bytes": 28801
+    },
+    {
+      "path": "connectors/memorycore/sql/daily.sql",
+      "sha256": "28cdab281a2a2d613bebf139b471394e7ea0ed1c7817f2d339d698cc433dbf1a",
+      "bytes": 358
+    },
+    {
+      "path": "connectors/memorycore/sql/personas.sql",
+      "sha256": "c64fb7127421c1c35298ae3c6d39b47ce24ca530788fb0b618cd5f7123bc1768",
+      "bytes": 589
+    },
+    {
+      "path": "connectors/memorycore/sql/records.sql",
+      "sha256": "3427b053176c25f37bc5ef595a8c29282dd2432aeadb1b3dcf59e7985964b32f",
+      "bytes": 1364
+    },
+    {
+      "path": "connectors/memorycore/sql/scenes.sql",
+      "sha256": "16c9220c86933a1c2549cd79d9fb057c17137ecb5278072bb67b5f4817103ed1",
+      "bytes": 739
+    },
+    {
+      "path": "connectors/memorycore/suite.json",
+      "sha256": "0e3e7e34411b1bc3ffafab0be108c2c77b576672b02d527561f08c769d4bf3ca",
+      "bytes": 2886
+    },
+    {
+      "path": "connectors/memorycore/tsconfig.json",
+      "sha256": "01fcba600354c7fb0acd0692d79b7ef1d44627ec8301cc1174698eb358004ea0",
+      "bytes": 216
+    },
+    {
+      "path": "connectors/packages.lock.json",
+      "sha256": "c1f3e6abd7b1ff1fd2d416a739c680e30a8046f706727d924eff9b0c539a2e8f",
+      "bytes": 1056
+    },
+    {
+      "path": "dashboard/.env.windows.example",
+      "sha256": "d172ed8574fa678831cdd2b51c0c69117e157d62ef1493c66ffabf4109963f97",
+      "bytes": 1193
+    },
+    {
+      "path": "dashboard/PROVENANCE.md",
+      "sha256": "f2041558acdedc6c792634892d85be10ece3403ce704bb39290b6358655e48ef",
+      "bytes": 9678
+    },
+    {
+      "path": "dashboard/README.md",
+      "sha256": "bfc13797a4105384b49ec7bf6b91e718d22ccb444115960047da639c31595558",
+      "bytes": 947
+    },
+    {
+      "path": "dashboard/THIRD-PARTY-NOTICES.md",
+      "sha256": "1c41af66c5925c61f561beb183255d26486b037fd89649d4d0ee1bddb3091b97",
+      "bytes": 2329
+    },
+    {
+      "path": "dashboard/access.py",
+      "sha256": "b91adf3e5432b25d4a0a0a6ddf013d2027ac1d3a03869d8b6ef3c198592b590f",
+      "bytes": 3438
+    },
+    {
+      "path": "dashboard/agentchat_feed.py",
+      "sha256": "104209fb13604b6251721f45de6529197dffec71e455f0beee9e59531d232f52",
+      "bytes": 6898
+    },
+    {
+      "path": "dashboard/embed_config.py",
+      "sha256": "ca2e1aefea88f0def8779ac68bb2f066d00e87ab7bd1e6928d9db27c627ab4ac",
+      "bytes": 2445
+    },
+    {
+      "path": "dashboard/file_lock.py",
+      "sha256": "a61d0f689495cd40bed891ec2ed5aedff7c7f0f7bdb89569b4c3d77a2db3d355",
+      "bytes": 1173
+    },
+    {
+      "path": "dashboard/freebuff_allowance.py",
+      "sha256": "daa002d996154334d4b27e859fb8fd9888854afd4ff8186e343feb5bcb52d7b0",
+      "bytes": 3953
+    },
+    {
+      "path": "dashboard/ghost_bridge.py",
+      "sha256": "556a0d1358852e98b9773e3192585b30f87d627852128c332b5c7b2b1a22dd6f",
+      "bytes": 5427
+    },
+    {
+      "path": "dashboard/ghost_schedule_plans.py",
+      "sha256": "358fc1d29357a83de69b0cfcd6144b46c0054bc6e41d5934ad0d8584af9d7728",
+      "bytes": 30514
+    },
+    {
+      "path": "dashboard/graph_annotations.py",
+      "sha256": "18714e78a9af6d7e550fedb5cb8f7638b202cebbfa3a05dfc0c19ed7784952a6",
+      "bytes": 3541
+    },
+    {
+      "path": "dashboard/harness_api.py",
+      "sha256": "45e4d03cde771319be4a45851477f0e04064e99e1cf867a7bbea2f25a301450d",
+      "bytes": 4742
+    },
+    {
+      "path": "dashboard/harness_rust.py",
+      "sha256": "f779fa1ff84344506fe73e0ded70c0f2f3e43bc6b12848382ba297a343ad7c17",
+      "bytes": 7883
+    },
+    {
+      "path": "dashboard/harness_telemetry.py",
+      "sha256": "c7dab00e2a374d81d9643cd712da9eb5d7ba5192463712184f8fa284ae56eef3",
+      "bytes": 97629
+    },
+    {
+      "path": "dashboard/local_account.py",
+      "sha256": "353533858451411d6f6ab73f3cf2b673e1cfc974f3326e7bf7dc06b906b275a9",
+      "bytes": 6395
+    },
+    {
+      "path": "dashboard/native_cpu.py",
+      "sha256": "113a91a88d013692bf31a78f3ecfc21756698fb055e8a0361455e2b72c50714d",
+      "bytes": 3353
+    },
+    {
+      "path": "dashboard/native_cpu_history.py",
+      "sha256": "cc9dbf0adb1a4d67ac63863ead76e36f7ec46e9a5383400db611f3de9116274b",
+      "bytes": 9923
+    },
+    {
+      "path": "dashboard/native_ghost.py",
+      "sha256": "c6d1cb0c6024636b436d03bef46e028402a7ebfcfc33ed9908c8e305d227b290",
+      "bytes": 3321
+    },
+    {
+      "path": "dashboard/native_gui_usage.py",
+      "sha256": "7188cc4000e07352db2bae9e04c2a9fe7377d0d10ae13712c2ade89a37d70bb0",
+      "bytes": 3748
+    },
+    {
+      "path": "dashboard/native_openmausbot.py",
+      "sha256": "33018080f03e7003087e2ea0e5e37a333fad7a8ee1b306e3c5ecce7f8f76e5bb",
+      "bytes": 4081
+    },
+    {
+      "path": "dashboard/native_panel_proxy.py",
+      "sha256": "eb9cd87d1e8cb18f348815593240f644debf8de7d6c1aed6ccce203958939dc1",
+      "bytes": 19701
+    },
+    {
+      "path": "dashboard/native_readiness.py",
+      "sha256": "b4a9b1fece729f786ee4a00990917444d74eb289c879537defa797d2fc6eeb60",
+      "bytes": 4932
+    },
+    {
+      "path": "dashboard/native_repoql_gate.py",
+      "sha256": "f68a07f186db074f92fc3012db4a66693dc5bba7d744890fbcfc944309a53ec0",
+      "bytes": 970
+    },
+    {
+      "path": "dashboard/office_bridge.py",
+      "sha256": "510aca04fbf2c2794ba87055568ed993b8d7d6a60ee3c63b6485fec0952c2702",
+      "bytes": 4298
+    },
+    {
+      "path": "dashboard/repo_query_usage.py",
+      "sha256": "53c491c24eacf440e47f8906b26bde1b176ba37e27bf5cd3f1459b3645f4e656",
+      "bytes": 8716
+    },
+    {
+      "path": "dashboard/repoql_bridge.py",
+      "sha256": "df42bde93a8c1e379450b78bfdf575561083c90cdbdf409d75f079fb0100bc97",
+      "bytes": 20150
+    },
+    {
+      "path": "dashboard/repoql_connectors.py",
+      "sha256": "d8f678fd1852f82d8f918e83a478c849d525bc6989209e7b1ede2ec99e2c3e7e",
+      "bytes": 10518
+    },
+    {
+      "path": "dashboard/repoql_native_auth.py",
+      "sha256": "16ed8643f06815e5a8bcd99ce7f19a8445d4c047de7d0ad82bc9ee2178233d42",
+      "bytes": 10063
+    },
+    {
+      "path": "dashboard/server.py",
+      "sha256": "4b5ac3251a3f4eba82f2204405eaf5e1ef6008bc74a434997467984231e7ab78",
+      "bytes": 126512
+    },
+    {
+      "path": "dashboard/static/account.html",
+      "sha256": "de0ee153e0948df8ca6e7da9fcafdbf93e588079eb058d0b0201aff4b4823681",
+      "bytes": 4411
+    },
+    {
+      "path": "dashboard/static/app.css",
+      "sha256": "442e17ef754311465c1f6353f90bc712788e49e51d87d6a3a6886d1774ad3d8b",
+      "bytes": 244252
+    },
+    {
+      "path": "dashboard/static/app.js",
+      "sha256": "817507fc10250586d55f52987e24ffd084e8a95ec5e9b300a70c1d47c40c1294",
+      "bytes": 264608
+    },
+    {
+      "path": "dashboard/static/app_test.mjs",
+      "sha256": "7cc23469c9eb9ab96fdfbbe8365242d36f4fcfbba635063c779ecf6b72653cc6",
+      "bytes": 6956
+    },
+    {
+      "path": "dashboard/static/ghost/api.js",
+      "sha256": "c60d849637236483f74a7554a7cf32e23bdc052432d1d29ece61c1266e345dc8",
+      "bytes": 693
+    },
+    {
+      "path": "dashboard/static/ghost/dashboard.js",
+      "sha256": "e31c00c9ab64be376b3a3a2703c24f726344e56861df4ba1927ee94314917503",
+      "bytes": 27141
+    },
+    {
+      "path": "dashboard/static/ghost/index.html",
+      "sha256": "e29892a18fa986eff3d28a9b1522594ac35796f5726f40e656e9f51014efe2f5",
+      "bytes": 34662
+    },
+    {
+      "path": "dashboard/static/ghost/schedule_model.mjs",
+      "sha256": "41282eafdab247fcddbcc5a407c663faae1e35bafccfede305a13683d5d5b302",
+      "bytes": 2082
+    },
+    {
+      "path": "dashboard/static/ghost/schedule_model.test.mjs",
+      "sha256": "4b548e1b9b875b2f0b94243e9cc6df44563960db1734e55314f3b094bf52a43c",
+      "bytes": 1850
+    },
+    {
+      "path": "dashboard/static/ghost/tasks.js",
+      "sha256": "0d819c38e9f950a8cf6929849f71c30286c9dbb3aa73de5afc10515105625df6",
+      "bytes": 41130
+    },
+    {
+      "path": "dashboard/static/index.html",
+      "sha256": "5bdd2917a4397428a421fe657c6cefe22ac1e6a949fa8afb60b8d8a87b0bcae3",
+      "bytes": 16814
+    },
+    {
+      "path": "dashboard/static/kanban_native.js",
+      "sha256": "7c9d97129732f31ac3a53e4097ad455ebdbd643e70392c89c940dfdef37b468c",
+      "bytes": 26211
+    },
+    {
+      "path": "dashboard/static/native_variant_ui.test.mjs",
+      "sha256": "36a8572393bbb460eba554a939b69cde6f450e09bd3f7d213ef81a313a852cfc",
+      "bytes": 1380
+    },
+    {
+      "path": "dashboard/static/navigation_ui.js",
+      "sha256": "e73dea05cf046f6e0c8dc0ceb1e903b608c7b81b01d77866e302e32ac4ccc3e3",
+      "bytes": 9193
+    },
+    {
+      "path": "dashboard/static/observability.js",
+      "sha256": "553c2d1769714d33882b5c4bf2cf1f9c1498e7cf5feaf92d05f53844fbca3454",
+      "bytes": 27858
+    },
+    {
+      "path": "dashboard/static/repoql_cheatsheet.js",
+      "sha256": "0692bd160586c964c41a6b9308a0c2094c4807fcc5cbb253c7377b0b0966ab7e",
+      "bytes": 17856
+    },
+    {
+      "path": "dashboard/static/repoql_guidance.js",
+      "sha256": "da2af9df03b175796f64d650137d403531af9382080187b48b624649503f58d9",
+      "bytes": 10359
+    },
+    {
+      "path": "dashboard/static/workflow_graphs.js",
+      "sha256": "fa20a0f5c6da26ec41e441cc27810fea93bf841669aed348c906b8c9a90b6004",
+      "bytes": 46475
+    },
+    {
+      "path": "dashboard/tencent_panel_proxy.py",
+      "sha256": "c92984cff180515008a5ccfe54968af3c6304afebbc8ac300ddcc98369361d4d",
+      "bytes": 3016
+    },
+    {
+      "path": "dashboard/test_agentchat_recent_presence.py",
+      "sha256": "5e572813c08f012976003e55147107440356556308811d2a691eb4d939119ac3",
+      "bytes": 1469
+    },
+    {
+      "path": "dashboard/test_agentchat_windows_file_identity.py",
+      "sha256": "70517b0bf708adb8b2efd246083d6e149310dedc0facc1493f5c63bd18ad2bb4",
+      "bytes": 2379
+    },
+    {
+      "path": "dashboard/test_exclusion_store_contract.py",
+      "sha256": "670fca2a40858c4442f2f8d273df2d2d88b58bcda85a08d2883bf87437b1563c",
+      "bytes": 3985
+    },
+    {
+      "path": "dashboard/test_file_lock.py",
+      "sha256": "9598f78341f06327e3bf7862fc999519d33dd58794ccf837adf1e4e47653da50",
+      "bytes": 717
+    },
+    {
+      "path": "dashboard/test_ghost_activation_handoff_contract.py",
+      "sha256": "2cdcbbfe50ab69496f0c9b706dbca7eac68818f64c0920455d14554417995b1f",
+      "bytes": 1837
+    },
+    {
+      "path": "dashboard/test_ghost_plan_origin_boundary.py",
+      "sha256": "e2c22542303a9ceae195126ff720c1212e72c7c16a62855885f00b637e35924d",
+      "bytes": 4000
+    },
+    {
+      "path": "dashboard/test_ghost_schedule_plans.py",
+      "sha256": "fc16cfbfe434f0a59ddcf94829c99c5eed91f27d2748b8632eb8070a35081046",
+      "bytes": 16782
+    },
+    {
+      "path": "dashboard/test_ghost_scheduler_control.py",
+      "sha256": "425cfa75f652b0fb893b3b15a6f88934df8cc1f21817cd50da65c0ec0eadcbf0",
+      "bytes": 13597
+    },
+    {
+      "path": "dashboard/test_harness_rust_native_security.py",
+      "sha256": "df5393c9383a28ac95ceebde6de2ac5952c3402fdf30aaffceb10d2900d9434d",
+      "bytes": 5102
+    },
+    {
+      "path": "dashboard/test_local_account.py",
+      "sha256": "3d31c7898eaeb4d93d9345c3d310c80a19c393c158b3ee923e0dd444ad835de6",
+      "bytes": 6719
+    },
+    {
+      "path": "dashboard/test_native_auth_broker.py",
+      "sha256": "baf6a3d69d23b369adbb2c212763b387b4d57bc99b029318eef1ac705bac4990",
+      "bytes": 3256
+    },
+    {
+      "path": "dashboard/test_native_browser_profiles.py",
+      "sha256": "e0dddeba96d41f8ac1feeba5f519fe816018bf2d4dfe91891688151f2963c4f5",
+      "bytes": 4822
+    },
+    {
+      "path": "dashboard/test_native_cpu.py",
+      "sha256": "01ffecf86f4cfba0adfd8e301d34bbf2eb8c064198a5a2b227f38f3e13688761",
+      "bytes": 3181
+    },
+    {
+      "path": "dashboard/test_native_cpu_collector_lifecycle.py",
+      "sha256": "85e4ac80144da06dc31120540e951d7922ece0a4477b1f130f347ec1d9d44d53",
+      "bytes": 4879
+    },
+    {
+      "path": "dashboard/test_native_cpu_history.py",
+      "sha256": "58a24f7f95f85ff7aa030f3f6825a2363d030a40137d42fdd519bf4089c40939",
+      "bytes": 7117
+    },
+    {
+      "path": "dashboard/test_native_dashboard_cpu_history.py",
+      "sha256": "51beb66144a4996ac85ae6da11e00dfb15d649ee161205bd980e4653af1e5555",
+      "bytes": 1970
+    },
+    {
+      "path": "dashboard/test_native_e2e_server.py",
+      "sha256": "70267efbd6c39af14e426d069d920ad05059175005d1a9da5e1bf5d97c454f71",
+      "bytes": 9215
+    },
+    {
+      "path": "dashboard/test_native_ghost.py",
+      "sha256": "51f8abed41e6567b861844c9ca5f319ec4635cdfd460dc8399c64a5ed34fec94",
+      "bytes": 4207
+    },
+    {
+      "path": "dashboard/test_native_gui_usage.py",
+      "sha256": "3c7cc976fbe0bb88cd770440a4f649619e6c22f9a2d41001bd2f356d83607e24",
+      "bytes": 4361
+    },
+    {
+      "path": "dashboard/test_native_openmausbot.py",
+      "sha256": "7160bd4a4d66ebc85a21ff58fe5f85d8a181eb85f7e7df0f8af27bf66392f9c0",
+      "bytes": 2430
+    },
+    {
+      "path": "dashboard/test_native_panel_safety.py",
+      "sha256": "c0e7a96b7586bba57899011651843ec70c3799c38648024b6dd3e992c80006d4",
+      "bytes": 2136
+    },
+    {
+      "path": "dashboard/test_native_readiness.py",
+      "sha256": "823d94650608cbff492caa49e320bfae64a0636b873af2828eca7c50f1a7ce7e",
+      "bytes": 2098
+    },
+    {
+      "path": "dashboard/test_native_repoql_gate.py",
+      "sha256": "512392a2fbfdf4c018edd890c0228d0ed1951fddd5c25af54beb3dfec1c45564",
+      "bytes": 1023
+    },
+    {
+      "path": "dashboard/test_native_telemetry_platform.py",
+      "sha256": "bee9897784ed32c42e45383e67707e3b27fa8ab2b65307dd538a3bd7bdd67454",
+      "bytes": 2049
+    },
+    {
+      "path": "dashboard/test_native_variant_dashboard_e2e.py",
+      "sha256": "38cecadc7f3edf1b64011a5a97594fa9146bc12fcb75d20dbef6be5eaff31de4",
+      "bytes": 4060
+    },
+    {
+      "path": "dashboard/test_office_proxy_roundtrip.py",
+      "sha256": "c4a2e385f112db4f10d0d35f031b693de0b3892844e09c5ec7b6fbf6ca152015",
+      "bytes": 4805
+    },
+    {
+      "path": "dashboard/test_office_windows_rollback.py",
+      "sha256": "26a1b20d260ccd68939652538c15d6ac8930363269277ffc258ccddd16baf00a",
+      "bytes": 6200
+    },
+    {
+      "path": "dashboard/test_repoql_connector_inventory_integrity.py",
+      "sha256": "1c49adfbfa37f55002b5aa31d7341dcc4351d1219c294fda7650fcb18592137f",
+      "bytes": 3858
+    },
+    {
+      "path": "dashboard/test_repoql_error_boundary.py",
+      "sha256": "214055ede26cf658940ae6d252b1ee0c41b63d89f912e4d9a304442604aa7d9a",
+      "bytes": 4802
+    },
+    {
+      "path": "dashboard/test_repoql_proxy_credential_boundary.py",
+      "sha256": "0d0cb8cfe48be8e13c7e4a2670427a6c2e786875fa4f26d175efef7809854431",
+      "bytes": 5239
+    },
+    {
+      "path": "dashboard/test_repoql_proxy_redirect_boundary.py",
+      "sha256": "fe490bd0d1a20453cb8ba2eecdd01fdc3480e4df5545c4ea89bbb353fe860c9a",
+      "bytes": 4859
+    },
+    {
+      "path": "dashboard/test_supervisor_health_endpoint.py",
+      "sha256": "d6c6106b2c7a20181759b21d81ca87b3fd923b1dd30ffb291224171b68518b26",
+      "bytes": 2055
+    },
+    {
+      "path": "dashboard/test_unified_windows_proxy.py",
+      "sha256": "ebc9fe07474b1562b26728881b510031d55449a87fe1a1c653a04d58a4ac9ef4",
+      "bytes": 6308
+    },
+    {
+      "path": "dashboard/test_variant_features.py",
+      "sha256": "ada1807ef996be4705b0ee168a75c722f1b9118d4fbacd73c54239dd2fb4267d",
+      "bytes": 1499
+    },
+    {
+      "path": "dashboard/test_variant_http.py",
+      "sha256": "2afe6a35ffa71e3eed74c990fb24247e715ef8fea061ed773f76a0a7163502fa",
+      "bytes": 3060
+    },
+    {
+      "path": "dashboard/test_windows_connector_roundtrip.py",
+      "sha256": "f21fea6e0d486a0e4ae93324dcabbdb7a8d2f1bb6e3b067f4d0552ca892ebd8b",
+      "bytes": 3610
+    },
+    {
+      "path": "dashboard/test_windows_gateway_locality.py",
+      "sha256": "a47210fcef40e2b7b777e3d65bed42fee3c35d3d7bdce74456cd0bc61ab081f4",
+      "bytes": 6324
+    },
+    {
+      "path": "dashboard/tests/browser_command_overview_smoke.py",
+      "sha256": "b5f5022243f6b92885f730b8c379425ab03e5673ba26ef5cfe481b5f06ff3233",
+      "bytes": 3614
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_native_smoke.py",
+      "sha256": "7e3bf7bf74b4a8ad4b5e7879bed3e384910ab1ac2c1a028d873e6fc3f0fa58a3",
+      "bytes": 8686
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_queue_smoke.py",
+      "sha256": "ecd0001a13ed82ddf57a906ab93ca11b43dec765565e8c89f12172fbbd7243ea",
+      "bytes": 4953
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_races_smoke.py",
+      "sha256": "708549f42a65e4d979f49ca8fffd7de329cb8b5d802e971d736410685ef54a64",
+      "bytes": 4274
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_stage_readback_smoke.py",
+      "sha256": "82161b2bf38f2ba32bba1c32c5b60826879e884c96e45890a8eda4363c40819f",
+      "bytes": 2960
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_usability_smoke.py",
+      "sha256": "a83dd6f59e3618bc972a3d30fc1265438f17900c268ca013434834a1dfa2f199",
+      "bytes": 4025
+    },
+    {
+      "path": "dashboard/tests/browser_lounge_kanzo_activity_smoke.py",
+      "sha256": "9d2da316f2ad8ee16fa451184b2ff588ae593ab6c034c69296dc6b857f6ccf40",
+      "bytes": 5152
+    },
+    {
+      "path": "dashboard/tests/browser_lounge_readability_smoke.py",
+      "sha256": "f74c77866bdc15a223d78c6e52a56c6f92c4b4627f3487faec05ed361b23acc1",
+      "bytes": 5567
+    },
+    {
+      "path": "dashboard/tests/browser_sidebar_icons_smoke.py",
+      "sha256": "fbccb790dfbbcf296bb31ab9a04b0cf4605f97a5696d5b8a9ce1b12bef4cd7ee",
+      "bytes": 3829
+    },
+    {
+      "path": "dashboard/tests/browser_unified_graph_fail_closed_smoke.py",
+      "sha256": "e819d3ca512dd680c823f4a99eb8bd436c895fcf5e1aba42e53cd500f89a9503",
+      "bytes": 4612
+    },
+    {
+      "path": "dashboard/tests/dashboard_command_center_test.mjs",
+      "sha256": "612b842a6b73ec9dc7a2824e402720d2cd1a4a0949a9e2827a13785393af24a9",
+      "bytes": 7267
+    },
+    {
+      "path": "dashboard/unified_bridge.py",
+      "sha256": "6c81217ab37994ac5121cbf2dcec3135ccbd314b32b943224e832a5e64a411ba",
+      "bytes": 12454
+    },
+    {
+      "path": "dashboard/variant_features.py",
+      "sha256": "55f9f31cb21b42f1e4c8899c04390d8f87830e2c2f0dad01ae960ceb3ad4c4d1",
+      "bytes": 1921
+    },
+    {
+      "path": "docs/AGENTS-SKILLS.md",
+      "sha256": "87daa1bf171c063683ed12f9133ac7ee8c4fb9fa9564340e44b8273b57468666",
+      "bytes": 8918
+    },
+    {
+      "path": "docs/ARCHITECTURE-ALIGNMENT.md",
+      "sha256": "a056ec3f97ea881f740e121d3cfc394980548cfb4b0383bed4b470c6d56a7eb9",
+      "bytes": 6137
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "sha256": "8d8ebc052d080655f3a45dcf8a75740ad06f7da6cedb124dbb046053cc3c131c",
+      "bytes": 8434
+    },
+    {
+      "path": "docs/CAPABILITY-MATRIX.md",
+      "sha256": "9f6c91db44ec0e3e2adaf4d6532ed49ed679ab0722e0102a8fa71f56824bc14a",
+      "bytes": 11183
+    },
+    {
+      "path": "docs/CLAUDE-CODE-SETUP.md",
+      "sha256": "0b35720fcb1c45ab52164387fd887bf2ff168edf3de9e5426deefd9de952fa1a",
+      "bytes": 19657
+    },
+    {
+      "path": "docs/DASHBOARD-SETUP.md",
+      "sha256": "bb38660b273809ae6b336e1191636d4a4caab9ba37c3559f49e6ff0c8d30dbe5",
+      "bytes": 11913
+    },
+    {
+      "path": "docs/DOC-INGESTION.md",
+      "sha256": "6307178487319edfe46296674e310bafb0b4d1570cf22be35e8adf927214708e",
+      "bytes": 14353
+    },
+    {
+      "path": "docs/GHOST-SETUP.md",
+      "sha256": "c877408c48f1a8ca0f6e748e54c039b85790a39bd9c5e960376569104bf3fe7c",
+      "bytes": 5435
+    },
+    {
+      "path": "docs/HARNESS.md",
+      "sha256": "5c814407c15e4fc55791b76bbf8e0eb07d5fc240bd149e0ef08995df0f0eec83",
+      "bytes": 9556
+    },
+    {
+      "path": "docs/MEMORY-LOOP.md",
+      "sha256": "d910159e3ed80c7cc41f79aced18efdf65ebcd2ddfb2c2f08fe2d597a852b536",
+      "bytes": 7951
+    },
+    {
+      "path": "docs/MEMORY-SETUP.md",
+      "sha256": "b3bcf572bc95e760e4088b448b0c27e37858cffc8c95eda1598611cbd21ab2e7",
+      "bytes": 10857
+    },
+    {
+      "path": "docs/NATIVE-MEMORY-STACK.md",
+      "sha256": "4741bf7b498d42438a5eea459ebc4a4bbbf3f8e46d060346595096900d8b7516",
+      "bytes": 3899
+    },
+    {
+      "path": "docs/NATIVE-WINDOWS-INSTALLATION.md",
+      "sha256": "3756ca13f87fee76eecf03a0536f36514c807811e951f63e498dbf43fbea3022",
+      "bytes": 22329
+    },
+    {
+      "path": "docs/OFFICE-SETUP.md",
+      "sha256": "58aa8c3c9bdfac69cfbe7450f7baa9c071d2cb6f2121bdc331a10deacbeaba81",
+      "bytes": 3232
+    },
+    {
+      "path": "docs/OPENCHAMBER-SETUP.md",
+      "sha256": "9990d1363ebeec3573e08c1fade4c3995a89257d773a442c43eb3277537090be",
+      "bytes": 11828
+    },
+    {
+      "path": "docs/ORCHESTRATION.md",
+      "sha256": "701e7939a8c93a616601d7af91485ed8930361173c2959404b953e8c61c9f66a",
+      "bytes": 13173
+    },
+    {
+      "path": "docs/RELEASE.md",
+      "sha256": "2d7d3ca5e27c3f19b0c0926d6d10c397e8134c11691bc0c4f106fd80933305db",
+      "bytes": 4441
+    },
+    {
+      "path": "docs/REPOQL-SETUP.md",
+      "sha256": "d8e2828a5ce497aa1db0d44de290595572d0ef6d5987d027951bd25f7e1e51ee",
+      "bytes": 6600
+    },
+    {
+      "path": "docs/RUNTIME-PARITY.md",
+      "sha256": "f53f8856fbb351a431ff2f4752a064ba208210272c693df8c27062146a4c7007",
+      "bytes": 10232
+    },
+    {
+      "path": "docs/TROUBLESHOOTING.md",
+      "sha256": "0106089827b3fcb281e0665edb116d51a560e392579d97f73133ec381d66c865",
+      "bytes": 7688
+    },
+    {
+      "path": "docs/WINDOWS-AGENT-MEMORY-POLICY.md",
+      "sha256": "6390e0dae8df891a0dc012711ac7842eee99dcff0349626a93fca2c1acae3bfd",
+      "bytes": 7614
+    },
+    {
+      "path": "docs/WINDOWS-DASHBOARD-DOCKER-UX-PORT-20261101.md",
+      "sha256": "e53f0dc8835f73e86e66b6edddab9d0a3bdae66f08f78e0dca36b5a06a3eb1fb",
+      "bytes": 7052
+    },
+    {
+      "path": "docs/WINDOWS-DASHBOARD-MEMORY-KANZO-ACCEPTANCE-20261101.md",
+      "sha256": "7d4f76ce8a14768501d9f11d14b8aded3e718e207e7760bf6bdddc39b2fc6668",
+      "bytes": 12161
+    },
+    {
+      "path": "docs/WINDOWS-FIRST-RELEASE-CLAUDE-COMPLETE.md",
+      "sha256": "961b9d019b7a52263bc635266155517cf51cc3e4e134c9586587b7c96569bb52",
+      "bytes": 9710
+    },
+    {
+      "path": "docs/WINDOWS-GUI-OFFICE-INTEGRATION.md",
+      "sha256": "4c6a9a689235f67d28f13a159a248ccf61301e40fc56ea01757a8c9eb546d5ee",
+      "bytes": 6699
+    },
+    {
+      "path": "docs/WINDOWS-GUI-RUST.md",
+      "sha256": "ab0ca090db16fbf69b706d515e790ec6e6c6d8b8de253a760388da6d60cd8f96",
+      "bytes": 5776
+    },
+    {
+      "path": "docs/WINDOWS-HARNESS-MEMORY-PORT-AUDIT-20261101.md",
+      "sha256": "de1a76c2f68b4f619a9bb6fd8962f130a901a5e66b9ae3a24519c7fe250363e9",
+      "bytes": 6569
+    },
+    {
+      "path": "docs/WINDOWS-KANZO-INDEXED-VIEW-COMPATIBILITY.md",
+      "sha256": "0b6005f2782819c14cf1ad05738883c83eb9f3c24214a37c327af68c7e20d69f",
+      "bytes": 4480
+    },
+    {
+      "path": "docs/WINDOWS-LOCAL-GRAPH-DEPLOY-20261102.md",
+      "sha256": "34b489107f9681a30fa46bf0451c566cdd687036c45b44906ca34fc445ea1544",
+      "bytes": 7539
+    },
+    {
+      "path": "docs/WINDOWS-LOCAL-UNIFIED-GATEWAY.md",
+      "sha256": "1f01cd53751642d957860fcba38daff8a57d8156699e34e45d8a78558a3423aa",
+      "bytes": 10692
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M10-ACCEPTANCE.md",
+      "sha256": "b46ea10b9254da274bf6b25e9a28510eaa0575cbe6b3d4d686f083a02c88893a",
+      "bytes": 3228
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M11-RELEASE-GATE.md",
+      "sha256": "c76b7f91c3fb5767804940fa80d3d4eb2e226c44459ee257e08ad2bf92722ba7",
+      "bytes": 7897
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M12-RELEASE-GATE.md",
+      "sha256": "189a6454cfbaff0d1af9012592aeb15a428a6f638492cb8c57b870b369360ab0",
+      "bytes": 6097
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M13-RELEASE-GATE.md",
+      "sha256": "2b7eddc65acdf37d11a17a576c705f9bd9686c84ee7ff5619ad163eb7a2a2030",
+      "bytes": 4517
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M14-RELEASE-GATE.md",
+      "sha256": "2601ab13545e4392621588971ff69a5e1dbaf2522864ad9a9506f7577171095e",
+      "bytes": 6877
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M15-PARITY-AUDIT.md",
+      "sha256": "9ea1b7d1e3635e6709fa2d6fde45d9ef8eacf71f5992d8683ad2df77252a23af",
+      "bytes": 10450
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M16-RELEASE-GATE.md",
+      "sha256": "216e6287f4799f397d8706c3176b6f3e72570e9b61470aaf51db3fd5f53b84dc",
+      "bytes": 5878
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M17-RELEASE-GATE.md",
+      "sha256": "9403a4b13c7f5b938b1a35749d245e566c6c9debb244846d486f71c866be3ac1",
+      "bytes": 5005
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M18-REPOQL-UPGRADE.md",
+      "sha256": "15e13e2a0852bac6662dca775b3c181e7fa3b758af85be09d0fc4a4aaca6e02b",
+      "bytes": 4651
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M19-RELEASE-GATE.md",
+      "sha256": "14f0e6b465e80a0ed3e4811c55e78a0b14ab915a6c7b9100767ac32e22de907f",
+      "bytes": 5124
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M20-RELEASE-GATE.md",
+      "sha256": "71102f44b7cdd252401b254b04ba38c59949417613b31404020a1a2f5c770e26",
+      "bytes": 4568
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M21-RELEASE-GATE.md",
+      "sha256": "50916d5bf393d8c44d7f1a79083fcab3c14599584c7e95cc574f9e121ce96e07",
+      "bytes": 4450
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M22-CODEX-HANDOVER.md",
+      "sha256": "93bb6f0b8334a504ae7724f40ce17669fd8e7276504bf67adc08d52449f500ce",
+      "bytes": 6866
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M23-CODEX-HANDOVER.md",
+      "sha256": "dd99cadf0981415db6eafa4210f1fa9c8feceac30de4b27bf6c8aae35b5cfb43",
+      "bytes": 3796
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M23-DASHBOARD-MATRIX.md",
+      "sha256": "a1a20f9566a8e165decc559ba6bbd6837452217e76a1c39a20fac770166448fe",
+      "bytes": 5838
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M24-CODEX-ADDENDUM.md",
+      "sha256": "2b75d9215c7e952d4a61eac0acdc7e1df19da55b723baadf10a3a0144f85a357",
+      "bytes": 2952
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M24-CPU-HISTORY.md",
+      "sha256": "787e2180fe87fed97df87d19241cd20ece1d7b67a0b9af9f793e58c525643fe2",
+      "bytes": 4141
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M25-CPU-COLLECTOR-SUPERVISION.md",
+      "sha256": "f2371e4a01efe28b6c6bdef3f14f7cc546e0c2a44e6d09d4902299f331eaf304",
+      "bytes": 5640
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M26-CLAUDE-COMPLETE-AUDIT.md",
+      "sha256": "1c993bc3147c3d1a4fab9241b3f238e540f841db34dc801ba7844141cfc1816d",
+      "bytes": 6057
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M27-CLAUDE-CONFIGURATION.md",
+      "sha256": "31833e71ea9e8815ec06d53bd3b80bd871608257fca49d6721e9352d227fa28d",
+      "bytes": 6427
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M28-SHARED-DOC-RUNTIME.md",
+      "sha256": "5d2e1acffc25c048bf5d7321a48f2da2d6f9ee77f1aaab3fe8ef82c3a22f7dbd",
+      "bytes": 1563
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M29-CLAUDE-RELEASE-HARDENING.md",
+      "sha256": "dedc5e61e035b721330cfab036682229715bfd6b6342bf70389d685aacf900d7",
+      "bytes": 3653
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M31-CLAUDE-FIRST-RELEASE-AUDIT.md",
+      "sha256": "91724d8bc92ce221c4bb589bbd65883ef432d3f5f83c101d12ef0833f9687454",
+      "bytes": 5084
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M32-CLAUDE-FLEET-MEMORY-SKILLS-AUDIT.md",
+      "sha256": "6b230e168424386194e18122e9b7f4f91bbf1060ba4bbcd2ba9f9f24fa223a67",
+      "bytes": 7547
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M33-CLAUDE-DOCUMENT-INGEST-CHECKPOINT.md",
+      "sha256": "c4a8e766972808ded07267098925fa09360978ed02b0c16c0d1e9b3427f6ec58",
+      "bytes": 2993
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M34-REPOQL-CLAUDE-SKILLS.md",
+      "sha256": "5c5439cf1b21bb449ada56a73884aac4ab521e1dffc6d3d5e06ae3017a875692",
+      "bytes": 5144
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M35-REPOQL-PLUGIN-CACHE-AUDIT.md",
+      "sha256": "f494e2ed41a64d7b474fe8e4782573b6612fa3bc1498d10d18d0e911066392ec",
+      "bytes": 3288
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M36-DOC-LEDGER-INTEGRITY.md",
+      "sha256": "640562af9797a50aab88dc841c7644d5f4f2156c7fdde905bae1ecae296d23ef",
+      "bytes": 3075
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M37-CONCURRENT-INGEST-RECOVERY.md",
+      "sha256": "336d335943f23d923b766e390c8dc353bef6dde43480c2bcd7d6da3858872e0e",
+      "bytes": 3448
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M40-CLAUDE-COMPLETE-DELEGATED-MEMORY.md",
+      "sha256": "489fb1e21d56288803fd02afa6d28a6c4ccf05a64b6798de26a85d83304fe484",
+      "bytes": 4344
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M41-CLAUDE-COMPLETE-DOC-PARITY.md",
+      "sha256": "506b3836a8e4f4f57a006f886098ad0a6ebcdb232d445af92091078f40b4b773",
+      "bytes": 3590
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M42-OPTION2-BUILD-CANDIDATE.md",
+      "sha256": "8a431af3b1d67ccae53e5a3c7dbc194e479fa21d7cf7c5c677aa1040ccc2914a",
+      "bytes": 3494
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M43-OPTION2-PREPARATION.md",
+      "sha256": "4bee9cdcd64d42946e7b6f3e8be89a9040e918ca3fbcbb92d0ff0b6de02976f6",
+      "bytes": 4226
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M45-OPTION2-INTEGRITY-AND-ACCEPTANCE.md",
+      "sha256": "439693dc06a7f0480f9c66b217fe5175fdcb1a702b318dc17169e790e9ea1b6e",
+      "bytes": 4965
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M46-OPTION2-PHASED-INSTALL.md",
+      "sha256": "cea15890ba1123c8065c502d66880b535252c343095ed2a41c9830bd5703920a",
+      "bytes": 5356
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M49-READ-ONLY-ACCEPTANCE-ORCHESTRATOR.md",
+      "sha256": "25b9df42715999a0ae4695c909812f5b59f89a327207341a9221d7aa2997ff8d",
+      "bytes": 2624
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M50-DOC-RECONCILIATION.md",
+      "sha256": "4bde7417f5db0217122529813689e35d5c82c11f1c6829e4451c5d8c92d53309",
+      "bytes": 3109
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M51-ARTIFACT-PROVENANCE.md",
+      "sha256": "7c71840c5a86571726b8f1e5431e149e49b2488796d728cedaefc73417ce8787",
+      "bytes": 1700
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M52-CLAUDE-STATIC-INVENTORY.md",
+      "sha256": "78b412ac6b91b541e30db78fdedc95b2e4a6565101531cbcfa329feddd918c20",
+      "bytes": 1432
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M53-REVERSIBLE-UNINSTALL.md",
+      "sha256": "affffdc885361e9291a9bd94a40f447ff950d1d5c6779516b644a922ea9497e2",
+      "bytes": 1968
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M54-UPGRADE-REFERENCE-GUARD.md",
+      "sha256": "ab86a7fbd0646f8f36e99d33a8334798eb57044606c60ff10bd3f7bc5c7f701a",
+      "bytes": 1323
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M55-GUI-MEMORY-ACCEPTANCE.md",
+      "sha256": "43109d758a0058d22554cb8ea2e73465e25b5c8144a6a40efcab6c37a69a375f",
+      "bytes": 1664
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M56-PARENT-PROXY.md",
+      "sha256": "cddafc8912c6872cf361f805b1a4c18873e6d60a28c8cc74ce81e4a1810ecb16",
+      "bytes": 4143
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M57-OPTION2-UPGRADE-DEPENDENCIES.md",
+      "sha256": "19b426c5357f1df9f74e287bb0f40752120b66c8cb60de6514f24cdf6792b9ed",
+      "bytes": 1671
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M58-PARENT-PROXY-RECOVERY.md",
+      "sha256": "d48077ed2df8237a94feafee8e816282d01a7985d40b5be112f09740798f0bb1",
+      "bytes": 1470
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M59-SUPERVISOR-ACCEPTANCE.md",
+      "sha256": "c506e4d008bb88b51399b7f3b96a9a5934524223ad2582e11426ba43bbd225b3",
+      "bytes": 1288
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M60-VERIFY-INSTALLED.md",
+      "sha256": "4365579bb177eaacb449c5472b5889f689c0e6ba96590b8c7da661fc083256f1",
+      "bytes": 1497
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M61-SCHEDULER-FAIL-CLOSED.md",
+      "sha256": "ad1a5188dccce0802d241f5c33f74c62d070e4a1c6827d4ab4894322435e7d89",
+      "bytes": 1101
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M62-REPOQL-INDEX-PARITY.md",
+      "sha256": "9357f714e5ba0619beb65699bd4f783f197bc6f60c77965bb8ab3655a703c03e",
+      "bytes": 1447
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M63-TENCENT-TEST-RECOVERY.md",
+      "sha256": "7d818d88fb37a94c3aee4c4aa5ddea71236411cc164f7023ccfb3c68cbbfdcec",
+      "bytes": 1985
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M64-GHOST-SCOPE-READBACK.md",
+      "sha256": "eef624b0da45bad8ae8f9125ae6154eb862de7955861495619a803091f6950b9",
+      "bytes": 2162
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M65-SUPERVISOR-SCHEDULER-OWNERSHIP.md",
+      "sha256": "7fd032d13b9166f048f9a7c8a2ad60ba7d8d8366552e16503a506b421800d09a",
+      "bytes": 960
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M66-KANZO-MCP-TRANSACTION.md",
+      "sha256": "db40b7e477c3ed24f01e27b85a1e9bedcb9125de45862b8f3483a207c45d2df5",
+      "bytes": 1002
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M67-KANZO-MCP-ROLLBACK.md",
+      "sha256": "d24dfdae35b69700279f7c6e3846c714e78a91240a22155bd01ef2270b6610ae",
+      "bytes": 806
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M68-CLAUDE-CONFIG-CRASH-RECOVERY.md",
+      "sha256": "af092e12da023b074bdbe92ca0594af89cea961c34da0bd2f7812fb60163e11c",
+      "bytes": 938
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M69-STAGING-ROLLBACK-INTEGRITY.md",
+      "sha256": "a3d7bd19f8d37d4c199913022e73c134880319e153c4b45151431e9892a00b68",
+      "bytes": 745
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M70-CLAUDE-ROLLBACK-MERGE-RECOVERY.md",
+      "sha256": "9ded21eb9c2b181b900ee1c140cee87201d9aaff20d43ecb6ef8922c6a8c1643",
+      "bytes": 1040
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M71-CLAUDE-RESTORE-JOURNAL.md",
+      "sha256": "3531e9854c8de7819777cf05017db2c5e9e1be895d46d11fd635050373f71b56",
+      "bytes": 1090
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M72-UNINSTALL-SCHEDULER-OWNERSHIP.md",
+      "sha256": "75435f3c62163898d9539697abf95be7e8de9d83431354435af0ffad9a7e0632",
+      "bytes": 1621
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M73-STAGING-FAILURE-RECOVERY.md",
+      "sha256": "96cbf91888193cdd26cfd389d196b91f7fed152976cdf72f88947fcf06842b2c",
+      "bytes": 1258
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M74-PARENT-RESTORE-JOURNAL.md",
+      "sha256": "7ac4d07bb3b26e5c4f36e3d3054d739151d75c09b58de5e45f0332341b0afd79",
+      "bytes": 1174
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M75-EXECUTABLE-ARCHITECTURE.md",
+      "sha256": "dae687cff8d25930bee8af3a7140ae62d74e7f29ca3c068b261bb78425c38eba",
+      "bytes": 831
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M76-DASHBOARD-REPOQL-AUDIT.md",
+      "sha256": "4311f97444f9a2cd922edf75bf564836a1ddca5e0d0053f5cd7b4caf1f7de1be",
+      "bytes": 6500
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M77-REPOQL-VERSION-AND-DASHBOARD-DRY-RUN.md",
+      "sha256": "97846a50eb3861b20bf9ff8398d030647947523864b3a17e4f59eedc490784af",
+      "bytes": 3196
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M78-DASHBOARD-STATE-AND-DOCTOR.md",
+      "sha256": "fb9a5400ea3ef32d3a38c16a4db7fe70533c79cc1bfdb1a47cce71cd33b5ef0d",
+      "bytes": 2428
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M79-CONNECTOR-EVIDENCE-INTEGRITY.md",
+      "sha256": "44c505d425a440eacc87f5c5a38fd2b86effdc141b137737c11d036ebc1af6d0",
+      "bytes": 2214
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M80-DASHBOARD-EXCLUSIONS-CONCURRENCY.md",
+      "sha256": "bfca874c38f02110132d352594f4f8711a7f3199a2ae4f5a893c80ee9f788a42",
+      "bytes": 1566
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M81-REPOQL-PROXY-CREDENTIAL-BOUNDARY.md",
+      "sha256": "fe7b50ad1de55d0786efb68cb7012a964736b96293274deb5513c382058fd1df",
+      "bytes": 1609
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M82-RUST-DEPENDENCY-RELEASE-GATE.md",
+      "sha256": "6b7bd41ae147f8c221b210a8a53db0c94fef50b4f906977a21f507a386abe5ab",
+      "bytes": 1756
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M83-CLAUDE-COMPLETE-README-RELEASE-HANDOFF.md",
+      "sha256": "649ba5ca41ff0d2b2f2e86b889992cdf8a2407ba06ab7aced1be6800af7eb79f",
+      "bytes": 1171
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M84-REPOQL-PROXY-BOUNDARY.md",
+      "sha256": "2cab44151257f88c89ef6b4dc4f3691e0ee34ab9c9bedfa8b73342387d0db8ef",
+      "bytes": 2418
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M85-GHOST-CALENDAR-DASHBOARD.md",
+      "sha256": "4f8e5aae6b65b7b86f7e42748b7d316a33b856ddfd0eabfa91feb2699817314d",
+      "bytes": 3493
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M86-GHOST-ACTIVATION-HANDOFF.md",
+      "sha256": "08c078b09d28ade94fd21cb8236eaf6af18b5ba936af49782170c9126918615c",
+      "bytes": 3338
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M87-GHOST-DST-PREFLIGHT.md",
+      "sha256": "641500dec6ecd560a6938316c91d47bddba20c439ca9341c3d4c2fb1f8c90f81",
+      "bytes": 1143
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M88-GHOST-DRAFT-ORIGIN.md",
+      "sha256": "5de994c3fe0e100669278b1e1e73b8f7160d3d8c1e53ac84c98c266a2b17a842",
+      "bytes": 923
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M89-GHOST-DRAFT-LOCK.md",
+      "sha256": "b25403a53a9a384c9b51c4999d83e92232e48aec6b14e60e8b23a4273415a9bb",
+      "bytes": 923
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M90-GHOST-IDEMPOTENCY-HISTORY.md",
+      "sha256": "f634e599c48b7f77b50dbd9a7dcf1fa61fb0bcc082f8d708c3cb4e2adb5640c0",
+      "bytes": 1759
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-M91-GHOST-REQUEST-RETIREMENT.md",
+      "sha256": "4ca8942d6dac7f7c3ef4dff45a2a967ca9c8d72c72befa61cec90fe13dc60492",
+      "bytes": 2197
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-OPENCHAMBER-WORKERS-NO-CLAUDE.md",
+      "sha256": "9a39c7444ad0bdba905743c7b9ac7a209083a5f63618835e52109b1017455bc0",
+      "bytes": 5318
+    },
+    {
+      "path": "docs/WINDOWS-NATIVE-RELEASE.md",
+      "sha256": "346f98a9147c228f625fdece6cb1c5c4c0aa742df95bd9410d653ca7719b1b93",
+      "bytes": 9511
+    },
+    {
+      "path": "docs/WINDOWS-OFFICE-AUTH-ROLLBACK.md",
+      "sha256": "84b245b27637f92fb25ca367d25bd50195b405f4e8b7d29038b2ebe6caa0bcb0",
+      "bytes": 7032
+    },
+    {
+      "path": "docs/WINDOWS-OPENMAUSBOT-CLAUDE-INTEGRATION.md",
+      "sha256": "f77d86dc75c24111a34eb1ed39c7c87887dafaea4d75154631ed9359d8abf41a",
+      "bytes": 7198
+    },
+    {
+      "path": "docs/WINDOWS-RELEASE-ACCEPTANCE.md",
+      "sha256": "858abb4c45457d3c491efadec99b4f13326b16679a20bc59fdbd3ad383ae3f2c",
+      "bytes": 5702
+    },
+    {
+      "path": "docs/WINDOWS-ZERO-CONSOLE-RUNTIME-20261102.md",
+      "sha256": "5c0152ca893faa1fc11a73c137568bf0cac81ea6dd1d44fffa151908c94835d4",
+      "bytes": 6372
+    },
+    {
+      "path": "docs/assets/claude-complete/installation-flow.dot",
+      "sha256": "43a2c23ebe3b760a276f40ac5967692e915866b8a962cf9a7e669f58a3f019eb",
+      "bytes": 1103
+    },
+    {
+      "path": "docs/assets/claude-complete/installation-flow.svg",
+      "sha256": "eb646875e8acc4cd432a27c1bd1985751bea13c5582f1009db7195a92172264b",
+      "bytes": 7696
+    },
+    {
+      "path": "docs/assets/claude-complete/system-architecture.dot",
+      "sha256": "6f1cbb28aa2e27b4bb0859571ac9a08707d39bb018d5807c5ebdb377ed1e3e5d",
+      "bytes": 1462
+    },
+    {
+      "path": "docs/assets/claude-complete/system-architecture.svg",
+      "sha256": "fd5e65d5780d132091ba617075738b0d5707e12428e8a74c211100d0fad4e878",
+      "bytes": 10016
+    },
+    {
+      "path": "docs/assets/memory-architecture.png",
+      "sha256": "058508c87e3ffe202af00aabfba767a81a13a746a7f3b8399d735a9d10872da5",
+      "bytes": 2102292
+    },
+    {
+      "path": "docs/memory-capture-promotion.md",
+      "sha256": "09246ca8ac57571d956dccd16bf632cfec228a382de2bd8725c1048320d8b016",
+      "bytes": 9994
+    },
+    {
+      "path": "docs/native-memory-stack.example.json",
+      "sha256": "5cab3bcd87edd58850fb0b2e13332972a7dab5ccf4d205f8072cf5a5860e06d7",
+      "bytes": 1509
+    },
+    {
+      "path": "docs/native-windows-wiring.patch",
+      "sha256": "c4b2ca1212c7c70bbd45ccfa32f05c60482f29719093d28cb7150625aa6151f5",
+      "bytes": 9833
+    },
+    {
+      "path": "docs/platforms/windows.md",
+      "sha256": "71972ec2e3467d83c5a3f759e9b5893a0f063d465395feae20df184a1978c2eb",
+      "bytes": 7955
+    },
+    {
+      "path": "ghost/README.md",
+      "sha256": "bb2137a9519fd96cc157e02893aa145e48b4c3741d284b5a98d9754ed2b7176d",
+      "bytes": 6352
+    },
+    {
+      "path": "ghost/chain.example.json",
+      "sha256": "af3ff5fbe84a1b21048bbca728a0b40b14c6bde439e8940e103801ef08983f1d",
+      "bytes": 660
+    },
+    {
+      "path": "ghost/chain.mjs",
+      "sha256": "8e14e470f33065eb35e40a1ea435228785bd8e16a7279f5bfed928cf0c1291f5",
+      "bytes": 5963
+    },
+    {
+      "path": "ghost/dream.mjs",
+      "sha256": "d414707a9655525e64ce089a9be6f46384eb8df4474fe348daa8019605dd61da",
+      "bytes": 44018
+    },
+    {
+      "path": "ghost/dream.test.mjs",
+      "sha256": "19aea3513fced3185640d6de7a3b914286b6fc0cd2d4c816528a20ab090d7979",
+      "bytes": 28358
+    },
+    {
+      "path": "ghost/gateway-backend.test.mjs",
+      "sha256": "1ea8f98d8ac8c14d918c1d48ed81f158e85431e9751f44c487f525f0d402392a",
+      "bytes": 3559
+    },
+    {
+      "path": "ghost/ghost-gateway.mjs",
+      "sha256": "9f21b3220612ece28b81fd393aef07c81ce0493b8f654b1e2fe6b5e445f55be2",
+      "bytes": 15031
+    },
+    {
+      "path": "ghost/ghost-gateway.test.mjs",
+      "sha256": "93a717cd0e53d416da1a177e45e2afc04bcbe429c563e623c058a5a5a973047e",
+      "bytes": 6875
+    },
+    {
+      "path": "ghost/ghost-memory.mjs",
+      "sha256": "b64d7c4b7c858de8371a5b0ce016019d248d5081c876d1263666e91b6946217a",
+      "bytes": 6534
+    },
+    {
+      "path": "ghost/ghost-turn.mjs",
+      "sha256": "29d08b46f08412f75886f98f5d98e177aaa46dd668663d90636e0348fb9df95d",
+      "bytes": 7341
+    },
+    {
+      "path": "ghost/prompt-store/prompt_store.py",
+      "sha256": "5401390eb5baac95b98a4af4d8331540b192963b33889287a1a3608a8d5f59fb",
+      "bytes": 12684
+    },
+    {
+      "path": "ghost/prompt-store/seeds.json",
+      "sha256": "deb3a2351371115d7df42146974139468a36087e0996d08924e54131251d1002",
+      "bytes": 725
+    },
+    {
+      "path": "ghost/prompt-store/seeds/dream/reflection.md",
+      "sha256": "b666ec7d26d61ca01b9b13fdc1d055414720e9e4f1113f5e3bde243994ed69b2",
+      "bytes": 82
+    },
+    {
+      "path": "ghost/prompt-store/seeds/sweep/review.md",
+      "sha256": "52393f48119312236f7c8d0ff7863f31edc9da5869b3739e8976b40a7f84e1a0",
+      "bytes": 120
+    },
+    {
+      "path": "ghost/prompt-store/seeds/sweep/synthesis.md",
+      "sha256": "b983c5fbaff567968d8176fbe416abf1e0abb241f299d71298cb136c8939b4e4",
+      "bytes": 131
+    },
+    {
+      "path": "ghost/prompt-store/seeds/wake/instruction.md",
+      "sha256": "0b3df9ec13029f637eb3d22bde8c47e1431746c4c42544c17a6bc0fe686aa806",
+      "bytes": 102
+    },
+    {
+      "path": "ghost/prompt-store/test_prompt_store.py",
+      "sha256": "c98e4e893751dc50a56d78ccaef4f7f413824211bc99155790cee77d281fccf5",
+      "bytes": 4830
+    },
+    {
+      "path": "ghost/prompt-store/test_windows_prompt_concurrency.py",
+      "sha256": "9a92d68f1ecf20065361b96e37e310506d5282ed1d5561e09d596057d5efdfff",
+      "bytes": 1330
+    },
+    {
+      "path": "ghost/seed/MEMORY.md",
+      "sha256": "8b45a724af6a867756ceb340b45733c81bea28f08543fa38dd9f24f0bada88a7",
+      "bytes": 191
+    },
+    {
+      "path": "ghost/seed/digest.md",
+      "sha256": "cdc1e2e03119102fd5f1e2f1a50639f70f49c5f6936ab2a78429f96ba20b3255",
+      "bytes": 127
+    },
+    {
+      "path": "ghost/seed/persona.md",
+      "sha256": "a6a7ef5f08f28803b1ccb5bfdc741198082493f8f7b1ec279bca927a0b470edf",
+      "bytes": 595
+    },
+    {
+      "path": "ghost/sweep/README.md",
+      "sha256": "d51e3d94ef229ca55a43121b5c2868c29d8f166ae543cdb18c77db25db4d279b",
+      "bytes": 3437
+    },
+    {
+      "path": "ghost/task-prompts.mjs",
+      "sha256": "41ff011b26c318a2bef873c27ca837d5010ac8af6b63ce75656454e7e8144b40",
+      "bytes": 1807
+    },
+    {
+      "path": "harness/CHECKSUMS",
+      "sha256": "3eac83c46c128e358f7ae6f79e11293e41a3928daba8b167a5b2beee703778d2",
+      "bytes": 2314
+    },
+    {
+      "path": "harness/NOTICES",
+      "sha256": "20704ab6ae34487e2ed01ca84fcce31ecce075996201acbc4d7d9040441dbe6a",
+      "bytes": 2988
+    },
+    {
+      "path": "harness/config/openchamber-runtime.json",
+      "sha256": "8d2e45c3d699f65dc59957bfad52506e6ff55dd54eed52e374732200070b1962",
+      "bytes": 1058
+    },
+    {
+      "path": "harness/harness.config.json",
+      "sha256": "1c15a7c28bcc9be4b6a46488f310bcd04b03ce0bef003d7016faec22a6649094",
+      "bytes": 4704
+    },
+    {
+      "path": "harness/kit/config.json",
+      "sha256": "6052c2bd038bb2c508fdb2a8002126334c75465cfc477688e9bd9375234042ac",
+      "bytes": 15015
+    },
+    {
+      "path": "harness/kit/config/repoql-scopes.json",
+      "sha256": "ff077db75a58e08c2cb6aab52414c6837dc1c64bc99a6b52cea35ff11826356e",
+      "bytes": 1267
+    },
+    {
+      "path": "harness/kit/docs/doc_program.py",
+      "sha256": "04f7d107936009b051fea366cdddaaa0cc0ba73aed35fd6eedd7db502bfca963",
+      "bytes": 40865
+    },
+    {
+      "path": "harness/kit/docs/docctl",
+      "sha256": "453dd50dd8a85a1d1a36eea17036a4232d72ad14ac7fcaa77f3d6c384dc9c064",
+      "bytes": 7657
+    },
+    {
+      "path": "harness/kit/docs/test-doc-program.py",
+      "sha256": "359280ef8822adb9ca1bf989aff2cfaec52c1950dba41319ca63e01a308ec511",
+      "bytes": 18337
+    },
+    {
+      "path": "harness/kit/lib/agent-issues.mjs",
+      "sha256": "f1a541ef2f3dbf1ed329212579e03d37f71b235a64bec0a14d6c5c178ca59e26",
+      "bytes": 10050
+    },
+    {
+      "path": "harness/kit/lib/approval-artifact.mjs",
+      "sha256": "dc9bf0e5b858e09818c0c2100ab663be021598860ee5f4f3ede6de40be58b3f8",
+      "bytes": 8096
+    },
+    {
+      "path": "harness/kit/lib/bridge-result.mjs",
+      "sha256": "7239bfe903afff5d69e04dedcb67cebe9f1756bc4e5d74e44085f9c600c6d481",
+      "bytes": 10926
+    },
+    {
+      "path": "harness/kit/lib/case-state.mjs",
+      "sha256": "c11004c02e6d28b81b7905a1bb73fb89bd69d307d71c58a16da080426ba21ef9",
+      "bytes": 16676
+    },
+    {
+      "path": "harness/kit/lib/case-store.mjs",
+      "sha256": "b87eb1b67a5ae3cc36cf443b6ff7c055e77fde17d46f35fd1fa12bc239bbe85d",
+      "bytes": 7222
+    },
+    {
+      "path": "harness/kit/lib/concept-capture.mjs",
+      "sha256": "114c0917cc375c2eb1b9e87aca2381dd3de7edb37743356b4f6b543aac839a02",
+      "bytes": 43634
+    },
+    {
+      "path": "harness/kit/lib/concept-conflict-gate.mjs",
+      "sha256": "77caf55833c5d441e3a9b504c24ff9295c8edff41f1267ea22227da6b376fc67",
+      "bytes": 18339
+    },
+    {
+      "path": "harness/kit/lib/confidentiality.mjs",
+      "sha256": "9beafd618a9e7dd1e676f5c6022841482044c0bb52b78be2970dbf333c1b6aa6",
+      "bytes": 5800
+    },
+    {
+      "path": "harness/kit/lib/consult-affinity.mjs",
+      "sha256": "5aeebea870cc6c729642129bf4eb9e028789313960367cd01a0dee5ce25b9ff4",
+      "bytes": 5510
+    },
+    {
+      "path": "harness/kit/lib/consult-integrity.test.mjs",
+      "sha256": "13d7cf4faabcd55516292ed12a898fe300d55e810987aebe4b22d3a322fd1bc6",
+      "bytes": 2692
+    },
+    {
+      "path": "harness/kit/lib/consult-liveness.mjs",
+      "sha256": "aafef7d63eeda0cb7a8bc3e51096ef21950fbd74bd9d8b9e5b83506265d487b9",
+      "bytes": 9908
+    },
+    {
+      "path": "harness/kit/lib/consult-pointer-reaper.mjs",
+      "sha256": "f361e5458f5ed4100c215955e1ba0254e66038b67f157c0142e7b18d118303f2",
+      "bytes": 3956
+    },
+    {
+      "path": "harness/kit/lib/consult-summary.mjs",
+      "sha256": "9f6003051e4bb9b2f60b7938677d64affff35ab169dc81f157a220026fb625a7",
+      "bytes": 8560
+    },
+    {
+      "path": "harness/kit/lib/consult-watch.mjs",
+      "sha256": "6b8553332a81cd6bfbcb511ade83095ff1bc6a61b340c4d360aa6ede76edc310",
+      "bytes": 21778
+    },
+    {
+      "path": "harness/kit/lib/context-pack.mjs",
+      "sha256": "5b940880c07f9d874f5a818430b1e2ee9f1229759d9a21d52a271557d2bbb2fb",
+      "bytes": 32147
+    },
+    {
+      "path": "harness/kit/lib/conversation-review.mjs",
+      "sha256": "7f699cf85ce973a64f2b3bd7c52136667bd590c999609455536984248e6c9c67",
+      "bytes": 38211
+    },
+    {
+      "path": "harness/kit/lib/coordinator-status.mjs",
+      "sha256": "b01fa6a2b05c140f4b99d302442fe0b5354648d5d957a39ba51dad16d4d61fe9",
+      "bytes": 8580
+    },
+    {
+      "path": "harness/kit/lib/debrief.mjs",
+      "sha256": "889586bcb67eae8884fb8881879745a5434c8a969d51015fb788b5ebfa4bfbe5",
+      "bytes": 56770
+    },
+    {
+      "path": "harness/kit/lib/deploy-gate.mjs",
+      "sha256": "fe091b30af6e9d6750a981612a10b4f6dc01153b93d6532fc83386c816dbae77",
+      "bytes": 12672
+    },
+    {
+      "path": "harness/kit/lib/deployment-intent.mjs",
+      "sha256": "c50fdf97ccf4593565ce84a8e70531ad1d58e8650f908116e6f03077a76469af",
+      "bytes": 16785
+    },
+    {
+      "path": "harness/kit/lib/deviation-ledger.mjs",
+      "sha256": "779634e1cf3c8e37c60eab647d4d05fce81b57f54cddbc527ac9f94229fb5bb6",
+      "bytes": 2874
+    },
+    {
+      "path": "harness/kit/lib/doc-impact.mjs",
+      "sha256": "435be9e5a0bbc755b02b241aa9465a72b4b7827e6590db4fe18d8daadea6dad0",
+      "bytes": 3675
+    },
+    {
+      "path": "harness/kit/lib/effort.mjs",
+      "sha256": "fea74e2aafe6e5961103eac6bf19e44e8943120d4a281c492169189ddb17777f",
+      "bytes": 4711
+    },
+    {
+      "path": "harness/kit/lib/engine-router.mjs",
+      "sha256": "b50b7ea279415af6008400766c667e2c72b662368ea3396d96de2a5ad1c34dfc",
+      "bytes": 58256
+    },
+    {
+      "path": "harness/kit/lib/engine-state.mjs",
+      "sha256": "025af69e51ae9af9e43f71229dc39f1b9eccd924c7223c8ac2e4945b167d9c11",
+      "bytes": 10476
+    },
+    {
+      "path": "harness/kit/lib/evidence-manifest.mjs",
+      "sha256": "43f4c8f30f9d6af332a80eff064731944de90e18fee0a02ae93c52f856fdca31",
+      "bytes": 5710
+    },
+    {
+      "path": "harness/kit/lib/evidence-pack.mjs",
+      "sha256": "b1badf0eb7a8141ea1e94b40fa59b019f8eb84dfb6113002b8b2cf1358d43e42",
+      "bytes": 15016
+    },
+    {
+      "path": "harness/kit/lib/free-model-registry.mjs",
+      "sha256": "ce5c4f513dbffaffcd777c08439917d3bc968afe0f1cf8a1a02baccd8bf3352a",
+      "bytes": 11184
+    },
+    {
+      "path": "harness/kit/lib/free-role-router.mjs",
+      "sha256": "a07392100d919c1a3e84d7d558daa33f37bd8061ec015885c60b3e71ee953af7",
+      "bytes": 24491
+    },
+    {
+      "path": "harness/kit/lib/freebucks-status.mjs",
+      "sha256": "e98a8bce99897b9ffc395b2f1751160ed4886ed8da94cdcf6047b7c29733c6d8",
+      "bytes": 8236
+    },
+    {
+      "path": "harness/kit/lib/gate-parser.mjs",
+      "sha256": "ad778bf52afdcae36e3cd80f0992f71c6a258888bcf592e7d5878bce6f944bb6",
+      "bytes": 14704
+    },
+    {
+      "path": "harness/kit/lib/ghostwake.mjs",
+      "sha256": "f2483ba164a38953b077078238955d9db7604a1bb911c711c1c15d2c21cf8350",
+      "bytes": 6330
+    },
+    {
+      "path": "harness/kit/lib/github-sync.mjs",
+      "sha256": "cdcff42c4ae07e6ba8be9151c922f43eeba6ba85003503f523e1a98125891788",
+      "bytes": 57055
+    },
+    {
+      "path": "harness/kit/lib/handoff-artifact.mjs",
+      "sha256": "9e5b2d618d6c9968f5a05bb181d70cecaa2bcab3f122288262055ebe21a6ad05",
+      "bytes": 2983
+    },
+    {
+      "path": "harness/kit/lib/heartbeat-child.mjs",
+      "sha256": "0b2ffda96731539bd9b40f104efca79efa72a2fa2a691256cc6275f0e5e5414a",
+      "bytes": 5822
+    },
+    {
+      "path": "harness/kit/lib/html-summary.mjs",
+      "sha256": "5364b4cb17975d926e1093be377d6dfc6933af644d871b04e19b96c16f38c930",
+      "bytes": 12852
+    },
+    {
+      "path": "harness/kit/lib/invocation-telemetry.mjs",
+      "sha256": "7f1e531ed974079eb151680d58134284a95e9dc734f509f5f4431a3c269084e7",
+      "bytes": 7019
+    },
+    {
+      "path": "harness/kit/lib/jobs-list.mjs",
+      "sha256": "2c168a9108654ce56bac0992bb34282ff34691a5720c9cb994c40e517a3a37f8",
+      "bytes": 5511
+    },
+    {
+      "path": "harness/kit/lib/kit-paths.mjs",
+      "sha256": "7ec1b8e5c8c86bd17d6d6af10db7a8b6e0cda29bf4c1be5d8f0bd287ff6cb4bb",
+      "bytes": 9757
+    },
+    {
+      "path": "harness/kit/lib/managed-bridge-cli.mjs",
+      "sha256": "049b1da0014639a3cd8e785ec5c5d02f85487dfbcbbf17da438ec591a68809b7",
+      "bytes": 4015
+    },
+    {
+      "path": "harness/kit/lib/memory-candidate-v2.mjs",
+      "sha256": "e6f557ee024dce397f89d6fef69c57ddf4ec1a914a99302c900e2bc6e27f3bba",
+      "bytes": 13556
+    },
+    {
+      "path": "harness/kit/lib/memory-impact.mjs",
+      "sha256": "d5e1d7dea14044f8562af65d22273a67e38ec445e32933b38affd058ba07cc63",
+      "bytes": 3384
+    },
+    {
+      "path": "harness/kit/lib/memory-learning.mjs",
+      "sha256": "9e7bcb5848693582c093464537e28d14ee511fcecafae08208ad797d63567d2e",
+      "bytes": 6131
+    },
+    {
+      "path": "harness/kit/lib/memory-lineage.mjs",
+      "sha256": "df7ed32cc3b2639422f6dfbf63492fc8911e05c9ea4843fcf5bb7dbc6bb76017",
+      "bytes": 45430
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/answerability.mjs",
+      "sha256": "e39d001e58220581af3081f60b8d9be18ab8a1028dced9cadb6ee5274ab082b2",
+      "bytes": 6821
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/attribution.mjs",
+      "sha256": "55dbc938385ab4158f479a0f578067f7a4b1d03454a03ed741f33b86bc9b139c",
+      "bytes": 6862
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/client-l23.mjs",
+      "sha256": "740ef86f57037b976c9b6a480b6e8ec7360623cfe6b858c745eaae402dade2ca",
+      "bytes": 19046
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/context.mjs",
+      "sha256": "e6afd976afc02a19a8cdb935e1f4ff918ed750f6751fe8a990cf7008ec882c06",
+      "bytes": 6290
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/corrections.mjs",
+      "sha256": "3804949fe1fe595c140478738690122354de8e022d3e85ed30eb461942bd33f7",
+      "bytes": 7330
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/decision-repair.mjs",
+      "sha256": "256072d5e32755d27a78d9e2d7e73927807e2e8e8ea41d9f9cf61a07944a9f01",
+      "bytes": 6292
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/executors.mjs",
+      "sha256": "a197c9839bb861ec9e1656f0ffe21e39a437a40b5d482ad27a14038077a3056b",
+      "bytes": 30652
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/export-portability.mjs",
+      "sha256": "a35166c4c9e18c2a88e012a1670cf97938459eb69f9d2f2098419d69a9b993f0",
+      "bytes": 4468
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/flags.mjs",
+      "sha256": "0abe7c8ad585c9370dacd39617ec5700781ada918fec3544e51119d5471edcd0",
+      "bytes": 3767
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/fusion.mjs",
+      "sha256": "674e478c7f1632a2b7d1b2ac66a2816771bb2e02199ffd6e9c51670af594481e",
+      "bytes": 23456
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/ghostwake.mjs",
+      "sha256": "e02012a1336949acb18e8630b4de2e003dbaf6a2a5e58b81f4ca531db176ca9e",
+      "bytes": 6749
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/hooks.mjs",
+      "sha256": "584c9de7dae047b41e1e0e178f46c274ab6b7fa687d0563c484b3837d21590ca",
+      "bytes": 5575
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/ledger.mjs",
+      "sha256": "d6a5c36f9db96d35105e7d96e5d53a8becd133edcda4d7a64e9bf5700bb3e131",
+      "bytes": 7031
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/planner.mjs",
+      "sha256": "c716e95bdd976b42e6b67bc2c178390842dd0f5c357b08bc66f5b572f337d8ea",
+      "bytes": 18041
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/policy-induction.mjs",
+      "sha256": "93d56c6a14e55b99ac6e0377cba26cfcaf1f6e1b38996710379674e7abe62268",
+      "bytes": 12306
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/skill-lifecycle.mjs",
+      "sha256": "829d5dd6c7392bbe8ab3a5f641440a9deb6b0f0e5f2be50785be886d823ec45c",
+      "bytes": 4868
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/steps.mjs",
+      "sha256": "a154fe64e1211f64b79e0a29e4928056062d4b5ebd84a6240391fc5c846ef1a7",
+      "bytes": 22841
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/wire.mjs",
+      "sha256": "dadfcebd19824fa274f6c3ecce8a239117acbe351c13c6d036717ef4ae350a4b",
+      "bytes": 8167
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/worldmodel.mjs",
+      "sha256": "7359c823ccf31bdb08caa736ce2cdcece0866b8e6ddb4afd4c6813164bf7fe3b",
+      "bytes": 4922
+    },
+    {
+      "path": "harness/kit/lib/memory-synthesis.mjs",
+      "sha256": "4e2e832f078e56add0d40157ecdd5fc86f41ec77b7330c62c69a9c7a56b03a5a",
+      "bytes": 11775
+    },
+    {
+      "path": "harness/kit/lib/memory-temporal.mjs",
+      "sha256": "bb72faf51c5c949474b19402bc99a314815b22eceb6c1b701200b87fa0e48c73",
+      "bytes": 9068
+    },
+    {
+      "path": "harness/kit/lib/memory-tombstone.mjs",
+      "sha256": "f79f34045ae62fdb005c6cfab2e7a3ff517248bdcfcf8332021ef78943f11d86",
+      "bytes": 27112
+    },
+    {
+      "path": "harness/kit/lib/memorycore-client.mjs",
+      "sha256": "cac7920ba02f89b4bf8a5ef74060c390070dcda72c3e538424815a8a10b33f5b",
+      "bytes": 12098
+    },
+    {
+      "path": "harness/kit/lib/nanny.mjs",
+      "sha256": "99c1ee797df1217023e414df8404b88b600e8f1c7f01f2742d294d66c297da5b",
+      "bytes": 43341
+    },
+    {
+      "path": "harness/kit/lib/narrator.mjs",
+      "sha256": "6a2123262a0b7a1504f08e32fecc25e06a6691f40b88c72c9f9df746f5049480",
+      "bytes": 13080
+    },
+    {
+      "path": "harness/kit/lib/native-managed-seat.test.mjs",
+      "sha256": "3a8b9f3c2bf9012f098696e4191d27e650435c99d27635351315ac5e9f830653",
+      "bytes": 4002
+    },
+    {
+      "path": "harness/kit/lib/native-opencode-worker.mjs",
+      "sha256": "e57e9ee7ba4d6aceaede6d4553c8b916a9b184556cb82e0816ace30513b041b2",
+      "bytes": 8749
+    },
+    {
+      "path": "harness/kit/lib/native-opencode-worker.test.mjs",
+      "sha256": "5323441a5012a184959d151c184fa8ebaa0d0a218be1755780b03f28fa36486a",
+      "bytes": 6148
+    },
+    {
+      "path": "harness/kit/lib/native-ownership-safety.test.mjs",
+      "sha256": "8e03a7f70975dd6a57cf8a8bf63efb97b9659703e96e271cbb987cc052937dd7",
+      "bytes": 3594
+    },
+    {
+      "path": "harness/kit/lib/no-change.mjs",
+      "sha256": "baa3c037734f8db4b92cccdb6531439bac0000173436dace0d4cdeb4c875a36f",
+      "bytes": 2391
+    },
+    {
+      "path": "harness/kit/lib/observer-bridge.mjs",
+      "sha256": "3d0a7a6e569dbb608156795eb564131aacc4169b8203cf86e8a249d186cff9fa",
+      "bytes": 5969
+    },
+    {
+      "path": "harness/kit/lib/observer-sink.mjs",
+      "sha256": "a02aaa2e6eec41aa0db69cee49a48c4a6d7dd3882b034f0fffa915011ea373fb",
+      "bytes": 3135
+    },
+    {
+      "path": "harness/kit/lib/openchamber-managed-seat.mjs",
+      "sha256": "b5d20c767e5fe1b456d0c3aaf89c9fb011dd2f3244b772fc599d34a148d0b89a",
+      "bytes": 13533
+    },
+    {
+      "path": "harness/kit/lib/openchamber-remediate.mjs",
+      "sha256": "107358a2c209e2ee18f6bac1730e78090d3094209984878ea42952ce24199e7c",
+      "bytes": 18329
+    },
+    {
+      "path": "harness/kit/lib/openchamber-watch.mjs",
+      "sha256": "dce5a79d1d2132852f2fc2149497f13f51c3ba712ea4f4b6dbb4c7993a4b5e47",
+      "bytes": 27912
+    },
+    {
+      "path": "harness/kit/lib/operator-query.mjs",
+      "sha256": "fb7fee42847a9d607d99dd5e34b019eb2ef73ba359ad780381bfc78a3eb87b50",
+      "bytes": 9349
+    },
+    {
+      "path": "harness/kit/lib/orch-oc-config-mutate.py",
+      "sha256": "36e983fd44f9cff61d509473c2314bb5f02f4bda40dc61baccd1594484302441",
+      "bytes": 1992
+    },
+    {
+      "path": "harness/kit/lib/orch-session-watcher-test.py",
+      "sha256": "8d2bf6dd50c3c0613aff0a5aff42bd8e37b90f978c792c90221d2fa58a53d18a",
+      "bytes": 5459
+    },
+    {
+      "path": "harness/kit/lib/orch-session-watcher.py",
+      "sha256": "7017c0cdd6fe80792428b3f6ff64724124e8847f1b92594c8fc2a181b652f1b6",
+      "bytes": 18821
+    },
+    {
+      "path": "harness/kit/lib/payload-budget.mjs",
+      "sha256": "a10d02c7411d9fdddc98e678c8b6b318fb696e3548956210aa7e44f04e68cd94",
+      "bytes": 4340
+    },
+    {
+      "path": "harness/kit/lib/phase-driver.mjs",
+      "sha256": "88fa8e98e74a00171b0e5b274a8a5fb6381eafcb91c7edde1e084dfe3279d9d7",
+      "bytes": 12449
+    },
+    {
+      "path": "harness/kit/lib/plan-cache.mjs",
+      "sha256": "9bd3ccf33d04dfcf325c2f807a55a813b6ec8b952a98c7fe5b56d11fa1e08192",
+      "bytes": 6763
+    },
+    {
+      "path": "harness/kit/lib/policy-identity.mjs",
+      "sha256": "c8b4f8ec199d11c9391201ea82043d808e5cc91a7f11a2a3e2b19a3b8c091750",
+      "bytes": 2298
+    },
+    {
+      "path": "harness/kit/lib/progress-brief.mjs",
+      "sha256": "d48c0f94aee7435597a446d5ba894532c462263d7a271d08e8035f3ff6b89f0e",
+      "bytes": 3599
+    },
+    {
+      "path": "harness/kit/lib/qmd-client.mjs",
+      "sha256": "0025fb52f3221c9e74c1ba22f335d59b07c5ba024d67fa872affbc8e70a6e308",
+      "bytes": 5937
+    },
+    {
+      "path": "harness/kit/lib/qmd-endpoint.mjs",
+      "sha256": "fa15d0eaece3d0f2b996a3d038e6608cd83f1a8f2bedb9db78443a1b7c50c87a",
+      "bytes": 1791
+    },
+    {
+      "path": "harness/kit/lib/qmd-refresh.mjs",
+      "sha256": "df5df8c53f14c6f8717bbafde624e5470f2bf59e9827ac3474d75191730b3ec7",
+      "bytes": 1295
+    },
+    {
+      "path": "harness/kit/lib/qmd-tunnel.mjs",
+      "sha256": "9bc1366bda2225e0681b2d2e375e8c7b2ca7f06f992e229f301c9d313d1210bc",
+      "bytes": 2085
+    },
+    {
+      "path": "harness/kit/lib/quality-pipeline.mjs",
+      "sha256": "1873344821579ee25794b0f77698fcae8fa4ac2854043d2ea322ac2d20941892",
+      "bytes": 24754
+    },
+    {
+      "path": "harness/kit/lib/repoql-client.mjs",
+      "sha256": "428c7109b3042bc9435aed2023ae239ef15e94c842bac03b302f7adce2eeb1bc",
+      "bytes": 46128
+    },
+    {
+      "path": "harness/kit/lib/resource-lease.mjs",
+      "sha256": "e663d27b53e7b4bfa68a49a34751e45942a19dd92d891508202622510d92c9f9",
+      "bytes": 8926
+    },
+    {
+      "path": "harness/kit/lib/review-evidence.mjs",
+      "sha256": "67e8169c089e979a363a8766ec3961969cf68c2068eef398b3271761cd0144e8",
+      "bytes": 7754
+    },
+    {
+      "path": "harness/kit/lib/roster.mjs",
+      "sha256": "9c0e5ef9212979de4b975408d7b581ce5332e5352b6b5b19a4e791785ffe2125",
+      "bytes": 8400
+    },
+    {
+      "path": "harness/kit/lib/run-health.mjs",
+      "sha256": "0036f3a2d35e4aad72f48708e4c51cb484cbbe00333e60bf40085c1e2f8ad444",
+      "bytes": 4754
+    },
+    {
+      "path": "harness/kit/lib/run-registry.mjs",
+      "sha256": "1cd8895e1f55a89fb282217717e1eae6c0f556ff7a7ae6b6ea4091a80d6ddc8d",
+      "bytes": 15100
+    },
+    {
+      "path": "harness/kit/lib/run-slots.mjs",
+      "sha256": "4a06d71f6eeee56046c925d218ba75389889a1a92693a4c977c4f94ae75c66f7",
+      "bytes": 10884
+    },
+    {
+      "path": "harness/kit/lib/run-summary.mjs",
+      "sha256": "91a50ab620be88c6bdc8497d64b70f1c835ea7e06420016e796b56a0b7c816a0",
+      "bytes": 2976
+    },
+    {
+      "path": "harness/kit/lib/rust-authority-cli.mjs",
+      "sha256": "b0dbd8a1f852d63f4fbe7a71cbf0e9317d39f5a643f56dd48657a63c1a039a3a",
+      "bytes": 2624
+    },
+    {
+      "path": "harness/kit/lib/rust-authority.mjs",
+      "sha256": "fc65eeb6a618a27a5b55a9c769268075bd4e2eba04c902325f68a73633d496f2",
+      "bytes": 17541
+    },
+    {
+      "path": "harness/kit/lib/rust-effects.mjs",
+      "sha256": "e55aad5bdb2ba3a4839bff0d01df16781247bc69d40ee46872dd2844728d8a19",
+      "bytes": 8074
+    },
+    {
+      "path": "harness/kit/lib/seat-lease-check.mjs",
+      "sha256": "a637c1ab4a3526283a38bcc33e28127b8ad8683bdfe9d2c0e6968a7824587cad",
+      "bytes": 1608
+    },
+    {
+      "path": "harness/kit/lib/session-bridge.mjs",
+      "sha256": "769bbc558e7760b43d10634cbc70570f1272560addf4c5dc63b381fa49128ad5",
+      "bytes": 8385
+    },
+    {
+      "path": "harness/kit/lib/session-watch.mjs",
+      "sha256": "409fa32fb3ed3891bac54c7a70f253d616e7645741e9de7eba193764df332920",
+      "bytes": 12520
+    },
+    {
+      "path": "harness/kit/lib/skill-harvest.mjs",
+      "sha256": "d5cbb4a993595d812720656c920c571bf2cef32876eab8b4435513d69b3a789a",
+      "bytes": 21076
+    },
+    {
+      "path": "harness/kit/lib/skill-publish.mjs",
+      "sha256": "e7b0af1f9277de12e0777a6a0c4f4c546a837441d8b1797794196a5782d49aff",
+      "bytes": 32644
+    },
+    {
+      "path": "harness/kit/lib/sol-humanize.mjs",
+      "sha256": "875c40dadde6fb7cbd626819799a990a190275c3e7580d91f9aad4101dd24fb0",
+      "bytes": 8910
+    },
+    {
+      "path": "harness/kit/lib/sol-outfile.mjs",
+      "sha256": "84255ea98adeb4d2c11cb3deebcb39f26c7bceaa19e90154b7f3a9db662b966a",
+      "bytes": 1479
+    },
+    {
+      "path": "harness/kit/lib/start-guard.mjs",
+      "sha256": "20fcfdaa04261d03cc5fc9dfb657b41cb8317d78959433a17e98becf43b87f25",
+      "bytes": 10994
+    },
+    {
+      "path": "harness/kit/lib/state-lock.mjs",
+      "sha256": "f1e7477e8d87841ec906c59dd4bd7b97377528cbca4f2b9a3cdc30c22218794b",
+      "bytes": 8256
+    },
+    {
+      "path": "harness/kit/lib/supervisor.mjs",
+      "sha256": "a1e9160b2e06047d5fb5f4a059b8607f7086eb89bb1bd60e04a8c8eebb8b9887",
+      "bytes": 7198
+    },
+    {
+      "path": "harness/kit/lib/watchdog.mjs",
+      "sha256": "80d54499198ab877bf8871687848a1b93c37f9667a6717cc3ea76d9952b76233",
+      "bytes": 13753
+    },
+    {
+      "path": "harness/kit/lib/windows-portability.test.mjs",
+      "sha256": "7b1938e7951a249d2454b7d535e0879917fa80b26ebb882e035111d573f56775",
+      "bytes": 3051
+    },
+    {
+      "path": "harness/kit/lib/worker-completion.mjs",
+      "sha256": "4742a79dd3e13fdd46a7c9e5be7f4c49a0e0f0b1524406d8f489218a6b881816",
+      "bytes": 4524
+    },
+    {
+      "path": "harness/kit/lib/worker-digest.mjs",
+      "sha256": "9225f92b991821b4d2525112529b90aedf4e23efc0779636c3ca4f01d84cb53a",
+      "bytes": 3980
+    },
+    {
+      "path": "harness/kit/lib/worker-lease.mjs",
+      "sha256": "493cc8ef128dce5b6c824b388bc462f631377f7fd35d3d6330f4c78b7d0ac516",
+      "bytes": 3628
+    },
+    {
+      "path": "harness/kit/orchestrate.mjs",
+      "sha256": "34e20b7c1a450660ad62812bc5e0fe840839798acc26f5bf2d608be411968568",
+      "bytes": 606112
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/README.md",
+      "sha256": "b474ce78c3f60a924d44ee8d1dc1b696a35f33155a8a0b5b340241c27f321485",
+      "bytes": 2514
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/adhd-presentation.md",
+      "sha256": "b82740b0d7408c3b69d02332a54862834ad15937f7d045191d81210a26661bb6",
+      "bytes": 1776
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/archify.md",
+      "sha256": "9751a04014c252a214c77a79254b370061f760e775d8713be4d93c934089aec5",
+      "bytes": 1868
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/camofox-browser-validation.md",
+      "sha256": "282d2ce560a1f42b03c038974d7cb7190b988e45a6c89dc85a7896e5c2a5996a",
+      "bytes": 2324
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/debugging-error-recovery.md",
+      "sha256": "30f04215062c7e75e23edbf93c70cc2127294cdea2cea303b806fa7c48c69ceb",
+      "bytes": 2017
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/impeccable.md",
+      "sha256": "4beb4ea6f9b102d00155c1fbff5c05a7639e1de22df089178ff1b3ca0648a49e",
+      "bytes": 2042
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/minimal-implementation.md",
+      "sha256": "33657052f0d479e4fe6624572d78b886c4bb431f97bca4631447b1e0090c40a8",
+      "bytes": 1473
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/security-hardening.md",
+      "sha256": "e1ea39249868a60748fbd164ec958e8721aef82a6b12102bfd7799aa9312edda",
+      "bytes": 2335
+    },
+    {
+      "path": "harness/kit/prompts/capabilities/source-driven-development.md",
+      "sha256": "fc85f60aba8ba4404bda727c9c6cf33c76886db4801f0d4c72933fb09bbf7569",
+      "bytes": 1810
+    },
+    {
+      "path": "harness/kit/prompts/consultant-codex.txt",
+      "sha256": "c38d797c666d5a0a4c9ee0da3babcc02bfd4f9fd586e0791dd45a1ae64087d08",
+      "bytes": 3847
+    },
+    {
+      "path": "harness/kit/prompts/consultant-inline.txt",
+      "sha256": "515d7ff9aac2117471aef20047986f1596ebe3694a8c021e357b4d98f225e118",
+      "bytes": 1783
+    },
+    {
+      "path": "harness/kit/prompts/env-context-sol.md",
+      "sha256": "74fc323e5d58cbe884186b389fb432012ecae18f2b93b70fb3751dd26cc13d43",
+      "bytes": 368
+    },
+    {
+      "path": "harness/kit/prompts/env-context.md",
+      "sha256": "ea97aa8c5de5a8819f8bb9caac72bb094d94fc757c1534b22e2974fcf93e08e2",
+      "bytes": 854
+    },
+    {
+      "path": "harness/kit/prompts/planner-gate.txt",
+      "sha256": "82cc941601009a06c73a7e7e4606e231c55e0a663bbf1029a2fe40a03f172639",
+      "bytes": 5390
+    },
+    {
+      "path": "harness/kit/prompts/planner.txt",
+      "sha256": "abbd8fc5d88be510e119d0ede793a1b4fc06c71311a869283c0ca80d0cd92ef3",
+      "bytes": 1812
+    },
+    {
+      "path": "harness/kit/prompts/reviewer-gate.txt",
+      "sha256": "e5454168316e8f2dead234e0b53280ca9eb404ef9e5436cca36a2bc4785905cc",
+      "bytes": 2831
+    },
+    {
+      "path": "harness/kit/prompts/reviewer.txt",
+      "sha256": "5ee99a0feabb9b0fe3804cbaafaedee88bf2adde6df6e43a7656aaff5a68d630",
+      "bytes": 1238
+    },
+    {
+      "path": "harness/kit/prompts/worker-protocol.md",
+      "sha256": "d4e19b2b9a0049c015fb42bfb476b1309fda88263be95c1dddad3b3eea6cfc0d",
+      "bytes": 7204
+    },
+    {
+      "path": "harness/kit/skills/INDEX.md",
+      "sha256": "da71a72da71d010d21b544a51ad05baed3c6175e76e754cd10bc6247cc260c79",
+      "bytes": 1344
+    },
+    {
+      "path": "harness/kit/skills/PUBLISHED.json",
+      "sha256": "f8532408457a837263ada29da7681c8a72583b0b5b97b4a0fbc2cf495200518b",
+      "bytes": 1134
+    },
+    {
+      "path": "harness/kit/skills/S-20260919-2bt0-secure-loopback-only-service-deploy-with-tailsca.md",
+      "sha256": "10f414fe57aeef847b1fa79326b9af5656cb55e807758a3395500b9c766b81fb",
+      "bytes": 2080
+    },
+    {
+      "path": "harness/kit/skills/S-20260922-zmb0-zombie-defunct-reaping.md",
+      "sha256": "972d32ec5a3e6c455f582ea0e08250d159346f4dbc54169637b5c0c83371927e",
+      "bytes": 3205
+    },
+    {
+      "path": "harness/kit/skills/S-20260923-7wt7-cross-host-docker-deploy-with-operator-override-.md",
+      "sha256": "da0d944fdbb75a657c51a7ea343c2e7caac5ae5b60be9ec3e25bf500aa65abd9",
+      "bytes": 1963
+    },
+    {
+      "path": "harness/kit/skills/S-20260924-x66s-retarget-stale-service-call-sites-after-entity-r.md",
+      "sha256": "6bc63afd800801518bb5fbae84697148d93e3ff6553d997de7f69bac67c280ed",
+      "bytes": 1409
+    },
+    {
+      "path": "harness/kit/skills/STATUS.md",
+      "sha256": "8ce99ae28addf6db1bbc88c02003fbe83543ac8a40f5211ff73995ac15a953b1",
+      "bytes": 1047
+    },
+    {
+      "path": "harness/kit/tests/concept-capture-resolution.test.mjs",
+      "sha256": "13eb11b4bf8a75cb78c26b407613dc4675c344f8ee8db8c1200732a17ed35156",
+      "bytes": 8405
+    },
+    {
+      "path": "harness/kit/tests/conversation-review-local-verification.test.mjs",
+      "sha256": "b43f0d581cef2bdfda3475af2cb1bcdbb2ec713e7e62a64fff959a929e3da834",
+      "bytes": 7339
+    },
+    {
+      "path": "harness/kit/tests/memory-freshness-failclosed.test.mjs",
+      "sha256": "0db2bbbe80255f2fd780e09ed7d5a73124ee30527a4b4a4fb1d4919be9ecde22",
+      "bytes": 7589
+    },
+    {
+      "path": "harness/kit/tests/rust-authority-windows.test.mjs",
+      "sha256": "0962d290986bc7137871dc73581710fcad976bd95a143df2948f0a4108c2bb1b",
+      "bytes": 3561
+    },
+    {
+      "path": "harness/kit/tests/rust-authority.test.mjs",
+      "sha256": "4c7c52982bca0e63d401f3c433c7eeb2f2d50533e70eef5042d66c0860bc95f7",
+      "bytes": 15321
+    },
+    {
+      "path": "harness/kit/tests/rust-effects.test.mjs",
+      "sha256": "45bcdc9474804cb1c2ce45794dce77a15fee43b2910310179657838299d01a55",
+      "bytes": 9311
+    },
+    {
+      "path": "harness/openchamber-patches/README.md",
+      "sha256": "239a7cdf3641f6206623ee2396eb3d716c715a4fa52206f754dcedfea1bd6e7f",
+      "bytes": 2963
+    },
+    {
+      "path": "harness/openchamber-patches/series",
+      "sha256": "25bc7e31faf95355dd7c7ee85694ec85fb17023c3fb9e920eada3af93b2a3448",
+      "bytes": 652
+    },
+    {
+      "path": "harness/rust-authority/Cargo.lock",
+      "sha256": "ff19c46421c25497306bb8cee7bba72ddb220997a11cb68cc97d3c42b37a2a30",
+      "bytes": 15007
+    },
+    {
+      "path": "harness/rust-authority/Cargo.toml",
+      "sha256": "99f3445d12566877ce1f9711207bd6efbd5a2226ace1beb742162017d5a4b8f7",
+      "bytes": 381
+    },
+    {
+      "path": "harness/rust-authority/PROVENANCE.md",
+      "sha256": "29c2ebc2eaab03b3e40209208d58260c8c5217fffda6aad9a3c790893ba250ed",
+      "bytes": 4231
+    },
+    {
+      "path": "harness/rust-authority/README.md",
+      "sha256": "6d6c3e08294ff7d81d45ae74ad67a98f61ae8459cc402b9faf8a73745d65eecb",
+      "bytes": 1639
+    },
+    {
+      "path": "harness/rust-authority/adapter/source-telemetry.mjs",
+      "sha256": "ea5f97bfaac8dfc5ead9fc4b305b98a699d30fd1b7c0ee8b72c31c2d977a6bbb",
+      "bytes": 3481
+    },
+    {
+      "path": "harness/rust-authority/adapter/telemetry-transport.mjs",
+      "sha256": "db55bf5b761c96bae879dfced1a5e267d557133e648e4c81f33d37e547417a2c",
+      "bytes": 4704
+    },
+    {
+      "path": "harness/rust-authority/adapter/worker-shadow.mjs",
+      "sha256": "fadb1c28ecd43f3517f34b3a468f6b9fed55dd98dc7eb6df5e52cd2b23ddebf3",
+      "bytes": 2352
+    },
+    {
+      "path": "harness/rust-authority/docs/reference-modules.json",
+      "sha256": "69624c1ac7c23d16c9fb743dfca97a0e7a07cae0036ce3c819ee07fdb566f262",
+      "bytes": 1513
+    },
+    {
+      "path": "harness/rust-authority/docs/source-inventory.json",
+      "sha256": "a1b091bb7dd7e69b40fedd727e805242b3555782c1719f0c7cbb1b7c04c8e4cd",
+      "bytes": 40615
+    },
+    {
+      "path": "harness/rust-authority/fixtures/compat.json",
+      "sha256": "d7f7e31bf866431533b502138fd7dd81b8c896a41b8ab7e78036e1d199f1669c",
+      "bytes": 294473
+    },
+    {
+      "path": "harness/rust-authority/fixtures/final-compat.json",
+      "sha256": "49d669afb4a8198152b7e0e1d320b42d7127195c048208b3c2bb73df900dcbe9",
+      "bytes": 166962
+    },
+    {
+      "path": "harness/rust-authority/fixtures/resource-lease.json",
+      "sha256": "b79540210aab54f16d9e1995c30954dcb0d10c6338ce5f7c305ae3c915eda34d",
+      "bytes": 12961
+    },
+    {
+      "path": "harness/rust-authority/scripts/compare-fixtures.mjs",
+      "sha256": "647d4859172a48f1abf8be5a146f0f31cbba9e7333e7e7b7d867763b0b4d5c83",
+      "bytes": 1980
+    },
+    {
+      "path": "harness/rust-authority/scripts/migration-coverage.mjs",
+      "sha256": "bed952d48c4d51b44b454f9eb5f70ee8ea5af82b409757c17a5a7758d0c7f023",
+      "bytes": 2544
+    },
+    {
+      "path": "harness/rust-authority/scripts/source-telemetry-preview.mjs",
+      "sha256": "989ad3ecfaea78cd712163765e520d608583d7c6aa2c24e673fc4095df94fe5d",
+      "bytes": 3067
+    },
+    {
+      "path": "harness/rust-authority/src/authority.rs",
+      "sha256": "bf5d38548d796cecaeb11b8610470f6c16445e3e3c94c02da4393b3498f4ac7a",
+      "bytes": 22412
+    },
+    {
+      "path": "harness/rust-authority/src/authority_windows.rs",
+      "sha256": "0564d6de1a8406bc01e0749c8e6c6c25f4f790f4b69c17d5dd029cd8925753d3",
+      "bytes": 18299
+    },
+    {
+      "path": "harness/rust-authority/src/bridge.rs",
+      "sha256": "fdb80e90cf7535dfdc9400fecf3a2f782f058dcc66aec7e22432aa5cad3aada2",
+      "bytes": 4953
+    },
+    {
+      "path": "harness/rust-authority/src/case_store.rs",
+      "sha256": "6f99073557bdf394f56869c90013c2ce9228d80f612f8e0d3fb547aad06de89c",
+      "bytes": 14432
+    },
+    {
+      "path": "harness/rust-authority/src/compat.rs",
+      "sha256": "f302fff7ab53b09a07b4ef472b1f3aa32340beb51d9916e81160dd036e0bd28f",
+      "bytes": 7675
+    },
+    {
+      "path": "harness/rust-authority/src/coordinator.rs",
+      "sha256": "054e52adcb5e6da027dc1d13e90003230556a0b78ccc8ea93daa03c34ed2e98b",
+      "bytes": 27794
+    },
+    {
+      "path": "harness/rust-authority/src/deviation.rs",
+      "sha256": "b656feeda34d133ff795a1b946c2ffeff49a6e40326fbd856f210f87e738ebc0",
+      "bytes": 2526
+    },
+    {
+      "path": "harness/rust-authority/src/doc_impact.rs",
+      "sha256": "d73f56817231b05428180b26211ae329d59b325520e0b1bd7837552711572498",
+      "bytes": 4112
+    },
+    {
+      "path": "harness/rust-authority/src/effort.rs",
+      "sha256": "43bec852642f1d7b69c396b2f74ac09e711b59c75db11c380a22437a2b8d977d",
+      "bytes": 4734
+    },
+    {
+      "path": "harness/rust-authority/src/engine_router.rs",
+      "sha256": "40ed0778e957aea1b55a076a74a43fe8dda6773643bdd7cb9c500076ff736909",
+      "bytes": 8579
+    },
+    {
+      "path": "harness/rust-authority/src/engine_state.rs",
+      "sha256": "db6f5e6b35c21a6687ff080fd94c96e9055c78825647635d68300ab428054fb6",
+      "bytes": 15022
+    },
+    {
+      "path": "harness/rust-authority/src/gate.rs",
+      "sha256": "c03120ee29e5b0bc48edc45051a8f60bedc59218b4ccf62394858cb7a5f17997",
+      "bytes": 13815
+    },
+    {
+      "path": "harness/rust-authority/src/main.rs",
+      "sha256": "29ad2a843d518ca8cfb858a222608f51828c716120a07262ad1cb16fb92b2068",
+      "bytes": 18251
+    },
+    {
+      "path": "harness/rust-authority/src/nanny_observe.rs",
+      "sha256": "f281d9d64a5d684a3953ed9c6b2243a3e4312948c817f12f44f8b0c73ac9feb4",
+      "bytes": 5898
+    },
+    {
+      "path": "harness/rust-authority/src/no_change.rs",
+      "sha256": "7920590ab29690843a69a37dc53691f709f568e50fe2f6680b2bea4f2731edf1",
+      "bytes": 2036
+    },
+    {
+      "path": "harness/rust-authority/src/payload.rs",
+      "sha256": "f8cf5d92912145d2ae46d7174274466531c8c07befbd6d3ea828c66c7756d398",
+      "bytes": 4022
+    },
+    {
+      "path": "harness/rust-authority/src/phase_driver.rs",
+      "sha256": "36362c7fa8e28119da7a58a34f5d12ef2ad996a7868535318a429fc0a4186cbb",
+      "bytes": 5524
+    },
+    {
+      "path": "harness/rust-authority/src/resource_lease.rs",
+      "sha256": "6738869fd0f8804eabc40fc44e32b7e7086e68a72d6a1487f3a1d7f05d4864be",
+      "bytes": 18091
+    },
+    {
+      "path": "harness/rust-authority/src/run_state.rs",
+      "sha256": "a27b0156a6adfa852d3253ced64f592ff4d914742a83320ccdca091cfa1bb8dd",
+      "bytes": 69533
+    },
+    {
+      "path": "harness/rust-authority/src/run_summary.rs",
+      "sha256": "87c284f7dc9a24e8344bfdadb52ce81fbbd01b4c308b8c590a9a0a881d2a7b6a",
+      "bytes": 4664
+    },
+    {
+      "path": "harness/rust-authority/src/scope.rs",
+      "sha256": "a1443c9090a4369e79a7405929b9129e90e6166451bf97d97ed73e354d0a8a43",
+      "bytes": 2644
+    },
+    {
+      "path": "harness/rust-authority/src/state_cli.rs",
+      "sha256": "8849e8ef7d4922bf63e446aee5343b9fd085ffcbe296753b47e38cfa5b19eedf",
+      "bytes": 9632
+    },
+    {
+      "path": "harness/rust-authority/src/store.rs",
+      "sha256": "4c3bee1fa458cba308291bee191bb88230871c5de101e8710c0cd2ba72faf32d",
+      "bytes": 13470
+    },
+    {
+      "path": "harness/rust-authority/src/worker.rs",
+      "sha256": "d67d715dc2991c26333ce817ca022c66d6196a706c5f7cf47c8f0431360df4e4",
+      "bytes": 6633
+    },
+    {
+      "path": "harness/rust-authority/tests/comparator.test.mjs",
+      "sha256": "efcdbc27d964302bcb05590b47428e797a5148b33fcaeb1ac2febf441314d1c8",
+      "bytes": 2962
+    },
+    {
+      "path": "harness/rust-authority/tests/coverage-audit.test.mjs",
+      "sha256": "48466113772ca4b33d98cda58be63e6ade2aef713e8b31eb4df2dea3b075cc66",
+      "bytes": 665
+    },
+    {
+      "path": "harness/rust-authority/tests/final-oracle.test.mjs",
+      "sha256": "dfa26ae001852c4e655ce339fccd3bad224be229d2699bb5c9cf6bebb3ef079a",
+      "bytes": 1423
+    },
+    {
+      "path": "harness/rust-authority/tests/native-state-hardening-reference.test.mjs",
+      "sha256": "a1c7f802dd3e297d5109890ce0e7fb15d720bddfddfb39aa66e94240ae09761a",
+      "bytes": 1617
+    },
+    {
+      "path": "harness/rust-authority/tests/reference-kit.mjs",
+      "sha256": "4e5be7d9a1a96f3ff982eff2482380ef237c23c8ea019aa9e6a9648816702656",
+      "bytes": 707
+    },
+    {
+      "path": "harness/rust-authority/tests/resource-reference.test.mjs",
+      "sha256": "80ec6296d2b53944869453287386a1b0140b7f9eefff40e284dec48ccb703e85",
+      "bytes": 1096
+    },
+    {
+      "path": "harness/rust-authority/tests/source-preview.test.mjs",
+      "sha256": "6e27eca3bdb44cbb4faf2655ada8eaa396b4ab05f996ac61b0e327a6e996fe3a",
+      "bytes": 2240
+    },
+    {
+      "path": "harness/rust-authority/tests/source-telemetry.test.mjs",
+      "sha256": "2f9fdd4361383cfdd95723c6a6276a11fba3f679976d7a1046d246ccaa761418",
+      "bytes": 3343
+    },
+    {
+      "path": "harness/rust-authority/tests/state-source-contract.test.mjs",
+      "sha256": "4a306ea8a1c9b96331b9e626beaab15412d55febc599e3143600ac9ac11d9339",
+      "bytes": 2332
+    },
+    {
+      "path": "harness/rust-authority/tests/telemetry-http.test.mjs",
+      "sha256": "2380f1be779d5e67d9caf840f89a00473a72c8916251b0bdfdc556698448e7ba",
+      "bytes": 1760
+    },
+    {
+      "path": "harness/rust-authority/tests/telemetry-transport.test.mjs",
+      "sha256": "f802598bc59dc2616dc2e1a53a22178f94a7f58bee3bae8914613a7cb907724d",
+      "bytes": 4251
+    },
+    {
+      "path": "harness/rust-authority/tests/transport-contract.test.mjs",
+      "sha256": "a450bde482521a9613cd98a6b37de245962096cdd60bfd29053de9e263a96556",
+      "bytes": 738
+    },
+    {
+      "path": "harness/rust-authority/tests/worker-shadow.test.mjs",
+      "sha256": "2bf7aeb8de93f22b4ba1fabfeeb64bf86cb01b1d4f12513feeb2feeaacf4dc83",
+      "bytes": 1514
+    },
+    {
+      "path": "memory/.env.example",
+      "sha256": "717e15ee8a3a9f28f93679dbfb7d949de6e306f8efeac882bde3b3fc5d31c199",
+      "bytes": 5880
+    },
+    {
+      "path": "memory/README.md",
+      "sha256": "44bca1217b9bbcf91c54c98c3e0873e6fb49672213fff0c73fcdb69b4b5c2599",
+      "bytes": 3810
+    },
+    {
+      "path": "memory/patches/README.md",
+      "sha256": "e6283efd04f0746ffeba8ab61a550c78dadd8044a8f3e9c2b62a7fe7d3ab5ce3",
+      "bytes": 3018
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1recordids/PROVENANCE.md",
+      "sha256": "fdaaed22325b954e4c8dc4c49ac12eb01272d4717cfe8c4eae0d1d2cac8f3673",
+      "bytes": 2808
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1recordids/core-l1recordids.patch",
+      "sha256": "294ac53705ec1aec2ea243d2cb6cc81c71de718d4457c60be21956d41c344811",
+      "bytes": 48490
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1recordids/series.json",
+      "sha256": "c02b45ba3758e4b10678f1493e74b1f8f66756933bfd7c29b7fa69f1c0d302ec",
+      "bytes": 3406
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1recordids/tests/issue712-ladder-regression.mjs",
+      "sha256": "887ea6f7ed23f660fd68aac99e6132fc343453149d6ca8d29fff21c646b89c02",
+      "bytes": 8843
+    },
+    {
+      "path": "memory/patches/hub-751/PROVENANCE.md",
+      "sha256": "28bab31013bdba8f4edbd6fa5c4e5e324793cdaec581d989440e80278153e26b",
+      "bytes": 3472
+    },
+    {
+      "path": "memory/patches/hub-751/patch/ingest-v2-CSw_7GGw.mjs",
+      "sha256": "8ff062420227290a56c4251705ce4aed631a437874362272e9935369c7225c54",
+      "bytes": 43752
+    },
+    {
+      "path": "memory/patches/hub-751/tests/diag.mjs",
+      "sha256": "502971423d3107ee862a3b830186cacf61d2a7ae767d1ea6809203229f93ff43",
+      "bytes": 1167
+    },
+    {
+      "path": "memory/patches/hub-751/tests/parse.test.mjs",
+      "sha256": "628c8aa854bcd681b726764a6854c86de8fd1b1d5ed880d385ea8778db6b0d48",
+      "bytes": 11326
+    },
+    {
+      "path": "memory/patches/hub-751/tests/summary.mjs",
+      "sha256": "e6c74c7f4a6e5860396b428230bdf16f5e3b0d0b57f3411e1c4bd7ee1a53b534",
+      "bytes": 2342
+    },
+    {
+      "path": "memory/portable/README.md",
+      "sha256": "4840d240b2e89b536ecacf42fd3b1e0d9bd7a468077e07ae2802a634b7876f1c",
+      "bytes": 5597
+    },
+    {
+      "path": "memory/portable/capture-consumer.env.example",
+      "sha256": "11ac214542a612add8db824c79ab36762d160566ec14ffa86a8caec5853f2f64",
+      "bytes": 2477
+    },
+    {
+      "path": "memory/portable/capture-consumer.mjs",
+      "sha256": "4255f1f57df4dc4082d9720efd423a692389912497d532c8567683ee7a211f19",
+      "bytes": 37460
+    },
+    {
+      "path": "native/desktop-bridge/Cargo.lock",
+      "sha256": "4c53b1cf0f78de9e8abfa4ab1a1cce29d502dd3048a919265eb1cbbe32c9f78e",
+      "bytes": 35338
+    },
+    {
+      "path": "native/desktop-bridge/Cargo.toml",
+      "sha256": "5b1b947bed8d0bc9db8e4d8f783a57a1f435b68200768974b9c7cdda65b4f280",
+      "bytes": 588
+    },
+    {
+      "path": "native/desktop-bridge/README.md",
+      "sha256": "3dedcf7b4a6164e34a0bb377c542f2f46098dbf9e4ceb6143491c090891fbe8a",
+      "bytes": 9033
+    },
+    {
+      "path": "native/desktop-bridge/src/ghost.rs",
+      "sha256": "7001887e34af3a810a2ee5b61e7f676fd7b972a03d0600f6d8d8abd4dceaed56",
+      "bytes": 5510
+    },
+    {
+      "path": "native/desktop-bridge/src/gui_plan.rs",
+      "sha256": "3bed1c81146b20de5ba7796430cc0c2b25403667b8979b52127ab8421f03a581",
+      "bytes": 14598
+    },
+    {
+      "path": "native/desktop-bridge/src/main.rs",
+      "sha256": "a7445e2a3d041054dfa95b5782f1675f1a2248bd85854145e4bb3392202462fc",
+      "bytes": 19141
+    },
+    {
+      "path": "native/desktop-bridge/src/office.rs",
+      "sha256": "e069c82962a1914a95c735e1bf7ca01ce084377ffb5cb66cf5a9ec8984c9e4f8",
+      "bytes": 13575
+    },
+    {
+      "path": "native/desktop-bridge/src/repoql_compat.rs",
+      "sha256": "8cc829282d13f4fd43f8021d6b3671ab0ee714f15091f814e97f097cef29e593",
+      "bytes": 10257
+    },
+    {
+      "path": "native/desktop-bridge/src/variant.rs",
+      "sha256": "39d381f2baf2093b22e0738ee2202602157a5b5d871e683e0b67572bb0b55829",
+      "bytes": 1984
+    },
+    {
+      "path": "native/desktop-bridge/src/windows_cpu.rs",
+      "sha256": "ea0cbedcb3cba71167060ad8903b989bd13b325d3f70559bac13736bd5fa13a3",
+      "bytes": 6570
+    },
+    {
+      "path": "native/gui-plugins/openchamber/singularity-office.mjs",
+      "sha256": "7e8899d5fe6b1108ea177fae95c06280103eb8ec2e96362e1746b584d61c66b1",
+      "bytes": 3307
+    },
+    {
+      "path": "native/gui-plugins/openchamber/singularity-office.test.mjs",
+      "sha256": "7a78d6f3839146a88acc15acf65040ab6923a3e173afeeb5fe0bf7b67dbec9f8",
+      "bytes": 2790
+    },
+    {
+      "path": "native/windows/a4_run_step.ps1",
+      "sha256": "4cae5211c523766d0ef70c341c18260bc50e8566e0f7eb6dd7ec3089f6974ae8",
+      "bytes": 2264
+    },
+    {
+      "path": "native/windows/apply_office_static.ps1",
+      "sha256": "610fc1470ff90a5cb94ef9b611d5f87ddf09e584fe9f5113c9cd7432eba73403",
+      "bytes": 6931
+    },
+    {
+      "path": "native/windows/apply_verified_source_port.ps1",
+      "sha256": "8cf4dd6c05c32a6ba7bf7d17a37047daf8d1d716ed21a0988ed89c7696188ca9",
+      "bytes": 7849
+    },
+    {
+      "path": "native/windows/assets/singularity-dashboard.ico",
+      "sha256": "65ef67864ab224468478148f8734dc919a8f29ed8baa7bc9b5d543f28c33ceec",
+      "bytes": 97361
+    },
+    {
+      "path": "native/windows/audit_claude_fleet_contract.mjs",
+      "sha256": "453c2bfb0e295ec55ef041736e8f94a7bf451ca27b089709a90845bfc3aa5db0",
+      "bytes": 2701
+    },
+    {
+      "path": "native/windows/audit_claude_fleet_contract.test.mjs",
+      "sha256": "eda631335124f802c16572a649a95a9945e8e0db098d5d253226e0083269a660",
+      "bytes": 1006
+    },
+    {
+      "path": "native/windows/audit_kanzo_board.ps1",
+      "sha256": "21de78d15402c4a0c5171a364c5740e09203bbeb598333eb4901fbca066aea58",
+      "bytes": 2042
+    },
+    {
+      "path": "native/windows/audit_locality_20261102.ps1",
+      "sha256": "a32004eff89025d8e5d1ec475f8839e8f17ea674e45a4eb175f22673f32369fc",
+      "bytes": 5973
+    },
+    {
+      "path": "native/windows/audit_portability.py",
+      "sha256": "b4363394cccffaf0fac956200c21301c9422b466c597533d8fadb5635ef0bba2",
+      "bytes": 5865
+    },
+    {
+      "path": "native/windows/bootstrap_runtime.ps1",
+      "sha256": "2d5ef42eb48b2be677af988f0a4786b36630b1669e6e880da1b6accf7a4c189e",
+      "bytes": 15694
+    },
+    {
+      "path": "native/windows/build_cpu_collector_component.py",
+      "sha256": "97c1da91ffc89287057ff0b4a70333833bd8464958462f1d1daa3f0189e934a4",
+      "bytes": 4202
+    },
+    {
+      "path": "native/windows/build_memory_stack_config.py",
+      "sha256": "ef5a2a57f48960adb153b653eb6b8896fa92fdfcc45b97eeebadf2a4d2209406",
+      "bytes": 10540
+    },
+    {
+      "path": "native/windows/build_option2_acceptance_bundle.py",
+      "sha256": "202b30992b316f99821ecf98baa1c39560753dca9dda9839b0ec34c419952f45",
+      "bytes": 9802
+    },
+    {
+      "path": "native/windows/build_source_variants.py",
+      "sha256": "c11703a5b827a41b8d5d4e9de87ce4b121a0ebadc158cbb31dd9af0c2a71c116",
+      "bytes": 6276
+    },
+    {
+      "path": "native/windows/build_supervisor_config.py",
+      "sha256": "9dc555926ab2a6c539ca196ef1ec1ff2eddb7690a0c74a3333f0d7a5469c8036",
+      "bytes": 10162
+    },
+    {
+      "path": "native/windows/build_unified_gateway.ps1",
+      "sha256": "c43db5deea4436222a1773c920808b7e773ffb255c699bbd0216de35c38a3f5f",
+      "bytes": 3637
+    },
+    {
+      "path": "native/windows/check_rust_lock_provenance.py",
+      "sha256": "a4d96eb2539a9a3454113e48baa621dd60396e3e9f9a23b1a76b1cf75f255381",
+      "bytes": 3882
+    },
+    {
+      "path": "native/windows/claude_complete_acceptance_matrix.py",
+      "sha256": "bd5ca8fe6c56ba8ffe638a62d6e2c5322b65cdbf2e7c7acdccb37310b5ddc383",
+      "bytes": 5998
+    },
+    {
+      "path": "native/windows/claude_complete_dashboard_host.py",
+      "sha256": "19b53f16ddc0b10408112fbbf6d137886422fbc8ae767312a0c336a16136a05c",
+      "bytes": 8154
+    },
+    {
+      "path": "native/windows/claude_complete_doc_parity.mjs",
+      "sha256": "ecb36c624a58c1d44c34a26e67b313fbbf69645c1020990946b3789d80f47644",
+      "bytes": 9317
+    },
+    {
+      "path": "native/windows/claude_complete_doc_parity.test.mjs",
+      "sha256": "a9f81adb622f9fe5ed486115c642fb40bf28ca0fe821b77bef5d2dd82c431387",
+      "bytes": 5766
+    },
+    {
+      "path": "native/windows/claude_complete_doc_reconciliation.mjs",
+      "sha256": "e9e7a7135a7f125eb5f003bffb074b3141b006765e8581579cfbd2c35e73db04",
+      "bytes": 6361
+    },
+    {
+      "path": "native/windows/claude_complete_doc_reconciliation.test.mjs",
+      "sha256": "47ea12d5f05456d906e9b19b8ea30cc544e9ae0469d9f9612020c0a92b5bec42",
+      "bytes": 3499
+    },
+    {
+      "path": "native/windows/claude_complete_ghost_scope_probe.mjs",
+      "sha256": "6f7efeb261eac10001b30c8e2bd54bf19291f037d44c1bb67ddb6e9e30191d4a",
+      "bytes": 5346
+    },
+    {
+      "path": "native/windows/claude_complete_ghost_scope_probe.test.mjs",
+      "sha256": "fd7a572ab98b616335f76942daa730d48b81748401befd87ff625c04fb1265c4",
+      "bytes": 2427
+    },
+    {
+      "path": "native/windows/claude_complete_gui_acceptance_plan.py",
+      "sha256": "8f655ac7662d90b36065179886aa25ea33f6e364349caf4515acece251cf55f9",
+      "bytes": 3571
+    },
+    {
+      "path": "native/windows/claude_complete_memory_profiles.mjs",
+      "sha256": "1b8a091cc7f5b72d472e148f71246ddd7fc934186a2afd0cfde3c069077f75a4",
+      "bytes": 7869
+    },
+    {
+      "path": "native/windows/claude_complete_memory_profiles.test.mjs",
+      "sha256": "9c7abf4acdab2baa1422f881e2e5d628a9f298e389d2b7c2dd8bbc7f146bcd03",
+      "bytes": 5139
+    },
+    {
+      "path": "native/windows/claude_complete_release_audit.py",
+      "sha256": "6c2db896c45dde29d009b7446f8f729dd69cbe52d96c223cf6b7f3caeb7afea7",
+      "bytes": 9577
+    },
+    {
+      "path": "native/windows/claude_complete_static_inventory.mjs",
+      "sha256": "ac9667cb6591b0c1fd182e5bf1278b2dcef7d31787632bdbb9271916079b7d8f",
+      "bytes": 4462
+    },
+    {
+      "path": "native/windows/claude_complete_static_inventory.test.mjs",
+      "sha256": "ae9501765a03823bd4ab7207e1e70348eaea46c1649916f81c9361a5c0f0e0a5",
+      "bytes": 2239
+    },
+    {
+      "path": "native/windows/claude_complete_tencent_recovery.mjs",
+      "sha256": "f53dc9d8eedb3ebcba7e8647a756cff0f981440e4d01298e1b675f61bf616c2d",
+      "bytes": 5369
+    },
+    {
+      "path": "native/windows/claude_complete_tencent_recovery.test.mjs",
+      "sha256": "b3bfb4f25218e8cd9daf7ac147951fca866c8744739407cb3771bc25abccabfc",
+      "bytes": 3547
+    },
+    {
+      "path": "native/windows/claude_complete_windows_probe.py",
+      "sha256": "9c7bb7d4d680f627dd83543c709220d8d3100e112c4c80d05df182a77345fc76",
+      "bytes": 6322
+    },
+    {
+      "path": "native/windows/compare_production_parity.py",
+      "sha256": "fe3fed0dc662ce6960fc50d7b15457689d57463aafbe9dbe2f21bd87f88d41cd",
+      "bytes": 5509
+    },
+    {
+      "path": "native/windows/configure_claude_code_windows.mjs",
+      "sha256": "b605a7caf5509e386a57dfc9b3781fe3741035657f91bb403ad6bb1e35f947d6",
+      "bytes": 50468
+    },
+    {
+      "path": "native/windows/configure_claude_code_windows.test.mjs",
+      "sha256": "a183ea670d4fca3563b5846301e31d86f716090fd686b1d2ab13d9aef2c63170",
+      "bytes": 48068
+    },
+    {
+      "path": "native/windows/configure_parent_memory_proxy.mjs",
+      "sha256": "fea17d91d3728936a9f2616301e104e435df3509362159769a0ca98f28eefca3",
+      "bytes": 12991
+    },
+    {
+      "path": "native/windows/configure_parent_memory_proxy.test.mjs",
+      "sha256": "bfd3c4ca8dfcfb58c7ba157b6064b2ce2f0b202a0a6e418a5c2b9e3725fdbc73",
+      "bytes": 10161
+    },
+    {
+      "path": "native/windows/configure_project_mcp.mjs",
+      "sha256": "de6f5b796d4c3a9220d46cc4c12638f2d56d134eca4c855ed2f94eb3748385e4",
+      "bytes": 17240
+    },
+    {
+      "path": "native/windows/configure_project_mcp.test.mjs",
+      "sha256": "e543858f776b7de59ceacbd23fe73d51e8dbd0e506a0f8a3cb52181bc833a326",
+      "bytes": 11499
+    },
+    {
+      "path": "native/windows/disable_unified_tunnel.ps1",
+      "sha256": "3fdb6bdc5ee5aff36ed91c9cc151722c874ebf42cb1e3c1c82f714d7deeb376a",
+      "bytes": 1782
+    },
+    {
+      "path": "native/windows/export_release.ps1",
+      "sha256": "dbc721b1f135765028c3a3cb375e905ebbf9c8bb2da1e1776e96b76acc8ee23e",
+      "bytes": 8817
+    },
+    {
+      "path": "native/windows/ghost_scheduler_host.py",
+      "sha256": "1c5381394a4015e92fee2e9243f8a0efca9b05077384bfae66e1cb6b413fcad8",
+      "bytes": 87452
+    },
+    {
+      "path": "native/windows/ghost_task_scheduler.ps1",
+      "sha256": "4ad82c6d48cac0ccff1a2cc2d52a04b4ad52da0177c1d0aa6f26bd45feda88e5",
+      "bytes": 19389
+    },
+    {
+      "path": "native/windows/install_claude_complete.ps1",
+      "sha256": "bda51dd12d216d3622ca4f5968e315a8a66ca9fa057496b87beb0cab22b22f99",
+      "bytes": 29289
+    },
+    {
+      "path": "native/windows/manage_claude_complete_dashboard.ps1",
+      "sha256": "81ca0d989c3259bcdf4d56faab975e54d5747a739112a870753979e87b3c5eea",
+      "bytes": 15503
+    },
+    {
+      "path": "native/windows/manage_claude_office.ps1",
+      "sha256": "73622ef220b3abb871361320f71dab48bce230d4bbcf570b6d98806741ab8431",
+      "bytes": 49163
+    },
+    {
+      "path": "native/windows/manage_dashboard_shortcut.ps1",
+      "sha256": "515c2d52d1c6a1be7c164de7913bbe72b922d9d47fc2fd72fe4b794514fe64f4",
+      "bytes": 4146
+    },
+    {
+      "path": "native/windows/manage_ghost_scheduler.ps1",
+      "sha256": "0de46af548e3e83dcc3c94baf37a0c7fec929930bec49d6bef392a3b7e414e31",
+      "bytes": 32581
+    },
+    {
+      "path": "native/windows/manage_native_windows.ps1",
+      "sha256": "020d882f04ac93602cdacc377c8f7c6aaf5ac80784f2ac49f5e7303e12451b51",
+      "bytes": 99705
+    },
+    {
+      "path": "native/windows/manage_unified_gateway.ps1",
+      "sha256": "c2d0257897e7c3f94b8b90b86a2febdff79b6ae797540fc400d091c2d3ff1b1b",
+      "bytes": 11511
+    },
+    {
+      "path": "native/windows/native_runtime_acceptance.py",
+      "sha256": "f3ce67ffd28f5f8fa97a138831445c23c59c5610093af160e117b57c40476fc9",
+      "bytes": 10957
+    },
+    {
+      "path": "native/windows/open_dashboard.ps1",
+      "sha256": "751c68525ade7ae22cdd15d1342bb18085595db12db699f2c372c7ecf4ca67e7",
+      "bytes": 609
+    },
+    {
+      "path": "native/windows/openmausbot/AGENTS.md",
+      "sha256": "867b60ed5e26c5ec36f67b787654f1b95df631f283e7344a50f61e90af5591c5",
+      "bytes": 2925
+    },
+    {
+      "path": "native/windows/openmausbot/claude_mcp_launcher.mjs",
+      "sha256": "23974aa0295f9ddc866e2edcd484ac8991dc9b7642d8cc6f735fa141948f5f71",
+      "bytes": 2457
+    },
+    {
+      "path": "native/windows/openmausbot/install_shared_rules.mjs",
+      "sha256": "9603ff0c086806cef28a1129396d5ce730691518e3955739ceeca58b532f6f30",
+      "bytes": 4173
+    },
+    {
+      "path": "native/windows/openmausbot/omb_integration.test.mjs",
+      "sha256": "5ce8e642d6870b9fb3a93948d45c0149b53527c219c0d97663a4e4e0848f159a",
+      "bytes": 5086
+    },
+    {
+      "path": "native/windows/parity-receipt-production.example.json",
+      "sha256": "25dc5c7aa5f8275754f85ff292ed3c516ab910d85e8daf2d1ed1078b1db754b9",
+      "bytes": 3264
+    },
+    {
+      "path": "native/windows/parity-receipt-windows.example.json",
+      "sha256": "5d6e9e50e09fcbeb3be6b420b0e17281ea0c2e530a3c24694417b5b514dfaedf",
+      "bytes": 3262
+    },
+    {
+      "path": "native/windows/plan_claude_code_windows.mjs",
+      "sha256": "524f01f3329c771739c91da0157c7172351eb9ce63ae239bff65d2debf13f8ba",
+      "bytes": 5648
+    },
+    {
+      "path": "native/windows/plan_claude_code_windows.test.mjs",
+      "sha256": "f33fec62413a99a8736e9670ae89d6a435da0d03f98f9b2ad334c630bb1e4f50",
+      "bytes": 3936
+    },
+    {
+      "path": "native/windows/plan_option2_upgrade.py",
+      "sha256": "4263f21dea408c234827b9a1c25e3366f803dbea1eb462c1878be387de7cf14a",
+      "bytes": 6369
+    },
+    {
+      "path": "native/windows/preflight.ps1",
+      "sha256": "a23e8433c2d0574c71fc6cc3857c14d7b47718ff0a56c99ce300bf6559ae8d49",
+      "bytes": 5885
+    },
+    {
+      "path": "native/windows/prepare_option2_candidate.py",
+      "sha256": "c9c42b28dd08c6bc0bd3a2a10c932a7ef26c0476023c38b9d3bc8f7bc7106f2c",
+      "bytes": 7950
+    },
+    {
+      "path": "native/windows/provision_connectors.py",
+      "sha256": "1b6a2697dc24d91bc633903f86ee0705b46f14e4fba85e49a703122ade31c7a4",
+      "bytes": 36366
+    },
+    {
+      "path": "native/windows/provision_memory_identity.mjs",
+      "sha256": "c4a1542ceab93550e1db1efb15b1a761d7e11ecea1d2d96acb8215caa198f6a8",
+      "bytes": 19481
+    },
+    {
+      "path": "native/windows/provision_memory_identity.test.mjs",
+      "sha256": "54629eab9f7dad7c628e4877b1adb621c7ec29298cd718b6df488cb3fa17b4f5",
+      "bytes": 13272
+    },
+    {
+      "path": "native/windows/provision_repoql.ps1",
+      "sha256": "5cf7f9f4c30dd6df4db77ddaeb7afdb50ae0b16309f8b841dfdfa86dfe3d1dc7",
+      "bytes": 3324
+    },
+    {
+      "path": "native/windows/refresh_installed_claude_rules.mjs",
+      "sha256": "9a42b8875de1c177dc3991964af9df7c1fdb5e493a572cdc617f0b7bf84c46f5",
+      "bytes": 5920
+    },
+    {
+      "path": "native/windows/refresh_installed_claude_rules.test.mjs",
+      "sha256": "a0b8dfa5f6248459425ab08736172d784b0eb1fcc536a63bfd37904eb37c66b4",
+      "bytes": 4590
+    },
+    {
+      "path": "native/windows/register-supervisor-task.ps1",
+      "sha256": "c0fa8d65988d999cc0f3cf911e2a615ab8a7494f82e34411b13dddd3e1c49a8f",
+      "bytes": 7068
+    },
+    {
+      "path": "native/windows/repoql_compat.py",
+      "sha256": "fbe8fa35e5f0fbccd83cee9f18cf0c6e6ae97d36c25c84fbfec4cbe27b7f1f0e",
+      "bytes": 8686
+    },
+    {
+      "path": "native/windows/requirements-windows-py312.lock.txt",
+      "sha256": "dd246d38a61569e0a0e23e73621e128b187fc4f6782b8e5d455fafe75704a078",
+      "bytes": 763
+    },
+    {
+      "path": "native/windows/runtime-pins.json",
+      "sha256": "5e4d6ced4477ffffdde1188b834bd58698f3d65f001a0fcfc421558b3a3705ed",
+      "bytes": 1623
+    },
+    {
+      "path": "native/windows/runtime_closure.py",
+      "sha256": "b19f1f385c2df56a44a9dccfe66792055b1e6d25a105cebf53553c5f71aee40f",
+      "bytes": 6291
+    },
+    {
+      "path": "native/windows/rust-supervisor/Cargo.lock",
+      "sha256": "6fc2895f98704b41cfa148417f67c993684dd7953c613f6b04e8e78b9a87bb13",
+      "bytes": 2687
+    },
+    {
+      "path": "native/windows/rust-supervisor/Cargo.toml",
+      "sha256": "7485b404d5290e59b93819fef8999499e7d18e1088dbb59fa6075ed3031fb437",
+      "bytes": 274
+    },
+    {
+      "path": "native/windows/rust-supervisor/README.md",
+      "sha256": "eccb65fedc9674d7c8171c951966e9cf24c3f5bb1b85f7bafe5b3068c379fa3c",
+      "bytes": 1487
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/backend_capacity.rs",
+      "sha256": "714bee278aa17fc627404a56615f9492db7e560886e264413279975d224ecdc7",
+      "bytes": 2444
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/bin/singularity_windows_supervisorw.rs",
+      "sha256": "54f1e5d32004814945281c2bdb1c91951cc4490921518ec62cc592805aca46ae",
+      "bytes": 1270
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/lib.rs",
+      "sha256": "ffde722f69e87b52af770fdee250a202a4d88f14c3df6357986a47561fbfd110",
+      "bytes": 25507
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/main.rs",
+      "sha256": "0407c20f0c9551955f6925c4ab3a1d7048e3339d6cbcbf731d4052a59dc7daeb",
+      "bytes": 910
+    },
+    {
+      "path": "native/windows/scan_source_archive.py",
+      "sha256": "3a721814212cfd110ae8717726b1c804a85fe0308a0bb3b30a903a42a1359d3c",
+      "bytes": 7769
+    },
+    {
+      "path": "native/windows/silent_python_host.py",
+      "sha256": "6cd8f47f1401a8c11701aff02bb03a97d3c225cc932bce16e1c1da72ea31cb3e",
+      "bytes": 2817
+    },
+    {
+      "path": "native/windows/smoke-stage.ps1",
+      "sha256": "9d3f594fba6ce73d8e0444e408fb02efd247842956517034925c6ec7d2e585c7",
+      "bytes": 3645
+    },
+    {
+      "path": "native/windows/stage-native.ps1",
+      "sha256": "1fde64680d1f46a2cdbdddca67a90a583cef9378a63833b7eca14101620ef922",
+      "bytes": 25634
+    },
+    {
+      "path": "native/windows/start_unified_gateway.ps1",
+      "sha256": "1e9c1a9564c884c0d9f990e626ccad358ae215011298c1192ca9c106805a7b93",
+      "bytes": 3159
+    },
+    {
+      "path": "native/windows/test_build_supervisor_config.py",
+      "sha256": "3a3856d08cb815f10b144de95bf10f473bb9d4069748375170119aead188a61c",
+      "bytes": 5615
+    },
+    {
+      "path": "native/windows/test_claude_complete_acceptance_matrix.py",
+      "sha256": "284b8b3f6c6840f87e4e35814a5354d58473460218574d4761516685d1647b53",
+      "bytes": 4120
+    },
+    {
+      "path": "native/windows/test_claude_complete_gui_acceptance_plan.py",
+      "sha256": "563148cd682370e67513583048d7b5e3c0384e212aa9b0d0663ea528e32048d3",
+      "bytes": 1527
+    },
+    {
+      "path": "native/windows/test_claude_complete_release_audit.py",
+      "sha256": "e5db1e1c2c8e2af1a50666cf244a7589ebaf0f2cc0122cdb9c23eb0417d4d35b",
+      "bytes": 1983
+    },
+    {
+      "path": "native/windows/test_claude_complete_windows_probe.py",
+      "sha256": "16c65e7aac71d0acaa8a73b4113c3109056e8899ee6415c16d59ca5fdad5eae3",
+      "bytes": 4631
+    },
+    {
+      "path": "native/windows/test_claude_package_config_integration.py",
+      "sha256": "ca825ec698ffbc6c92f3c974290517b634cfd842c5636f72a98fd85cb888ac11",
+      "bytes": 4917
+    },
+    {
+      "path": "native/windows/test_connector_provisioning_contract.py",
+      "sha256": "33cbced94ce569913906f3b2633f2bf0c7b2c6dc1b979cc6aa5401c6abe2aea0",
+      "bytes": 29044
+    },
+    {
+      "path": "native/windows/test_cpu_collector_component.py",
+      "sha256": "3139c3632bbd76df684d08fa52902abbf3516a5faa911db7e2aca0cac734108e",
+      "bytes": 4066
+    },
+    {
+      "path": "native/windows/test_dashboard_shortcut_contract.py",
+      "sha256": "69453063ff3cbae2a2ffce0b21861db2c5f4da95a46fbd885b7edecfe8da91c9",
+      "bytes": 4279
+    },
+    {
+      "path": "native/windows/test_ghost_scheduler_host.py",
+      "sha256": "afaa10562691f499767c5ce630300c3a3ee6f650306e3b8f0b6291ac9dca2df1",
+      "bytes": 35405
+    },
+    {
+      "path": "native/windows/test_install_claude_complete_contract.py",
+      "sha256": "1994ecf180e11f51d62ac850daad8918b5795343a88bac0954d1a5804dff26ef",
+      "bytes": 4410
+    },
+    {
+      "path": "native/windows/test_kanzo_imported_view_source.py",
+      "sha256": "87a71dc0a147d5920709fecd533270e56cc5f4d2b55b506c86065a34715889ae",
+      "bytes": 1750
+    },
+    {
+      "path": "native/windows/test_native_ghost_client_config.py",
+      "sha256": "a9d2d10abe0a27528f362fd159685fa3dcfade84595ab83046a291febd866e8f",
+      "bytes": 4663
+    },
+    {
+      "path": "native/windows/test_native_install_lifecycle_behaviour.ps1",
+      "sha256": "fd2ea3cd0c9a6f6d81edb4f2eeeb5070ab5e61150cf5ffa9f8896f166787adaa",
+      "bytes": 29513
+    },
+    {
+      "path": "native/windows/test_native_install_lifecycle_contract.py",
+      "sha256": "1952dc498bc69c98bf69a8bce37d63f1ffa56d168e911c6a71e6931112b88c03",
+      "bytes": 37995
+    },
+    {
+      "path": "native/windows/test_native_runtime_acceptance.py",
+      "sha256": "869d27ebfb140dba372d0cea5091edcc8b58679c6e80c400ac685ba5c74ecd84",
+      "bytes": 5313
+    },
+    {
+      "path": "native/windows/test_native_source_boundary.py",
+      "sha256": "0725570175dc75849f533be1ad84c051ab2ce9aa5cd7bcfc016492130b73586b",
+      "bytes": 3031
+    },
+    {
+      "path": "native/windows/test_office_ghost_only_patch.py",
+      "sha256": "e4f2d4c6d4bdef2c99681b54ac68e0e133f8925775410e494cccf120739bbe2f",
+      "bytes": 15217
+    },
+    {
+      "path": "native/windows/test_office_native_contract.py",
+      "sha256": "2fb3c8548ed0e6dc6bcdc994c5a6963b53a60b39e655e4b4bafc90a9912c3eab",
+      "bytes": 1637
+    },
+    {
+      "path": "native/windows/test_office_restage_behaviour.ps1",
+      "sha256": "f1eb0beb43c1cc9e0c1c4df56526abc7b7a5d91f6b983f941cc6cf70c7c0a72d",
+      "bytes": 18238
+    },
+    {
+      "path": "native/windows/test_openmausbot_windows_package.py",
+      "sha256": "8f5468922c4ab3d7582a040279e6b6b7936399c16157bc58fbfcbe3d514cd841",
+      "bytes": 1386
+    },
+    {
+      "path": "native/windows/test_option2_acceptance_bundle.py",
+      "sha256": "7cb085921fbe08f9ff063f348fe3fe5a1eb9e158ce5445f1aad29a6db3b6f72d",
+      "bytes": 7293
+    },
+    {
+      "path": "native/windows/test_option2_dashboard_wiring.py",
+      "sha256": "5b255e7ab541ea056f1605721a8b880f827a5f6c62d109c2ede91f0e25142674",
+      "bytes": 6881
+    },
+    {
+      "path": "native/windows/test_plan_option2_upgrade.py",
+      "sha256": "a958251746992273bb178923934868d45e215deb40ed904766175f0e1db73827",
+      "bytes": 3860
+    },
+    {
+      "path": "native/windows/test_portability_audit.py",
+      "sha256": "5e1a67dfad08abefec8ec5fbed05331ff5b980965e17ff8b8529c1ad4fea08d2",
+      "bytes": 1040
+    },
+    {
+      "path": "native/windows/test_preflight_contract.py",
+      "sha256": "29a9f4e0823a7e034efb2c6154e2bd7d8316061b498b6a62cf910d203c082abc",
+      "bytes": 1033
+    },
+    {
+      "path": "native/windows/test_prepare_option2_candidate.py",
+      "sha256": "a3a7add820e473a3a075ab85766abf0a6fd9be04dcee787d71922978dd7a96f6",
+      "bytes": 5099
+    },
+    {
+      "path": "native/windows/test_production_parity.py",
+      "sha256": "534106372af75c9e3074886c712101dfa2298b40e93a774ec133494025748e66",
+      "bytes": 3045
+    },
+    {
+      "path": "native/windows/test_project_mcp_package.py",
+      "sha256": "5fdfb052367b97336c1d61467deead0f1aecda2f4dc16d1739d421f87ef79a22",
+      "bytes": 3669
+    },
+    {
+      "path": "native/windows/test_provision_connectors.py",
+      "sha256": "cc30d8825a7208540044e97315d2f2c6f8fd72821f8cef70bd819a0b58184fdd",
+      "bytes": 26720
+    },
+    {
+      "path": "native/windows/test_repoql_bare_version_source_contract.py",
+      "sha256": "2dab66c0e34122f2c299d835ca2150ae75d610a43e456594181e2ad4332a334b",
+      "bytes": 1484
+    },
+    {
+      "path": "native/windows/test_repoql_compat.py",
+      "sha256": "ba3f49126e115085b7f5665aff364147137b2f776e89b3f1d459cdcbcb758f63",
+      "bytes": 5760
+    },
+    {
+      "path": "native/windows/test_repoql_release_consistency.py",
+      "sha256": "ec2942e7dd4d8ffd9f907b0e72594c9ad013e69542dc7eddb3ccb6ae883a1092",
+      "bytes": 3061
+    },
+    {
+      "path": "native/windows/test_runtime_closure.py",
+      "sha256": "263a36f8deaa4c71a87994995774d1e2b9d0e31afbcd58e219b604535f94115e",
+      "bytes": 2228
+    },
+    {
+      "path": "native/windows/test_rust_case_lock_contract.py",
+      "sha256": "da4dc8649625b2fa9e28c95a3e9a390b510678ae959baaa69e984f6c0cbbc085",
+      "bytes": 1220
+    },
+    {
+      "path": "native/windows/test_rust_lock_release_gate.py",
+      "sha256": "077e620b2984a2969948e66e12c37417005a764b71e4ed4c79430a5b7f179654",
+      "bytes": 2573
+    },
+    {
+      "path": "native/windows/test_rust_supervisor_source.py",
+      "sha256": "e11ab3509502e303cd2ce29904dec27a7086c48a7b7b61d01d264a74a57ccd32",
+      "bytes": 3826
+    },
+    {
+      "path": "native/windows/test_scan_source_archive.py",
+      "sha256": "1ab3d36bea3d1136371b48aea516c4b172161a6cce436b34e2b7095766ae8f40",
+      "bytes": 2282
+    },
+    {
+      "path": "native/windows/test_scheduler_fail_closed_contract.py",
+      "sha256": "5ec43c6a546cf7198462a7c41acf7149605134a5fc1faae9f22ab2ddd62eac0d",
+      "bytes": 1006
+    },
+    {
+      "path": "native/windows/test_silent_runtime_contract.py",
+      "sha256": "9af0f3c97ee8a9fadc9ac530bdee3ba823436e2ecec6c7767901f0c29cecea0e",
+      "bytes": 3881
+    },
+    {
+      "path": "native/windows/test_source_variant_feature_exclusions.py",
+      "sha256": "df8100fc1463ce0217cca197c7cf7e2def4231bb43252e51078242928c3a955c",
+      "bytes": 1386
+    },
+    {
+      "path": "native/windows/test_stage_native_contract.py",
+      "sha256": "bccd8672f5ae3d1f0c52e5c3284d7c1b32a83dbfe37c4adf8ded58a8c216a741",
+      "bytes": 4202
+    },
+    {
+      "path": "native/windows/test_staging_rollback_source_contract.py",
+      "sha256": "08b52e704d78ab132eccfb91f9f2883a359b76dac0a64c6d395aebfc0dc6ea14",
+      "bytes": 1422
+    },
+    {
+      "path": "native/windows/test_supervisor_readiness_contract.py",
+      "sha256": "0e9b9fe28eebaef20cf1cb4d8179003407d9aa4dedc4dc298a7e326c03480c58",
+      "bytes": 1896
+    },
+    {
+      "path": "native/windows/test_supervisor_registration_source_contract.py",
+      "sha256": "d2ce31d3912032b45217dcc685f296b0940f57c4d34220549196a45253bb44f3",
+      "bytes": 1569
+    },
+    {
+      "path": "native/windows/test_trace_linux_assumptions.py",
+      "sha256": "5babd96844b41706f56d17370f0d7c01d34bc829f1ae14fdabd7134f861303ba",
+      "bytes": 1092
+    },
+    {
+      "path": "native/windows/test_unified_gateway_dashboard_pairing.py",
+      "sha256": "0559b9b00aaca63e69eae55195e595e4eae5024ad1fc3b53f66b7c306f70786d",
+      "bytes": 1489
+    },
+    {
+      "path": "native/windows/test_uninstall_claude_complete_contract.py",
+      "sha256": "c6feceb77f6fb69b2651fe9e31a4f7ff993dd37399428f62883e22881d0945d3",
+      "bytes": 3137
+    },
+    {
+      "path": "native/windows/test_verify_installed_contract.py",
+      "sha256": "9faa5ad3bb93a599ad8a0c7f326f39f47451bc332df89f64dff2ce798bb973a0",
+      "bytes": 1116
+    },
+    {
+      "path": "native/windows/test_verify_option2_expected_digest.py",
+      "sha256": "fb99f2d945a0eecd94b56f95bd873b72b7786ddbb9198f90f435de67ca813466",
+      "bytes": 2765
+    },
+    {
+      "path": "native/windows/test_verify_prepared_option2_candidate.py",
+      "sha256": "8b4690579048495ddd296de8b81029b7e8b758cb6d7a758ec0b2aa130e83ac3b",
+      "bytes": 6198
+    },
+    {
+      "path": "native/windows/test_verify_supervisor_task_contract.py",
+      "sha256": "aacdb3322e375cedb4066174553779083644c31042cafafc81af07025ec8cb54",
+      "bytes": 1232
+    },
+    {
+      "path": "native/windows/test_windows_authority_contract.py",
+      "sha256": "e203b55391192283f14440f77fb3459f8bb5abae6b7a9867a36d95e9bd036664",
+      "bytes": 3213
+    },
+    {
+      "path": "native/windows/test_windows_memory_gateway_source.py",
+      "sha256": "c2982bd850631d80719ad17aae7241efac526a1e46bd0b6de31016b638ba3e78",
+      "bytes": 5379
+    },
+    {
+      "path": "native/windows/tests/test_ghost_task_scheduler_ps51_smoke.py",
+      "sha256": "3701a8808eb6c4cf023d4f63555aba1455afd2222ce0cf9ac95d2fd8171d4126",
+      "bytes": 4383
+    },
+    {
+      "path": "native/windows/tests/test_ghost_task_snapshot.ps1",
+      "sha256": "e3a2da4e699be87e986fd710f9aef501c166db1a8679cb8b1ad99237532c2da0",
+      "bytes": 5332
+    },
+    {
+      "path": "native/windows/tests/test_host_dashboard_contract.py",
+      "sha256": "3d2b3613bbe616caf8669e1d02202622bca31159e99b807feedd35361a8bcedc",
+      "bytes": 2938
+    },
+    {
+      "path": "native/windows/trace_linux_assumptions.py",
+      "sha256": "74f3af9f3354318d146fc4d620d8642ce9123657646f0e1636135e6929fab233",
+      "bytes": 2944
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/Cargo.lock",
+      "sha256": "11350275dd8ad82c841fe2133ba07c518e21fdc422fbff87c19b3124e7a0b7a2",
+      "bytes": 24886
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/Cargo.toml",
+      "sha256": "583300994dd1bd6bcfe051bf5b350f354ac177136460a1bc31ac20f8e5de70cf",
+      "bytes": 290
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/README.md",
+      "sha256": "f46ff4374a8e45659387713e3a2a7096d26499a88136afb2dd6eaf0e328612b7",
+      "bytes": 4010
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/kanzo_board_audit.rs",
+      "sha256": "ce0e03dad0b626f51088d79bd4808d12e1316450b9b7ce4f097a48884ae39eb1",
+      "bytes": 4834
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/memory_scope_audit.rs",
+      "sha256": "47e87d66f2eb8113f3aa23d85848d5ca0034e7d0040882ee9e4a7ca477c08c31",
+      "bytes": 6567
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity_dashboard_open.rs",
+      "sha256": "a1042a6e13fd77db4f0a2a7374a08dca7851a4114afa824ceb868ee1d1771fb8",
+      "bytes": 2310
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/main.rs",
+      "sha256": "05fae0f6a571963176cf7209b45efa453676fed4a2b86027fbbf2b1a716daf0d",
+      "bytes": 98412
+    },
+    {
+      "path": "native/windows/uninstall_claude_complete.ps1",
+      "sha256": "b60f55ce79d799abd52c76f7b60c637cc7f27373a030947fc564c5903388c762",
+      "bytes": 8855
+    },
+    {
+      "path": "native/windows/variants.json",
+      "sha256": "541820a1d4662e11e480b8bfb06e0b296406f65dd5c5a0c40c9e9b18f647a03b",
+      "bytes": 1935
+    },
+    {
+      "path": "native/windows/verify_after_reboot.ps1",
+      "sha256": "00bb950ed3daed010e1d3341a60dd7e39eccad5c4c0028cd692be727bd2a98a3",
+      "bytes": 16123
+    },
+    {
+      "path": "native/windows/verify_option2_connectors.py",
+      "sha256": "3768cc5aafa75bf0abd3a4c3c86ede348a6346cd23d96b9765e56ef24f04360c",
+      "bytes": 2737
+    },
+    {
+      "path": "native/windows/verify_option2_expected_digest.py",
+      "sha256": "f70aa5872e3861d0512ea32b0d380d2e95bc55ae60c9421637e8f81caf7ad288",
+      "bytes": 3657
+    },
+    {
+      "path": "native/windows/verify_prepared_option2_candidate.py",
+      "sha256": "68452271bceb65182fc909fcc452d2772cdfe59755e5a6103f77438a33281619",
+      "bytes": 6033
+    },
+    {
+      "path": "native/windows/verify_source_release.py",
+      "sha256": "8b60f82ddb413dc0ad539dcbf385c0ce6bc449ffd8ccafe60be48d542590d3c6",
+      "bytes": 8068
+    },
+    {
+      "path": "native/windows/verify_supervisor_task.ps1",
+      "sha256": "97d5d8f6d70b14b9162229403845d558ca2384f6da4c657ec64926fc7272fb4d",
+      "bytes": 3669
+    },
+    {
+      "path": "native/windows/windows_source_policy.py",
+      "sha256": "62a518793f8b00fbc791fb1108152bd019d94747bc1ffcdfc24069a4056c86ff",
+      "bytes": 1775
+    },
+    {
+      "path": "office/LICENSE",
+      "sha256": "1605cdfa94fa4cbe47338cf5d7db9769fe4e795992594667f27ec4fa31a0558a",
+      "bytes": 1069
+    },
+    {
+      "path": "office/PROVENANCE.md",
+      "sha256": "911534bbbbc34c18be7dc068794f6a542da263070df26cd7c69382133a14ef7d",
+      "bytes": 12528
+    },
+    {
+      "path": "office/README.md",
+      "sha256": "f344367ca847afa7df5c06d1176d28321247ea0805500ae96f08bc46eb048150",
+      "bytes": 3375
+    },
+    {
+      "path": "office/assets/ben-layout.json",
+      "sha256": "4fc64eeab169901bd447fff63ac35d28986180d778a50d1252b9b4b671210d99",
+      "bytes": 3581
+    },
+    {
+      "path": "office/assets/ben-saved-layouts.json",
+      "sha256": "6cce0cc278547071c75141de3af664cad94b121e12091d265ba158a3eac94005",
+      "bytes": 3624
+    },
+    {
+      "path": "office/office.deployed.override.example.yml",
+      "sha256": "e02e209c16d7c5ae02dec280ce43545e3ba0aca9269b15664de4c554716d805d",
+      "bytes": 852
+    },
+    {
+      "path": "office/patches/ben-default-layout.patch",
+      "sha256": "25c01dd241aca8d4cf4ccaaf05b324ea8cff77b6e84b2a36785728e4e9002e6d",
+      "bytes": 2183
+    },
+    {
+      "path": "office/patches/boss-desk-unconditional.patch",
+      "sha256": "6428d166c362b38c38a788f79558d8742f50f438515e83ffb1cb9153aa7e8f14",
+      "bytes": 1086
+    },
+    {
+      "path": "office/patches/desks-unconditional.patch",
+      "sha256": "ac596acd7127022eab515895afd9de0866606d95d552aae6474419ee06282368",
+      "bytes": 2911
+    },
+    {
+      "path": "office/patches/windows-ghost-only.patch",
+      "sha256": "d48f56f51d2a5600137d5de06499e2442c7c11c3d07d0552b9dc9a2f9cb2740d",
+      "bytes": 2025
+    },
+    {
+      "path": "office/patches/ws-loopback-origin.patch",
+      "sha256": "82592253b5ee0260825c63c4eca0c2cb6b1905a68101003d18bd46f9e33684d1",
+      "bytes": 652
+    },
+    {
+      "path": "office/requirements-windows-py312.lock.txt",
+      "sha256": "a60bbb0d6e570c159ac99b42591585e0ec099117bafd9d211924a89d4a6be206",
+      "bytes": 1441
+    },
+    {
+      "path": "office/requirements-windows-py313.lock.txt",
+      "sha256": "a504a71bcf4ee2fe02b3b357fdf0ddfe9b74ecb1923ce8efd2a47b15552a682e",
+      "bytes": 1190
+    },
+    {
+      "path": "openchamber/AGENTS.md",
+      "sha256": "b023cbcf7d0c99a99d8bfda9e0b6acf11a6feb7370e2d95152ea8f9ed4d2fd02",
+      "bytes": 16390
+    },
+    {
+      "path": "openchamber/agents/board.md",
+      "sha256": "70a4de0225fbf6773b7515a8a431cfe199051cc54beaf2bd12d75ae2921c58a8",
+      "bytes": 2761
+    },
+    {
+      "path": "openchamber/agents/code-reviewer.md",
+      "sha256": "de54fd05ca0fbb687f1f2d0c1f99c85c2421781d25062a7539425040c0f8b21b",
+      "bytes": 4303
+    },
+    {
+      "path": "openchamber/agents/duel-coordinator.md",
+      "sha256": "8a8b91c612936699ed962598aaa590eb4cefdc39c827f7ae6fb66e2bc89d2ebe",
+      "bytes": 3071
+    },
+    {
+      "path": "openchamber/agents/duo.md",
+      "sha256": "ca000766fa561f41de83ffbc315eee250bd45b1f326b5562b9f49e51605ec098",
+      "bytes": 4020
+    },
+    {
+      "path": "openchamber/agents/explore.md",
+      "sha256": "28b02e06d17e7d92c880cce1f080ad42ba3da9f683f48dfa74fa8c7d47404b0d",
+      "bytes": 834
+    },
+    {
+      "path": "openchamber/agents/fleet-reviewer.md",
+      "sha256": "52317dad4a7a6fb31dc6c6ecf73af1521316324fdc8c6f0cb1c058f6797b4242",
+      "bytes": 2491
+    },
+    {
+      "path": "openchamber/agents/free-mode.md",
+      "sha256": "ea7c16b609d8009a91b456b5efa7c8585ee60eeb452be80dba490dda7e3f295a",
+      "bytes": 3104
+    },
+    {
+      "path": "openchamber/agents/general.md",
+      "sha256": "c031ec3c756977e3d423ff975b7eda631edce474b3fd24cdec294b863b17c87f",
+      "bytes": 878
+    },
+    {
+      "path": "openchamber/agents/ghost.md",
+      "sha256": "bede943fdd103863b343cc3ce049449e6b7e40a868d6a685cc7315d6c19d22ce",
+      "bytes": 5514
+    },
+    {
+      "path": "openchamber/agents/orchestrator.md",
+      "sha256": "ac0283e30ebb22fba0544c5653a079d8f2efd450b6dfc7635ca4cfabf7e8f6c4",
+      "bytes": 6302
+    },
+    {
+      "path": "openchamber/agents/quad-coordinator.md",
+      "sha256": "5f7537ea2f78237a814eb68e402b6ec4f8c777e5f5996aea03335a86168de2d3",
+      "bytes": 2568
+    },
+    {
+      "path": "openchamber/agents/quality-fixer.md",
+      "sha256": "799368fce6242f45350f314d6519723106ab1f99db56fa041236e3858fc57710",
+      "bytes": 837
+    },
+    {
+      "path": "openchamber/agents/researcher-web.md",
+      "sha256": "3bcafdb9ddba4976631ed1a9838ee740b7fbf5145f22e5de81a39bbba486a0a3",
+      "bytes": 885
+    },
+    {
+      "path": "openchamber/agents/solo-coordinator.md",
+      "sha256": "16bfd9a3de22b013424fd665d63d12fcf815dc5b376913d367315505ef9dae3c",
+      "bytes": 4312
+    },
+    {
+      "path": "openchamber/agents/standalone.md",
+      "sha256": "48b55d96f9aa441ff43e63224eed4430d428da4262b9b163e4064ebc1c1b6555",
+      "bytes": 4470
+    },
+    {
+      "path": "openchamber/agents/super.md",
+      "sha256": "9276a6ded2d078e5fee0b36a961b702e6e152c06f32f39017ee39813c759e021",
+      "bytes": 5302
+    },
+    {
+      "path": "openchamber/agents/thinker.md",
+      "sha256": "6e78aec5932718d507c27d6b43d8ddd2bdc3119ae45d41e6cf492796b9e17b26",
+      "bytes": 1055
+    },
+    {
+      "path": "openchamber/dcp.jsonc",
+      "sha256": "59080a1d557c43207d43c282f4a29de90bfe73bcccc0f680657e41c1cc4b30e5",
+      "bytes": 550
+    },
+    {
+      "path": "openchamber/examples/mcp-remote-example.jsonc",
+      "sha256": "626a202cacec6cedda28361ab7ac1869c553b2e3b75c6195e9f583e264f1c082",
+      "bytes": 274
+    },
+    {
+      "path": "openchamber/examples/provider-openai-compatible.jsonc",
+      "sha256": "be432685fcd2a291cd1b48595e6076130144ed1b14d2530e881ae65f60b80309",
+      "bytes": 413
+    },
+    {
+      "path": "openchamber/package.json",
+      "sha256": "079aeaf7dc6b891a6206ae8168fabb4eedf0d5843032ed6e5a456ecbe07f0fdb",
+      "bytes": 86
+    },
+    {
+      "path": "openchamber/plugins/product-office/README.md",
+      "sha256": "0c0b7603f48cdb2b265365a86f071474cd8a7e796d8a9956970b60845281662f",
+      "bytes": 2701
+    },
+    {
+      "path": "openchamber/plugins/product-office/index.js",
+      "sha256": "859110a049470b0306a08be8f7f04bd54b0fef0ce04c8ccf5f914c1629caf206",
+      "bytes": 12011
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-reconcile.js",
+      "sha256": "abf806e7e83db51013408e8d9c2d0a5f2bf2d299482ce3df721860845dc4c3f9",
+      "bytes": 1802
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-reconcile.test.mjs",
+      "sha256": "327a5356ab8b05c7a9810c333da5b7a9677b47b748e367c8ae38c5f29bfadca5",
+      "bytes": 5701
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-turns.js",
+      "sha256": "810559d31a3c4822ac67b5643f9872b459964e698080eea250ecea74230f37d3",
+      "bytes": 2959
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-turns.test.mjs",
+      "sha256": "391b44f4f71ca3f1636d7d66473290de73a0f74f05b396d4d555c2f7a2db1d82",
+      "bytes": 3594
+    },
+    {
+      "path": "openchamber/plugins/product-office/native-contract.js",
+      "sha256": "e334c638090c6f98181e42bb5ebe1f123c6821785b579564c81401fc16f0b837",
+      "bytes": 642
+    },
+    {
+      "path": "openchamber/plugins/product-office/native-contract.test.mjs",
+      "sha256": "e1478229066ece4be8cf1d7da7aa1f9a8cf6d55845c3e272a7cb37887167e6d8",
+      "bytes": 773
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-events.js",
+      "sha256": "7fe9ced396ad41e98c3e76f609036b09095ca5ad88772c58dec3bb4983eaa80c",
+      "bytes": 1960
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-events.test.mjs",
+      "sha256": "79fa84e1d93d50ac13ea75b1bcd0e8cb6ff3449bb69954db2516e2a7d736e4ec",
+      "bytes": 1904
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-transport.js",
+      "sha256": "65598d2f39dad4cca8ab7398ddc9c9598b5c67562083c2c552ecfbc5c5e13bc3",
+      "bytes": 1331
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-transport.test.mjs",
+      "sha256": "b0c61422ba59d30a56017a2888a086ea3a7f717b47199ae0ed2f81a4ad8f91d0",
+      "bytes": 2321
+    },
+    {
+      "path": "openchamber/plugins/product-office/package.json",
+      "sha256": "202777680bed6f4e5e8eb60061eb464883783c55c56997e6206a813fdc7c55b8",
+      "bytes": 355
+    },
+    {
+      "path": "openchamber/plugins/runbook-nudge/README.md",
+      "sha256": "36b5df11e4e576d00eee4bb398310d4651cd96ff391efe84d46b6ddb2814de13",
+      "bytes": 2235
+    },
+    {
+      "path": "openchamber/plugins/runbook-nudge/index.js",
+      "sha256": "a9342edf190e042b35180fb1da43bd7904c039ba2f61dd8e9188e5cb677e1825",
+      "bytes": 16411
+    },
+    {
+      "path": "openchamber/plugins/runbook-nudge/package.json",
+      "sha256": "52c5cdf01c1e990dad361c375eff180efb9e702c76c290fc519d117e2492c06e",
+      "bytes": 377
+    },
+    {
+      "path": "openchamber/plugins/runbook-nudge/runbook-nudge.test.mjs",
+      "sha256": "fd554b71e4505f3cf66bd8065b579ec4a4e154011523c6436dcfdcc0f3183149",
+      "bytes": 11978
+    },
+    {
+      "path": "openchamber/skills/board/SKILL.md",
+      "sha256": "f137272c20f50f8b32a6f664ce8bf22685d8369ceba2010f657bb8b4cc523665",
+      "bytes": 2613
+    },
+    {
+      "path": "openchamber/skills/claude-office-visual/SKILL.md",
+      "sha256": "f35f2149f3b36345f3a03075a2db299a8a59d89b1397157ced83430a4b43932a",
+      "bytes": 3708
+    },
+    {
+      "path": "openchamber/skills/consult-dispatch/SKILL.md",
+      "sha256": "a2d980854c3cc0fe856ba99a1e3bac1f15c0c821fee75c2669de9aa41c1e46b2",
+      "bytes": 2393
+    },
+    {
+      "path": "openchamber/skills/handoff/SKILL.md",
+      "sha256": "965f33def320e8a33e237c33b062550d5169b159300e96505c9571645ce85b2d",
+      "bytes": 1948
+    },
+    {
+      "path": "openchamber/skills/hub-doc-update/SKILL.md",
+      "sha256": "6d4534a0fcb8bcc6bde006d645b2147b421f0642e5999b8cae07e83a2d3fa767",
+      "bytes": 1698
+    },
+    {
+      "path": "openchamber/skills/implementation-review/SKILL.md",
+      "sha256": "35e1cb92869d6108dc41e32e979ea048986250f769254c121c961a3025e81a8e",
+      "bytes": 1273
+    },
+    {
+      "path": "openchamber/skills/issue-closeout/SKILL.md",
+      "sha256": "40db50c564f21dcc04307fe2fb064a17f1498f88a3e643385ed66b51c756ca7f",
+      "bytes": 2860
+    },
+    {
+      "path": "openchamber/skills/mcp-builder/SKILL.md",
+      "sha256": "3509ffa3b4cef687d14b516427575b8356169b8252648c5b2195d6c0cec2df78",
+      "bytes": 3239
+    },
+    {
+      "path": "openchamber/skills/retro/SKILL.md",
+      "sha256": "c819a62ba63984ba6112b529cb978229a0f2e9cfc821bfba7723ec6615ebf6b3",
+      "bytes": 4250
+    },
+    {
+      "path": "openchamber/skills/statusline-builder/SKILL.md",
+      "sha256": "58da257784193631f6395aecd637418feace99224d0d14291bf4a5878995f1a8",
+      "bytes": 1950
+    },
+    {
+      "path": "orchestration/approvals.mjs",
+      "sha256": "bcd5e7f52e77870606d642be546863a185512a1c1e81a70843b506b2dc9e2c2c",
+      "bytes": 3898
+    },
+    {
+      "path": "orchestration/evidence.mjs",
+      "sha256": "683929970988e4c20bcd5b44ef21cb363f26a6cb7c2edf44b20ce881a978c2cd",
+      "bytes": 4245
+    },
+    {
+      "path": "orchestration/governance.test.mjs",
+      "sha256": "a92561666df44b4a5f2b33b0a6453176383d81b5d78bdd92a33e03a04ba8af19",
+      "bytes": 7383
+    },
+    {
+      "path": "orchestration/leases.mjs",
+      "sha256": "863d0e15aa84181a963d4546ebd054ebec2470485acb1c787d84a3a093a2c28a",
+      "bytes": 3513
+    },
+    {
+      "path": "orchestration/modes.mjs",
+      "sha256": "e18717227f0230e605775f243a27c17f2e2cab6f331c372e5a9c04e7c08e07d9",
+      "bytes": 6155
+    },
+    {
+      "path": "orchestration/routing.mjs",
+      "sha256": "e288535b2fdceac66045d5f7780f86ff92efe0b38a7301d2f4aff4bcfce895a2",
+      "bytes": 9442
+    },
+    {
+      "path": "orchestration/routing.test.mjs",
+      "sha256": "3a11729bbc1c8697d1d7f30e4b0defa54c48f055911da15779ee79c495644e82",
+      "bytes": 7135
+    },
+    {
+      "path": "orchestration/runs.mjs",
+      "sha256": "fc6986a7a4493922717494cc1c0a9724fdcc9eb40b3646a40a4e56198b750d60",
+      "bytes": 14243
+    },
+    {
+      "path": "orchestration/stage-machine.mjs",
+      "sha256": "0a17ff82e07a8a1d220cd4a4fb990360d779df12752727f97fda8751efe3efef",
+      "bytes": 19184
+    },
+    {
+      "path": "orchestration/state.mjs",
+      "sha256": "bcd5c7cffd366417f06304a8df431115d0306cb66f7783350ed593048cd9b8b0",
+      "bytes": 5943
+    },
+    {
+      "path": "orchestration/workflow.test.mjs",
+      "sha256": "9da8688556cd07fae0df27945670062f4cfcd8376b855cd5c5be510488fe64a7",
+      "bytes": 37708
+    },
+    {
+      "path": "scripts/acceptance-ordinary-session.mjs",
+      "sha256": "bcc0693b016560163f727aeefa8761cbc67a3287026a136e67dd15a6851f6808",
+      "bytes": 55812
+    },
+    {
+      "path": "scripts/acceptance-ordinary-session.test.mjs",
+      "sha256": "8e4fbfe4ddeaa7acaad0ddaf3a5008ffcab459b2d660d42d01987b2855ceb3e7",
+      "bytes": 11088
+    },
+    {
+      "path": "scripts/attach-openchamber.mjs",
+      "sha256": "f7e00a5ac3d6c6b15ff4dec5440b578eddb9c652457ce2074a4a087584d3ca51",
+      "bytes": 48667
+    },
+    {
+      "path": "scripts/attach-openchamber.test.mjs",
+      "sha256": "3ce54a3416acacc0dab10eb717a37d90d065039a9e7d341ef3e4c38f6f8072ba",
+      "bytes": 29977
+    },
+    {
+      "path": "scripts/bundle-classification.mjs",
+      "sha256": "f1f38591607a263b79647bba2d97b9118537e117bd1806c1311ee301043f3ac6",
+      "bytes": 13393
+    },
+    {
+      "path": "scripts/bundle-classification.test.mjs",
+      "sha256": "efaa885c899e1a5ba5b3485ae5097d5bfa8ddc822bd6d6a0e4e31c9c9010c8f1",
+      "bytes": 9915
+    },
+    {
+      "path": "scripts/cohere-quota.mjs",
+      "sha256": "6d643168b2b68c39aa48e0f49c203917eca64c6a1b05f7856f0dd80a5e6b2f5b",
+      "bytes": 4022
+    },
+    {
+      "path": "scripts/cohere-quota.test.mjs",
+      "sha256": "4337504ac2272f97e57333d5df45b4520a5461836b26d92a4c8a2e44e99982c1",
+      "bytes": 2584
+    },
+    {
+      "path": "scripts/doc-ingest-node.mjs",
+      "sha256": "d692820756c11132a67032ea96b2adadc542e22cfb81ce96902573ffc49f927d",
+      "bytes": 39222
+    },
+    {
+      "path": "scripts/doc-ingest-node.test.mjs",
+      "sha256": "1e3ab0bf3612aa72d997209f8487e57c053387c1f4c2a89ab8fc224801e7c8df",
+      "bytes": 23137
+    },
+    {
+      "path": "scripts/doc-policy-batch.test.mjs",
+      "sha256": "da5aad9a43dc7f369470e82df3540702f0fdfb7707091268ac674c5c71d0af0a",
+      "bytes": 3783
+    },
+    {
+      "path": "scripts/doc-policy.mjs",
+      "sha256": "e4a9332b6f5918428d318f184a43d7b0b9111e2e01465ae98c8ad72fc4446a63",
+      "bytes": 46452
+    },
+    {
+      "path": "scripts/doctor.mjs",
+      "sha256": "c8eb9ed1ed6eedc76d306a1eceb132576d1fb44c5b8a1c1e6933ced8e419c7cc",
+      "bytes": 28721
+    },
+    {
+      "path": "scripts/doctor.test.mjs",
+      "sha256": "1b41eb47a869184270b355328a4c52b589db7983c3c56f232f9d5fbf33500b60",
+      "bytes": 19108
+    },
+    {
+      "path": "scripts/export-release.ps1",
+      "sha256": "58768498d842352d45c925f43c1a70512617b954210f98be91867e6ec8b8f6de",
+      "bytes": 7186
+    },
+    {
+      "path": "scripts/extraction-failover.mjs",
+      "sha256": "fb4629f99ae8e38eeeb319defa658457652a250762cd3c055f3b5a416b3a7e4e",
+      "bytes": 16023
+    },
+    {
+      "path": "scripts/extraction-failover.test.mjs",
+      "sha256": "70b878806043c0729c729a52c55ac05d73db2019a465ed3d77ba5f6e8397a51c",
+      "bytes": 7094
+    },
+    {
+      "path": "scripts/install-claude-code.components.test.mjs",
+      "sha256": "20657b2fe3868e02c21de07b6c9605e97f1d2f1afb8d14f2389006216ea8e06c",
+      "bytes": 2610
+    },
+    {
+      "path": "scripts/install-claude-code.gate.test.mjs",
+      "sha256": "e7d401a192234d1207619b6bb21bede092c08d484aa3448d5a759e76716c3495",
+      "bytes": 24160
+    },
+    {
+      "path": "scripts/install-claude-code.mjs",
+      "sha256": "b40151df960c23692a07b8eb12e214f065499360f36058f97cc3c186cac76bd8",
+      "bytes": 95371
+    },
+    {
+      "path": "scripts/install-claude-code.profiles.test.mjs",
+      "sha256": "05d52e774ed1e7132a6267d211fa92cdebd971675db79e6f1ce725a134d2460c",
+      "bytes": 5972
+    },
+    {
+      "path": "scripts/knowledge-promotion.py",
+      "sha256": "d033ad1cdf8fed26dc022135c81fba56a6e2106cb30ea536fe44c0ee8eb766b1",
+      "bytes": 13957
+    },
+    {
+      "path": "scripts/lib/win-platform.mjs",
+      "sha256": "8ba8a976f73ca7b3723551593dffb73fe422c644cfbbfdc6a9d4b2c7731d6654",
+      "bytes": 11546
+    },
+    {
+      "path": "scripts/lib/win-platform.test.mjs",
+      "sha256": "fb801d809682eab16fed5a8a21b43907d35860d5abee9e659a5eb9ed2af3b7f3",
+      "bytes": 8656
+    },
+    {
+      "path": "scripts/memory-config-loader.mjs",
+      "sha256": "1455d4e5a42ba0c103bc17505e9819d4c7e8eccbd74ab47c9d0cb12d426003f3",
+      "bytes": 2385
+    },
+    {
+      "path": "scripts/memory-doc-ingest.py",
+      "sha256": "0c1b753cfd88baa2b7f1615417266454e858f8a59b45315761b95cdba8a96eed",
+      "bytes": 35710
+    },
+    {
+      "path": "scripts/memory-forwarder.mjs",
+      "sha256": "a0831766e72c20f29219175127962f12de72f9acbd3b25fb1a4f215493f83c01",
+      "bytes": 994
+    },
+    {
+      "path": "scripts/memory-reconcile-core.mjs",
+      "sha256": "c5165baa8c884fac0a28ecd8390b8c130c0dd786e8631167370476a406ecbf7f",
+      "bytes": 2035
+    },
+    {
+      "path": "scripts/memory_client.py",
+      "sha256": "a503d1251f7f161eb85a6d13bc067b9051f722304974f491672216cd68afaef4",
+      "bytes": 2589
+    },
+    {
+      "path": "scripts/memory_promote.py",
+      "sha256": "0ee699165b53fa5c7a7ce06bbf373b3709f1f2a4d16baff52d76c0f53f6a0656",
+      "bytes": 13729
+    },
+    {
+      "path": "scripts/memory_turn_capture.py",
+      "sha256": "36785277847779c8cb95cb7d7026589c356805682808c8c1138cf54d71bb3d81",
+      "bytes": 8093
+    },
+    {
+      "path": "scripts/model-lane.mjs",
+      "sha256": "fb5bb50f18b3523e82e91bb90712451485520c4826c6a86be021e2722dd1c581",
+      "bytes": 9164
+    },
+    {
+      "path": "scripts/model-lane.test.mjs",
+      "sha256": "1601cb11fb33fca65f1228dedced41fd85015a847d173b0a509b544a0fdb5b7b",
+      "bytes": 5659
+    },
+    {
+      "path": "scripts/native-memory-supervisor.mjs",
+      "sha256": "ad16b61f77dbdbd9b9a4e2ec6271650ab2d0d58abc44f07b2e617537b8dc3bc8",
+      "bytes": 46291
+    },
+    {
+      "path": "scripts/native-memory-supervisor.test.mjs",
+      "sha256": "dc3191246474e0ffea32ff6355516ab39b297498127b476846fa01a89155a28d",
+      "bytes": 16514
+    },
+    {
+      "path": "scripts/orch-chat",
+      "sha256": "1e2034c1e7f90cc40afc588c191fd96a1b6e463679ec31aa3cffd2bebb98056f",
+      "bytes": 60105
+    },
+    {
+      "path": "scripts/orch-run",
+      "sha256": "4be2c53d731e2b7bceccee4d384e11b40bc70ed4a558243be3bacea74721b99c",
+      "bytes": 13876
+    },
+    {
+      "path": "scripts/orch-run.test.mjs",
+      "sha256": "9b8ebd7e82c4686899c4dcfd6d10a75c96bcebeb98489efc46c9f9f3c5ecea92",
+      "bytes": 12480
+    },
+    {
+      "path": "scripts/orch_chat_office.py",
+      "sha256": "6fb28c3e9eb9417d1ca00bb60fbaef02a2214fc5c1e296041653323647a799ef",
+      "bytes": 16842
+    },
+    {
+      "path": "scripts/orch_chat_sessions.py",
+      "sha256": "38c5031558eddc7eb9f9d1c030e3be73d69b5248e741176fa16588f5fc3abde6",
+      "bytes": 11091
+    },
+    {
+      "path": "scripts/provider-failover-proof.test.mjs",
+      "sha256": "6b2b60686ba1113dbd8f1503c7848c621dcbd66353b33ce3e141ffff89261ea4",
+      "bytes": 8671
+    },
+    {
+      "path": "scripts/provision-secrets.py",
+      "sha256": "4487cf18e48ccb17c1ff2313d544319a7f9f74e6e64f68e4edcd9c8eb8cbc52e",
+      "bytes": 15324
+    },
+    {
+      "path": "scripts/provision-secrets.test.mjs",
+      "sha256": "a1c9b0b7d21b435f436a4d04d1125ddf90d9693bd8af767654dea4d86e89a54b",
+      "bytes": 5185
+    },
+    {
+      "path": "scripts/redact-memory-startup.py",
+      "sha256": "8f0ea41ec027955be2dd59789c0d7ea8ae06550b62d3e7a7c10a90b07e5f1929",
+      "bytes": 5006
+    },
+    {
+      "path": "scripts/runtime-proofs.mjs",
+      "sha256": "24862168c171c44515fea9438c6f0239afd2d1528143f1f2723ed394af6d9d0d",
+      "bytes": 34549
+    },
+    {
+      "path": "scripts/runtime-proofs.test.mjs",
+      "sha256": "0fc8f25b7a4f57ea18212c3325e8a13ef93653bb89baf04fd409ecec8b719212",
+      "bytes": 21886
+    },
+    {
+      "path": "scripts/selflearn-candidates.mjs",
+      "sha256": "add0f2d927718b97d8bc35b1566a098750a1cf21f9e62dc2f231a2fa0dc73936",
+      "bytes": 39598
+    },
+    {
+      "path": "scripts/setup-agent-profiles.mjs",
+      "sha256": "5d6d0c99c25f5c3d2fd9ca9f6d883f1f8c9359b4a8c5089eec667f5b89041cb7",
+      "bytes": 12404
+    },
+    {
+      "path": "scripts/setup-agent-profiles.test.mjs",
+      "sha256": "b732ad0cd2beedc19a02df4f276c06810c0959acbeccda8182e0010764851e06",
+      "bytes": 18569
+    },
+    {
+      "path": "scripts/skill-gate.mjs",
+      "sha256": "bc633e673d0765adcf65e4fadc4dc3fad485e77297bc3aef7635aea90c388cb9",
+      "bytes": 20994
+    },
+    {
+      "path": "scripts/skill-gate.test.mjs",
+      "sha256": "abf9ba8b0e5debb1c34a45d62af684e54f6c4f94a0b6af9dfcf5653492b19ee8",
+      "bytes": 12772
+    },
+    {
+      "path": "scripts/test_doc_ledger_corruption.py",
+      "sha256": "417c4d3b4fa374a1500ebd0fc86f75d79c471862e661a27a33c6c03b3dcc9e09",
+      "bytes": 1776
+    },
+    {
+      "path": "scripts/test_doc_ledger_lock.py",
+      "sha256": "4b5b356b53e8f9f8bdeba9a791580c3b1d5e904c6fae65f03e858ca48c342b60",
+      "bytes": 2450
+    },
+    {
+      "path": "scripts/verify-memory-user-key.py",
+      "sha256": "e99f9b57c65f8baee833b58684adaadc5350c47c55e816b043041b5284e8a51c",
+      "bytes": 2575
+    },
+    {
+      "path": "templates/product.env.example",
+      "sha256": "ca131712500076fb16b4f6dcc863d1c18d12e22c0743981c977719127740dcc3",
+      "bytes": 1161
+    },
+    {
+      "path": "tests/attach-harness-contract.test.mjs",
+      "sha256": "c8ed36148da242408a7295d7dbe752713e5f2ad97ea083f9790124cc1f163120",
+      "bytes": 2137
+    },
+    {
+      "path": "tests/dashboard-portable.test.mjs",
+      "sha256": "fdb9882c6b3a36ae97d898665547b93281323ff1e4a3eb00a0f569409d7fc092",
+      "bytes": 12276
+    },
+    {
+      "path": "tests/doc-ingest-parity.test.mjs",
+      "sha256": "82ade4abc35ca194a35ca08669458fa52868960c5c50bd1e6f74d75dd138272c",
+      "bytes": 31786
+    },
+    {
+      "path": "tests/doc-policy.test.mjs",
+      "sha256": "7a97acbd2c0d4721a0c95390f4d6e73b7377600934da8f82d55f01deb22ed88e",
+      "bytes": 35000
+    },
+    {
+      "path": "tests/doctor-selflearn.test.mjs",
+      "sha256": "7cef71c9a9e89321300f05746f3d571564b1951a9ef48d04ba343023072a1c00",
+      "bytes": 2449
+    },
+    {
+      "path": "tests/fixtures/doc-ingest/parity/python-ledger.json",
+      "sha256": "0be3cb75f6274121420571f5187bdc5a288cf7092482ca84e43b0c731ad17e76",
+      "bytes": 1067
+    },
+    {
+      "path": "tests/fixtures/doc-ingest/parity/python-observations.json",
+      "sha256": "f83ae04ff2cfce69b59c66ab3db964efffa4515bf4260d16cf2b7b0c7d0bf12d",
+      "bytes": 40964
+    },
+    {
+      "path": "tests/fixtures/doc-ingest/runbook.md",
+      "sha256": "03e54b8ab846734a07c88aea0f9559d0ee05062ed40e6550cdec37fa69f95c8a",
+      "bytes": 404
+    },
+    {
+      "path": "tests/fixtures/harness-help.txt",
+      "sha256": "76b6bff346a7953f4ed3238c98779299394a68283b67a69852755c0c07e3b9eb",
+      "bytes": 4488
+    },
+    {
+      "path": "tests/fixtures/native-memory/fake-service.mjs",
+      "sha256": "04254ff062502468622f872d616ab281452a94c821ee2298a705b141d99fe68e",
+      "bytes": 1556
+    },
+    {
+      "path": "tests/forbidden-refs.txt",
+      "sha256": "164290244cf11e36902543058ec6e755782ff870d99038173b73fb11a02b73a0",
+      "bytes": 2414
+    },
+    {
+      "path": "tests/harness-authority.test.mjs",
+      "sha256": "a83faa590762c4ad33b6ef9b827b482088a4c04a2abda8b3116f2f26bed390c1",
+      "bytes": 4370
+    },
+    {
+      "path": "tests/harness-config-schema.test.mjs",
+      "sha256": "a79847d1fe25c0e51d1fe681d45773d5d7ef11410e8cb972244f98165742593e",
+      "bytes": 3494
+    },
+    {
+      "path": "tests/harness-contract.test.mjs",
+      "sha256": "2e03217f2bb6029db76301854f5f770dfe08492c8ae66d89b8c231a3a47ffef7",
+      "bytes": 4447
+    },
+    {
+      "path": "tests/harness-guard.test.mjs",
+      "sha256": "da581a92207b4642c18702d889b03d2d16c934fe540619c73a594d0c85e4e3dc",
+      "bytes": 7305
+    },
+    {
+      "path": "tests/harness-paths.test.mjs",
+      "sha256": "fc1d21cf8ac2b8b030c72ec0c43d26c0f4a4adf3656ec621d909016283454a59",
+      "bytes": 5744
+    },
+    {
+      "path": "tests/portable-agent-bundle.test.mjs",
+      "sha256": "e2b2ae726697fd89a839402aaf4a2641bf13ab8e08fbb10a60746509016be460",
+      "bytes": 18085
+    },
+    {
+      "path": "tests/runtime-parity.test.mjs",
+      "sha256": "dda21d683f20dcb06e250af33229600a68a409711ea3f371f262a8a094ea16fb",
+      "bytes": 14211
+    },
+    {
+      "path": "tests/selflearn-candidates.test.mjs",
+      "sha256": "39fae10ae369c2187d5c8ed054e7e5274f39ad2ad723126d0d77f4f8c5d16bfa",
+      "bytes": 12512
+    },
+    {
+      "path": "tests/test-memory-doc-ingest.py",
+      "sha256": "5be92b12435394fa054987a964817d928ee5bace664d65c74be52282ad2b7e0a",
+      "bytes": 24813
+    },
+    {
+      "path": "tests/test-memory-promote.py",
+      "sha256": "58ec097e579735e44112b045a543b74dbbe28d780daac32ef9c5ed9375499d6f",
+      "bytes": 4015
+    },
+    {
+      "path": "tests/test-memory-security.py",
+      "sha256": "ad4d9fa286632b657824c2adf0362f46764ae8aa0850165ad25c4e773da0472d",
+      "bytes": 10799
+    },
+    {
+      "path": "tests/test-orch-chat-sessions.py",
+      "sha256": "b624dd01006251adf82f5e23eb7119250d787cd045b2bf9ad8d23c5cbbe03065",
+      "bytes": 6704
+    },
+    {
+      "path": "tests/test-orch-chat.py",
+      "sha256": "68d781d07bf7e0941b12c95c4ab2340e7d57b167cf1b1d223a6e32678cbb7095",
+      "bytes": 21388
+    },
+    {
+      "path": "SHA256SUMS",
+      "sha256": "6420a168e0f0faa456860465e6802f89a314873d0bf172cd041e0e4a606733ad",
+      "bytes": 101255
+    }
+  ]
+}

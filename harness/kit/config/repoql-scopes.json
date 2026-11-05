@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "comment": "Portable harness scope registry. These scopes are declared against this repository, not a fleet's published repos; fill in a real RepoQL host (harness.config.json features.repoql) before relying on retrieval.",
+  "scopes": {
+    "harness-kit": {
+      "uriGlob": "file:///harness/kit/**",
+      "requiredFor": [
+        "PLAN",
+        "IMPLEMENTATION",
+        "REVIEW",
+        "FINAL_ACCEPTANCE"
+      ],
+      "confidentialityClass": "local",
+      "sentinels": [
+        "file:///harness/kit/orchestrate.mjs",
+        "file:///harness/kit/lib/repoql-client.mjs"
+      ]
+    },
+    "harness-tests": {
+      "uriGlob": "file:///tests/**",
+      "requiredFor": [
+        "REVIEW"
+      ],
+      "confidentialityClass": "local",
+      "sentinels": [
+        "file:///tests/harness-paths.test.mjs"
+      ]
+    },
+    "harness-docs": {
+      "uriGlob": "file:///docs/**",
+      "requiredFor": [
+        "PLAN",
+        "REVIEW"
+      ],
+      "confidentialityClass": "local",
+      "sentinels": [
+        "file:///docs/HARNESS.md"
+      ]
+    },
+    "concepts": {
+      "uriGlob": "concept:///**",
+      "requiredFor": [
+        "PLAN",
+        "REVIEW"
+      ],
+      "confidentialityClass": "local",
+      "sentinels": []
+    }
+  }
+}

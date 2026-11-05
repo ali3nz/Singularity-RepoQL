@@ -1,0 +1,9 @@
+# Tested with CPython 3.12.10 x64 on native Windows.
+# Install with: python.exe -m pip install --require-hashes --only-binary=:all: -r this-file
+# tzdata supplies IANA timezone data on Windows; PyJWT crypto extras support
+# the dashboard's optional signed/JWKS authentication path.
+cffi==2.1.1 --hash=sha256:f53e442b08449d42821fa4a4fba000095af9f62742a500f978a9f557ec44339a
+cryptography==50.0.2 --hash=sha256:7afa5a6602a9f29af1f3a2965f831bae7c9d5d597b7cbb716d41ab3b7d89879c
+pycparser==3.12 --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e
+PyJWT[crypto]==2.15.1 --hash=sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193
+tzdata==2026.6 --hash=sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec

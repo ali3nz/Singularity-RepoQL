@@ -1,0 +1,1495 @@
+{
+  "sourceZip": "ai-orchestration-source.zip",
+  "modulesCount": 186,
+  "mjsLines": 46605,
+  "modules": [
+    {
+      "path": "add-vision-selftest.mjs",
+      "lines": 29,
+      "size": 1827,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "9871a48e8c58f22561142e3f6f7c36d1db8c3f6dca2f73da2f6f5e3f2884b36d"
+    },
+    {
+      "path": "backfill-consults.mjs",
+      "lines": 34,
+      "size": 1921,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "f100ffa3b510eef31c361b1a3e732669b702fe9afcb0cf3be35a640d85839b3b"
+    },
+    {
+      "path": "bridge-test.mjs",
+      "lines": 943,
+      "size": 64062,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "52f50aa7c834c37f1dd3c0611cfb4c7a1b4cafa9343d38e2c564004bbd0c3eaf"
+    },
+    {
+      "path": "canary-pack-evidence.mjs",
+      "lines": 69,
+      "size": 5463,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "f5cbd2e1bab5e484d9f392b3802a6a033d1223a358d18a41a084bfab72e811d7"
+    },
+    {
+      "path": "consult-watch.mjs",
+      "lines": 240,
+      "size": 12971,
+      "imports": 4,
+      "exports": 17,
+      "sha256": "b58a3603a5ea9ea35174b6eaa914d02446c639b130c3ad27c5ed1c5e670e2d06"
+    },
+    {
+      "path": "deploy/hermes-kit-bridge.mjs",
+      "lines": 276,
+      "size": 14099,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "a4051df075bd8558cb94deb77431ba6e7f58d5ceaf2b0728ced8f8a9797166b9"
+    },
+    {
+      "path": "eso-live-debug-test.mjs",
+      "lines": 100,
+      "size": 7004,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "1947386ea6552471a777a30c7c3a4b58babcab400fe21a923d487f05af4bef8b"
+    },
+    {
+      "path": "export-wikijs.mjs",
+      "lines": 93,
+      "size": 4016,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "038e8835369486897e73ad012dc664ef9d6c58027facaa76d24f77360f5c1d71"
+    },
+    {
+      "path": "fb-shot.mjs",
+      "lines": 81,
+      "size": 3920,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "b1f4fc2aa069741e5fd11ec39c5fd3b935fea314b8a793ae6d0f83b29cf5b510"
+    },
+    {
+      "path": "fix-bridge-test.mjs",
+      "lines": 108,
+      "size": 8754,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "004d141142c34d77aef3a0dc28b857aacb90e877eeae2de0ba9c4cc301f76ef4"
+    },
+    {
+      "path": "fix-bridge.mjs",
+      "lines": 40,
+      "size": 1833,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "5f785f0491bf40e7780b4eff9ec875d93e1218120f8dc813c79a8e63ce83ab1a"
+    },
+    {
+      "path": "fix-selftest.mjs",
+      "lines": 16,
+      "size": 1070,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "71197784818c52ff1836303059d67780d3b5f4472de77a7b05a02926fc2f7981"
+    },
+    {
+      "path": "fix-status.mjs",
+      "lines": 113,
+      "size": 6185,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "a57b871d68a354fa0f31f5bc1a1acd22f1c276f18b630bd08fe2da9c042e2408"
+    },
+    {
+      "path": "fix-testrc.mjs",
+      "lines": 14,
+      "size": 775,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "996d73e51130f4af7ae871f130009e9c83e368442cab0657a626f8af60a81125"
+    },
+    {
+      "path": "fix-testrc2.mjs",
+      "lines": 25,
+      "size": 1355,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "25e62debfbb0dd4d54757e2d86ce048be25e2a21f78607507e6dead6004f0530"
+    },
+    {
+      "path": "fix-testrc3.mjs",
+      "lines": 36,
+      "size": 1833,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "5c3bcf7e1104842e0a959e66fdb7764b163a82204bfa43209169a7fa66959dcc"
+    },
+    {
+      "path": "free-model-registry.mjs",
+      "lines": 208,
+      "size": 9556,
+      "imports": 3,
+      "exports": 7,
+      "sha256": "dfc8a5fcd98d0cd65ec923744bc9cfbe0f8f07cd77f08b1376aa3de58743ca33"
+    },
+    {
+      "path": "gen-vision-marker.mjs",
+      "lines": 88,
+      "size": 3472,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "a639218a7568a685671e15c067464b11c2f78434b51600b72bfb507761b3f4b9"
+    },
+    {
+      "path": "gh-sync-setup.mjs",
+      "lines": 171,
+      "size": 10936,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "253532b83a31c7c8628d5f2090ad0ed309db0eb59fcdad639c7e5d2f4785c131"
+    },
+    {
+      "path": "gh-sync-test.mjs",
+      "lines": 346,
+      "size": 24719,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "2e2d041ccc56e91c9d8378240746795314c5ca2af974264e601e8ec79b28d343"
+    },
+    {
+      "path": "gh-truth.mjs",
+      "lines": 98,
+      "size": 5791,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "80435d87f3974f0d7fdb1f622d5a7fda9ac6753d46cac82c13aae1e4f971e075"
+    },
+    {
+      "path": "gh-view-config.mjs",
+      "lines": 39,
+      "size": 2565,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "8da5e7878f5de2f96f928bddec64ff2f6db8052acf8277e1b52fa50b51369ac6"
+    },
+    {
+      "path": "guardian-test.mjs",
+      "lines": 346,
+      "size": 29197,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "799012527ede48464c36d883fc7ed7d2f77b2002a9e83a4cfe14c63ba72a64cf"
+    },
+    {
+      "path": "issue378-consult-pointer-test.mjs",
+      "lines": 226,
+      "size": 17027,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "964a32f6e9941271392712d7fb233b58b70bb68244b385dfeae4607755d36d7e"
+    },
+    {
+      "path": "issue378-sol-classify-test.mjs",
+      "lines": 53,
+      "size": 4366,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "39b4b96fe2d0a84d5481d22105e1411656f95ac263a17771e38cd74fde66d9ef"
+    },
+    {
+      "path": "lib/agent-issues.mjs",
+      "lines": 186,
+      "size": 10047,
+      "imports": 4,
+      "exports": 7,
+      "sha256": "bfcce5d8480c0cd0d2bfaa0d4db224fd7f55d7e1d97521ff44dae4200628717b"
+    },
+    {
+      "path": "lib/approval-artifact.mjs",
+      "lines": 146,
+      "size": 8095,
+      "imports": 4,
+      "exports": 11,
+      "sha256": "905eed11319b9935bffe6eab9734853e7d1f06bed17fab78f8e7100709901107"
+    },
+    {
+      "path": "lib/bridge-result.mjs",
+      "lines": 205,
+      "size": 10920,
+      "imports": 0,
+      "exports": 10,
+      "sha256": "5ec49903d08321c6cc4ad44e70173c11ef0a92ea398885a3aa5c3d3f38c9f61d"
+    },
+    {
+      "path": "lib/case-state.mjs",
+      "lines": 336,
+      "size": 16684,
+      "imports": 3,
+      "exports": 18,
+      "sha256": "cef26fb9fb7afcd428e83e08dac9d7bc288bcee25e3ed93055502a594200d85e"
+    },
+    {
+      "path": "lib/case-store.mjs",
+      "lines": 149,
+      "size": 7221,
+      "imports": 3,
+      "exports": 8,
+      "sha256": "add0b243288dc5719958a603c4086e1fd4a7955407fcbb6722bb160fefd378ec"
+    },
+    {
+      "path": "lib/concept-capture.mjs",
+      "lines": 548,
+      "size": 35824,
+      "imports": 6,
+      "exports": 16,
+      "sha256": "eede8c6943aa17406d9110cbdf8fa28fa85169b751e47bee1a748fee93451b8b"
+    },
+    {
+      "path": "lib/concept-conflict-gate.mjs",
+      "lines": 308,
+      "size": 18335,
+      "imports": 3,
+      "exports": 11,
+      "sha256": "58e3ec50a0705bc2a57d2e7a60439f95a795978c7ef8ab8caba34b603af6ab59"
+    },
+    {
+      "path": "lib/confidentiality.mjs",
+      "lines": 104,
+      "size": 5798,
+      "imports": 1,
+      "exports": 7,
+      "sha256": "eecee0f53b8658b3d0392460243ba027446a97e0c8dfaf3e1324f55687d8f34f"
+    },
+    {
+      "path": "lib/consult-affinity.mjs",
+      "lines": 106,
+      "size": 5508,
+      "imports": 0,
+      "exports": 5,
+      "sha256": "b61bb020998a6f1daa7535234528d9ff4ea46f4a24056a907e020529ebff2cc4"
+    },
+    {
+      "path": "lib/consult-integrity.test.mjs",
+      "lines": 43,
+      "size": 2692,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "13d7cf4faabcd55516292ed12a898fe300d55e810987aebe4b22d3a322fd1bc6"
+    },
+    {
+      "path": "lib/consult-liveness.mjs",
+      "lines": 167,
+      "size": 8514,
+      "imports": 1,
+      "exports": 9,
+      "sha256": "5e02c4b89f2f91c9e99b9469241c4d6b537669695ca5c9adb9a42230f6be5410"
+    },
+    {
+      "path": "lib/consult-pointer-reaper.mjs",
+      "lines": 70,
+      "size": 3953,
+      "imports": 2,
+      "exports": 4,
+      "sha256": "996605ad61baa1d90a6db8c54fe0139955ba7dc93cf74df19532d7f391f1d52f"
+    },
+    {
+      "path": "lib/consult-summary.mjs",
+      "lines": 140,
+      "size": 8560,
+      "imports": 2,
+      "exports": 5,
+      "sha256": "9f6003051e4bb9b2f60b7938677d64affff35ab169dc81f157a220026fb625a7"
+    },
+    {
+      "path": "lib/consult-watch.mjs",
+      "lines": 393,
+      "size": 21773,
+      "imports": 6,
+      "exports": 22,
+      "sha256": "49a44e5b184e9b530eec73232909111c126b600b61d72a39ec77474f65a136de"
+    },
+    {
+      "path": "lib/context-pack.mjs",
+      "lines": 483,
+      "size": 31203,
+      "imports": 5,
+      "exports": 10,
+      "sha256": "03b0d3c7a699610e472ef9032f06af36af8036f823837de09e1d18f30eb0c5b8"
+    },
+    {
+      "path": "lib/conversation-review.mjs",
+      "lines": 647,
+      "size": 41988,
+      "imports": 5,
+      "exports": 15,
+      "sha256": "1aa571cd90ba618258b74a44799fe4209788d0d9926417b021114ca19001f17e"
+    },
+    {
+      "path": "lib/coordinator-status.mjs",
+      "lines": 152,
+      "size": 7934,
+      "imports": 4,
+      "exports": 3,
+      "sha256": "b3ad5096ad51ca98b7c73a6e30c9604b0e36873101320f7a53563eb9289c29ae"
+    },
+    {
+      "path": "lib/debrief.mjs",
+      "lines": 957,
+      "size": 56457,
+      "imports": 5,
+      "exports": 26,
+      "sha256": "2453b04eacf61f21ee820e973de1a4ce678c3fd2e5c40c4224c61225b001cf5c"
+    },
+    {
+      "path": "lib/deploy-gate.mjs",
+      "lines": 259,
+      "size": 12670,
+      "imports": 6,
+      "exports": 4,
+      "sha256": "3571993246faaf4c87aa30869886869e43aea8567c69d565991b21a91bb70506"
+    },
+    {
+      "path": "lib/deployment-intent.mjs",
+      "lines": 356,
+      "size": 16784,
+      "imports": 5,
+      "exports": 14,
+      "sha256": "6bad2bd583c34e6af2d18440d25039309873ce593b85d232dd70c53c91b2adf3"
+    },
+    {
+      "path": "lib/deviation-ledger.mjs",
+      "lines": 65,
+      "size": 2873,
+      "imports": 2,
+      "exports": 3,
+      "sha256": "5ac05e4245357faefe0a741744f294389bc28a25d7a25c24102e5b483f06f4fc"
+    },
+    {
+      "path": "lib/doc-impact.mjs",
+      "lines": 57,
+      "size": 3689,
+      "imports": 0,
+      "exports": 2,
+      "sha256": "89d895c9127b91305490ec7b8963e8a6974b5a7ec9e3c38ec72e75d99bfb8321"
+    },
+    {
+      "path": "lib/effort.mjs",
+      "lines": 101,
+      "size": 4709,
+      "imports": 0,
+      "exports": 11,
+      "sha256": "0fb09e455ad52fbe16f8c965a943da3ce2401969f154f3f72c1e9530b480ae92"
+    },
+    {
+      "path": "lib/engine-router.mjs",
+      "lines": 1012,
+      "size": 61743,
+      "imports": 10,
+      "exports": 20,
+      "sha256": "567c4f9d3ebaabb5618cf43a1e127949f420ba37980f80184fe938401eb10978"
+    },
+    {
+      "path": "lib/engine-state.mjs",
+      "lines": 268,
+      "size": 11369,
+      "imports": 2,
+      "exports": 3,
+      "sha256": "11211903b7a67f7319dfc3f434547b901953d735a282a8501ab75b2ebb4ecea6"
+    },
+    {
+      "path": "lib/eso-live-debug.mjs",
+      "lines": 199,
+      "size": 9493,
+      "imports": 0,
+      "exports": 21,
+      "sha256": "7a7d9b05b711b775e32e2647187635a8b26f51134c9e20c37932caf4f32a6904"
+    },
+    {
+      "path": "lib/evidence-manifest.mjs",
+      "lines": 124,
+      "size": 5709,
+      "imports": 3,
+      "exports": 3,
+      "sha256": "3e0f10c232a1af51b2100310fee4665ff9a5e2a496abe1e32ef1c052e7da9e77"
+    },
+    {
+      "path": "lib/evidence-pack.mjs",
+      "lines": 285,
+      "size": 15011,
+      "imports": 3,
+      "exports": 10,
+      "sha256": "3aa94902b94afe77b0d0421dd3543fb4a6c7d2421e96511b8ccd92fe750cc06c"
+    },
+    {
+      "path": "lib/free-model-registry.mjs",
+      "lines": 238,
+      "size": 11177,
+      "imports": 3,
+      "exports": 7,
+      "sha256": "6aa55f1e269a71ed55294c6abd5a5eb846c8e4b58eca3a574c384f79084f7537"
+    },
+    {
+      "path": "lib/free-role-router.mjs",
+      "lines": 444,
+      "size": 24219,
+      "imports": 7,
+      "exports": 12,
+      "sha256": "546a4e62e35d5bb0e802476bbf7464a6bc82aa79f56ded0041b664f2f1e1bc0b"
+    },
+    {
+      "path": "lib/freebucks-status.mjs",
+      "lines": 198,
+      "size": 8237,
+      "imports": 3,
+      "exports": 2,
+      "sha256": "d364030cfe9333eadcdf9324c4bbbea016dc7e81be1affad70ecc2e60d09cc88"
+    },
+    {
+      "path": "lib/gate-parser.mjs",
+      "lines": 302,
+      "size": 14703,
+      "imports": 0,
+      "exports": 9,
+      "sha256": "593d694aab49f71100ba454f1ad8cbb083cfd82fecc67f0223c5ca29f24cfc51"
+    },
+    {
+      "path": "lib/ghostwake.mjs",
+      "lines": 104,
+      "size": 6332,
+      "imports": 4,
+      "exports": 6,
+      "sha256": "5b2592e105e749f286768a17e24eb6a26fda0d5bcd11347a347385fb968e6c63"
+    },
+    {
+      "path": "lib/github-sync.mjs",
+      "lines": 980,
+      "size": 56961,
+      "imports": 7,
+      "exports": 27,
+      "sha256": "47c6a58d76713fc4f93b330e12ab972637cbc6c556d3058f1b562f510eb405a5"
+    },
+    {
+      "path": "lib/guardian-bot-control.mjs",
+      "lines": 95,
+      "size": 5364,
+      "imports": 1,
+      "exports": 4,
+      "sha256": "08c0f5fbb1c111031c9078f88e33c18b237c70ba574a6d5d0c483e95daa33b59"
+    },
+    {
+      "path": "lib/guardian-frame-filter.mjs",
+      "lines": 136,
+      "size": 8386,
+      "imports": 1,
+      "exports": 4,
+      "sha256": "350926a1f57d2a784c60711ad734e8721e3c4a31f30b6376479c877891347064"
+    },
+    {
+      "path": "lib/guardian-state.mjs",
+      "lines": 151,
+      "size": 8389,
+      "imports": 2,
+      "exports": 3,
+      "sha256": "d4030d00fd4686a570cac0b63157606a3e564e24a03d685a5071d173f7239522"
+    },
+    {
+      "path": "lib/guardian-vision.mjs",
+      "lines": 211,
+      "size": 14251,
+      "imports": 0,
+      "exports": 5,
+      "sha256": "8e874cd3af0137afbd8e6ec396dbde6dfaf562f45dbf03812817bcbd8d6a923f"
+    },
+    {
+      "path": "lib/handoff-artifact.mjs",
+      "lines": 60,
+      "size": 2982,
+      "imports": 3,
+      "exports": 3,
+      "sha256": "9e9605cd29aa3d31504ec6b31036baff354be93cbf3321cccf567f6c601e970f"
+    },
+    {
+      "path": "lib/heartbeat-child.mjs",
+      "lines": 124,
+      "size": 5821,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "867d323c8e3b2c90c72eba0516bf65174770dc0219b875f87811385067ed3807"
+    },
+    {
+      "path": "lib/html-summary.mjs",
+      "lines": 164,
+      "size": 12852,
+      "imports": 2,
+      "exports": 6,
+      "sha256": "5364b4cb17975d926e1093be377d6dfc6933af644d871b04e19b96c16f38c930"
+    },
+    {
+      "path": "lib/invocation-telemetry.mjs",
+      "lines": 165,
+      "size": 7016,
+      "imports": 4,
+      "exports": 5,
+      "sha256": "c8198c0b5dbb2b3285c3f8d3d0d15403c23c20b994ad0819c064bd63963eb9b8"
+    },
+    {
+      "path": "lib/jobs-list.mjs",
+      "lines": 121,
+      "size": 5510,
+      "imports": 0,
+      "exports": 7,
+      "sha256": "0b983b2f6d98c39bd640dfe1c18a5a239ffaff9c8cb82f3e513f4a0fd1d02432"
+    },
+    {
+      "path": "lib/managed-bridge-cli.mjs",
+      "lines": 78,
+      "size": 4012,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "f6e66f83fdb6c6ac7684304042d340c0d2b5e32a6ee28cc04365e6b30f9ecff7"
+    },
+    {
+      "path": "lib/memory-candidate-v2.mjs",
+      "lines": 235,
+      "size": 13553,
+      "imports": 2,
+      "exports": 16,
+      "sha256": "a3b3cd9f99dd0606e05878a6f513018bf58f7b4bd882d936500df90a2ebd4d8b"
+    },
+    {
+      "path": "lib/memory-impact.mjs",
+      "lines": 69,
+      "size": 3383,
+      "imports": 2,
+      "exports": 3,
+      "sha256": "745ddb916353708f20fc8d0932c6f759ce049818b24b37371b5fc73d2e6ad59e"
+    },
+    {
+      "path": "lib/memory-learning.mjs",
+      "lines": 110,
+      "size": 6131,
+      "imports": 1,
+      "exports": 9,
+      "sha256": "9e7bcb5848693582c093464537e28d14ee511fcecafae08208ad797d63567d2e"
+    },
+    {
+      "path": "lib/memory-lineage.mjs",
+      "lines": 774,
+      "size": 44818,
+      "imports": 5,
+      "exports": 29,
+      "sha256": "6512af4d41489ac27ae3c8209152b70f111935bbb9a61b34079e1e8cebfd5c67"
+    },
+    {
+      "path": "lib/memory-orchestra/answerability.mjs",
+      "lines": 148,
+      "size": 6821,
+      "imports": 0,
+      "exports": 5,
+      "sha256": "e39d001e58220581af3081f60b8d9be18ab8a1028dced9cadb6ee5274ab082b2"
+    },
+    {
+      "path": "lib/memory-orchestra/attribution.mjs",
+      "lines": 127,
+      "size": 6862,
+      "imports": 0,
+      "exports": 4,
+      "sha256": "55dbc938385ab4158f479a0f578067f7a4b1d03454a03ed741f33b86bc9b139c"
+    },
+    {
+      "path": "lib/memory-orchestra/client-l23.mjs",
+      "lines": 380,
+      "size": 19048,
+      "imports": 5,
+      "exports": 2,
+      "sha256": "3d2bfa86fb49d6a12229518ebd919736536e2cb7a11d6d44d306e5a1ef1e7646"
+    },
+    {
+      "path": "lib/memory-orchestra/context.mjs",
+      "lines": 112,
+      "size": 6290,
+      "imports": 1,
+      "exports": 4,
+      "sha256": "e6afd976afc02a19a8cdb935e1f4ff918ed750f6751fe8a990cf7008ec882c06"
+    },
+    {
+      "path": "lib/memory-orchestra/corrections.mjs",
+      "lines": 124,
+      "size": 7331,
+      "imports": 3,
+      "exports": 5,
+      "sha256": "bb00970d53914e75a8281f578cd8079f3cf3b5e7d636b81199fce07f61e772ad"
+    },
+    {
+      "path": "lib/memory-orchestra/decision-repair.mjs",
+      "lines": 120,
+      "size": 6294,
+      "imports": 4,
+      "exports": 4,
+      "sha256": "04cbea7c6c4ad3dd57ca93ab0c7e49e9ba552a56c5f59f376c0c3ad7ee0961ae"
+    },
+    {
+      "path": "lib/memory-orchestra/executors.mjs",
+      "lines": 572,
+      "size": 30654,
+      "imports": 4,
+      "exports": 2,
+      "sha256": "080fab1ad4d0d5cf7527e94aefda083a52aec8b1f9350da8985acba6ef4d0079"
+    },
+    {
+      "path": "lib/memory-orchestra/export-portability.mjs",
+      "lines": 97,
+      "size": 4469,
+      "imports": 4,
+      "exports": 2,
+      "sha256": "b6c5eac7110797c2eafac3e3609ffc37081e4cfde3ba9d36551a72544ca2b178"
+    },
+    {
+      "path": "lib/memory-orchestra/flags.mjs",
+      "lines": 75,
+      "size": 3767,
+      "imports": 2,
+      "exports": 3,
+      "sha256": "0abe7c8ad585c9370dacd39617ec5700781ada918fec3544e51119d5471edcd0"
+    },
+    {
+      "path": "lib/memory-orchestra/fusion.mjs",
+      "lines": 429,
+      "size": 23456,
+      "imports": 2,
+      "exports": 6,
+      "sha256": "674e478c7f1632a2b7d1b2ac66a2816771bb2e02199ffd6e9c51670af594481e"
+    },
+    {
+      "path": "lib/memory-orchestra/ghostwake.mjs",
+      "lines": 110,
+      "size": 6751,
+      "imports": 4,
+      "exports": 6,
+      "sha256": "94569dbbc40e88bea763d01f95816758b20c85c65c09cc6fae5d16d8e0e94a8c"
+    },
+    {
+      "path": "lib/memory-orchestra/hooks.mjs",
+      "lines": 103,
+      "size": 5575,
+      "imports": 7,
+      "exports": 5,
+      "sha256": "584c9de7dae047b41e1e0e178f46c274ab6b7fa687d0563c484b3837d21590ca"
+    },
+    {
+      "path": "lib/memory-orchestra/ledger.mjs",
+      "lines": 186,
+      "size": 7032,
+      "imports": 3,
+      "exports": 6,
+      "sha256": "62c1ce5f90bd82c20916dbbc97c865a210fbe693a55a78883769f857159ebac7"
+    },
+    {
+      "path": "lib/memory-orchestra/planner.mjs",
+      "lines": 293,
+      "size": 18040,
+      "imports": 2,
+      "exports": 12,
+      "sha256": "e543e9691802ecee6b396dc9c77c1484b24e3d5a715a17d01817339fbedded6f"
+    },
+    {
+      "path": "lib/memory-orchestra/policy-induction.mjs",
+      "lines": 244,
+      "size": 12307,
+      "imports": 3,
+      "exports": 10,
+      "sha256": "fbf8af643a0b967ec08929c9f297ba900723b0b6f49c428ee1d0183a1cb9f6ea"
+    },
+    {
+      "path": "lib/memory-orchestra/skill-lifecycle.mjs",
+      "lines": 86,
+      "size": 4868,
+      "imports": 0,
+      "exports": 5,
+      "sha256": "829d5dd6c7392bbe8ab3a5f641440a9deb6b0f0e5f2be50785be886d823ec45c"
+    },
+    {
+      "path": "lib/memory-orchestra/steps.mjs",
+      "lines": 455,
+      "size": 22842,
+      "imports": 3,
+      "exports": 10,
+      "sha256": "f8f6f7e2a1bcd4de679e8ddd252eacd601349d6bdd8f998bef987accd7ad5f7a"
+    },
+    {
+      "path": "lib/memory-orchestra/wire.mjs",
+      "lines": 125,
+      "size": 8168,
+      "imports": 4,
+      "exports": 8,
+      "sha256": "1ee50d13622e64b19bb06eb1caa28f9b57ac40cb0f1958fccbdde6d058320254"
+    },
+    {
+      "path": "lib/memory-orchestra/worldmodel.mjs",
+      "lines": 98,
+      "size": 4922,
+      "imports": 3,
+      "exports": 4,
+      "sha256": "7359c823ccf31bdb08caa736ce2cdcece0866b8e6ddb4afd4c6813164bf7fe3b"
+    },
+    {
+      "path": "lib/memory-synthesis.mjs",
+      "lines": 190,
+      "size": 11774,
+      "imports": 5,
+      "exports": 7,
+      "sha256": "cec80534e1b9b6fa3a1580e9287c6f4432d79e3f14f7bf7a31787cc0b6eee0cf"
+    },
+    {
+      "path": "lib/memory-temporal.mjs",
+      "lines": 171,
+      "size": 9066,
+      "imports": 0,
+      "exports": 8,
+      "sha256": "d0b3b3278119855f5394960f1b9e9596bfeb7c7b0480c61e03c1277ceedccd41"
+    },
+    {
+      "path": "lib/memory-tombstone.mjs",
+      "lines": 428,
+      "size": 24821,
+      "imports": 4,
+      "exports": 13,
+      "sha256": "211034b18d87ee28e65213d0b4704a18ca0bf72053bf03c8368df46b52f17953"
+    },
+    {
+      "path": "lib/memorycore-client.mjs",
+      "lines": 230,
+      "size": 12087,
+      "imports": 1,
+      "exports": 2,
+      "sha256": "7b06a03be04e012e4acb320abae3195e0725ae619b8383306e7c54b41da62be0"
+    },
+    {
+      "path": "lib/nanny.mjs",
+      "lines": 701,
+      "size": 43336,
+      "imports": 7,
+      "exports": 11,
+      "sha256": "8acbd74b004b0bc666092d1bd7a50c8c5ee8402efd477378403edcc38ec14adf"
+    },
+    {
+      "path": "lib/narrator.mjs",
+      "lines": 231,
+      "size": 13077,
+      "imports": 1,
+      "exports": 11,
+      "sha256": "b80e097333360cecd696f979836b1270df11c312fe1cc8a9a5808636eb6354e1"
+    },
+    {
+      "path": "lib/no-change.mjs",
+      "lines": 44,
+      "size": 2390,
+      "imports": 2,
+      "exports": 4,
+      "sha256": "f5bbcf0faefc7e7c8df3ef39f54ff50f1e0cd44afdce2f5bcc6aab12e9f73706"
+    },
+    {
+      "path": "lib/observer-bridge.mjs",
+      "lines": 111,
+      "size": 5963,
+      "imports": 2,
+      "exports": 3,
+      "sha256": "3c91917ed988f4c3eaf6fc65d5095fc0fa7a2cf09bfc72a8030f15814c57aff9"
+    },
+    {
+      "path": "lib/observer-sink.mjs",
+      "lines": 68,
+      "size": 3135,
+      "imports": 3,
+      "exports": 3,
+      "sha256": "a02aaa2e6eec41aa0db69cee49a48c4a6d7dd3882b034f0fffa915011ea373fb"
+    },
+    {
+      "path": "lib/openchamber-managed-seat.mjs",
+      "lines": 177,
+      "size": 10239,
+      "imports": 1,
+      "exports": 11,
+      "sha256": "3796190899b470cff82e8755dc8a3f6d9d3aaa1edbed667b4d86c0e25a7dd9a6"
+    },
+    {
+      "path": "lib/openchamber-remediate.mjs",
+      "lines": 319,
+      "size": 18325,
+      "imports": 2,
+      "exports": 22,
+      "sha256": "48fcce7c18a345848e3f872825af54efb0ff7afc3583b857bf72954f2fd506a2"
+    },
+    {
+      "path": "lib/openchamber-watch.mjs",
+      "lines": 594,
+      "size": 27639,
+      "imports": 9,
+      "exports": 23,
+      "sha256": "0bab2eae1362246f0e8db04d8ac9e08526def079e8f0b3847eaf4a7751b86011"
+    },
+    {
+      "path": "lib/operator-query.mjs",
+      "lines": 164,
+      "size": 9349,
+      "imports": 3,
+      "exports": 12,
+      "sha256": "fb7fee42847a9d607d99dd5e34b019eb2ef73ba359ad780381bfc78a3eb87b50"
+    },
+    {
+      "path": "lib/payload-budget.mjs",
+      "lines": 90,
+      "size": 4339,
+      "imports": 2,
+      "exports": 6,
+      "sha256": "c314996b2f04eee07b2abb1a3693a08e976399f3992b996d943abb8e1d4c5cfb"
+    },
+    {
+      "path": "lib/phase-driver.mjs",
+      "lines": 237,
+      "size": 12448,
+      "imports": 1,
+      "exports": 9,
+      "sha256": "a84ee9bf8310b9428bffd065ac637a20437b40c00ec5fec01676ce5bdb11b5aa"
+    },
+    {
+      "path": "lib/plan-cache.mjs",
+      "lines": 148,
+      "size": 6793,
+      "imports": 5,
+      "exports": 3,
+      "sha256": "16b0c9b67dca82664ad2d1e41a7cdfba7c0ca1a1163b49c920e92047ceeae8c2"
+    },
+    {
+      "path": "lib/policy-identity.mjs",
+      "lines": 48,
+      "size": 2297,
+      "imports": 3,
+      "exports": 4,
+      "sha256": "b67de8b81a68b4b9ddebf3a47982130bda7d9eef8270ab1b9a8e7c0074dce7b5"
+    },
+    {
+      "path": "lib/progress-brief.mjs",
+      "lines": 74,
+      "size": 3598,
+      "imports": 0,
+      "exports": 3,
+      "sha256": "c8e63643db4486046ac95f30a527dd070520745db0ce2f3bd107486f55434161"
+    },
+    {
+      "path": "lib/qmd-client.mjs",
+      "lines": 109,
+      "size": 5935,
+      "imports": 0,
+      "exports": 1,
+      "sha256": "fa421d3045b2c4cd603bd03d88aff3578e275ca28a966548fa4a82774777f38e"
+    },
+    {
+      "path": "lib/qmd-endpoint.mjs",
+      "lines": 34,
+      "size": 1790,
+      "imports": 1,
+      "exports": 1,
+      "sha256": "870a57118a68812d0992b3d6703669c72959b440b5a4db24a3f4cfb0f20d5396"
+    },
+    {
+      "path": "lib/qmd-refresh.mjs",
+      "lines": 27,
+      "size": 1295,
+      "imports": 1,
+      "exports": 1,
+      "sha256": "6efff58bd7039b205890dc4a51ac17cfc3206988715041eef16e24e113c0609a"
+    },
+    {
+      "path": "lib/qmd-tunnel.mjs",
+      "lines": 48,
+      "size": 2084,
+      "imports": 1,
+      "exports": 1,
+      "sha256": "53393f890f7949960f3376db5673833873e9fd1240bd093f758a0b6945d5c2a6"
+    },
+    {
+      "path": "lib/quality-pipeline.mjs",
+      "lines": 427,
+      "size": 24754,
+      "imports": 6,
+      "exports": 6,
+      "sha256": "157d0c4190b73a977a3c4b3cb9955a819dc0b45cd709e6fcd34901bdc466cf2e"
+    },
+    {
+      "path": "lib/repoql-client.mjs",
+      "lines": 804,
+      "size": 47397,
+      "imports": 3,
+      "exports": 7,
+      "sha256": "71c628783e3de008f147ccaf3eaea52639c170fa2a3014a6da63776f248cc1bc"
+    },
+    {
+      "path": "lib/resource-lease.mjs",
+      "lines": 200,
+      "size": 8924,
+      "imports": 3,
+      "exports": 8,
+      "sha256": "d322b3a2ff4779f747a73eeb2eee17ead9708ba7a7c4accdc941ba73692a3a4d"
+    },
+    {
+      "path": "lib/review-evidence.mjs",
+      "lines": 172,
+      "size": 7754,
+      "imports": 0,
+      "exports": 1,
+      "sha256": "67e8169c089e979a363a8766ec3961969cf68c2068eef398b3271761cd0144e8"
+    },
+    {
+      "path": "lib/roster.mjs",
+      "lines": 149,
+      "size": 8398,
+      "imports": 0,
+      "exports": 16,
+      "sha256": "290d456adad3b745d0cc5efdec19c1c6243f9bc8e3e4a1621ebd897f610b9b7e"
+    },
+    {
+      "path": "lib/run-health.mjs",
+      "lines": 113,
+      "size": 4785,
+      "imports": 2,
+      "exports": 2,
+      "sha256": "3f74ea97f988a08be34ae642e0c1b17f9f846e28c8c5d0c20f644f1ca118047e"
+    },
+    {
+      "path": "lib/run-registry.mjs",
+      "lines": 290,
+      "size": 15081,
+      "imports": 2,
+      "exports": 17,
+      "sha256": "ead2cb9de1742daf6b271da185eb7c3b764a2e5ffe434f503eb979415da93523"
+    },
+    {
+      "path": "lib/run-slots.mjs",
+      "lines": 203,
+      "size": 9771,
+      "imports": 3,
+      "exports": 18,
+      "sha256": "84ec0c6bd7ab00d8d2822fee7587ef23c93d1db2bdc75bea1e6bfeec23af01a3"
+    },
+    {
+      "path": "lib/run-summary.mjs",
+      "lines": 63,
+      "size": 2975,
+      "imports": 2,
+      "exports": 2,
+      "sha256": "98e63c6f67b77a275212e04ca2bffa060e050474ed292cae473b685f4872d0b9"
+    },
+    {
+      "path": "lib/seat-lease-check.mjs",
+      "lines": 29,
+      "size": 1607,
+      "imports": 2,
+      "exports": 2,
+      "sha256": "2a943e709f9686dd6db9681877c2e25237f4408eff7b25ff9462070c3911434e"
+    },
+    {
+      "path": "lib/session-bridge.mjs",
+      "lines": 172,
+      "size": 8383,
+      "imports": 1,
+      "exports": 13,
+      "sha256": "e38b4d9ebef9429d11b03fd5676e1d337f9ba8fad7e5e9d5d5f933367a202048"
+    },
+    {
+      "path": "lib/session-watch.mjs",
+      "lines": 203,
+      "size": 12136,
+      "imports": 4,
+      "exports": 7,
+      "sha256": "0f350b97628c20d6dc7071f2cabc4bcde479044aa11a3727a8703e594e138e06"
+    },
+    {
+      "path": "lib/skill-harvest.mjs",
+      "lines": 421,
+      "size": 21072,
+      "imports": 3,
+      "exports": 20,
+      "sha256": "f3aa14436f03fa8ddc8f8f9148af835b6bee69d63e9b1d575ac91b0a32267816"
+    },
+    {
+      "path": "lib/skill-publish.mjs",
+      "lines": 545,
+      "size": 32642,
+      "imports": 3,
+      "exports": 12,
+      "sha256": "245ec929dfa28273d70d95d4c6777c6477608d9629ef02086f732e11b33d463e"
+    },
+    {
+      "path": "lib/sol-humanize.mjs",
+      "lines": 175,
+      "size": 8909,
+      "imports": 0,
+      "exports": 2,
+      "sha256": "b537ce5ff3c9a0509da02cd63d64b9aeb37d17556770718348974431480d479b"
+    },
+    {
+      "path": "lib/sol-outfile.mjs",
+      "lines": 27,
+      "size": 1479,
+      "imports": 1,
+      "exports": 2,
+      "sha256": "84255ea98adeb4d2c11cb3deebcb39f26c7bceaa19e90154b7f3a9db662b966a"
+    },
+    {
+      "path": "lib/start-guard.mjs",
+      "lines": 170,
+      "size": 10628,
+      "imports": 2,
+      "exports": 9,
+      "sha256": "5e9306c9adb4235e7f0a93a4157c66f3214ce6df3f4516e9cb3ed259fcbba588"
+    },
+    {
+      "path": "lib/state-lock.mjs",
+      "lines": 185,
+      "size": 8255,
+      "imports": 2,
+      "exports": 5,
+      "sha256": "7162211bf1d92f8b650dbf1df4b3d47ccbcb16f86884af8201b1ed3fbf7a0011"
+    },
+    {
+      "path": "lib/supervisor.mjs",
+      "lines": 146,
+      "size": 7198,
+      "imports": 5,
+      "exports": 4,
+      "sha256": "ec653cbb6ba94a2f95f330b8800cdd40add39cfea5cb9eeb0ea4b57f9d66f864"
+    },
+    {
+      "path": "lib/watchdog.mjs",
+      "lines": 228,
+      "size": 13753,
+      "imports": 6,
+      "exports": 3,
+      "sha256": "5ab16d62bd43fafca389ff58b5043cdd1776ea99d71a6600804cad3b16d52860"
+    },
+    {
+      "path": "lib/worker-completion.mjs",
+      "lines": 87,
+      "size": 4523,
+      "imports": 0,
+      "exports": 6,
+      "sha256": "8ae33e3f287aff40fcdd4ba23de9d71f694c56fd53faad8ce7ebee5cd50baa56"
+    },
+    {
+      "path": "lib/worker-digest.mjs",
+      "lines": 74,
+      "size": 3979,
+      "imports": 2,
+      "exports": 4,
+      "sha256": "47ac62ebb9bab14db3664435085f7d31a06b8f37b8a571866603568a906fa927"
+    },
+    {
+      "path": "lib/worker-lease.mjs",
+      "lines": 78,
+      "size": 3627,
+      "imports": 2,
+      "exports": 6,
+      "sha256": "45a753321ecaea89e4c48457e69c88e0aeeba47daf8a3322653d756611f4097b"
+    },
+    {
+      "path": "nanny.mjs",
+      "lines": 451,
+      "size": 27236,
+      "imports": 7,
+      "exports": 9,
+      "sha256": "d1e820207912634e74507672e5cce84fbc93d3037d0b103bfd56c1134108bf15"
+    },
+    {
+      "path": "openchamber-remediate.mjs",
+      "lines": 317,
+      "size": 18219,
+      "imports": 2,
+      "exports": 22,
+      "sha256": "2851e7f201552d0d00928a042ba7af82523b9c40b8566b69dd95e8672116b5fc"
+    },
+    {
+      "path": "oq-freetext-test.mjs",
+      "lines": 97,
+      "size": 6027,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "361438c4c1c54de0148ec69cc240adb087cc8aa64f59a3d30259ad38d9e251cf"
+    },
+    {
+      "path": "orchestrate.mjs",
+      "lines": 8483,
+      "size": 603938,
+      "imports": 41,
+      "exports": 22,
+      "sha256": "7691ff5faad167ed9ed6fd894eb4897eff28ed3fff35105b954f617a1659627f"
+    },
+    {
+      "path": "replace-engines.mjs",
+      "lines": 94,
+      "size": 5680,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "02f3fdef2b5ef09c9249c9b71bf0ba4db5f7990ef248e0403542e678e4e1071a"
+    },
+    {
+      "path": "repoql-benchmark.mjs",
+      "lines": 101,
+      "size": 7110,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "f611bc0f7a021f675507ff216f9cae961273ea2586246c2d57113652ca3402c6"
+    },
+    {
+      "path": "repoql-cutover-gate.mjs",
+      "lines": 84,
+      "size": 4121,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "d02734f1115c3a32751ae75fc1f9a3e39914d69a4576cf3754a31a52396684ac"
+    },
+    {
+      "path": "repoql-parity-benchmark.mjs",
+      "lines": 32,
+      "size": 2139,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "8055781f91ebc39b1c4a05361515f63bf1a767e30cb0871ca21b24fd4b8e6e38"
+    },
+    {
+      "path": "scripts/mem-inspect.mjs",
+      "lines": 81,
+      "size": 3385,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "db882bd1aab29e11e75a686c5a19634d34fdb357cb578bead69b4a98f9ecee7f"
+    },
+    {
+      "path": "smoke-test.mjs",
+      "lines": 82,
+      "size": 3684,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "1f99c8b7fbeb34a8999ca9ff77253af0ef8eb65622d01c82563e7185c573e79a"
+    },
+    {
+      "path": "sol-bridge-test.mjs",
+      "lines": 200,
+      "size": 12356,
+      "imports": 5,
+      "exports": 0,
+      "sha256": "9ffd9777db5da286fb30977f9749c51dbd872d46bf007ca0c1fdf97077e17e9a"
+    },
+    {
+      "path": "tools/concept-capture.mjs",
+      "lines": 53,
+      "size": 3839,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "fb90944849983d427b007de5bb71144a2e31794a7980a06cb43c26fd4ee48c93"
+    },
+    {
+      "path": "tools/concept-capture.preflight.test.mjs",
+      "lines": 230,
+      "size": 12681,
+      "imports": 9,
+      "exports": 0,
+      "sha256": "687c6e8b7eca0573f748f7a810e2e18d2865d97028046d532587bb2f619fc4bd"
+    },
+    {
+      "path": "tools/concept-drift.mjs",
+      "lines": 145,
+      "size": 7521,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "56f324a09da0094acc18095bddd6c43697c13c23c2e2c5b904025fd0f7e688bc"
+    },
+    {
+      "path": "tools/doc-advisory-enqueue.mjs",
+      "lines": 78,
+      "size": 3353,
+      "imports": 3,
+      "exports": 1,
+      "sha256": "e3a9a330996cf73e50503c4a6ffab884b095d8c4089b1770eee91c143a526454"
+    },
+    {
+      "path": "tools/drain-advisories.mjs",
+      "lines": 40,
+      "size": 2009,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "6683ec594d324de247efcfbb865a4d77a9e2a23a718e9a8d5780af67bc36e0e5"
+    },
+    {
+      "path": "tools/memory-approve.mjs",
+      "lines": 130,
+      "size": 8305,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "1a29a2f87da3de28c65c865d587c099029580a40796401b82005c3f66251e4a4"
+    },
+    {
+      "path": "tools/memory-lineage.mjs",
+      "lines": 117,
+      "size": 5724,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "aabbf058f54cad9ba1d5c742f817172635ec5fb05f3a137f048301479966a6cf"
+    },
+    {
+      "path": "tools/memory-tombstone.mjs",
+      "lines": 174,
+      "size": 9215,
+      "imports": 0,
+      "exports": 0,
+      "sha256": "387cf47ec0c397fa5dc6b81e502397adc49e1bc96326698b23ed9e6f4bd02d83"
+    },
+    {
+      "path": "tools/memory-upgrade-acceptance.test.mjs",
+      "lines": 178,
+      "size": 12941,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "acf23d94bbef978d58a3598681874cd5c8f29195c9ef6270e2fc0327258e4466"
+    },
+    {
+      "path": "tools/report-repoql-metrics.mjs",
+      "lines": 54,
+      "size": 2321,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "4483c50f579b4c88759440329e3eace10eec335e11e4576521092fd5eefda7b4"
+    },
+    {
+      "path": "tools/skill-approve.mjs",
+      "lines": 111,
+      "size": 6617,
+      "imports": 5,
+      "exports": 0,
+      "sha256": "a1aa8f07dcfd8ece1815befa80f34b1b07834d7aeaf21a3bcf7c0a4b93a191ce"
+    },
+    {
+      "path": "tools/skill-publish.mjs",
+      "lines": 28,
+      "size": 1342,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "2e3a018b679b64ff4f5dac8d4847d642cdd9f73fc4304c8a499ad73f88dc4e20"
+    },
+    {
+      "path": "tools/skill-publish.offline.test.mjs",
+      "lines": 454,
+      "size": 27631,
+      "imports": 6,
+      "exports": 0,
+      "sha256": "fff3c4c5ba4139c9e3142508adde640067ec2be8f81cc87d062e529d1442f9f4"
+    },
+    {
+      "path": "tools/test-advisory-durability.mjs",
+      "lines": 50,
+      "size": 2255,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "d1eea7f753b8e241b05f8aa89ad5e58b880ad6a7c5ed25f63f1548ae24ec2081"
+    },
+    {
+      "path": "tools/test-advisory-queue-race.mjs",
+      "lines": 152,
+      "size": 7959,
+      "imports": 5,
+      "exports": 0,
+      "sha256": "d8b7737df9e75cdab33687be78ca7c808a393457e42740dc5f82a655071abd11"
+    },
+    {
+      "path": "tools/test-concept-gate.mjs",
+      "lines": 142,
+      "size": 8134,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "971ba55a9207d5b2932a1473d955be875bf25721e24f27248306f758ad099af2"
+    },
+    {
+      "path": "tools/test-doc-lifecycle.mjs",
+      "lines": 176,
+      "size": 10437,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "60064448608a6cc9cb3d2c8f15c7cff61f1048e1e4eb39af29233a503551e975"
+    },
+    {
+      "path": "tools/test-l23-artifact.mjs",
+      "lines": 150,
+      "size": 10288,
+      "imports": 8,
+      "exports": 0,
+      "sha256": "37b302bcb158fe0ae7aa5fb1ac89930447bafab7802385445800083a05f0c0ff"
+    },
+    {
+      "path": "tools/test-p0-outcomes.mjs",
+      "lines": 129,
+      "size": 7262,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "b27f692d50923e85b15e0b1ac31a65badf3c7cc2209d4950e2838c2ab08fb122"
+    },
+    {
+      "path": "tools/test-perf-contract.mjs",
+      "lines": 103,
+      "size": 6842,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "c740ea88e31b92f0484b1e275070c7210034195a0529cf2b9f68afc1cd7e5bd5"
+    },
+    {
+      "path": "v34-repoql-fallback-test.mjs",
+      "lines": 121,
+      "size": 8302,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "b8cc2fe393858532fdd2d4dce30e040b6eff33cf5c3b0ff752dfd49913c2006f"
+    },
+    {
+      "path": "v34-repoql-test.mjs",
+      "lines": 184,
+      "size": 14310,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "49d94149bec4b7a6e1f494bd7d428057a104dde7f4e0373ee925051bea47b37b"
+    },
+    {
+      "path": "v34-test.mjs",
+      "lines": 425,
+      "size": 29996,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "8931210be11433c5ace1c96399201d1d504fa1ed03d10eb48075bf2967884a47"
+    },
+    {
+      "path": "v35-test.mjs",
+      "lines": 314,
+      "size": 21958,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "b3b1cfb529bf8f8c72b40377ac161bfe6149412975184e23dfcc26540c12e685"
+    },
+    {
+      "path": "v36-affinity-test.mjs",
+      "lines": 103,
+      "size": 7705,
+      "imports": 1,
+      "exports": 0,
+      "sha256": "b6fbb9058588150f34fadc9d01d3794c2abccdedf60badd08393f1d02195cd6c"
+    },
+    {
+      "path": "v36-convreview-test.mjs",
+      "lines": 275,
+      "size": 18575,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "1028b033365d68732fcfc22e98d1566fcc1b1ff11c0002fd776a5aa948b32c9d"
+    },
+    {
+      "path": "v37-phase1-test.mjs",
+      "lines": 52,
+      "size": 2942,
+      "imports": 2,
+      "exports": 0,
+      "sha256": "41f94a5ead48b14f8691c7de1c1aec8af016078cf1362d419790ca7bf0cc6795"
+    },
+    {
+      "path": "v37b-foundations-test.mjs",
+      "lines": 61,
+      "size": 4813,
+      "imports": 6,
+      "exports": 0,
+      "sha256": "2e007ead95ed0ba5ec7706870fa9bac033d8bd44c6fd74ebd8c79a24386cf1c5"
+    },
+    {
+      "path": "v38-wave5-test.mjs",
+      "lines": 46,
+      "size": 3759,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "b5f53a64e93e7488be5c6032f9e4309ac3b093f634dea5dbf851e4445ec47bb8"
+    },
+    {
+      "path": "v39-secondbrain-test.mjs",
+      "lines": 262,
+      "size": 21372,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "c6729c66efd0ca0fe75e15b7ba1779a7eef57f0ea490ebd10c7e1994b8677fed"
+    },
+    {
+      "path": "v40-deploy-gate-test.mjs",
+      "lines": 876,
+      "size": 62709,
+      "imports": 8,
+      "exports": 0,
+      "sha256": "daadb569892be990886ab60e8d89c5f70d5c5ec90d6627c4cbf1d293e4706d3f"
+    },
+    {
+      "path": "v40-projection-coverage-test.mjs",
+      "lines": 250,
+      "size": 13797,
+      "imports": 6,
+      "exports": 0,
+      "sha256": "b580d68b8ee68d4f95993738baca05e775658d833840a1016ba6f531b8e408e3"
+    },
+    {
+      "path": "v41-roster-test.mjs",
+      "lines": 189,
+      "size": 17653,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "6cecf87a43364e12d0d1963e7b0aa64a05df1d7d3261e3049c228f2198c64506"
+    },
+    {
+      "path": "v42-memory-negative-test.mjs",
+      "lines": 304,
+      "size": 22694,
+      "imports": 3,
+      "exports": 0,
+      "sha256": "7f4bd404bfc8152b3cd7e47b01ee7796ef348a0d5d638ee6dc4bc503cfed35ea"
+    },
+    {
+      "path": "v43-repoql-budgets-test.mjs",
+      "lines": 87,
+      "size": 5984,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "2f3bede3ef094891a697716e223cc7d352997b64bfc24e5589f46a062c62bd2c"
+    },
+    {
+      "path": "v44-memory-lineage-test.mjs",
+      "lines": 506,
+      "size": 43806,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "a383fc3c513e3230c674dcf400a91c825c6a1ea17fda4f26deb78423f6f9cd38"
+    },
+    {
+      "path": "v45-memory-tombstone-test.mjs",
+      "lines": 213,
+      "size": 17145,
+      "imports": 4,
+      "exports": 0,
+      "sha256": "0ed3d49d06d61277e65ee7bbbc2f50775f70ed005dba7e2378476288e06146da"
+    },
+    {
+      "path": "verify-acceptance-evidence.mjs",
+      "lines": 116,
+      "size": 5760,
+      "imports": 5,
+      "exports": 0,
+      "sha256": "70b4aa3c6fdf2751eb97b55703a148da428fe133c077cc861458d53f499249d0"
+    }
+  ]
+}

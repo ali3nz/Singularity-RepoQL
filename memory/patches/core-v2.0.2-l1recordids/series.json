@@ -1,0 +1,79 @@
+{
+  "schema": "singularity-memory-patch-series/1",
+  "id": "core-v2.0.2-l1recordids",
+  "upstream": {
+    "project": "TencentCloud/TencentDB-Agent-Memory",
+    "tag": "v2.0.2",
+    "commit": "99a1a2c251741658917e3fa700bf8e337ad15a5f",
+    "subpath": "MemoryCore",
+    "license": "MIT",
+    "tarball_sha256": "11dab534e0a11ce69de2f9eef309fa85d297b63fbfa63df20742a15d0a6267e0"
+  },
+  "image": {
+    "tag": "tencent-memorycore:v2.0.2-99a1a2c-l1recordids1",
+    "note": "Live image under which the head content was read back byte-identical from the running container (/app) on 2026-10-28."
+  },
+  "patch": {
+    "file": "core-l1recordids.patch",
+    "sha256": "294ac53705ec1aec2ea243d2cb6cc81c71de718d4457c60be21956d41c344811",
+    "apply": "patch -p1 -E --batch --forward < core-l1recordids.patch   # from the extracted MemoryCore/ directory",
+    "reverse": "patch -p1 -E --batch --reverse < core-l1recordids.patch",
+    "note": "GNU patch, not `git apply -R`: reversing a creation with git leaves a zero-byte file, which would hide a non-reversible series."
+  },
+  "files": [
+    {
+      "path": "src/adapters/standalone/llm-runner.ts",
+      "status": "modified",
+      "base_sha256": "a38cfd57676b4d0cb62b5591b15d432c1e535ee84da528e16795786193b1648f",
+      "head_sha256": "aa427d924fab6a11cd07a723a86acc391a2fc4064b5cd188bf802e0bcb259c66"
+    },
+    {
+      "path": "src/core/record/l1-extractor.ts",
+      "status": "modified",
+      "base_sha256": "eb354b4571ed088398ccd1885baee7800933d4005b4dad4e42b755d0d3ef7e7b",
+      "head_sha256": "852aa41ec0743d66907bdb401a6b61bcdee4aa32f9c9053294269eb6603fa525"
+    },
+    {
+      "path": "src/core/store/sqlite/memory-store.ts",
+      "status": "modified",
+      "base_sha256": "f4e62980a0c48f366c53d12c3c2575a80ea9012a276486a81cc6bba2729b276e",
+      "head_sha256": "169cf065ae09397ecb170e6e30f5548b9633f8c9e2d94b5ae5adb93913ba3316"
+    },
+    {
+      "path": "src/core/tdai-core.ts",
+      "status": "modified",
+      "base_sha256": "423b0d2dba5c081c6f62ce9b8b27cd3db2738cbb4ee396a64475b3e8e8155856",
+      "head_sha256": "006b233351ace9e430b21af0c2216a3a0fa19792d4c8d44097ac0f4a27574d58"
+    },
+    {
+      "path": "src/gateway/server.ts",
+      "status": "modified",
+      "base_sha256": "c91058fd22d3a3234beb1fc822b31381b0d4f86a54e055ddd86827906a9e05dd",
+      "head_sha256": "2eff90ccaae1f0f948b248bd0c1210e83904e95415584dbe368dfeaf5feaaf3f"
+    },
+    {
+      "path": "src/gateway/v2-router.ts",
+      "status": "modified",
+      "base_sha256": "9f59fe7b3a1de375159e138a0be92114685d4e07adef55165c4b0dc79d45dd77",
+      "head_sha256": "975fa830ec0f60b1f5ece7ab8ea4d4f1efc5c921b3cbbe760301643cd0010fef"
+    },
+    {
+      "path": "src/services/pipeline-worker.ts",
+      "status": "modified",
+      "base_sha256": "922d7e459c98f0c1a21c2a99b2a9bee275412b5e640241b61f8286ab7ba67611",
+      "head_sha256": "c6da45fe1232ccbccb115111911ca1431badea9b1bca934d4a19fef23c671ad4"
+    },
+    {
+      "path": "src/utils/pipeline-factory.ts",
+      "status": "modified",
+      "base_sha256": "95dcc5154ecd930e20bf42ce932f04d2dd70ff713c8b6539416babaa776ac4cb",
+      "head_sha256": "d424290c5b0ec874b857a4063b8a46e3b9eaf430459b6a6b78f5529ddf8daeb3"
+    },
+    {
+      "path": "tests/issue712-ladder-regression.mjs",
+      "status": "added",
+      "base_sha256": null,
+      "head_sha256": "15825ae88dc056c6443572b6144ccd5e9c2acb6223683b2662f6ec2f38e1ccd2"
+    }
+  ]
+}

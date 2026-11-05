@@ -1,0 +1,42 @@
+{
+  "docs": {
+    "bc339c8e::docs/legacy.md": {
+      "active_rev": "75d6b0e6",
+      "doc_id": "511ee775",
+      "last_verified": "2026-10-28T08:00:04Z",
+      "rel": "docs/legacy.md",
+      "revs": {
+        "75d6b0e6": {
+          "chunks": 1,
+          "hashes": [
+            "5a3003e3"
+          ],
+          "ingested_at": "2026-10-28T08:00:04Z",
+          "session": null,
+          "status": "DOC_INGEST_INDEXED",
+          "task_ids": [
+            "docs-511ee775-r75d6b0e6-c01"
+          ],
+          "verified_at": "2026-10-28T08:00:04Z"
+        },
+        "9a6f2674": {
+          "chunks": 1,
+          "hashes": [
+            "650d73d3"
+          ],
+          "ingested_at": "2026-10-28T08:00:03Z",
+          "session": null,
+          "status": "DOC_INGEST_INDEXED",
+          "task_ids": [
+            "docs-511ee775-r9a6f2674-c01"
+          ],
+          "verified_at": "2026-10-28T08:00:03Z"
+        }
+      },
+      "root": "/tmp/doc-parity-rqB0uR/workspace",
+      "root_id": "bc339c8e",
+      "title": "Legacy runbook"
+    }
+  },
+  "version": 1
+}

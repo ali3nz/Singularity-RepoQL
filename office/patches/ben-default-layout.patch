@@ -1,0 +1,65 @@
+--- a/backend/app/api/routes/layout.py
++++ b/backend/app/api/routes/layout.py
+@@ -206,6 +206,46 @@
+     await db.commit()
+ 
+ 
++BEN_LAYOUT_NAME = "Ben"
++
++
++async def seed_default_layouts(db: AsyncSession) -> None:
++    """Seed the curated "Ben" view and make it the active layout.
++
++    B5 (operator): a fresh Windows install must open on the operator's normal
++    floor (the bundled ``default_layout.json``) and expose it as the saved
++    "Ben" snapshot, exactly like the live deployment. Only ever fills a
++    missing preference row; an existing layout is never overwritten.
++    """
++    if _BUNDLED_DEFAULT_LAYOUT is None:
++        return
++    result = await db.execute(
++        select(UserPreference).where(UserPreference.key == LAYOUT_KEY)
++    )
++    if result.scalar_one_or_none() is None:
++        db.add(
++            UserPreference(
++                key=LAYOUT_KEY,
++                value=json.dumps(
++                    _BUNDLED_DEFAULT_LAYOUT, separators=(",", ":"), ensure_ascii=False
++                ),
++            )
++        )
++    result = await db.execute(
++        select(UserPreference).where(UserPreference.key == SAVED_LAYOUTS_KEY)
++    )
++    if result.scalar_one_or_none() is None:
++        saved_at = _BUNDLED_DEFAULT_LAYOUT.get("updatedAt") or _now_ms()
++        saved = {BEN_LAYOUT_NAME: {"savedAt": saved_at, "layout": _BUNDLED_DEFAULT_LAYOUT}}
++        db.add(
++            UserPreference(
++                key=SAVED_LAYOUTS_KEY,
++                value=json.dumps(saved, separators=(",", ":"), ensure_ascii=False),
++            )
++        )
++    await db.commit()
++
++
+ @router.get("")
+ async def get_layout(
+     db: Annotated[AsyncSession, Depends(get_db)],
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -47,6 +47,13 @@
+     async with engine.begin() as conn:
+         await conn.run_sync(Base.metadata.create_all)
+         await migrate_schema(conn)
++
++    from sqlalchemy.ext.asyncio import async_sessionmaker
++
++    from app.api.routes.layout import seed_default_layouts
++
++    async with async_sessionmaker(get_engine(), expire_on_commit=False)() as db:
++        await seed_default_layouts(db)
+ 
+     await _reap_stale_sessions()
+ 

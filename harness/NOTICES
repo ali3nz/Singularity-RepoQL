@@ -1,0 +1,28 @@
+# Third-party notices — portable harness contribution
+
+This contribution is distributed under the same MIT licence as the rest of
+Singularity (root `LICENSE`, "Copyright (c) 2026 Ali3nz (Singularity)"). It
+adds `harness/`, `bin/ai-orchestra`, `docs/HARNESS.md` and `tests/harness-*.test.mjs`.
+
+The components below keep their own licences and copyrights. Upstream files are
+not relicensed by this repository.
+
+| Component | What this contribution carries | Treatment |
+| --- | --- | --- |
+| AI Orchestra kit (engine source, `harness/kit/`) | First-party source from the operator's own harness, exported and parameterised. No upstream `LICENSE` file existed in the source kit. | First-party, MIT as part of Singularity. No third-party file is relicensed. |
+| [OpenChamber](https://github.com/openchamber/openchamber) | **Nothing vendored.** The app delta is recorded as a patch series against upstream tag `v2.5.2` (`c4919abc1e7a0a3beeaa126666487806bf79cfe0`); no upstream source is copied. | MIT upstream. Keep the upstream licence when building or redistributing the app. |
+| [OpenCode](https://opencode.ai) | **Nothing vendored.** The runtime pin is documented in `harness/config/openchamber-runtime.json`. | MIT upstream. |
+| OpenCode DCP (`@tarquinen/opencode-dcp`, [Opencode-DCP](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning)) | **Nothing vendored**, no plugin copied. Referenced only as a runtime dependency a host installs itself. | **AGPL-3.0-or-later.** A separately installed dependency: review the licence before redistributing any modification of it. This contribution does not modify or redistribute it. |
+| [RepoQL](https://github.com/RepoQL/RepoQL) | **Nothing vendored.** The engine talks to an external RepoQL host through `rql`; the host is installed and licensed separately by the user. | Commercial product; the vendor's own terms apply. Not relicensed here. |
+| RepoQL OpenCode plugin | **Nothing vendored.** Referenced as a separately installed plugin. | MIT (per the repository's `THIRD_PARTY_NOTICES.md`). |
+| [Rust](https://www.rust-lang.org/) crate graph (`harness/rust-authority/`) | Source only, `Cargo.lock` included for reproducibility, `target/` excluded, nothing built by this contribution. | Crate licences are those declared by each crate in `Cargo.lock`; review them before building or distributing a binary. |
+| [Claude Office](https://github.com/paulrobello/claude-office), TencentDB Agent Memory | **Not part of this contribution.** | Covered by the root `THIRD_PARTY_NOTICES.md` for the parts Singularity ships elsewhere. |
+
+Notes for a distributor:
+
+- the exported engine's `prompts/` and `skills/` text is first-party operating
+  material, not upstream documentation;
+- no credentials, tokens or subscriber model entitlements are carried (see
+  `docs/HARNESS.md` §Configuration);
+- if you redistribute Singularity, keep the root `THIRD_PARTY_NOTICES.md` and any
+  upstream licence text for the components you actually ship.

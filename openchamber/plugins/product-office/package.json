@@ -1,0 +1,12 @@
+{
+  "name": "singularity-product-office",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenChamber plugin: captures completed sessions into Singularity Memory Core and forwards optional session events to Claude Office.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "license": "MIT"
+}

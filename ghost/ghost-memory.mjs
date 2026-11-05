@@ -1,0 +1,136 @@
+#!/usr/bin/env node
+// ghost-memory.mjs — Ghost's bounded MemoryCore CLI interface.
+//
+// Reads credentials from data/opencode/config/product-secrets/memory.json (or
+// SINGULARITY_MEMORY_CONFIG) so no secret appears on argv or in logs.
+//
+// Usage:
+//   node ghost/ghost-memory.mjs recall "<query>" [--layer L1|L0] [--limit 5]
+//   node ghost/ghost-memory.mjs remember --role user|assistant --text "..." [--session ghost-runtime-YYYY-MM-DD] [--ts ISO]
+//   node ghost/ghost-memory.mjs core [--max-chars 6000]
+//   node ghost/ghost-memory.mjs stats
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export {loadGhostMemoryConfig} from "../scripts/memory-config-loader.mjs";
+import {loadGhostMemoryConfig} from "../scripts/memory-config-loader.mjs";
+
+export {callMemoryCore} from "../scripts/memory-config-loader.mjs";
+import {callMemoryCore} from "../scripts/memory-config-loader.mjs";
+
+const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n) + "…" : s; };
+
+export async function runGhostMemoryCli(argv = process.argv.slice(2), opts = {}) {
+  const cfg = opts.cfg || loadGhostMemoryConfig(opts.env);
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const cmd = argv[0];
+  const flag = (name, dflt) => {
+    const eq = argv.find((a) => a.startsWith(`--${name}=`));
+    if (eq) return eq.slice(name.length + 3);
+    const i = argv.indexOf(`--${name}`);
+    return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
+  };
+  const positional = argv.slice(1).filter((a, i) => !a.startsWith("--") && !(i > 0 && argv[i] && String(argv[i]).startsWith("--") && !String(argv[i]).includes("=")));
+  const defaultSession = (opts.env || process.env).GHOST_MC_SESSION || `ghost-runtime-${new Date().toISOString().slice(0, 10)}`;
+
+  if (cmd === "recall") {
+    const query = flag("query") || positional.join(" ").trim();
+    if (!query) return { exitCode: 2, output: { error: "usage: ghost-memory recall \"<query>\" [--layer L1|L0] [--limit 5]" } };
+    const layer = String(flag("layer", "L1")).toUpperCase();
+    const limit = Math.min(Number(flag("limit", 5)) || 5, 20);
+    const ep = layer === "L0" ? "/v3/conversation/search" : "/v3/atomic/search";
+    const r = await callMemoryCore(ep, { ...cfg.identity, query, limit }, cfg, fetchImpl);
+    if (r.error || (r.code !== undefined && r.code !== 0)) {
+      return { exitCode: 1, output: { error: r.error || r.message || "recall-failed", code: r.code } };
+    }
+    const items = (r.data?.messages || r.data?.atoms || r.data?.items || []).map((m) => ({
+      id: m.id,
+      score: m.score ? Math.round(m.score * 1000) / 1000 : undefined,
+      session: m.session_id,
+      ts: m.timestamp || m.recorded_at,
+      text: clip(m.content ?? m.body, 600),
+    }));
+    return { exitCode: 0, output: { layer, query, count: items.length, items } };
+  }
+
+  if (cmd === "remember") {
+    const role = String(flag("role", "user"));
+    const text = flag("text") || positional.join(" ").trim();
+    const session = flag("session", defaultSession);
+    const ts = flag("ts") || new Date().toISOString();
+    if (!text) return { exitCode: 2, output: { error: "usage: ghost-memory remember --role user|assistant --text \"...\"" } };
+    if (!["user", "assistant"].includes(role)) return { exitCode: 2, output: { error: "role must be user|assistant" } };
+    const taskId = `${session}-${Date.now().toString(36)}`;
+    const r = await callMemoryCore("/v3/conversation/add", {
+      ...cfg.identity,
+      session_id: session,
+      task_id: taskId,
+      messages: [{ role, content: text.slice(0, 8000), recorded_at: ts }],
+    }, cfg, fetchImpl);
+    const ok = r.code === 0;
+    return {
+      exitCode: ok ? 0 : 1,
+      output: { ok, code: r.code, message: r.message || r.error, session, accepted: r.data?.accepted_ids?.length ?? (ok ? 1 : 0) },
+    };
+  }
+
+  if (cmd === "core") {
+    const max = Number(flag("max-chars", 6000)) || 6000;
+    const r = await callMemoryCore("/v3/core/read", { ...cfg.identity }, cfg, fetchImpl);
+    const content = r.data?.content || "";
+    return {
+      exitCode: r.code === 0 ? 0 : 1,
+      output: { ok: r.code === 0, chars: content.length, version: r.data?.version, content: clip(content, max) },
+    };
+  }
+
+  if (cmd === "stats") {
+    // Strict diagnostic: a missing/unreadable config, missing credentials, a
+    // non-JSON or semantic-error response, or an incomplete identity all fail.
+    // Exit 0 is reserved for two authenticated count calls that returned code 0.
+    const env = opts.env || process.env;
+    const cfgPath = env.SINGULARITY_MEMORY_CONFIG
+      || resolve(process.cwd(), "data/opencode/config/product-secrets/memory.json");
+    let parsed = null;
+    try { parsed = JSON.parse(readFileSync(cfgPath, "utf8")) || null; } catch { parsed = null; }
+    if (!parsed) return { exitCode: 1, output: { error: "config-missing-or-unreadable", path: cfgPath } };
+    if (!cfg.gatewayKey && !cfg.userKey) return { exitCode: 1, output: { error: "no-service-key", path: cfgPath } };
+    const [l0, l1] = await Promise.all([
+      callMemoryCore("/v3/conversation/count", cfg.identity, cfg, fetchImpl),
+      callMemoryCore("/v3/atomic/count", cfg.identity, cfg, fetchImpl),
+    ]);
+    const reason = (r) => (r.error || (r.code !== undefined && r.code !== 0) || r.status)
+      ? (r.error || r.message || `code ${r.code ?? "?"}`) : null;
+    const r0 = reason(l0), r1 = reason(l1);
+    if (r0 || r1) {
+      return { exitCode: 1, output: { error: "memory-count-failed", l0: r0, l1: r1 } };
+    }
+    const ident = cfg.identity || {};
+    if (!ident.team_id || !ident.user_id || !ident.agent_id) {
+      return { exitCode: 1, output: { error: "identity-incomplete", identity: ident } };
+    }
+    return {
+      exitCode: 0,
+      output: { identity: ident, l0_messages: Number(l0.data?.total ?? 0), l1_atomic: Number(l1.data?.total ?? 0) },
+    };
+  }
+
+  return {
+    exitCode: cmd ? 2 : 0,
+    output: {
+      usage: [
+        "ghost-memory recall \"<query>\" [--layer L1|L0] [--limit 5]",
+        "ghost-memory remember --role user|assistant --text \"...\" [--session ghost-runtime-YYYY-MM-DD] [--ts ISO]",
+        "ghost-memory core [--max-chars 6000]",
+        "ghost-memory stats",
+      ],
+    },
+  };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const res = await runGhostMemoryCli();
+  process.stdout.write(JSON.stringify(res.output, null, 2) + "\n");
+  process.exit(res.exitCode);
+}

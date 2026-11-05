@@ -1,0 +1,174 @@
+# native-windows-wiring.patch — native Windows (no WSL) wiring for Worker C's files.
+#
+# Owner: Worker D (branch workerd-native, base 5984d1e). Worker C is editing
+# scripts/install-claude-code.mjs and scripts/doctor.mjs in
+# /home/bensl/singularity-workerC-kit, so these hunks are DELIVERED HERE, not
+# applied in the release checkout. Context lines are from 5984d1e.
+#
+# Depends on (already shipped by Worker D in this branch):
+#   scripts/lib/win-platform.mjs        resolveHome, claudeConfigDir,
+#                                       findClaudeExecutable, findRqlExecutable,
+#                                       verifySecretFilePermissions
+#   adapters/claude-code/settings-merge.mjs  exec-form hooks on win32 (no installer
+#                                       change needed: ensureMemoryIntegration
+#                                       defaults to process.platform/process.execPath)
+#   scripts/doc-ingest-node.mjs         pure-Node ingestion (no python3)
+#
+# Apply (from a checkout at the same base):
+#   git apply --check docs/native-windows-wiring.patch
+#   git apply docs/native-windows-wiring.patch
+#
+# Already applied in this branch (not in this patch):
+#   bin/ai-orchestra        containment via path.relative (Windows separators,
+#                           sibling-prefix false positives)
+#   bin/ai-orchestra.cmd    Windows launcher template (absolute node, %* passthrough)
+#
+# Deliberately NOT patched (Owner C's files):
+#   harness/kit/orchestrate.mjs — the engine is POSIX-heavy by design (docs/HARNESS.md
+#   says native cmd/PowerShell is unsupported). The kit's Windows story is the .cmd
+#   launcher plus a WSL/Docker engine; changing orchestrate.mjs here would collide
+#   with Worker C's kit wiring without a proven native path.
+#   scripts/attach-openchamber.mjs — REQUIRED FOLLOW-UP: it must carry
+#   scripts/doc-ingest-node.mjs beside doc-policy.mjs (doc-policy imports it) and
+#   its runtime-file test must include it; otherwise an attached option 3/4 target
+#   cannot load the shared policy. This patch does not touch C's file.
+#   scripts/install-claude-code.mjs — REQUIRED FOLLOW-UP for a cross-path upgrade:
+#   pass the install record's previous hook script path as
+#   `previousScriptPaths` to ensureMemoryIntegration/removeMemoryIntegration; the
+#   merge now refuses to claim a same-named foreign handler without that proof.
+#
+# Note on tests: scripts/lib/win-platform.test.mjs and
+# adapters/claude-code/settings-windows.test.mjs cover the primitives used below.
+--
+--- a/scripts/install-claude-code.mjs
++++ b/scripts/install-claude-code.mjs
+@@ -55,6 +55,9 @@
+ // FUNCTIONALLY VERIFIED proof layer: the gate separates CONFIGURED facts from
+ // runtime proofs, and a proof that cannot run is a FAIL-CLOSED MISSING.
+ import { resolveModelLane, probeModelLane, modelLaneAdvice, readUpstreamEnvContent } from "./model-lane.mjs";
++// Native-Windows facts (home resolution, executable discovery, honest permission
++// checks). Kept in one tested module instead of POSIX `which`/`chmod` guesses.
++import { findClaudeExecutable, findRqlExecutable, resolveHome, verifySecretFilePermissions } from "./lib/win-platform.mjs";
+ import { probeMemoryIdentity, probeMemoryLoop, probeRepoqlMcp, probeDocIngestion, probeProviderFailover, isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
+ 
+ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+@@ -84,15 +87,12 @@
+ // Credential-bearing files (harness settings with routing tokens and the
+ // integration state ledger) are 0600. Writing with mode 0600 does not fix a
+ // PRE-EXISTING file's mode, so the restriction is (re)applied explicitly and
+-// verified. POSIX only — Windows ACL semantics are out of scope here.
++// verified. On Windows there are no POSIX mode bits: the helper reports
++// `enforced: false, verified: false` with the reason instead of claiming a
++// protection that was never checked. NTFS ACL verification (icacls) is the
++// documented follow-up, not a silent "enforced: true".
+ function enforceSecretPermissions(path) {
+-  if (process.platform === "win32") return { enforced: true, mode: "n/a (windows)" };
+-  let enforced = false;
+-  try { chmodSync(path, 0o600); enforced = true; } catch { /* fall through to verification */ }
+-  try {
+-    const ok = (statSync(path).mode & 0o777) === 0o600;
+-    return { enforced: enforced && ok, mode: ok ? "0600" : "mismatch", verified: ok };
+-  } catch { return { enforced, mode: "unverified", verified: false }; }
++  return verifySecretFilePermissions(path);
+ }
+ 
+ function writeSettingsFile(path, settings) {
+@@ -121,7 +121,13 @@
+ }
+ 
+ function claudeBinary() {
+-  return spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0 ? "claude" : null;
++  // Native Windows has no `claude` on PATH: the standalone CLI lives in
++  // %USERPROFILE%\.local\bin and the Desktop app bundles its own claude-code
++  // under %LOCALAPPDATA%\Claude-Data. Probe the resolved absolute path.
++  const found = findClaudeExecutable();
++  if (!found) return null;
++  const probe = spawnSync(found.path, ["--version"], { encoding: "utf8", windowsHide: true });
++  return probe.status === 0 ? found.path : null;
+ }
+ 
+ function resolveRqlCommand(candidate) {
+@@ -134,9 +140,12 @@
+   return candidate;
+ }
+ 
+-/** Detect a runnable Linux rql (env override, PATH, then the WSL2 installer location). */
++/** Detect a runnable rql (env override, PATH, native install dir, then the WSL2 installer location). */
+ export function detectRql(home, env = process.env) {
+-  for (const candidate of [env.REPOQL_RQL_PATH, "rql", join(home || "", ".local/bin/rql")]) {
++  // On native Windows `which` does not exist and the binary is `rql.exe`; the
++  // helper finds it on PATH or under %LOCALAPPDATA%\Singularity\bin.
++  const native = findRqlExecutable({ env, home });
++  for (const candidate of [env.REPOQL_RQL_PATH, native ? native.path : null, "rql", join(home || "", ".local/bin/rql")]) {
+     if (!candidate) continue;
+     const resolved = resolveRqlCommand(candidate);
+     if (resolved) return resolved;
+@@ -298,6 +307,14 @@
+ }
+ 
+ export function parseFlags(argv, home, cwd) {
++  // `process.env.HOME` is normally unset in PowerShell/cmd, which made every
++  // derived path relative. Resolve the real home (USERPROFILE on Windows) once
++  // and refuse clearly when neither exists — never invent one.
++  let homeDir = home;
++  if (!homeDir) {
++    try { homeDir = resolveHome({ fallbackHome: "" }); }
++    catch { throw new UsageError("cannot determine the home directory (HOME and USERPROFILE are unset); on Windows run from your user session, or use --scope project --project-dir <dir>"); }
++  }
+   const flags = { scope: "user", projectDir: resolve(cwd), team: "", user: "", skipProfiles: false, skipRepoqlMcp: false, dryRun: false,
+     mainMemory: null, // null = offer interactively (TTY), off when non-interactive
+     replaceProvider: false, probe: false, variant: null, container: null, configDir: null };
+@@ -325,10 +342,10 @@
+     else if (a === "--config-dir") flags.configDir = argv[++i];
+     else throw new UsageError(`unknown argument: ${a}`);
+   }
+-  flags.settingsPath = settingsPathFor(flags.scope, home, flags.projectDir);
++  flags.settingsPath = settingsPathFor(flags.scope, homeDir, flags.projectDir);
+   flags.agentsTarget = flags.scope === "project"
+     ? join(flags.projectDir, ".claude", "agents")
+-    : join(home, ".claude", "agents");
++    : join(homeDir, ".claude", "agents");
+   return flags;
+ }
+ 
+--- a/scripts/doctor.mjs
++++ b/scripts/doctor.mjs
+@@ -34,6 +34,7 @@
+ import { isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
+ import { candidateSummary } from "./selflearn-candidates.mjs";
+ import { auditComponentSet, CREDENTIAL_COMPONENTS, VARIANT_COMPONENTS } from "./bundle-classification.mjs";
++import { claudeConfigDir, findClaudeExecutable, resolveHome } from "./lib/win-platform.mjs";
+ import { MANAGED_BEGIN, MANAGED_END, parseJsonc } from "./attach-openchamber.mjs";
+ 
+ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+@@ -75,6 +76,30 @@
+ }
+ 
+ /**
++ * Native-Windows facts (no WSL): where the install would land and what can be
++ * proved. On Windows `HOME` is usually unset, `claude` is not on PATH, and POSIX
++ * mode bits do not exist — this section reports those facts instead of failing
++ * with a POSIX error or claiming ACL protection that was never checked.
++ */
++export function nativeWindowsCheck({ env = process.env, platform = process.platform } = {}) {
++  if (platform !== "win32") return { state: "NOT_APPLICABLE", detail: `host platform is ${platform}; native-Windows checks apply to win32 only` };
++  let home;
++  try { home = resolveHome({ env, platform }); }
++  catch (e) { return { state: "INCOMPLETE", detail: `home directory cannot be resolved: ${e?.message || e}` }; }
++  const claudeConfig = claudeConfigDir({ home, platform });
++  const exe = findClaudeExecutable({ env, platform, home });
++  const settingsPath = join(claudeConfig, "settings.json");
++  const problems = [];
++  if (!exe) problems.push("no Claude Code executable found on PATH, in %USERPROFILE%\\.local\\bin, or in %LOCALAPPDATA%\\Claude-Data");
++  if (!existsSync(settingsPath)) problems.push(`no Claude Code settings file at ${settingsPath}`);
++  if (problems.length) return { state: "INCOMPLETE", detail: problems.join("; ") };
++  return {
++    state: "CONFIGURED",
++    detail: `home ${home}; claude ${exe.kind} at ${exe.path}; settings ${settingsPath}; POSIX mode bits do not exist here (NTFS ACLs are not verified)`,
++  };
++}
++
++/**
+  * The capture single-writer contract, as facts on disk (issue 7).
+  * Exactly ONE automatic writer may be installed. A second scheduler unit is not
+  * "more capture": it is two writers racing the same ledger, so the doctor

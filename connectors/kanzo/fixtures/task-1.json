@@ -1,0 +1,27 @@
+{
+  "task": {
+    "id": 1,
+    "project": "demo",
+    "title": "Seed the fixture board",
+    "description": "Synthetic card. Nothing here is a real record.",
+    "tags": [
+      "fixture"
+    ],
+    "human": false,
+    "status": "done",
+    "position": 1,
+    "created_at": "2026-01-02T03:04:05Z",
+    "updated_at": "2026-01-02T04:00:00Z",
+    "comments": 1
+  },
+  "comments": [
+    {
+      "id": 1,
+      "task_id": 1,
+      "body": "Synthetic comment for the fixture suite.",
+      "author": "fixture",
+      "created_at": "2026-01-02T04:00:00Z"
+    }
+  ],
+  "images": []
+}

@@ -1,0 +1,517 @@
+// Unit tests for the Claude Code integration installer (pure parts) and the
+// settings merge/unmerge helpers. Run:
+//   node --test adapters/claude-code/installer.test.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, statSync, chmodSync, copyFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import {
+  ensureMemoryIntegration,
+  removeMemoryIntegration,
+  settingsPathFor,
+  isSingularityHookCommand,
+} from "./settings-merge.mjs";
+import {
+  applyAgentFiles,
+  applySettings,
+  agentRemovalPlan,
+  resolveVariant,
+  VARIANTS,
+  integrationEnv,
+  parseFlags,
+  parseOptionChoice,
+  planAgentFiles,
+  readState,
+  saveInstallRecord,
+  uninstallFilesForRecord,
+  applyMainMemory,
+  usageText,
+  installOptionLines,
+  option2BoundaryLines,
+  runInstall,
+  UsageError,
+} from "../../scripts/install-claude-code.mjs";
+
+const HOOK_SCRIPT = "/srv/singularity/adapters/claude-code/memory-hook.mjs";
+
+// The legacy Docker/Ubuntu installer refuses to run on Windows before it
+// reaches any option/flag logic (NATIVE_WINDOWS_INSTALLER_INCOMPLETE, rc 5);
+// the supported Windows path is native/windows/manage_native_windows.ps1.
+// Tests that exercise the POSIX installer's CLI therefore do not apply here.
+const LEGACY_INSTALLER_SKIP = process.platform === "win32"
+  ? "the legacy Docker/Ubuntu installer refuses to run on Windows (NATIVE_WINDOWS_INSTALLER_INCOMPLETE, rc 5); the native Windows path is manage_native_windows.ps1"
+  : false;
+
+test("hook command recognition is precise", () => {
+  assert.equal(isSingularityHookCommand(`node ${HOOK_SCRIPT} subagent-start`), true);
+  assert.equal(isSingularityHookCommand(`node ${HOOK_SCRIPT} subagent-stop`), true);
+  assert.equal(isSingularityHookCommand(`node /other/office-hook.mjs subagent-stop`), false);
+  assert.equal(isSingularityHookCommand(`node ${HOOK_SCRIPT} stop`), false);
+  assert.equal(isSingularityHookCommand(undefined), false);
+});
+
+test("ensureMemoryIntegration adds both hook events and env without touching unrelated settings", () => {
+  const existing = {
+    model: "opus",
+    env: { EXISTING_VAR: "keep-me", SINGULARITY_REPO_ROOT: "/user/override" },
+    hooks: {
+      PreToolUse: [{ hooks: [{ type: "command", command: "node /other/pretool.mjs" }] }],
+      SubagentStop: [{ hooks: [{ type: "command", command: "node /other/officestop.mjs" }] }],
+    },
+  };
+  // The command shape is platform-specific (Windows uses exec form with
+  // node.exe + args). This test asserts POSIX command strings, so pin the
+  // platform instead of depending on the host running the suite.
+  const { settings, changed } = ensureMemoryIntegration(existing, {
+    scriptPath: HOOK_SCRIPT,
+    env: integrationEnv("/srv/singularity"),
+    platform: "linux",
+  });
+  assert.equal(changed, true);
+  assert.equal(settings.model, "opus", "unrelated settings preserved");
+  assert.equal(settings.hooks.PreToolUse[0].hooks[0].command, "node /other/pretool.mjs");
+  const stopCommands = settings.hooks.SubagentStop[0].hooks.map((h) => h.command);
+  assert.deepEqual(stopCommands, ["node /other/officestop.mjs", `node ${HOOK_SCRIPT} subagent-stop`], "hook appended, other hooks kept");
+  assert.deepEqual(settings.hooks.SubagentStart.flatMap((g) => g.hooks.map((h) => h.command)), [`node ${HOOK_SCRIPT} subagent-start`]);
+  // env: ours added when absent, user's existing value never overwritten
+  assert.equal(settings.env.EXISTING_VAR, "keep-me");
+  assert.equal(settings.env.SINGULARITY_REPO_ROOT, "/user/override");
+  assert.equal(settings.env.SINGULARITY_MEMORY_CONFIG, join("/srv/singularity", "data/opencode/config/product-secrets/memory.json"));
+});
+
+test("re-running ensureMemoryIntegration is a no-op (idempotency)", () => {
+  const base = {};
+  const first = ensureMemoryIntegration(base, { scriptPath: HOOK_SCRIPT, env: integrationEnv("/srv/singularity") });
+  const second = ensureMemoryIntegration(first.settings, { scriptPath: HOOK_SCRIPT, env: integrationEnv("/srv/singularity") });
+  assert.equal(second.changed, false);
+  assert.deepEqual(second.settings, first.settings);
+});
+
+test("removeMemoryIntegration deletes only this integration's entries", () => {
+  const existing = {
+    model: "opus",
+    env: { EXISTING_VAR: "keep-me", ...integrationEnv("/srv/singularity") },
+    hooks: {
+      SubagentStart: [{ hooks: [{ type: "command", command: `node ${HOOK_SCRIPT} subagent-start` }] }, { hooks: [{ type: "command", command: "node /other/otherstart.mjs" }] }],
+      SessionStart: [{ hooks: [{ type: "command", command: "node /other/session.mjs" }] }],
+    },
+  };
+  const { settings, changed, removedEnvKeys } = removeMemoryIntegration(existing, {
+    scriptPath: HOOK_SCRIPT,
+    env: integrationEnv("/srv/singularity"),
+  });
+  assert.equal(changed, true);
+  assert.equal(settings.model, "opus");
+  assert.ok(settings.hooks.SubagentStart, "the event survives because a foreign hook remains");
+  assert.ok(settings.hooks.SubagentStart.some(g => g.hooks.some(h => h.command === "node /other/otherstart.mjs")), "foreign SubagentStart handler preserved");
+  assert.ok(!settings.hooks.SubagentStart.some(g => g.hooks.some(isSingularityHookCommand)), "our handler is gone");
+  assert.ok(settings.hooks.SessionStart, "foreign SessionStart hook preserved");
+  assert.deepEqual(removedEnvKeys.sort(), ["SINGULARITY_MEMORY_CONFIG", "SINGULARITY_REPO_ROOT"]);
+  assert.equal(settings.env.EXISTING_VAR, "keep-me");
+});
+
+test("removeMemoryIntegration keeps env keys that were edited by the user afterwards", () => {
+  const existing = { env: { SINGULARITY_REPO_ROOT: "/elsewhere/now" } };
+  const { changed, removedEnvKeys } = removeMemoryIntegration(existing, { scriptPath: HOOK_SCRIPT, env: integrationEnv("/srv/singularity") });
+  assert.equal(changed, false);
+  assert.deepEqual(removedEnvKeys, []);
+  assert.equal(existing.env.SINGULARITY_REPO_ROOT, "/elsewhere/now");
+});
+
+test("settingsPathFor picks user vs project layout", () => {
+  // Compare through join() so the assertion holds on both path flavours.
+  assert.equal(settingsPathFor("user", "/home/u", "/proj"), join("/home/u", ".claude/settings.json"));
+  assert.equal(settingsPathFor("project", "/home/u", "/proj"), join("/proj", ".claude/settings.json"));
+});
+
+// ── installer (pure planning + file application) ─────────────────────────────
+const srcFixture = () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-src-"));
+  writeFileSync(join(dir, "singularity-thinker.md"), "---\nname: singularity-thinker\ndescription: reasoning specialist\n---\nbody\n");
+  writeFileSync(join(dir, "singularity-board.md"), "---\nname: singularity-board\ndescription: advisory board\n---\nbody\n");
+  return dir;
+};
+
+test("planAgentFiles reports create/present/replace; applyAgentFiles is idempotent", () => {
+  const source = srcFixture();
+  const target = mkdtempSync(join(tmpdir(), "cc-target-"));
+  mkdirSync(join(target, ".claude", "agents"), { recursive: true });
+
+  let plan = planAgentFiles(join(target, ".claude", "agents"), source);
+  assert.deepEqual(plan.map((f) => f.status), ["create", "create"]);
+  const first = applyAgentFiles(plan, { dryRun: false });
+  assert.equal(first.changed.length, 2);
+  assert.equal(first.ledger.filter((e) => e.action === "create").length, 2);
+
+  plan = planAgentFiles(join(target, ".claude", "agents"), source);
+  assert.deepEqual(plan.map((f) => f.status), ["present", "present"]);
+  const second = applyAgentFiles(plan, { dryRun: false }); // second install: nothing rewritten
+  assert.equal(second.changed.length, 0, "repeated install is idempotent: no new writes");
+  assert.equal(second.ledger.every((e) => e.action === "present"), true);
+  assert.equal(readFileSync(join(target, ".claude", "agents", "singularity-thinker.md"), "utf8").includes("reasoning specialist"), true);
+
+  // drift: differing content is a user-owned file — replan markers "replace".
+  // The replace IS backed up and ledgered at apply time (see the ownership tests).
+  writeFileSync(join(target, ".claude", "agents", "singularity-thinker.md"), "edited locally");
+  plan = planAgentFiles(join(target, ".claude", "agents"), source);
+  assert.deepEqual(plan.map((f) => f.status), ["present", "replace"]);
+  assert.ok(plan[1].prevSha, "pre-replace hash captured");
+  applyAgentFiles(plan, { dryRun: false });
+  assert.ok(readFileSync(join(target, ".claude", "agents", "singularity-thinker.md"), "utf8").includes("body\n"));
+});
+
+test("agent-file ownership: user file is backed up before replace and RESTORED at uninstall", () => {
+  const source = srcFixture();
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-agents-"));
+  const target = join(agentsDir, "singularity-board.md");
+  const original = "my own board notes — DO NOT DESTROY";
+  writeFileSync(target, original, { mode: 0o644 });
+
+  let plan = planAgentFiles(agentsDir, source);
+  assert.equal(plan.find((f) => f.target === target).status, "replace");
+  const { ledger } = applyAgentFiles(plan, { dryRun: false });
+  const entry = ledger.find((e) => e.target === target);
+  assert.equal(entry.action, "replace");
+  assert.ok(entry.backupPath && existsSync(entry.backupPath), "original backed up");
+  assert.equal(readFileSync(entry.backupPath, "utf8"), original, "backup preserves user content verbatim");
+  if (process.platform !== "win32") assert.equal(readFileSync(entry.backupPath).length > 0, true);
+
+  // A ledger-equipped record with the installed content restores the original.
+  const record = { agentsDir, agentLedger: ledger };
+  const plan2 = agentRemovalPlan(record, source);
+  const restoreItem = plan2.find((x) => x.target === target);
+  assert.equal(restoreItem.action, "restore", "ledger-proven installed file restores the pre-install original");
+  // simulate uninstall application:
+  copyFileSync(restoreItem.backupPath, restoreItem.target);
+  assert.equal(readFileSync(target, "utf8"), original, "original content returns");
+
+  // Refusal of unsafe restoration: the user changed the file AFTER install.
+  writeFileSync(target, "brand-new user edits made later");
+  const plan3 = agentRemovalPlan(record, source);
+  assert.equal(plan3.find((x) => x.target === target).action, "user-modified-keep",
+    "newer user changes are never overwritten by uninstall");
+});
+
+test("agent-file ownership: unowned files are kept; untracked-but-package-identical are removable", () => {
+  const source = srcFixture();
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-agents-"));
+  // A user's own agent file that happens to share our naming pattern: no ledger
+  // entry, content differs from the package -> never touched.
+  const foreign = join(agentsDir, "singularity-thinker.md");
+  writeFileSync(foreign, "foreign hand-written");
+  // An identical copy of the packaged source without a ledger: content proof.
+  const copy = join(agentsDir, "singularity-board.md");
+  copyFileSync(join(source, "singularity-board.md"), copy);
+  const plan = agentRemovalPlan({ agentsDir, agentLedger: null }, source);
+  assert.equal(plan.find((x) => x.target === foreign).action, "keep-unowned");
+  assert.equal(plan.find((x) => x.target === copy).action, "remove-unchanged-source");
+});
+
+test("applySettings refuses a malformed existing settings file and preserves it; missing file is fine", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-bad-"));
+  const settingsPath = join(dir, "settings.json");
+  writeFileSync(settingsPath, "{ model: \"haiku\", BROKEN,,, :");
+  const refused = applySettings(settingsPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(refused.refused, "malformed-settings");
+  assert.equal(refused.changed, false);
+  assert.equal(readFileSync(settingsPath, "utf8"), "{ model: \"haiku\", BROKEN,,, :", "malformed file is preserved byte-exact");
+  assert.equal(refused.backup, null, "no destructive side effects on refusal");
+
+  // A missing file is NOT the malformed case: fresh install proceeds.
+  const missingPath = join(dir, "nested", "settings.json");
+  const fresh = applySettings(missingPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(fresh.refused, undefined);
+  assert.equal(fresh.changed, true);
+  assert.ok(existsSync(missingPath));
+});
+
+test("credential-bearing files are 0600 with pre-existing modes corrected (POSIX)", { skip: process.platform === "win32" ? "POSIX mode bits do not exist on Windows; this legacy installer path does not run on Windows" : false }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-perm-"));
+  const settingsPath = join(dir, "settings.json");
+  // A pre-existing group/world-readable settings file with a token inside:
+  // mode 0600 at write time would NOT fix it — explicit enforcement must.
+  writeFileSync(settingsPath, JSON.stringify({ model: "haiku", env: { ANTHROPIC_AUTH_TOKEN: "sk-test-only" } }), { mode: 0o664 });
+  chmodSync(settingsPath, 0o664);
+  applySettings(settingsPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(numberToModeString((statSync(settingsPath).mode & 0o777)), "600", "enforced and verified 0600");
+  // The backup of a token-bearing settings file is also restricted.
+  const first = applySettings(join(dir, "other.json"), HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(first.backup, null);
+});
+
+function numberToModeString(mode) { return mode.toString(8); }
+
+test("applySettings writes a timestamped backup before the first change; skips when idempotent", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-settings-"));
+  const settingsPath = join(dir, "settings.json");
+  writeFileSync(settingsPath, JSON.stringify({ model: "haiku" }));
+  const first = applySettings(settingsPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(first.changed, true);
+  assert.ok(first.backup && existsSync(first.backup), "backup written");
+  assert.equal(JSON.parse(readFileSync(first.backup, "utf8")).model, "haiku");
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).model, "haiku", "pre-existing settings kept");
+
+  const second = applySettings(settingsPath, HOOK_SCRIPT, integrationEnv("/srv/s"), { dryRun: false });
+  assert.equal(second.changed, false);
+  assert.equal(second.backup, null, "no churn when already installed");
+});
+
+test("uninstalled state: removeMemoryIntegration leaves foreign hooks behind after uninstalling ours", () => {
+  const settings = ensureMemoryIntegration({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "echo plain" }] }] } }, { scriptPath: HOOK_SCRIPT, env: {} }).settings;
+  const after = removeMemoryIntegration(settings, { scriptPath: HOOK_SCRIPT, env: {} });
+  assert.deepEqual(after.settings, { hooks: { SessionStart: [{ hooks: [{ type: "command", command: "echo plain" }] }] } });
+});
+
+test("parseFlags: defaults, project scope paths, team/user overrides, unknown flag rejected", () => {
+  const home = "/home/test-user";
+  const f1 = parseFlags([], home, "/proj");
+  assert.equal(f1.scope, "user");
+  assert.equal(f1.settingsPath, join(home, ".claude/settings.json"));
+  assert.equal(f1.agentsTarget, join(home, ".claude/agents"));
+  assert.equal(f1.mainMemory, null, "main-agent memory is an explicit decision (no silent default in flags)");
+  const f2 = parseFlags(["--scope", "project", "--project-dir", "/proj"], home, "/proj");
+  assert.equal(f2.settingsPath, resolve("/proj", ".claude/settings.json"));
+  assert.equal(f2.agentsTarget, resolve("/proj", ".claude/agents"));
+  const f3 = parseFlags(["--team", "t1", "--user", "u1"], home, "/proj");
+  assert.equal(f3.team, "t1");
+  assert.equal(f3.user, "u1");
+  const f4 = parseFlags(["--enable-main-memory", "--replace-provider", "--probe"], home, "/proj");
+  assert.equal(f4.mainMemory, true);
+  assert.equal(f4.replaceProvider, true);
+  assert.equal(f4.probe, true);
+  const f5 = parseFlags(["--no-main-memory"], home, "/proj");
+  assert.equal(f5.mainMemory, false);
+  assert.throws(() => parseFlags(["--bogus"], home, "/proj"), UsageError);
+});
+
+test("applyMainMemory: fresh settings get proxy routing when enabled; token never printed or logged", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main-"));
+  const settingsPath = join(dir, "settings.json");
+  const cfgDir = join(dir, "data", "opencode", "config", "product-secrets");
+  mkdirSync(cfgDir, { recursive: true });
+  const TOKEN = "sk-unit-test-token-value";
+  writeFileSync(join(cfgDir, "memory.json"), JSON.stringify({ baseUrl: "http://stub", authPrefix: "Bearer ", gatewayKey: "g", serviceId: "s", userKey: TOKEN }));
+  mkdirSync(join(dir, "memory", "upstream"), { recursive: true });
+  writeFileSync(join(dir, "memory", "upstream", ".env"), "PROXY_PORT=18496\n");
+
+  const logs = [];
+  const log = (m) => logs.push(String(m));
+  const warn = (m) => logs.push("WARN " + m);
+  const out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: false }, repoRoot: dir, dryRun: false, log, warn });
+  assert.equal(out.applied, true);
+  assert.equal(out.baseUrl, "http://127.0.0.1:18496/claude-code/default");
+  const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+  assert.equal(settings.env.ANTHROPIC_BASE_URL, "http://127.0.0.1:18496/claude-code/default");
+  assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, TOKEN);
+  for (const l of logs) assert.ok(!l.includes(TOKEN), "token must never appear in installer output: " + l);
+});
+
+test("applyMainMemory refuses on existing provider config without explicit replace consent", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main2-"));
+  const settingsPath = join(dir, "settings.json");
+  const cfgDir = join(dir, "data", "opencode", "config", "product-secrets");
+  mkdirSync(cfgDir, { recursive: true });
+  writeFileSync(join(cfgDir, "memory.json"), JSON.stringify({ userKey: "k" }));
+  writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://api.anthropic.com" } }));
+  const warns = [];
+  let out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: false }, repoRoot: dir, dryRun: false, log: () => {}, warn: (m) => warns.push(m) });
+  assert.equal(out.refused, true);
+  assert.ok(warns.some((m) => /--replace-provider/.test(m)));
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL, "https://api.anthropic.com", "settings untouched on refusal");
+  const changes = [];
+  out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true, replaceProvider: true }, repoRoot: dir, dryRun: false, log: (m) => changes.push(m), warn: () => {} });
+  assert.equal(out.applied, true);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL.startsWith("http://127.0.0.1:8096"), true);
+  assert.ok(changes.some((m) => /replaced per consent/.test(m)));
+});
+
+test("applyMainMemory: no memory config or no scoped key degrades with instructions", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main3-"));
+  const settingsPath = join(dir, "settings.json");
+  const logs = [];
+  const out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: true }, repoRoot: dir, dryRun: false, log: (m) => logs.push(m), warn: () => {} });
+  assert.equal(out.skipped, true);
+  assert.ok(logs.some((m) => /provision-secrets|business-user key/.test(m)));
+});
+
+test("--no-main-memory keeps hooks but leaves proxy routing untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-main4-"));
+  const settingsPath = join(dir, "settings.json");
+  writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://existing.example" } }));
+  const out = applyMainMemory(settingsPath, { mainMemoryFlags: { enabled: false }, repoRoot: dir, dryRun: false, log: () => {}, warn: () => {} });
+  assert.equal(out.skipped, true);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL, "https://existing.example");
+});
+
+test("state record round-trip and uninstall file plan", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-state-"));
+  const stateFile = join(dir, "state.json");
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-agents-"));
+  writeFileSync(join(agentsDir, "singularity-thinker.md"), "x");
+  writeFileSync(join(agentsDir, "singularity-board.md"), "x");
+  saveInstallRecord({ installedAt: "now", scope: "user", settingsPath: "/s", agentsDir, hooksScript: HOOK_SCRIPT, envWritten: {}, mcp: null, profileLedger: "/l" }, stateFile);
+  const state = readState(stateFile);
+  assert.equal(state.installs.length, 1);
+  const plan = uninstallFilesForRecord(state.installs[0]);
+  assert.equal(plan.length, 2, "only our agent names are planned for removal");
+  // a foreign agent file in the same directory is never touched
+  const foreign = join(agentsDir, "some-users-agent.md");
+  assert.ok(!plan.includes(foreign));
+});
+
+test("variant matrix: exactly four variants with correct mandatory flags", () => {
+  assert.deepEqual(Object.keys(VARIANTS), ["1", "2", "3", "4"]);
+  assert.equal(VARIANTS[1].ghost, false);
+  assert.equal(VARIANTS[2].ghost && VARIANTS[2].office && VARIANTS[2].ghostBackend, "claude-code");
+  assert.equal(VARIANTS[3].openchamber, true);
+  assert.equal(VARIANTS[4].ghost && VARIANTS[4].office && VARIANTS[4].ghostBackend, "openchamber");
+});
+
+test("resolveVariant: variant 2 requires Ghost+Office and reports the claude backend", () => {
+  const flags = { variant: "2", skipProfiles: false, scope: "user" };
+  const res = resolveVariant(flags, {});
+  assert.equal(res.ok, true, "the package bundles ghost/office so variant 2 resolves");
+  assert.ok(res.notes.some((n) => n.includes("GHOST_BACKEND=claude-code")));
+
+  // A user-modified checkout with the_ghost setup removed must refuse.
+  const missing = resolveVariant({ ...flags }, { ghostSetupExists: () => false });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.problems[0].includes("Ghost is mandatory"));
+
+  const officeMissing = resolveVariant({ ...flags }, { officeComposeExists: () => false });
+  assert.equal(officeMissing.ok, false);
+  assert.ok(officeMissing.problems[0].includes("Claude Office is mandatory"));
+});
+
+test("resolveVariant: variant 3/4 attach to an existing OpenChamber and refuse duplicates", () => {
+  const home = mkdtempSync(join(tmpdir(), "variant-home-"));
+  const absent = resolveVariant({ variant: "3", skipProfiles: false, scope: "user" }, { home, detectOpenchamber: () => false });
+  assert.equal(absent.ok, false);
+  assert.match(absent.problems.join(";"), /EXISTING OpenChamber/);
+  const present = resolveVariant({ variant: "4", skipProfiles: false, scope: "user" }, { home, detectOpenchamber: () => true });
+  assert.equal(present.ok, true);
+  assert.ok(present.notes.some((n) => n.includes("reusing the detected existing OpenChamber")));
+});
+
+test("resolveVariant: --skip-profiles conflicts with any installation option because specialist agents are mandatory", () => {
+  const res = resolveVariant({ variant: "1", skipProfiles: true, scope: "user" }, {});
+  assert.equal(res.ok, false);
+  assert.match(res.problems[0], /mandatory in every installation option/);
+});
+
+// ── option surface: exactly four numbered installation options ───────────────
+test("usage text exposes EXACTLY four numbered installation options, then advanced configuration", () => {
+  const lines = installOptionLines();
+  assert.equal(lines.length, 4);
+  for (const [i, line] of lines.entries()) {
+    assert.match(line, new RegExp(`^  ${i + 1}  `), "each option line is numbered 1-4");
+  }
+  // options 2/4 carry Ghost + Office automatically; 1/3 exclude them
+  assert.match(lines[1], /automatically included/);
+  assert.match(lines[3], /automatically included/);
+  assert.match(lines[0], /not part of this option/);
+  assert.match(lines[2], /not part of this option/);
+
+  const text = usageText();
+  assert.match(text, /installation options[^\n]*exactly four/);
+  assert.match(text, /advanced configuration/);
+  // no fifth option and no alternative package combination in the surface
+  for (const id of ["0", "5", "6"]) assert.ok(!text.includes(`  ${id}  `), `option ${id} must not appear in the usage surface`);
+  assert.ok(!text.toLowerCase().includes("variant a") && !text.toLowerCase().includes("variant b"), "no legacy A/B variants");
+});
+
+test("parseOptionChoice accepts only option ids 1..4", () => {
+  assert.equal(parseOptionChoice("1"), "1");
+  assert.equal(parseOptionChoice(" 4 "), "4");
+  assert.equal(parseOptionChoice("5"), null);
+  assert.equal(parseOptionChoice("0"), null);
+  assert.equal(parseOptionChoice(""), null);
+  assert.equal(parseOptionChoice("y"), null);
+});
+
+test("install without an option selection stops unmodified (no unnumbered base install)", { skip: LEGACY_INSTALLER_SKIP }, async () => {
+  const logs = [];
+  // capture output: runInstall logs module-side; instrument by monkeypatching
+  // console via stream? Simpler: run in a non-TTY CI-like environment and assert rc.
+  const rc = await runInstall({ scope: "user", projectDir: "/proj", team: "", user: "", skipProfiles: false,
+    skipRepoqlMcp: false, dryRun: false, mainMemory: null, replaceProvider: false, probe: false, variant: null,
+    settingsPath: "/nonexistent/singularity-test/settings.json", agentsTarget: "/nonexistent/singularity-test/agents" });
+  assert.equal(rc, 2, "no option selected -> refusal rc 2 before any on-disk change");
+});
+
+test("option refusal strings: mandated wording mentions installation option explicitly", () => {
+  const res = resolveVariant({ variant: "7", skipProfiles: false, scope: "user" }, {});
+  assert.equal(res.ok, false);
+  assert.match(res.problems[0], /one of 1\.\.4/);
+});
+
+// ── regressions from the Windows WSL install acceptance (job 3) ─────────────
+
+test("a re-install MERGES the earlier replace proof: uninstall restores the user's file", () => {
+  // Regression: the second install used to rewrite the ledger entry for a file
+  // that is now "present", dropping the earlier replace/backup metadata. The
+  // uninstall then deleted the user's agent instead of restoring it.
+  const source = srcFixture();
+  const agentsDir = mkdtempSync(join(tmpdir(), "cc-merge-"));
+  const target = planAgentFiles(agentsDir, source).find((f) => f.target.endsWith("singularity-board.md")).target;
+  const original = "my own board notes — MUST come back at uninstall";
+  writeFileSync(target, original);
+
+  const first = applyAgentFiles(planAgentFiles(agentsDir, source), { dryRun: false });
+  const firstEntry = first.ledger.find((e) => e.target === target);
+  assert.equal(firstEntry.action, "replace");
+  assert.ok(firstEntry.backupPath && existsSync(firstEntry.backupPath));
+
+  // Re-install sees the packaged content ("present") and must keep the proof.
+  const second = applyAgentFiles(planAgentFiles(agentsDir, source), { dryRun: false, priorLedger: first.ledger });
+  const secondEntry = second.ledger.find((e) => e.target === target);
+  assert.equal(secondEntry.action, "replace", "the earlier replace proof survives the re-install");
+  assert.equal(secondEntry.backupPath, firstEntry.backupPath, "the original backup is still the one referenced");
+  assert.equal(secondEntry.installedSha, firstEntry.installedSha);
+
+  const removal = agentRemovalPlan({ agentsDir, agentLedger: second.ledger }, source);
+  const item = removal.find((x) => x.target === target);
+  assert.equal(item.action, "restore", "uninstall restores user-modified files, never deletes them");
+  copyFileSync(item.backupPath, item.target); // what runUninstall does for "restore"
+  assert.equal(readFileSync(target, "utf8"), original);
+});
+
+test("uninstall --dry-run PLANS the settings removal it would perform", { skip: LEGACY_INSTALLER_SKIP }, () => {
+  // Regression: the dry run reported "settings: nothing to change" while the
+  // real uninstall removed the integration hooks.
+  const home = mkdtempSync(join(tmpdir(), "cc-uninstall-dry-"));
+  try {
+    const stateFile = join(home, "state.json");
+    const settingsPath = join(home, ".claude", "settings.json");
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    const scriptPath = "/srv/singularity/adapters/claude-code/memory-hook.mjs";
+    const env = integrationEnv("/srv/singularity");
+    const { settings } = ensureMemoryIntegration({}, { scriptPath, env });
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    const before = readFileSync(settingsPath, "utf8");
+    saveInstallRecord({ installedAt: "now", scope: "user", settingsPath, agentsDir: join(home, ".claude", "agents"),
+      hooksScript: scriptPath, envWritten: env, mcp: null }, stateFile);
+
+    const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+    const r = spawnSync(process.execPath, [join(repo, "scripts/install-claude-code.mjs"), "uninstall", "--dry-run"], {
+      encoding: "utf8", env: { ...process.env, HOME: home, SINGULARITY_CLAUDE_CODE_STATE: stateFile },
+    });
+    const out = `${r.stdout}${r.stderr}`;
+    assert.equal(r.status, 0, out);
+    assert.match(out, /settings: would remove/, "the dry run names the removal it would perform");
+    assert.doesNotMatch(out, /settings: nothing to change/, "the dry run must not contradict the real uninstall");
+    assert.equal(readFileSync(settingsPath, "utf8"), before, "a dry run writes nothing");
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test("option 2 states its provisioning boundary and the exact follow-up commands", () => {
+  const text = option2BoundaryLines().join("\n");
+  assert.match(text, /does NOT start MemoryCore, Ghost or Claude Office/);
+  assert.match(text, /scripts\/start-memory-stack\.sh/);
+  assert.match(text, /provision-secrets\.py --variant 2 --with-ghost && bash ghost\/setup-ghost\.sh/);
+  assert.match(text, /office\.compose\.yml up -d/);
+  assert.match(text, /INCOMPLETE/);
+});

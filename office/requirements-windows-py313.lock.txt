@@ -1,0 +1,42 @@
+# Claude Office backend dependency pins - Windows x86_64, CPython 3.13
+# Exported 2026-10-30 from the working acceptance venv on the release machine.
+#
+# These are exact version pins, NOT hash-pinned: no uv, pip-compile or local
+# wheelhouse was available, so no artifact hashes could be recorded. To make
+# this a hash-enforcing lock, build a wheelhouse and add --hash lines:
+#   pip download -r office/requirements-windows-py313.lock.txt -d wheelhouse
+#   pip hash wheelhouse/*.whl
+#
+# The project itself (claude-office-visualizer) is deliberately absent: uvicorn
+# runs app.main:app from the backend directory, so nothing is pip-installed for it.
+
+aiosqlite==0.22.1
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+click==8.5.0
+fastapi==0.141.1
+greenlet==3.5.6
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+idna==3.19
+markdown-it-py==4.2.0
+mdurl==0.1.2
+pydantic-settings==2.15.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+Pygments==2.21.0
+python-dotenv==1.2.3
+python-multipart==0.0.32
+PyYAML==6.0.3
+rich==15.0.0
+SQLAlchemy==2.0.52
+starlette==1.6.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.53.0
+watchfiles==1.2.0
+websockets==17.1

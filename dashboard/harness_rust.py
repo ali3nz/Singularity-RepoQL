@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Client for the read-only Rust coordinator snapshot (Harness Control Center).
+
+The Rust service (`orchestra-observer coord-serve`) exposes one bounded,
+authenticated, READ-ONLY read model of the harness run tree. This module is the
+dashboard's only integration point with it:
+
+  * loopback-only by default; a non-loopback base URL is refused unless the
+    caller passes allow_remote=True explicitly;
+  * every failure is returned as {"available": False, ...} so the dashboard
+    keeps working when the Rust service is down (telemetry must never block the
+    page);
+  * the schema string is validated, so an incompatible Rust build is reported
+    as unavailable instead of silently rendering wrong data;
+  * no prompts, transcripts or tokens are stored or logged.
+"""
+from __future__ import annotations
+
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+SCHEMA = "orchestra-coordinator-read/1"
+DEFAULT_BASE = "http://127.0.0.1:7879"
+MAX_BODY = 4 * 1024 * 1024
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # The coordinator token must never follow a 30x into another service.
+        return None
+
+# Do not allow machine HTTP_PROXY/HTTPS_PROXY settings to forward a private
+# loopback coordinator bearer token to a proxy managed by another process.
+_NO_REDIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+
+
+def _user_home() -> Path | None:
+    """Best-effort home directory that never raises.
+
+    ``Path.home()`` raises RuntimeError on Windows when USERPROFILE is not in
+    the environment (a service context, or a caller that clears the environment
+    before launching the dashboard). A missing default token path must degrade
+    to "harness unverified", never crash App construction.
+    """
+    for name in ("USERPROFILE", "HOME"):
+        value = os.environ.get(name)
+        if value:
+            return Path(value)
+    try:
+        return Path.home()
+    except (RuntimeError, KeyError):
+        return None
+
+
+def _fallback_root() -> Path:
+    root = os.environ.get("TEMP") or os.environ.get("TMP")
+    return Path(root) if root else Path(os.getcwd())
+
+
+def _default_token_file() -> Path:
+    if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
+        root = os.environ.get("LOCALAPPDATA")
+        if root:
+            return Path(root) / "Singularity" / "Harness" / "coordinator.token"
+        # Never silently fall back to a Linux XDG path on a Windows build.
+        home = _user_home()
+        base = home / "AppData" / "Local" if home else _fallback_root()
+        return base / "Singularity" / "Harness" / "coordinator.token"
+    state = os.environ.get("SINGULARITY_STATE_DIR")
+    if state:
+        return Path(state) / "coordinator.token"
+    home = _user_home()
+    base = home / ".local" / "state" / "singularity-dashboard" if home else _fallback_root()
+    return base / "coordinator.token"
+
+
+def _valid_base_url(base: str, *, allow_remote: bool) -> bool:
+    try:
+        parsed = urllib.parse.urlsplit(base)
+        if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/'):
+            return False
+        if parsed.port is None or not (1 <= parsed.port <= 65535):
+            return False
+        if parsed.scheme == "http" and parsed.hostname in LOOPBACK_HOSTS:
+            return True
+        return allow_remote and parsed.scheme == "https" and bool(parsed.hostname)
+    except ValueError:
+        return False
+
+
+def _is_loopback(base: str) -> bool:
+    try:
+        host = urllib.parse.urlsplit(base).hostname or ""
+    except ValueError:
+        return False
+    return host in LOOPBACK_HOSTS
+
+
+class RustHarness:
+    def __init__(self, base_url: str | None = None, token: str | None = None,
+                 token_file: str | os.PathLike | None = None,
+                 timeout: float = 0.8, allow_remote: bool = False):
+        self.base_url = (base_url or os.environ.get("RUST_HARNESS_URL") or DEFAULT_BASE).rstrip("/")
+        self.allow_remote = allow_remote
+        self.timeout = timeout
+        self._token = token
+        self._token_file = Path(token_file or os.environ.get("RUST_HARNESS_TOKEN_FILE") or _default_token_file())
+
+    # -- auth ---------------------------------------------------------
+    def token(self) -> str:
+        if self._token:
+            return self._token
+        env = os.environ.get("ORCHESTRA_COORD_TOKEN")
+        if env:
+            self._token = env.strip()
+            return self._token
+        try:
+            self._token = self._token_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            self._token = ""
+        return self._token
+
+    def configured(self) -> bool:
+        return bool(self.token()) and _valid_base_url(self.base_url, allow_remote=self.allow_remote)
+
+    # -- transport ----------------------------------------------------
+    def _get(self, path: str) -> dict:
+        if not _valid_base_url(self.base_url, allow_remote=self.allow_remote):
+            return {"available": False, "error": "non_loopback_refused"}
+        token = self.token()
+        if not token:
+            return {"available": False, "error": "not_configured"}
+        request = urllib.request.Request(self.base_url + path, method="GET")
+        request.add_header("Authorization", "Bearer " + token)
+        try:
+            with _NO_REDIRECT_OPENER.open(request, timeout=self.timeout) as response:
+                body = response.read(MAX_BODY + 1)
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+            # Never include the header or the token in the error text.
+            return {"available": False, "error": type(exc).__name__}
+        if len(body) > MAX_BODY:
+            return {"available": False, "error": "response_too_large"}
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return {"available": False, "error": "invalid_json"}
+        if not isinstance(payload, dict):
+            return {"available": False, "error": "invalid_payload"}
+        return payload
+
+    # -- read model ---------------------------------------------------
+    def health(self) -> dict:
+        payload = self._get("/v1/health")
+        if payload.get("available") is False:
+            return payload
+        if not payload.get("ok"):
+            return {"available": False, "error": "health_not_ok"}
+        if payload.get("schema") != SCHEMA or payload.get("readOnly") is not True:
+            return {"available": False, "error": "schema_mismatch"}
+        return {"available": True, **payload}
+
+    def snapshot(self) -> dict:
+        payload = self._get("/v1/snapshot")
+        if payload.get("available") is False:
+            return payload
+        if payload.get("schema") != SCHEMA:
+            return {"available": False, "error": "schema_mismatch"}
+        if not isinstance(payload.get("runs"), list) or not isinstance(payload.get("health"), dict):
+            return {"available": False, "error": "invalid_payload"}
+        payload["available"] = True
+        return payload
+
+    def authority(self) -> dict:
+        payload = self._get("/v1/authority")
+        if payload.get("available") is False:
+            return payload
+        if not payload.get("ok"):
+            return {"available": False, "error": payload.get("error", "unknown")}
+        if not isinstance(payload.get("runs"), list):
+            return {"available": False, "error": "invalid_payload"}
+        payload["available"] = True
+        return payload
+
+    def status(self) -> dict:
+        """One dashboard-shaped view: service health plus authority ownership."""
+        health = self.health()
+        if not health.get("available"):
+            return {
+                "available": False,
+                "error": health.get("error", "unavailable"),
+                "baseUrl": self.base_url,
+            }
+        authority = self.authority()
+        return {"available": bool(authority.get("available")), "health": health, "authority": authority,
+                "error": authority.get("error") if not authority.get("available") else None}
+
+    def run(self, run_id: str) -> dict:
+        if not run_id or "/" in run_id or ".." in run_id:
+            return {"available": False, "error": "invalid_run_id"}
+        payload = self._get("/v1/runs/" + urllib.parse.quote(run_id, safe=""))
+        if payload.get("available") is False:
+            return payload
+        if not payload.get("ok") or not isinstance(payload.get("run"), dict):
+            return {"available": False, "error": payload.get("error", "not_found")}
+        payload["available"] = True
+        return payload

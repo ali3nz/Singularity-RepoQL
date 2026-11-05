@@ -1,0 +1,12 @@
+{
+  "name": "singularity-runbook-nudge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenChamber plugin: context-time reminders to check tracking/runbook discipline before work and runbook/RepoQL-concept discipline before the final answer.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "license": "MIT"
+}

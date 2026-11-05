@@ -1,0 +1,17 @@
+scheme: memorycore
+title: Tencent MemoryCore
+summary: Copies a Tencent MemoryCore store into the workspace - one file for each L1 memory record, each L2 scene block and each L3 persona, with the store's own ids, instants and provenance; raw conversations, vectors and checkpoints are left out.
+calls: [parse, fetch, render]
+recordsVersion: 2
+fetchIntervalSeconds: 900
+fullFetchIntervalSeconds: 900
+maxValueBytes: 65536
+uri:
+  example: memorycore://data
+source:
+  roots:
+    data:
+      default: "~/tencent-memory/data"
+      title: "Tencent MemoryCore data folder"
+      note: "Reads the store's own files, read-only: records/*.jsonl (L1), profiles/*/persona*.md (L3) and profiles/*/scene_blocks/*.md (L2). The store's service is the folder's only writer; this connector never writes there and sends no request."
+embedding: full

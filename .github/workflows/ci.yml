@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Gitleaks needs the push revision range, not a shallow HEAD alone.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Source tests
+        run: |
+          node --test openchamber/plugins/product-office/*.test.mjs
+          node --test openchamber/plugins/runbook-nudge/*.test.mjs
+          node --test scripts/skill-gate.test.mjs
+          node --test scripts/cohere-quota.test.mjs
+          node --test scripts/extraction-failover.test.mjs
+          node --test scripts/install-claude-code.profiles.test.mjs
+          node --test adapters/claude-code/doc-hook.test.mjs
+          node --test tests/doc-policy.test.mjs
+          node --test tests/selflearn-candidates.test.mjs
+          node --test tests/doctor-selflearn.test.mjs
+          node --test adapters/claude-code/integration.test.mjs
+          node --test adapters/claude-code/memory-hook.test.mjs
+          node --test adapters/claude-code/installer.test.mjs
+          node --test ghost/dream.test.mjs
+          node --test ghost/ghost-gateway.test.mjs
+
+      - name: Python tests
+        run: |
+          python3 tests/test-memory-security.py
+          python3 tests/test-memory-promote.py
+          python3 tests/test-memory-doc-ingest.py
+          python3 tests/test-orch-chat-sessions.py
+          python3 tests/test-orch-chat.py
+
+      - name: Manifest drift gate
+        run: bash tests/validate-manifest.sh
+
+      - name: Local validation (configs, syntax, references)
+        run: bash tests/validate-local.sh
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

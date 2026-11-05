@@ -1,0 +1,524 @@
+name: Native Windows GUI Rust bridge
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'adapters/claude-code/singularity-workflow.md'
+      - 'adapters/claude-code/memory-hook.mjs'
+      - 'adapters/claude-code/memory-hook.test.mjs'
+      - 'dashboard/static/app.js'
+      - 'dashboard/static/app.css'
+      - 'dashboard/static/index.html'
+      - 'dashboard/static/kanban_native.js'
+      - 'dashboard/tests/browser_kanban_stage_readback_smoke.py'
+      - 'dashboard/tests/dashboard_command_center_test.mjs'
+      - 'connectors/kanzo/sql/imported_tasks.sql'
+      - 'connectors/kanzo/SOURCE-SHA256'
+      - 'native/desktop-bridge/**'
+      - 'native/windows/**'
+      - 'scripts/setup-agent-profiles.mjs'
+      - 'scripts/setup-agent-profiles.test.mjs'
+      - 'native/windows/claude_complete_memory_profiles.mjs'
+      - 'native/windows/claude_complete_memory_profiles.test.mjs'
+      - 'native/windows/claude_complete_doc_parity.mjs'
+      - 'native/windows/claude_complete_doc_parity.test.mjs'
+      - 'native/windows/claude_complete_ghost_scope_probe.mjs'
+      - 'native/windows/claude_complete_ghost_scope_probe.test.mjs'
+      - 'scripts/doc-policy.mjs'
+      - 'scripts/doc-policy-batch.test.mjs'
+      - 'adapters/claude-code/doc-hook.mjs'
+      - 'adapters/claude-code/doc-hook.test.mjs'
+      - 'scripts/doc-ingest-node.mjs'
+      - 'scripts/doc-ingest-node.test.mjs'
+      - 'scripts/memory-doc-ingest.py'
+      - 'scripts/test_doc_ledger_corruption.py'
+      - 'scripts/test_doc_ledger_lock.py'
+      - 'tests/test-memory-doc-ingest.py'
+      - 'tests/doc-ingest-parity.test.mjs'
+      - 'harness/kit/**'
+      - 'dashboard/harness_telemetry.py'
+      - 'dashboard/test_native_telemetry_platform.py'
+      - 'harness/rust-authority/**'
+      - 'dashboard/variant_features.py'
+      - 'dashboard/test_variant_features.py'
+      - 'dashboard/test_file_lock.py'
+      - 'dashboard/file_lock.py'
+      - 'dashboard/unified_bridge.py'
+      - 'dashboard/server.py'
+      - 'dashboard/test_repoql_proxy_credential_boundary.py'
+      - 'dashboard/test_repoql_proxy_redirect_boundary.py'
+      - 'dashboard/test_repoql_error_boundary.py'
+      - 'dashboard/native_panel_proxy.py'
+      - 'dashboard/test_native_e2e_server.py'
+      - 'dashboard/test_unified_windows_proxy.py'
+      - 'native/gui-plugins/openchamber/**'
+      - '.github/workflows/native-desktop-rust.yml'
+  push:
+    paths:
+      - 'AGENTS.md'
+      - 'adapters/claude-code/singularity-workflow.md'
+      - 'adapters/claude-code/memory-hook.mjs'
+      - 'adapters/claude-code/memory-hook.test.mjs'
+      - 'dashboard/static/app.js'
+      - 'dashboard/static/app.css'
+      - 'dashboard/static/index.html'
+      - 'dashboard/static/kanban_native.js'
+      - 'dashboard/tests/browser_kanban_stage_readback_smoke.py'
+      - 'dashboard/tests/dashboard_command_center_test.mjs'
+      - 'connectors/kanzo/sql/imported_tasks.sql'
+      - 'connectors/kanzo/SOURCE-SHA256'
+      - 'native/desktop-bridge/**'
+      - 'native/windows/**'
+      - 'scripts/setup-agent-profiles.mjs'
+      - 'scripts/setup-agent-profiles.test.mjs'
+      - 'native/windows/claude_complete_memory_profiles.mjs'
+      - 'native/windows/claude_complete_memory_profiles.test.mjs'
+      - 'native/windows/claude_complete_doc_parity.mjs'
+      - 'native/windows/claude_complete_doc_parity.test.mjs'
+      - 'native/windows/claude_complete_ghost_scope_probe.mjs'
+      - 'native/windows/claude_complete_ghost_scope_probe.test.mjs'
+      - 'scripts/doc-policy.mjs'
+      - 'scripts/doc-policy-batch.test.mjs'
+      - 'adapters/claude-code/doc-hook.mjs'
+      - 'adapters/claude-code/doc-hook.test.mjs'
+      - 'scripts/doc-ingest-node.mjs'
+      - 'scripts/doc-ingest-node.test.mjs'
+      - 'scripts/memory-doc-ingest.py'
+      - 'scripts/test_doc_ledger_corruption.py'
+      - 'scripts/test_doc_ledger_lock.py'
+      - 'tests/test-memory-doc-ingest.py'
+      - 'tests/doc-ingest-parity.test.mjs'
+      - 'harness/kit/**'
+      - 'dashboard/harness_telemetry.py'
+      - 'dashboard/test_native_telemetry_platform.py'
+      - 'harness/rust-authority/**'
+      - 'dashboard/variant_features.py'
+      - 'dashboard/test_variant_features.py'
+      - 'dashboard/test_file_lock.py'
+      - 'dashboard/file_lock.py'
+      - 'dashboard/unified_bridge.py'
+      - 'dashboard/server.py'
+      - 'dashboard/test_repoql_proxy_credential_boundary.py'
+      - 'dashboard/test_repoql_proxy_redirect_boundary.py'
+      - 'dashboard/test_repoql_error_boundary.py'
+      - 'dashboard/native_panel_proxy.py'
+      - 'dashboard/test_native_e2e_server.py'
+      - 'dashboard/test_unified_windows_proxy.py'
+      - 'native/gui-plugins/openchamber/**'
+      - '.github/workflows/native-desktop-rust.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rust-dependency-release-gate:
+    name: Reviewable Cargo dependency locks (intentionally blocks release until committed)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate lock provenance gate against isolated fixtures
+        run: python -m unittest discover -s native/windows -p test_rust_lock_release_gate.py -q
+      - name: Require committed and reviewable Cargo.lock files for both Windows Rust crates
+        run: python native/windows/check_rust_lock_provenance.py
+  test-windows-unified-gateway:
+    name: Source-backed local Rust graph gateway (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Windows gateway ownership and memory policy contracts
+        run: python -m unittest discover -s native/windows -p test_windows_memory_gateway_source.py -q
+      - name: Verify installed Claude workflow rule refresh ownership and interrupted-update recovery
+        run: node --test native/windows/refresh_installed_claude_rules.test.mjs
+      - name: Verify graph owner PID transition invalidates cached data
+        run: python -m unittest discover -s dashboard -p test_windows_gateway_locality.py -q
+      - name: Check Windows dashboard gateway token pairing and Kanzo indexed view source
+        run: |
+          python -m unittest discover -s native/windows -p test_unified_gateway_dashboard_pairing.py -q
+          python -m unittest discover -s native/windows -p test_kanzo_imported_view_source.py -q
+      - name: Build and test vendored Rust gateway with locked dependencies
+        run: cargo test --manifest-path native/windows/unified-gateway-rust/Cargo.toml --all-targets --locked
+      - name: Produce release binary on Windows
+        if: runner.os == 'Windows'
+        run: cargo build --manifest-path native/windows/unified-gateway-rust/Cargo.toml --release --locked
+      - name: Confirm Windows Kanzo audit binary is included in the locked build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $auditor = 'native/windows/unified-gateway-rust/target/release/kanzo_board_audit.exe'
+          if (-not (Test-Path -LiteralPath $auditor)) { throw 'KANZO_RUST_AUDITOR_MISSING' }
+          '{"statuses":["todo","doing","done"],"projects":[],"done_hidden":3,"tasks":[{"id":1,"status":"doing"}]}' | & $auditor --stdin
+          if ($LASTEXITCODE -ne 0) { throw 'KANZO_RUST_AUDITOR_FAILED' }
+      - name: Verify all reviewed Windows Rust lockfiles
+        run: python native/windows/check_rust_lock_provenance.py
+
+  test-desktop-bridge:
+    name: Test native MCP bridge (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Rust toolchain
+        run: rustc --version
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path native/desktop-bridge/Cargo.toml --check
+      - name: Test bridge without Office (options 1 and 3)
+        run: cargo test --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features
+      - name: Test bridge with Office (options 2 and 4)
+        run: cargo test --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features --features office,ghost
+      - name: Test dashboard install option matrix (native host)
+        run: python -m unittest discover -s dashboard -p 'test_variant_features.py'
+      - name: Test variant HTTP route enforcement (native host)
+        run: python -m unittest discover -s dashboard -p 'test_variant_http.py'
+      - name: Verify dashboard blocks unsupported RepoQL before startup
+        run: python -m unittest discover -s dashboard -p test_native_repoql_gate.py
+      - name: Test native Harness liveness and fleet-health safeguards
+        run: node --test harness/kit/lib/windows-portability.test.mjs
+      - name: Verify explicitly approved Tencent test-document recovery and source revision checks
+        run: node --test native/windows/claude_complete_tencent_recovery.test.mjs
+      - name: Verify bounded multi-document reconciliation contract (mock backends)
+        run: node --test native/windows/claude_complete_doc_reconciliation.test.mjs
+      - name: Verify Option 2 independent Tencent and RepoQL document readback contract (mock backends)
+        run: node --test native/windows/claude_complete_doc_parity.test.mjs
+      - name: Verify supervisor task registrar fail-closed source contract
+        run: python -m unittest discover -s native/windows -p test_supervisor_registration_source_contract.py -q
+      - name: Verify Ghost and delegated MemoryCore search scope probes (mock service)
+        run: node --test native/windows/claude_complete_ghost_scope_probe.test.mjs
+      - name: Verify Option 2 delegated memory mapping, safe seeding and live readback contract (mock service)
+        run: node --test native/windows/claude_complete_memory_profiles.test.mjs scripts/setup-agent-profiles.test.mjs
+      - name: Validate parent-session Tencent proxy ownership and rollback (fake settings)
+        run: node --test native/windows/configure_parent_memory_proxy.test.mjs
+      - name: Exercise Claude Code native configuration apply/verify/rollback with isolated fixtures
+        run: node --test native/windows/configure_claude_code_windows.test.mjs native/windows/audit_claude_fleet_contract.test.mjs
+      - name: Test Claude Code Windows hook scope and foreign matcher isolation
+        run: node --test adapters/claude-code/settings-windows.test.mjs
+      - name: Test real Claude ZIP to isolated settings installation and rollback
+        run: python -m unittest discover -s native/windows -p test_claude_package_config_integration.py
+      - name: Test native OpenChamber worker transport without Claude seats
+        run: node --test harness/kit/lib/native-opencode-worker.test.mjs harness/kit/lib/native-managed-seat.test.mjs
+      - name: Test Agent Chat Windows file identity and replacement races
+        run: python -m unittest discover -s dashboard -p test_agentchat_windows_file_identity.py
+      - name: Test Windows-native dashboard telemetry semantics
+        run: python -m unittest discover -s dashboard -p test_native_telemetry_platform.py
+      - name: Test authenticated Harness dashboard with real loopback HTTP fixtures
+        run: python -m unittest discover -s dashboard -p test_harness_rust_native_security.py
+      - name: Test native dashboard supervisor readiness without exposed credentials
+        run: python -m unittest discover -s dashboard -p test_supervisor_health_endpoint.py
+      - name: Test full dashboard HTTP browser sessions against isolated local services
+        run: python -m unittest discover -s dashboard -p test_native_e2e_server.py
+      - name: Test native proxy and GUI usage safety
+        run: |
+          python -m unittest discover -s dashboard -p test_native_gui_usage.py
+          python -m unittest discover -s dashboard -p test_native_panel_safety.py
+          python -m unittest discover -s dashboard -p test_office_windows_rollback.py
+          python -m unittest discover -s dashboard -p test_office_proxy_roundtrip.py
+          python -m unittest discover -s dashboard -p test_windows_connector_roundtrip.py
+          python -m unittest discover -s dashboard -p test_native_auth_broker.py
+          python -m unittest discover -s dashboard -p test_native_cpu.py
+          python -m unittest discover -s dashboard -p test_native_ghost.py
+          python -m unittest discover -s dashboard -p test_native_readiness.py
+      - name: Test source component classification
+        run: node --test scripts/bundle-classification.test.mjs
+      - name: Audit full Claude Code option and read-only Windows hook plan
+        run: |
+          node --test native/windows/plan_claude_code_windows.test.mjs adapters/claude-code/doc-hook.test.mjs adapters/claude-code/installer.test.mjs adapters/claude-code/integration.test.mjs adapters/claude-code/main-memory.test.mjs adapters/claude-code/memory-hook.test.mjs adapters/claude-code/memory-hook-process.test.mjs adapters/claude-code/settings-windows.test.mjs
+          python -m unittest discover -s native/windows -p test_claude_complete_release_audit.py
+      - name: Verify project-scoped RepoQL and Kanzo MCP registration in both GUIs
+        run: |
+          node --test native/windows/configure_project_mcp.test.mjs native/windows/configure_claude_code_windows.test.mjs
+          python -m unittest discover -s native/windows -p test_project_mcp_package.py
+      - name: Test newer Command Center frontend and hooked memory scope
+        run: |
+          node --test dashboard/tests/dashboard_command_center_test.mjs
+          node --test adapters/claude-code/memory-hook.test.mjs
+      - name: Test Ghost calendar draft model and schedule-control HTTP wiring
+        run: |
+          node --test dashboard/static/ghost/schedule_model.test.mjs
+          python -m unittest discover -s dashboard -p test_ghost_schedule_plans.py
+          python -m unittest discover -s dashboard -p test_variant_http.py
+      - name: Test native-compatible Ghost versioned prompt store
+        run: python -m unittest discover -s ghost/prompt-store -p 'test_*.py'
+      - name: Test shared Node/Python documentation ledger safety
+        run: |
+          node --test scripts/doc-policy-batch.test.mjs scripts/doc-ingest-node.test.mjs adapters/claude-code/doc-hook.test.mjs
+          python -m unittest discover -s scripts -p test_doc_ledger_lock.py
+          python -m unittest discover -s scripts -p test_doc_ledger_corruption.py
+      - name: Test unified graph proxy redirect and credential isolation
+        run: python -m unittest discover -s dashboard -p test_unified_windows_proxy.py
+      - name: Test Windows staging and Rust lock source contracts
+        run: |
+          python -m unittest discover -s native/windows -p test_stage_native_contract.py
+          python -m unittest discover -s native/windows -p test_rust_case_lock_contract.py
+      - name: Test file lock compatibility (native host)
+        run: python -m unittest discover -s dashboard -p 'test_file_lock.py'
+      - name: Test native CPU collector lifecycle and Rust supervisor component preview
+        run: |
+          python -m unittest discover -s dashboard -p test_native_cpu_collector_lifecycle.py
+          python -m unittest discover -s native/windows -p test_cpu_collector_component.py
+      - name: Test native Windows Rust CPU history identity, retention, and profile isolation
+        run: |
+          python -m unittest discover -s dashboard -p test_native_cpu_history.py
+          python -m unittest discover -s dashboard -p test_native_cpu.py
+          python -m unittest discover -s dashboard -p test_native_dashboard_cpu_history.py
+      - name: Verify native GUI two-session memory test plan (offline contract only)
+        run: python -m unittest discover -s native/windows -p test_claude_complete_gui_acceptance_plan.py
+      - name: Verify guarded scheduler state for Windows installer mutation
+        run: python -m unittest discover -s native/windows -p test_scheduler_fail_closed_contract.py
+      - name: Verify standalone installed Option 2 receipt-readback contract
+        run: python -m unittest discover -s native/windows -p test_verify_installed_contract.py
+      - name: Verify read-only Option 2 supervisor task acceptance source contract
+        run: python -m unittest discover -s native/windows -p test_verify_supervisor_task_contract.py
+      - name: Verify read-only Option 2 upgrade dependency planner
+        run: python -m unittest discover -s native/windows -p test_plan_option2_upgrade.py
+      - name: Verify reversible Option 2 first-install uninstall source contract
+        run: python -m unittest discover -s native/windows -p test_uninstall_claude_complete_contract.py
+      - name: Verify source-only Claude Code Complete static installed inventory contracts
+        run: node --test native/windows/claude_complete_static_inventory.test.mjs
+      - name: Test Claude Code Complete read-only acceptance orchestration (mocked)
+        run: python -m unittest discover -s native/windows -p test_claude_complete_windows_probe.py
+      - name: Test native Windows runtime observation (read-only real loopback fixtures)
+        run: python -m unittest discover -s native/windows -p test_native_runtime_acceptance.py
+      - name: Test supervisor path and component-readiness source contracts
+        run: python -m unittest discover -s native/windows -p test_supervisor_readiness_contract.py
+      - name: Test source Linux-assumption inventory without exposing code bodies
+        run: python -m unittest discover -s native/windows -p test_trace_linux_assumptions.py
+      - name: Verify exact RepoQL 1.7.18 compatibility policy
+        run: python -m unittest discover -s native/windows -p test_repoql_compat.py
+      - name: Verify RepoQL 1.7.18 release policy consistency
+        run: python -m unittest discover -s native/windows -p test_repoql_release_consistency.py
+      - name: Test Office compatibility and Ghost native source contracts
+        run: python -m unittest discover -s native/windows -p test_office_native_contract.py
+      - name: Verify read-only Windows preflight source contract
+        run: python -m unittest discover -s native/windows -p test_preflight_contract.py
+      - name: Test native service supervisor safety
+        run: node --test scripts/native-memory-supervisor.test.mjs
+      - name: Verify RepoQL dashboard proxy does not forward dashboard credentials
+        run: python -m unittest discover -s dashboard -p test_repoql_proxy_credential_boundary.py
+      - name: Refuse foreign RepoQL redirects and scrub unexpected server failures
+        run: |
+          python -m unittest discover -s dashboard -p test_repoql_proxy_redirect_boundary.py -q
+          python -m unittest discover -s dashboard -p test_repoql_error_boundary.py -q
+      - name: Verify dashboard exclusion mutations are serialized across processes
+        run: python -m unittest discover -s dashboard -p test_exclusion_store_contract.py
+      - name: Verify connector inventory cannot certify ambiguous or truncated RepoQL imports
+        run: |
+          python -m unittest discover -s dashboard -p test_repoql_connector_inventory_integrity.py
+          python -m unittest discover -s native/windows -p test_option2_dashboard_wiring.py
+      - name: Verify source connector inventory
+        run: python native/windows/verify_source_release.py
+      - name: Build and scan all four source-review variants
+        run: |
+          python native/windows/build_source_variants.py --output-dir dist-native-review
+          python native/windows/scan_source_archive.py dist-native-review/singularity-native-windows-option1-SOURCE-ONLY.zip dist-native-review/singularity-native-windows-option2-SOURCE-ONLY.zip dist-native-review/singularity-native-windows-option3-SOURCE-ONLY.zip dist-native-review/singularity-native-windows-option4-SOURCE-ONLY.zip
+      - name: Record complete Claude Code package blockers (not a release claim)
+        run: python native/windows/claude_complete_release_audit.py dist-native-review/singularity-native-windows-option2-SOURCE-ONLY.zip --output dist-native-review/claude-complete-release-audit.json
+      - name: Inventory remaining Ubuntu/Docker/WSL source references
+        run: python native/windows/trace_linux_assumptions.py dist-native-review/singularity-native-windows-option4-SOURCE-ONLY.zip --output dist-native-review/native-linux-candidates.json
+      - name: Explicitly report which runtime services are still unverified
+        run: |
+          python native/windows/runtime_closure.py dist-native-review/singularity-native-windows-option1-SOURCE-ONLY.zip dist-native-review/singularity-native-windows-option2-SOURCE-ONLY.zip dist-native-review/singularity-native-windows-option3-SOURCE-ONLY.zip dist-native-review/singularity-native-windows-option4-SOURCE-ONLY.zip --output dist-native-review/runtime-closure.json
+          python -m unittest discover -s native/windows -p test_runtime_closure.py
+      - name: Upload source-review diagnostics without granting release approval
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-source-review-${{ github.run_id }}
+          path: |
+            dist-native-review/runtime-closure.json
+            dist-native-review/native-linux-candidates.json
+          if-no-files-found: ignore
+      - name: Dashboard native profile source and UI policy contracts
+        run: |
+          node dashboard/static/native_variant_ui.test.mjs
+          python -m unittest discover -s dashboard -p test_native_variant_dashboard_e2e.py
+          python -m unittest discover -s dashboard -p test_native_dashboard_cpu_history.py
+      - name: Test host-language GUI adapter
+        run: node --test native/gui-plugins/openchamber/singularity-office.test.mjs
+      - name: Rust lint for lean and complete variants
+        run: |
+          cargo clippy --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features -- -D warnings
+          cargo clippy --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features --features office,ghost -- -D warnings
+      - name: Build lean executable without Office (options 1 and 3)
+        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features
+      - name: Build complete executable with Office (options 2 and 4)
+        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features --features office,ghost
+      - name: Upload compiled Windows desktop bridge for isolated acceptance
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-windows-bridge-unreleased-${{ github.run_id }}
+          path: native/desktop-bridge/target/release/*.exe
+          if-no-files-found: error
+
+  smoke-native-staging:
+    name: Smoke Windows per-user transactional staging (no GUI/service mutation)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage all four source variants and verify local rollback path
+        shell: pwsh
+        run: |
+          ./native/windows/smoke-stage.ps1 -RepoRoot $PWD.Path
+
+  rust-harness-platform-gate:
+    name: Rust Harness authority platform gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and test the native Rust Harness authority
+        run: cargo test --manifest-path harness/rust-authority/Cargo.toml --all-targets
+      - name: Check Rust Harness formatting
+        run: cargo fmt --manifest-path harness/rust-authority/Cargo.toml --check
+      - name: Build authority CLI for native IPC acceptance
+        run: cargo build --manifest-path harness/rust-authority/Cargo.toml --bin orchestra-observer
+      - name: Windows named-pipe run-state round trip (real Rust binary)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:ORCHESTRA_BIN = (Resolve-Path 'harness/rust-authority/target/debug/orchestra-observer.exe').Path
+          node --test harness/kit/tests/rust-authority-windows.test.mjs
+
+  rust-windows-supervisor-platform-gate:
+    name: Native Rust ownership supervisor (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check supervisor formatting
+        run: cargo fmt --manifest-path native/windows/rust-supervisor/Cargo.toml --check
+      - name: Test strict schema and negative cases
+        run: cargo test --manifest-path native/windows/rust-supervisor/Cargo.toml --all-targets
+      - name: Lint ownership model
+        run: cargo clippy --manifest-path native/windows/rust-supervisor/Cargo.toml --all-targets -- -D warnings
+      - name: Build native executable
+        run: cargo build --release --manifest-path native/windows/rust-supervisor/Cargo.toml
+      - name: Upload compiled Windows supervisor for isolated acceptance (NOT an installer)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-windows-supervisor-unreleased-${{ github.run_id }}
+          path: native/windows/rust-supervisor/target/release/singularity-windows-supervisor.exe
+          if-no-files-found: error
+      - name: Windows non-mutating supervisor and scheduled task preflight
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path native/windows/rust-supervisor/target/release/singularity-windows-supervisor.exe).Path
+          $root = Join-Path $env:RUNNER_TEMP 'singularity-supervisor-test'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $config = Join-Path $root 'stack.json'
+          $fixture = @{
+            schema = 'singularity-rust-supervisor/v1'
+            variant = 1
+            repoqlVersion = '1.7.18'
+            components = @(@{
+              id = 'tencent-core'
+              executable = (Join-Path $env:WINDIR 'System32/cmd.exe')
+              args = @('/c','exit','0')
+              workingDir = $env:WINDIR
+            })
+          } | ConvertTo-Json -Depth 8
+          Set-Content -LiteralPath $config -Value $fixture -Encoding UTF8
+          & $exe check $config
+          if ($LASTEXITCODE -ne 0) { throw 'supervisor configuration failed' }
+          # Do NOT start this short-lived fixture as a background task. Test
+          # invocation only; Windows Job Object cleanup needs separate tests.
+
+  claude-complete-option2-bundle:
+    name: Build Claude Code Complete Option 2 Windows acceptance candidate (unreleased)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test fail-closed Option 2 bundle assembler and preparation
+        run: |
+          python -m unittest discover -s native/windows -p test_option2_acceptance_bundle.py
+          python -m unittest discover -s native/windows -p test_prepare_option2_candidate.py
+          python -m unittest discover -s native/windows -p test_verify_prepared_option2_candidate.py
+          python -m unittest discover -s native/windows -p test_claude_complete_acceptance_matrix.py
+      - name: Compile native Rust desktop bridge with Office and Ghost
+        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features --features office,ghost
+      - name: Compile native Rust process supervisor
+        run: cargo build --release --manifest-path native/windows/rust-supervisor/Cargo.toml
+      - name: Build and scan source-only Option 2 inventory
+        run: |
+          python native/windows/build_source_variants.py --output-dir .acceptance --variant 2
+          python native/windows/scan_source_archive.py .acceptance/singularity-native-windows-option2-SOURCE-ONLY.zip
+          python native/windows/claude_complete_release_audit.py .acceptance/singularity-native-windows-option2-SOURCE-ONLY.zip
+      - name: Assemble reproducible unapproved native acceptance candidate
+        shell: pwsh
+        run: |
+          python native/windows/build_option2_acceptance_bundle.py `
+            --source .acceptance/singularity-native-windows-option2-SOURCE-ONLY.zip `
+            --bridge native/desktop-bridge/target/release/singularity-desktop-bridge.exe `
+            --supervisor native/windows/rust-supervisor/target/release/singularity-windows-supervisor.exe `
+            --output .acceptance/claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip `
+            --commit $env:GITHUB_SHA
+      - name: Inspect resulting archive and verify file hashes
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0, 'native/windows'); from build_option2_acceptance_bundle import check_acceptance_bundle; from pathlib import Path; print(check_acceptance_bundle(Path('.acceptance/claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip')))"
+          if ($LASTEXITCODE -ne 0) { throw 'OPTION2_ACCEPTANCE_BUNDLE_INVALID' }
+          Get-FileHash .acceptance/claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip -Algorithm SHA256
+      - name: Inspect and prepare bundle using only its verified bootstrap helpers
+        shell: pwsh
+        run: |
+          $bundle = (Resolve-Path '.acceptance/claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip').Path
+          $unpacked = Join-Path $env:RUNNER_TEMP 'option2-bundle-outer'
+          Expand-Archive -LiteralPath $bundle -DestinationPath $unpacked
+          $helper = Join-Path $unpacked 'bootstrap/prepare_option2_candidate.py'
+          python $helper --bundle $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'OPTION2_BUNDLE_BOOTSTRAP_INSPECTION_FAILED' }
+          $root = Join-Path $env:LOCALAPPDATA 'Singularity/WindowsNativePreview'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $prepared = Join-Path $root ('option2-ci-' + $env:GITHUB_RUN_ID)
+          python $helper --bundle $bundle --extract --destination $prepared
+          if ($LASTEXITCODE -ne 0) { throw 'OPTION2_PREPARATION_FAILED' }
+          $receipt = Get-Content -LiteralPath (Join-Path $prepared 'PREPARATION_RECEIPT.json') -Raw | ConvertFrom-Json
+          if ($receipt.status -ne 'PREPARED_ONLY_NOT_STAGED_NOT_INSTALLED' -or $receipt.release_ready -ne $false) {
+            throw 'OPTION2_PREPARATION_RECEIPT_INVALID'
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $prepared 'source/native/windows/stage-native.ps1'))) {
+            throw 'OPTION2_STAGE_INPUTS_MISSING'
+          }
+          $verifier = Join-Path $unpacked 'bootstrap/verify_prepared_option2_candidate.py'
+          python $verifier --bundle $bundle --prepared $prepared
+          if ($LASTEXITCODE -ne 0) { throw 'OPTION2_PREPARED_CONTENT_VERIFICATION_FAILED' }
+      - name: Generate explicitly unverified Windows acceptance matrix (no live app tests)
+        shell: pwsh
+        run: |
+          python native/windows/claude_complete_acceptance_matrix.py --output .acceptance/acceptance-gates-NOT-RUN.json
+          if ($LASTEXITCODE -ne 0) { throw 'OPTION2_ACCEPTANCE_MATRIX_GENERATION_FAILED' }
+      - name: Compare produced candidate with same-run CI digest and commit (not independent publisher trust)
+        shell: pwsh
+        run: |
+          $bundle = '.acceptance/claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip'
+          $digest = (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip" | Set-Content -LiteralPath '.acceptance/sha256-NOT-SIGNED.txt' -Encoding ascii
+          python native/windows/verify_option2_expected_digest.py --bundle $bundle --expected-sha256 $digest --expected-commit $env:GITHUB_SHA --output '.acceptance/external-digest-comparison-SELF-CHECK-ONLY.json'
+          if ($LASTEXITCODE -ne 0) { throw 'OPTION2_CANDIDATE_DIGEST_SELF_CONSISTENCY_FAILED' }
+      - name: Upload native Windows acceptance candidate (NOT installer or production release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER-${{ github.run_id }}
+          path: |
+            .acceptance/claude-code-complete-option2-WINDOWS-ACCEPTANCE-NOT-INSTALLER.zip
+            .acceptance/acceptance-gates-NOT-RUN.json
+            .acceptance/sha256-NOT-SIGNED.txt
+            .acceptance/external-digest-comparison-SELF-CHECK-ONLY.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "platform": "windows-native",
+  "variants": {
+    "1": {
+      "name": "Claude Desktop Code + Tencent MemoryCore",
+      "gui": "claude-desktop-code",
+      "features": {
+        "repoql_dashboard": true,
+        "tencent_connector": true,
+        "kanban": true,
+        "agent_chat": true,
+        "ghost": false,
+        "office": false,
+        "memory": true,
+        "repoql_mcp": true
+      },
+      "rustOfficeFeature": false
+    },
+    "2": {
+      "name": "Claude Desktop Code Complete (+ Ghost, + Claude Office)",
+      "gui": "claude-desktop-code",
+      "features": {
+        "repoql_dashboard": true,
+        "tencent_connector": true,
+        "kanban": true,
+        "agent_chat": true,
+        "ghost": true,
+        "office": true,
+        "memory": true,
+        "repoql_mcp": true
+      },
+      "rustOfficeFeature": true
+    },
+    "3": {
+      "name": "OpenChamber Desktop + Tencent MemoryCore",
+      "gui": "openchamber-desktop",
+      "features": {
+        "repoql_dashboard": true,
+        "tencent_connector": true,
+        "kanban": true,
+        "agent_chat": true,
+        "ghost": false,
+        "office": false,
+        "memory": true,
+        "repoql_mcp": true
+      },
+      "rustOfficeFeature": false
+    },
+    "4": {
+      "name": "OpenChamber Desktop Complete (+ Ghost, + Claude Office)",
+      "gui": "openchamber-desktop",
+      "features": {
+        "repoql_dashboard": true,
+        "tencent_connector": true,
+        "kanban": true,
+        "agent_chat": true,
+        "ghost": true,
+        "office": true,
+        "memory": true,
+        "repoql_mcp": true
+      },
+      "rustOfficeFeature": true
+    }
+  },
+  "repoql": {
+    "requiredVersion": "1.7.18",
+    "connectorContract": "fetch-render",
+    "binary": "externally-installed-native-rql.exe",
+    "versionPolicy": "exact-match-fail-closed",
+    "upgradePolicy": "explicit-connector-migration-and-acceptance"
+  }
+}

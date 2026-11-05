@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "component": "openchamber-opencode-runtime",
+  "note": "Pin record for a human comparing deployments. The portable harness does not consume this file and copies no runtime config, plugin or node_modules tree.",
+  "opencodeRuntime": {
+    "version": "2.1.4",
+    "verifiedWhere": "running OpenChamber container on the reference host",
+    "verifiedBy": "parent work package",
+    "independentlyRecheckedHere": false
+  },
+  "configBundleShape": {
+    "observedFiles": 88,
+    "observedPlugins": 29,
+    "includedBackups": true,
+    "includedNodeModules": true,
+    "shipped": false,
+    "curationRule": "only generic, non-personal plugin *choice* is a product concern; back-ups (opencode.jsonc.bak*), reviews, state and share data are never copied"
+  },
+  "upstreamTag": "v2.5.2",
+  "upstreamCommit": "c4919abc1e7a0a3beeaa126666487806bf79cfe0",
+  "forkDelta": {
+    "head": "9ad2a0200",
+    "commits": 5,
+    "files": 32,
+    "reproducible": false,
+    "reason": "objects unpublished; see harness/openchamber-patches/README.md"
+  }
+}

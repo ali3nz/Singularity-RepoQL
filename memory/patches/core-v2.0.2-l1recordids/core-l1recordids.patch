@@ -1,0 +1,1004 @@
+--- a/src/adapters/standalone/llm-runner.ts
++++ b/src/adapters/standalone/llm-runner.ts
+@@ -35,6 +35,111 @@
+ // Max iterations in the tool-call loop to prevent infinite loops
+ const MAX_TOOL_ITERATIONS = 20;
+ 
++/**
++ * Issue 658 tier-2: parse TDAI_LLM_FALLBACK_TARGETS — alternate FCC targets
++ * tried after the primary target's full model ladder fails transiently.
++ * Spec: targets separated by ';', each `url|KEY_ENV_NAME|model1,model2`.
++ * KEY_ENV_NAME is resolved from process.env AT CALL TIME (loader pattern —
++ * no credential literal ever lands in compose/config); "-" sends no auth.
++ */
++function parseFallbackTargets(
++  spec: string | undefined,
++): { baseUrl: string; apiKey: string; models: string[] }[] {
++  const out: { baseUrl: string; apiKey: string; models: string[] }[] = [];
++  if (!spec) return out;
++  for (const part of spec.split(";")) {
++    const seg = part.trim();
++    if (!seg) continue;
++    const [rawUrl, keyRef, modelsCsv] = seg.split("|").map((s) => s.trim());
++    const baseUrl = rawUrl && rawUrl.length > 0 ? rawUrl : "";
++    if (!baseUrl) continue;
++    const apiKey = !keyRef || keyRef === "-" ? "" : (process.env[keyRef] ?? "");
++    const models = (modelsCsv ?? "")
++      .split(",")
++      .map((s) => s.trim())
++      .filter((m): m is string => m.length > 0);
++    if (models.length === 0) continue;
++    out.push({ baseUrl, apiKey, models });
++  }
++  return out;
++}
++
++/**
++ * Issue 658 round 2: is this failure a TRANSIENT upstream availability
++ * problem a model fallback may fix (rate limit / capacity / upstream 5xx)?
++ * Deterministic failures (auth, bad model id, schema) and abort/timeout-class
++ * errors must NOT trigger failover HERE; the ladder separately treats a fired
++ * per-attempt deadline as failover-eligible while the overall budget remains
++ * (issue 712, classified from the actual signal states in the attempt loop).
++ */
++function isTransientUpstreamFailure(err: unknown): boolean {
++  if (!(err instanceof Object)) return false;
++  const e0 = err as {
++    name?: unknown;
++    message?: unknown;
++  };
++  // Caller aborts / internal timeouts end the whole run() call — never fail
++  // over on our own budget. Tested on the TOP level only.
++  if (e0.name === "AbortError" || e0.name === "TimeoutError") return false;
++  const m0 = typeof e0.message === "string" ? e0.message.toLowerCase() : "";
++  if (/(^|[^a-z])(abort|timed? ?out)([^a-z]|$)/.test(m0)) return false;
++  // The AI SDK wraps empty streams in AI_NoOutputGeneratedError and buries the
++  // real transport/HTTP error in `cause`. Walk the cause chain and classify at
++  // each level; the first decisive signal wins.
++  let cur: unknown = err;
++  for (let depth = 0; depth < 4 && cur !== null && cur instanceof Object; depth++) {
++    const e = cur as {
++      name?: unknown;
++      message?: unknown;
++      statusCode?: unknown;
++      status?: unknown;
++      cause?: unknown;
++    };
++    const status =
++      typeof e.statusCode === "number"
++        ? e.statusCode
++        : typeof e.status === "number"
++          ? e.status
++          : undefined;
++    if (status !== undefined) {
++      if (
++        status === 408 ||
++        status === 429 ||
++        (status >= 500 && status !== 501 && status !== 505)
++      ) {
++        return true;
++      }
++      // Definitive non-transient status (e.g. 401/403/400/404) — but only stop
++      // the walk here when it is a REAL status-bearing API error, not an
++      // unrelated wrapper (404-class codes from a wrapper without a route
++      // should still let deeper causes decide).
++      if (e.name !== "AI_NoOutputGeneratedError") {
++        return false;
++      }
++    }
++    const msg = typeof e.message === "string" ? e.message.toLowerCase() : "";
++    // Network-transport failures (target down, DNS, connect refused, socket
++    // dropped) are transient — the whole point of an alternate target is to
++    // survive a primary that is rate-limited AND one that is unreachable.
++    if (
++      /(fetch failed|econnrefused|econnreset|econnaborted|etimedout|enotfound|eai_again|epipe|socket hang ?up|network error|und_err_connect|connect ?timeout|cannot connect|bad port|getaddrinfo)/.test(
++        msg,
++      )
++    ) {
++      return true;
++    }
++    if (
++      /rate.?limit|too many requests|429|overloaded|over capacity|insufficient capacity|quota exceeded|temporarily|try again|service unavailable|internal server error|upstream/.test(
++        msg,
++      )
++    ) {
++      return true;
++    }
++    cur = e.cause;
++  }
++  return false;
++}
++
+ // ============================
+ // experimental_telemetry.metadata 组装
+ // ============================
+@@ -301,11 +406,56 @@
+     // Create OpenAI-compatible provider via AI SDK
+     // Use "compatible" mode to call /chat/completions (not Responses API),
+     // which works with all OpenAI-compatible backends (DeepSeek, Qwen, etc.)
+-    const provider = createOpenAI({
+-      baseURL: this.config.baseUrl,
+-      apiKey: this.config.apiKey,
+-      compatibility: "compatible",
+-    });
++    // issue 658 round 2 (operator order 2026-10-15): FCC router failover.
++    // TDAI_LLM_API_FORMAT=responses → target the OpenAI Responses API
++    // (/v1/responses), the form the FCC router serves (streaming-only, BEARER
++    // auth). Default "chat" keeps Chat Completions so existing NVIDIA/vLLM
++    // deployments are untouched.
++    // TDAI_LLM_FALLBACK_MODELS="a,b,..." → per-call fallback ladder: when the
++    // primary model fails with a transient upstream error (429 / rate limit /
++    // 5xx), the next model in the list is tried before run() fails.
++    // issue 658: hosted reasoning models (e.g. NVIDIA Nemotron) can consume the
++    // entire maxOutputTokens budget on the reasoning phase and return EMPTY
++    // content (finish_reason=length). For structured extraction that is a hard
++    // parse failure -> held cursor -> retry -> repeated hosted-quota burn.
++    // When TDAI_LLM_DISABLE_REASONING=true, disable the reasoning phase for
++    // OpenAI-compatible backends that honour chat_template_kwargs (vLLM / NIM).
++    // NOTE: chat_template_kwargs is a Chat Completions extension — it must NOT
++    // be injected in Responses format (would be an unknown body field).
++    const apiFormat =
++      (process.env.TDAI_LLM_API_FORMAT ?? "chat").trim().toLowerCase() === "responses"
++        ? "responses"
++        : "chat";
++    const disableReasoning =
++      process.env.TDAI_LLM_DISABLE_REASONING === "true" && apiFormat === "chat";
++    const makeProvider = (baseUrl: string, apiKey: string) =>
++      createOpenAI({
++        baseURL: baseUrl,
++        apiKey,
++        compatibility: "compatible",
++        ...(disableReasoning
++          ? {
++              fetch: async (input: any, init?: any) => {
++                if (init && typeof init.body === "string") {
++                  try {
++                    const parsed = JSON.parse(init.body);
++                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
++                      parsed.chat_template_kwargs = {
++                        ...(parsed.chat_template_kwargs ?? {}),
++                        thinking: false,
++                      };
++                      init = { ...init, body: JSON.stringify(parsed) };
++                    }
++                  } catch {
++                    /* not JSON - leave the body untouched */
++                  }
++                }
++                return fetch(input as any, init as any);
++              },
++            }
++          : {}),
++      });
++    const provider = makeProvider(this.config.baseUrl, this.config.apiKey);
+ 
+     // Select tools based on mode + storage
+     // Service mode (COS): use storage-backed tools → LLM reads/writes via StorageAdapter
+@@ -327,55 +477,194 @@
+       tools = undefined; // pure-text task — never expose any tool to the model
+     }
+ 
++    // Issue 712: ladder tracking lives OUTSIDE the try so the catch block's
++    // failure report can read it (the declaration previously sat inside the
++    // try while the catch referenced it — every failure surfaced as
++    // "ReferenceError: usedModel is not defined", masking the real error).
++    let usedModel = this.model;
++    let usedModelAttempts = 0;
++    let usedModelTarget = this.config.baseUrl;
++
+     try {
+-      // H-11 Step 2: combine internal timeout with caller-provided abortSignal
+-      // (e.g. pipeline-worker lost its lock and wants the LLM call to bail out).
+-      // AbortSignal.any (Node 20+) aborts when ANY of the listed signals abort.
++      // H-11 Step 2 (issue 712 update): this signal is the ONE OVERALL run
++      // ceiling across the whole ladder. AbortSignal.any (Node 20+) aborts
++      // when ANY of the listed signals abort; the caller's abortSignal is
++      // combined per-attempt in the ladder below.
+       const timeoutSignal = AbortSignal.timeout(timeoutMs);
+-      const combinedSignal = params.abortSignal
+-        ? AbortSignal.any([timeoutSignal, params.abortSignal])
+-        : timeoutSignal;
+-
+-      const callParams = {
+-        model: provider.chat(this.model),
+-        system: params.systemPrompt,
+-        prompt: params.prompt,
+-        // Only attach tools when actually enabled — passing an empty object
+-        // (or even a tools-only-with-`read`) makes some OpenAI-compatible
+-        // backends emit spurious tool calls on pure-text tasks.
+-        ...(tools && Object.keys(tools).length > 0
+-          ? { tools, stopWhen: stepCountIs(maxIterations) }
+-          : {}),
+-        maxOutputTokens: maxTokens,
+-        abortSignal: combinedSignal,
+-        experimental_telemetry: {
+-          isEnabled: true,
+-          functionId: params.taskId,
+-          metadata: buildTelemetryMetadata(params),
+-        },
++
++      // Issue 712: per-attempt deadline. A hung model (upstream accepts the
++      // request and never responds) must fail over to the next ladder model
++      // instead of consuming the entire run budget. perAttemptMs =
++      // min(90s, timeoutMs/2): 90s for the 180s L1 ceiling AND 90s where the
++      // ceiling is 300s — the 90s cap binds in both. Healthy calls: 6-21s.
++      const perAttemptMs = Math.max(1, Math.min(90_000, Math.floor(timeoutMs / 2)));
++      const callerSignal = params.abortSignal;
++      const runCall = async (
++        baseUrl: string,
++        apiKey: string,
++        modelId: string,
++        attemptSignal: AbortSignal,
++      ) => {
++        // Reuse the primary provider for the primary target; fresh provider for
++        // alternate failover targets (they may carry their own base URL + key).
++        const attemptProvider =
++          baseUrl === this.config.baseUrl && apiKey === this.config.apiKey
++            ? provider
++            : makeProvider(baseUrl, apiKey);
++        const callParams = {
++          model: apiFormat === "responses"
++            ? // Responses (FCC) mode — pass the model id verbatim: FCC ids are
++              // provider-routed multi-segment paths (anthropic/groq/openai/...).
++              attemptProvider.responses(modelId)
++            : attemptProvider.chat(modelId),
++          system: params.systemPrompt,
++          prompt: params.prompt,
++          // Only attach tools when actually enabled — passing an empty object
++          // (or even a tools-only-with-`read`) makes some OpenAI-compatible
++          // backends emit spurious tool calls on pure-text tasks.
++          ...(tools && Object.keys(tools).length > 0
++            ? { tools, stopWhen: stepCountIs(maxIterations) }
++            : {}),
++          maxOutputTokens: maxTokens,
++          abortSignal: attemptSignal,
++          experimental_telemetry: {
++            isEnabled: true,
++            functionId: params.taskId,
++            metadata: buildTelemetryMetadata(params),
++          },
++        };
++
++        // stream=true → streamText(给只吃流式的上游);否则 generateText。
++        // FCC /v1/responses is streaming-only → force streamText in responses
++        // mode (generateText would send a non-streaming request FCC rejects).
++        // 读 totalUsage 而不是单 step 的 usage —— tool-call 多 step 时后者只报最后一步,
++        // 会漏掉前序工具调用请求的用量,导致 credit 计费偏低。
++        // ai@6.0.164 的字段是 inputTokens/outputTokens/totalTokens。
++        const { text, usage, steps } = this.stream || apiFormat === "responses"
++          ? await (async () => {
++              // Issue 658 tier-2: AI SDK surfaces transport/HTTP failures from
++              // streamText as a generic AI_NoOutputGeneratedError WITHOUT a
++              // cause; the REAL error only flows through onError. Capture it
++              // and rethrow the real error so the ladder's classifier (which
++              // walks causes) can decide transient vs deterministic.
++              let streamError: unknown;
++              const streamResult = streamText({
++                ...callParams,
++                onError: ({ error }: { error: unknown }) => {
++                  streamError = error;
++                },
++              });
++              try {
++                return {
++                  text: ((await streamResult.text) ?? "").trim(),
++                  usage: await streamResult.totalUsage,
++                  steps: await streamResult.steps,
++                };
++              } catch (err) {
++                const hasCause =
++                  err instanceof Object &&
++                  (err as { cause?: unknown }).cause !== undefined &&
++                  (err as { cause?: unknown }).cause !== null;
++                if (streamError !== undefined && !hasCause) {
++                  throw streamError;
++                }
++                throw err;
++              }
++            })()
++          : await (async () => {
++              const genResult = await generateText(callParams);
++              return {
++                text: (genResult.text ?? "").trim(),
++                usage: genResult.totalUsage,
++                steps: genResult.steps,
++              };
++            })();
++        return { text, usage, steps };
+       };
++      type RunCallResult = Awaited<ReturnType<typeof runCall>>;
+ 
+-      // stream=true → streamText(给只吃流式的上游);否则 generateText。
+-      // 读 totalUsage 而不是单 step 的 usage —— tool-call 多 step 时后者只报最后一步,
+-      // 会漏掉前序工具调用请求的用量,导致 credit 计费偏低。
+-      // ai@6.0.164 的字段是 inputTokens/outputTokens/totalTokens。
+-      const { text, usage, steps } = this.stream
+-        ? await (async () => {
+-            const streamResult = streamText(callParams);
+-            return {
+-              text: ((await streamResult.text) ?? "").trim(),
+-              usage: await streamResult.totalUsage,
+-              steps: await streamResult.steps,
+-            };
+-          })()
+-        : await (async () => {
+-            const genResult = await generateText(callParams);
+-            return {
+-              text: (genResult.text ?? "").trim(),
+-              usage: genResult.totalUsage,
+-              steps: genResult.steps,
+-            };
+-          })();
++      // Issue 658 round 2 (updated by issue 712): per-call model fallback
++      // ladder — primary first, then TDAI_LLM_FALLBACK_MODELS on transient
++      // upstream failures. Caller aborts and deterministic errors (auth, bad
++      // model id) never fail over; a HUNG upstream now fails over via the
++      // per-attempt deadline instead of killing the whole run.
++      const fallbackModels = (process.env.TDAI_LLM_FALLBACK_MODELS ?? "")
++        .split(",")
++        .map((s) => s.trim())
++        .filter((s): s is string => s.length > 0 && s !== this.model);
++      // Issue 658 tier-2 (operator order 2026-10-16): alternate FCC targets as a
++      // deep failover layer. TDAI_LLM_FALLBACK_TARGETS spec, targets separated
++      // by ';':  url|KEY_ENV_NAME|model1,model2  ("-" = no auth header).
++      // Tried ONLY after every FCC-1 attempt above has failed transiently —
++      // each target is a separate upstream quota pool (FCC-Ghost = Poolside-2
++      // + Nvidia-2 keys), so rate limits on the primary pool cannot stall
++      // extraction. Keys are resolved from env by NAME at call time (loader
++      // pattern — no credential literal in compose/config).
++      const targets: { baseUrl: string; apiKey: string; models: string[] }[] = parseFallbackTargets(
++        process.env.TDAI_LLM_FALLBACK_TARGETS,
++      );
++      targets.unshift({
++        baseUrl: this.config.baseUrl,
++        apiKey: this.config.apiKey,
++        models: [this.model, ...fallbackModels],
++      });
++      const attemptSeq = targets.flatMap((t) => t.models.map((m) => ({ target: t, modelId: m })));
++      if (targets.length > 1 || fallbackModels.length > 0) {
++        this.logger?.debug?.(
++          `${TAG} run() model ladder: primary=${this.model} @ ${this.config.baseUrl}, ${fallbackModels.length} FCC-1 fallback(s), ${targets.length - 1} extra target(s): ` +
++            targets
++              .slice(1)
++              .map((t) => `${t.baseUrl} [${t.models.join(",")}]`)
++              .join(" ; "),
++        );
++      }
++      let lastTransient: unknown;
++      const callResult: RunCallResult = await (async () => {
++        for (let attempt = 0; attempt < attemptSeq.length; attempt++) {
++          const { target, modelId } = attemptSeq[attempt]!;
++          // Issue 712: fresh per-attempt deadline so one hung model cannot
++          // consume the whole run; the shared timeoutSignal stays the overall
++          // ceiling across the whole ladder. The caller signal and the
++          // ceiling still abort an in-flight attempt immediately when fired.
++          const attemptTimeout = AbortSignal.timeout(perAttemptMs);
++          const attemptSignal = callerSignal
++            ? AbortSignal.any([attemptTimeout, callerSignal, timeoutSignal])
++            : AbortSignal.any([attemptTimeout, timeoutSignal]);
++          try {
++            const result = await runCall(target.baseUrl, target.apiKey, modelId, attemptSignal);
++            usedModel = modelId;
++            usedModelTarget = target.baseUrl;
++            return result;
++          } catch (err) {
++            const transient = isTransientUpstreamFailure(err);
++            // Issue 712 (gate-2 correction 2026-10-17T22-45-54-822-300495):
++            // caller cancellation and the overall ceiling take precedence over
++            // EVERY failure class — including a transient upstream error that
++            // raced with them — so they are checked first and remain fatal.
++            const cancelled = !!callerSignal?.aborted || timeoutSignal.aborted;
++            // A fired per-attempt deadline means the upstream hung;
++            // failover-eligible only while not cancelled.
++            const ownAttemptTimeout = attemptTimeout.aborted && !cancelled;
++            if (cancelled || (!transient && !ownAttemptTimeout)) {
++              throw err;
++            }
++            if (ownAttemptTimeout && attempt + 1 >= attemptSeq.length) {
++              throw err; // no fallback left — surface the last error
++            }
++            lastTransient = err;
++            usedModelAttempts += 1;
++            if (attempt + 1 < attemptSeq.length) {
++              const next = attemptSeq[attempt + 1]!;
++              const attemptErr = err instanceof Error ? err.message : String(err);
++              this.logger?.warn(
++                `${TAG} run() model failover: ${modelId} failed with ${ownAttemptTimeout ? "per-attempt timeout (upstream hung)" : "transient upstream error"} (${attemptErr}) → next ${next.modelId} @ ${next.target.baseUrl} (attempt ${attempt + 2}/${attemptSeq.length})`,
++              );
++            }
++          }
++        }
++        throw lastTransient ?? new Error("LLM attempt sequence exhausted with no persisted error");
++      })();
++      const { text, usage, steps } = callResult;
+ 
+       const totalMs = Date.now() - runStartMs;
+ 
+@@ -427,7 +716,7 @@
+         report("llm_call", {
+           taskId: params.taskId,
+           provider: "standalone",
+-          model: this.model,
++          model: usedModel,
+           inputLength: params.prompt.length,
+           outputLength: text.length,
+           totalDurationMs: totalMs,
+@@ -446,7 +735,7 @@
+         report("llm_call", {
+           taskId: params.taskId,
+           provider: "standalone",
+-          model: this.model,
++          model: usedModel,
+           inputLength: params.prompt.length,
+           outputLength: 0,
+           totalDurationMs: totalMs,
+@@ -490,10 +779,18 @@
+     const modelRef = opts?.modelRef;
+ 
+     // Parse "provider/model" → just use the model part for OpenAI-compatible API
++    // Issue 658 round 2: in Responses (FCC) mode the model id is a verbatim
++    // provider-routed multi-segment path (anthropic/groq/openai/gpt-oss-120b),
++    // so the historic single-segment strip must not fire — it would flatten
++    // "anthropic/model" to "model" and never reach the routed FCC upstream.
+     let model = this.config.model;
+     if (modelRef) {
+-      const slashIdx = modelRef.indexOf("/");
+-      model = slashIdx > 0 ? modelRef.slice(slashIdx + 1) : modelRef;
++      if ((process.env.TDAI_LLM_API_FORMAT ?? "chat").trim().toLowerCase() === "responses") {
++        model = modelRef;
++      } else {
++        const slashIdx = modelRef.indexOf("/");
++        model = slashIdx > 0 ? modelRef.slice(slashIdx + 1) : modelRef;
++      }
+     }
+ 
+     this.logger?.debug?.(
+--- a/src/core/record/l1-extractor.ts
++++ b/src/core/record/l1-extractor.ts
+@@ -192,6 +192,7 @@
+   // never happen again.
+   let scenes: SceneSegment[];
+   let earlyEmptyReason: L1EmptyReason | undefined;
++  let parseRetried = false;
+   try {
+     const outcome = await callLlmExtraction({
+       newMessages,
+@@ -207,6 +208,7 @@
+     });
+     scenes = outcome.scenes;
+     earlyEmptyReason = outcome.emptyReason;
++    parseRetried = outcome.retried === true;
+     logger?.debug?.(`${TAG} LLM detected ${scenes.length} scene(s)`);
+   } catch (err) {
+     logger?.error(`${TAG} LLM extraction failed: ${err instanceof Error ? err.message : String(err)}`);
+@@ -270,8 +272,17 @@
+         // 静默忽略，不影响业务逻辑
+       }
+     }
++    const hardParseFailure =
++      earlyEmptyReason === "no_json" || earlyEmptyReason === "parse_fail" || earlyEmptyReason === "not_array";
++    if (hardParseFailure) {
++      // Sol consult 2026-10-14: a malformed response must NOT be recorded as a
++      // successful zero-memory extraction. Terminal, explicit failure state.
++      logger?.error?.(
++        `${TAG} l1-extraction-failed reason=${finalReason} retried=${parseRetried ? "true" : "false"} sessionKey=${sessionKey} - malformed LLM output is NOT a valid empty extraction`,
++      );
++    }
+     return {
+-      success: true,
++      success: !hardParseFailure,
+       extractedCount: 0,
+       storedCount: 0,
+       records: [],
+@@ -509,16 +520,17 @@
+   // / 可筛选 tags。避免所有记忆抽取都显示为 Unnamed trace。
+   const traceParams = buildTraceParams("memory.l1-extract", traceContext);
+ 
+-  if (llmRunner) {
+-    // Use the host-neutral LLMRunner interface
+-    result = await llmRunner.run({
+-      prompt: userPrompt,
+-      systemPrompt,
+-      taskId: "l1-extraction",
+-      timeoutMs: 180_000,
+-      ...traceParams,
+-    });
+-  } else {
++  const runOnce = async (p: string, s: string): Promise<string> => {
++    if (llmRunner) {
++      // Use the host-neutral LLMRunner interface
++      return await llmRunner.run({
++        prompt: p,
++        systemPrompt: s,
++        taskId: "l1-extraction",
++        timeoutMs: 180_000,
++        ...traceParams,
++      });
++    }
+     // Fallback: create CleanContextRunner (OpenClaw path)
+     const runner = new CleanContextRunner({
+       config,
+@@ -526,17 +538,37 @@
+       enableTools: false,
+       logger,
+     });
+-
+-    result = await runner.run({
+-      prompt: userPrompt,
+-      systemPrompt,
++    return await runner.run({
++      prompt: p,
++      systemPrompt: s,
+       taskId: "l1-extraction",
+       timeoutMs: 180_000,
+       ...traceParams,
+     });
++  };
++
++  result = await runOnce(userPrompt, systemPrompt);
++  let outcome = parseExtractionResult(result, logger);
++
++  // issue 658 / Sol consult 2026-10-14: ONE bounded retry on a HARD parse
++  // failure only (no_json / parse_fail / not_array). A VALID empty array
++  // (empty_scenes) is never retried. Duplicate-safe: nothing is persisted
++  // until parseExtractionResult succeeds, so a retry cannot create a
++  // duplicate memory. Deliberately NO arbitrary JSON-substring extraction
++  // (Sol: risks accepting unintended content from malformed responses).
++  if (isHardParseFailure(outcome)) {
++    logger?.warn?.(
++      `${TAG} Extraction hard parse failure (reason=${outcome.emptyReason}) - retrying once with a strict-JSON instruction`,
++    );
++    const retryPrompt =
++      `${userPrompt}\n\nIMPORTANT: Reply with ONLY a single valid JSON array ` +
++      `(starting with "[" and ending with "]"). No prose, no markdown, no code ` +
++      `fences, no commentary.`;
++    const retryResult = await runOnce(retryPrompt, systemPrompt);
++    outcome = { ...parseExtractionResult(retryResult, logger), retried: true };
+   }
+ 
+-  return parseExtractionResult(result, logger);
++  return outcome;
+ }
+ 
+ /**
+@@ -555,6 +587,17 @@
+   scenes: SceneSegment[];
+   /** Populated iff we ended with 0 memories across all scenes. */
+   emptyReason?: L1EmptyReason;
++  /** True iff a bounded retry was performed after a hard parse failure. */
++  retried?: boolean;
++}
++
++/**
++ * True iff the response could not be parsed into a JSON array at all - as
++ * opposed to a valid empty result (`empty_scenes`) or an LLM/transport error.
++ * Gates the single bounded retry (issue 658 / Sol consult 2026-10-14).
++ */
++function isHardParseFailure(o: ParseExtractionOutcome): boolean {
++  return o.emptyReason === "no_json" || o.emptyReason === "parse_fail" || o.emptyReason === "not_array";
+ }
+ 
+ /**
+--- a/src/core/store/sqlite/memory-store.ts
++++ b/src/core/store/sqlite/memory-store.ts
+@@ -1684,6 +1684,14 @@
+       if (filter?.teamId !== undefined) rows = rows.filter((r) => r.team_id === filter.teamId);
+       if (filter?.userId !== undefined) rows = rows.filter((r) => r.user_id === filter.userId);
+       if (filter?.agentId !== undefined) rows = rows.filter((r) => r.agent_id === filter.agentId);
++      // Issue 764 follow-up: honour primary-key lookups. The VDB adapters map
++      // recordIds to documentIds; without this line SQLite silently returned
++      // every L1 row (what `atomic/update` then treated as the target record,
++      // so an edit could fail with "belongs to a different agent").
++      if (filter?.recordIds !== undefined) {
++        const ids = new Set(filter.recordIds);
++        rows = rows.filter((r) => ids.has(r.record_id));
++      }
+       if (taskId !== undefined) rows = rows.filter((r) => r.task_id === taskId);
+ 
+       this.logger?.info(
+--- a/src/core/tdai-core.ts
++++ b/src/core/tdai-core.ts
+@@ -1110,7 +1110,7 @@
+   /**
+    * Run L2 scene extraction using an externally provided Store.
+    */
+-  async runL2WithStore(sessionKey: string, store: IMemoryStore, storage?: StorageAdapter, cursor?: string): Promise<{ creditUsed: number; skipped: boolean }> {
++  async runL2WithStore(sessionKey: string, store: IMemoryStore, storage?: StorageAdapter, cursor?: string): Promise<{ creditUsed: number; skipped: boolean; latestCursor?: string }> {
+     const useStandaloneRunner = this.cfg.llm.enabled || this.hostAdapter.hostType !== "openclaw";
+     const openclawConfig = (!useStandaloneRunner && this.hostAdapter.hostType === "openclaw")
+       ? (this.hostAdapter as { getOpenClawConfig?(): unknown }).getOpenClawConfig?.()
+@@ -1148,7 +1148,10 @@
+     const creditUsed: number = (llmRunner as any)?.accumulatedCredit ?? 0;
+     // L2 runner returns undefined when no new L1 records, or { skipped: true } on empty extraction
+     const skipped = (runnerResult === undefined && creditUsed === 0) || (runnerResult?.skipped === true);
+-    return { creditUsed, skipped };
++    // Propagate the consumed-record cursor so a valid empty extraction can advance
++    // l2_last_extraction_time instead of being re-enqueued forever.
++    const latestCursor = (runnerResult as { latestCursor?: string } | undefined)?.latestCursor;
++    return { creditUsed, skipped, latestCursor };
+   }
+ 
+   /**
+--- a/src/gateway/server.ts
++++ b/src/gateway/server.ts
+@@ -3048,6 +3048,11 @@
+         if (result.skipped) {
+           (task as any)._l2Skipped = true;
+         }
++        // A valid empty extraction still CONSUMED L1 records: carry its cursor so the worker
++        // can advance l2_last_extraction_time while keeping the L3 cascade suppressed.
++        if (result.latestCursor) {
++          (task as any)._l2ConsumedCursor = result.latestCursor;
++        }
+ 
+         // Report credit + new scenes as memory
+         if (gateway.quotaManager && !result.skipped) {
+--- a/src/gateway/v2-router.ts
++++ b/src/gateway/v2-router.ts
+@@ -429,6 +429,7 @@
+   "/core/read": handleCoreRead,
+   "/core/write": handleCoreWrite,
+   "/core/count": handleCoreCount,
++  "/conversation/flush": handleConversationFlush,
+ };
+ 
+ const routeTable: Record<string, RouteHandler> = {
+@@ -763,9 +764,14 @@
+   // teamId/agentId 透传给 captureAtomic 决定 hash slot 与锁粒度。
+   if (deps.notifyPipeline) {
+     const rounds = messages.filter((m) => m.role === "user").length;
+-    if (rounds > 0) {
++    // issue 658 / Sol 2026-10-14: previously gated on user-message count, so a
++    // batch containing only assistant messages was persisted to L0 but never
++    // scheduled for extraction (silent omission). Schedule whenever the batch
++    // carries any message; count at least one unit so an assistant-only batch
++    // still triggers L1. A valid empty result is unaffected.
++    if (messages.length > 0) {
+       try {
+-        await deps.notifyPipeline(auth.serviceId, session_id, rounds, iso?.teamId, iso?.agentId);
++        await deps.notifyPipeline(auth.serviceId, session_id, Math.max(rounds, 1), iso?.teamId, iso?.agentId);
+       } catch (err) {
+         // Non-fatal: L0 is already persisted, pipeline will catch up later
+         deps.logger.warn(`${TAG} Pipeline notify failed for ${session_id}: ${err instanceof Error ? err.message : String(err)}`);
+@@ -892,6 +898,37 @@
+   return successEnvelope<ConversationQueryData>({ messages, total }, requestId);
+ }
+ 
++/**
++ * L1 drain trigger (issue 658 backfill).
++ *
++ * Notifies the pipeline for an ALREADY-STORED session without writing L0, so a
++ * session whose L0 rows sit past its L1 cursor can be drained on demand. This is
++ * the only L0-safe way to drive L1 for idle/historical sessions: the add path
++ * mints `msg-${randomUUID()}`, so re-posting stored conversations would append
++ * duplicate L0 rows and re-create the duplicate-extraction defect.
++ *
++ * The notify does not need to cross the warmup threshold to be useful - it also
++ * arms the per-session L1 idle timer, which drains the session from its cursor.
++ */
++async function handleConversationFlush(
++  body: unknown,
++  auth: V2AuthContext,
++  requestId: string,
++  deps: V2RouterDeps,
++): Promise<ApiResponseEnvelope> {
++  const b = (body ?? {}) as Record<string, unknown>;
++  const sessionId = typeof b.session_id === "string" ? b.session_id.trim() : "";
++  if (!sessionId) return errorEnvelope(400, "session_id is required", requestId);
++  if (!deps.notifyPipeline) return errorEnvelope(503, "Pipeline notify is not available", requestId);
++  const iso = deps.requestIsolation;
++  try {
++    await deps.notifyPipeline(auth.serviceId, sessionId, 1, iso?.teamId, iso?.agentId);
++  } catch (err) {
++    return errorEnvelope(500, `notify failed: ${err instanceof Error ? err.message : String(err)}`, requestId);
++  }
++  return successEnvelope<{ notified: boolean; session_id: string }>({ notified: true, session_id: sessionId }, requestId);
++}
++
+ async function handleConversationCount(body: unknown, _auth: V2AuthContext, requestId: string, deps: V2RouterDeps): Promise<ApiResponseEnvelope> {
+   const parsed = conversationCountRequestSchema.safeParse(body);
+   if (!parsed.success) return errorEnvelope(400, formatZodError(parsed.error), requestId);
+--- a/src/services/pipeline-worker.ts
++++ b/src/services/pipeline-worker.ts
+@@ -1034,7 +1034,19 @@
+     if (task.type === "L2") {
+       // If L2 was skipped (no new L1 records), don't cascade to L3 or arm timer
+       if ((task as any)._l2Skipped) {
+-        this.logger?.debug?.(`${TAG} [${task.instanceId}/${task.sessionId}] L2 skipped (no new data), not arming timer or enqueuing L3`);
++        const consumedCursor = (task as any)._l2ConsumedCursor as string | undefined;
++        if (consumedCursor) {
++          // Valid empty extraction: the records WERE consumed, so persist the consumed-record
++          // cursor before returning. Not persisting it re-enqueues this session on every scan
++          // (no-op => no cursor advance => infinite loop). No L3 cascade, no timer armed.
++          await this.backend.updateSessionState(task.instanceId, task.sessionId, {
++            l2_pending_l1_count: 0,
++            l2_last_extraction_time: consumedCursor,
++          }, tid, aid);
++          this.logger?.debug?.(`${TAG} [${task.instanceId}/${task.sessionId}] L2 valid empty -> cursor advanced to ${consumedCursor}, no L3`);
++        } else {
++          this.logger?.debug?.(`${TAG} [${task.instanceId}/${task.sessionId}] L2 skipped (no new data), not arming timer or enqueuing L3`);
++        }
+         return;
+       }
+ 
+@@ -1147,8 +1159,17 @@
+       // agent 级锁：同 agent 的 L2/L3 互斥，避免共享目录撞写
+       return `pipeline:${ns}`;
+     }
+-    // L1 + flush 仍是 session 级
+-    return `pipeline:${ns}:s:${task.sessionId}`;
++    // L1 + flush: session-scoped ONLY - the agent tuple is deliberately excluded.
++    //
++    // issue 658 / Sol 2026-10-14: the L0 slice query is `session_key`-scoped while
++    // grouping is by (user, agent, sessionId), so two tasks for the SAME session can
++    // belong to DIFFERENT agents. While the lock key included the agent tuple those
++    // two tasks did not exclude each other: both read the same L0 rows (their cursors
++    // were unadvanced) and both extracted the same scene -> duplicate memories.
++    // Keying L1/flush by (instance, session) only means any two tasks touching the
++    // same session serialize regardless of agent, while different sessions keep full
++    // concurrency. The hash tag stays per (instance, session) so slot spread is kept.
++    return `pipeline:{${task.instanceId}:${task.sessionId}}:s`;
+   }
+ 
+   // ============================
+--- a/src/utils/pipeline-factory.ts
++++ b/src/utils/pipeline-factory.ts
+@@ -588,6 +588,9 @@
+       let totalExtracted = 0;
+       let totalStored = 0;
+       let lastSceneName: string | undefined;
++      // issue 658 / Sol 2026-10-14: track a terminal extraction failure so the L1
++      // cursor is NOT advanced past a scene that failed (parse failure / llm error).
++      let anyTerminalFailure = false;
+       const profileScopes = new Set<string>();
+       const l1PromptTargets = groups.map((group) => ({
+         teamId: group.teamId,
+@@ -635,6 +638,7 @@
+ 
+         totalExtracted += l1Result.extractedCount;
+         totalStored += l1Result.storedCount;
++        if (l1Result.success === false) anyTerminalFailure = true;
+         if (l1Result.storedCount > 0) {
+           // L2/L3 output is team+agent scoped, but each L2 extraction input must
+           // stay bounded to the source session that just produced L1. Encode the
+@@ -655,9 +659,19 @@
+       // Use maxRecordedAtMs (write time) of the **processed** slice as cursor —
+       // always positive, TCVDB-safe. Boundary alignment guarantees we will not
+       // skip same-ms siblings on the next round.
+-      await checkpoint.markL1ExtractionComplete(sessionKey, totalStored, maxRecordedAtMs || undefined, lastSceneName);
++      // issue 658 / Sol 2026-10-14: do NOT advance the L1 cursor past a scene whose
++      // extraction failed terminally — otherwise a failure is recorded as a
++      // successful empty result and the scene is permanently skipped. A VALID
++      // empty_scenes still counts as success and advances normally.
++      if (anyTerminalFailure) {
++        logger.warn(
++          `${TAG} [l1] terminal extraction failure for session ${sessionKey} - cursor NOT advanced; the scene remains for a later retry`,
++        );
++      } else {
++        await checkpoint.markL1ExtractionComplete(sessionKey, totalStored, maxRecordedAtMs || undefined, lastSceneName);
++      }
+       logger.info(
+-        `${TAG} [l1] L1 complete: extracted=${totalExtracted}, stored=${totalStored} (${groups.length} group(s))`,
++        `${TAG} [l1] L1 complete: extracted=${totalExtracted}, stored=${totalStored} (${groups.length} group(s))${anyTerminalFailure ? " [cursor-held]" : ""}`,
+       );
+ 
+       return { processedCount: totalMessages, storedCount: totalStored, hasMore, hasFullBacklog, profileScopes: Array.from(profileScopes) };
+@@ -787,6 +801,10 @@
+ 
+     let processedTotal = 0;
+     let anyEmptyExtraction = false;
++    // Cursor of records CONSUMED by a valid empty extraction (success && processed>0 but no
++    // file changes). Tracked separately from `processedTotal` so the checkpoint can still
++    // advance: a no-op that never advances the cursor re-enqueues these sessions forever.
++    let emptyLatestCursor = "";
+     const l2PromptTargets = [...grouped.values()].map((groupRecords) => ({
+       teamId: groupRecords[0]?.teamId,
+       agentId: groupRecords[0]?.agentId,
+@@ -843,8 +861,14 @@
+       const extractResult = await extractor.extract(memories);
+       if (!(extractResult.success && extractResult.memoriesProcessed > 0)) continue;
+       if (extractResult.emptyExtraction) {
++        // Valid empty: the records WERE consumed (success && processed>0) but produced no
++        // file changes. Capture their cursor so it can advance — otherwise this session is
++        // re-enqueued on every scan (no-op => no cursor advance => infinite loop).
++        // A FAILURE never reaches here (it fails the guard above), so a failed extraction
++        // still holds its cursor.
+         anyEmptyExtraction = true;
+-        logger.warn(`${TAG} [L2] Extraction produced no file changes (empty run), skipping checkpoint increment`);
++        emptyLatestCursor = records.reduce((latest, r) => r.updatedAt > latest ? r.updatedAt : latest, emptyLatestCursor);
++        logger.warn(`${TAG} [L2] Extraction produced no file changes (empty run); consumed cursor=${emptyLatestCursor || "(none)"}, checkpoint will advance`);
+         continue;
+       }
+ 
+@@ -934,7 +958,7 @@
+       logger.debug?.(`${TAG} [L2] Extraction complete: processed=${processedTotal}, latestCursor=${latestCursor}`);
+       return { latestCursor: latestCursor || undefined };
+     }
+-    if (anyEmptyExtraction) return { skipped: true };
++    if (anyEmptyExtraction) return { latestCursor: emptyLatestCursor || undefined, skipped: true };
+   };
+ }
+ 
+--- a/tests/issue712-ladder-regression.mjs
++++ b/tests/issue712-ladder-regression.mjs
+@@ -0,0 +1,180 @@
++// Issue 712 — targeted fallback-ladder regression for src/adapters/standalone/llm-runner.ts.
++// Runs fully offline with local mock OpenAI-compatible chat servers (no external network).
++// Cases mandated at Sol gate 1 (2026-10-17T22-07-10-647-294748):
++//   T1 successful primary extraction
++//   T2 hanging primary -> per-attempt deadline -> successful fallback (failover warning)
++//   T3 caller cancellation stays fatal (no failover, fast)
++//   T4 overall ceiling expiry stays fatal when every attempt hangs
++//   T5 all candidates fail -> last error surfaces (not a ReferenceError)
++//   T6 failure with instanceId set reports the underlying error, no "usedModel" masking
++// Exit 0 = all pass. Usage (inside the image): node --import tsx tests/issue712-ladder-regression.mjs
++import http from "node:http";
++import { once } from "node:events";
++import { StandaloneLLMRunner } from "../src/adapters/standalone/llm-runner.ts";
++
++const results = [];
++function ok(name, cond, extra = "") {
++  results.push({ name, pass: !!cond });
++  console.log(`${cond ? "PASS" : "FAIL"}  ${name}${extra ? "  — " + extra : ""}`);
++}
++
++function chatResponse(text) {
++  return JSON.stringify({
++    id: "cmpl-1", object: "chat.completion", created: 0, model: "mock",
++    choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
++    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
++  });
++}
++
++async function startMock(mode) { // "ok" | "hang" | "err500"
++  const hits = [];
++  const srv = http.createServer((req, res) => {
++    let b = ""; req.on("data", (c) => (b += c));
++    req.on("end", () => {
++      hits.push(req.url);
++      if (mode === "hang") return; // accept, never respond
++      if (mode === "err500") { // transient upstream failure, delayed
++        setTimeout(() => {
++          try { res.writeHead(500, { "content-type": "application/json" }); res.end('{"error":"upstream"}'); } catch { /* aborted */ }
++        }, 400);
++        return;
++      }
++      res.writeHead(200, { "content-type": "application/json" });
++      res.end(chatResponse("MOCK_OK"));
++    });
++  });
++  srv.listen(0, "127.0.0.1");
++  await once(srv, "listening");
++  return { port: srv.address().port, hits, close: () => new Promise((r) => { srv.closeAllConnections?.(); srv.close(r); }) };
++}
++
++const logs = [];
++const logger = {
++  info: (m) => logs.push(["info", String(m)]),
++  warn: (m) => logs.push(["warn", String(m)]),
++  error: (m) => logs.push(["error", String(m)]),
++  debug: (m) => logs.push(["debug", String(m)]),
++};
++function mkRunner({ primaryPort, model = "mock-primary", timeoutMs }) {
++  return new StandaloneLLMRunner({
++    config: { baseUrl: `http://127.0.0.1:${primaryPort}/v1`, apiKey: "test-key", model, timeoutMs, maxTokens: 64 },
++    logger,
++  });
++}
++const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
++
++// T1 — successful primary extraction (no fallbacks configured)
++{
++  delete process.env.TDAI_LLM_FALLBACK_MODELS;
++  delete process.env.TDAI_LLM_FALLBACK_TARGETS;
++  const m1 = await startMock("ok");
++  const r = mkRunner({ primaryPort: m1.port, timeoutMs: 8000 });
++  let text = "", err = null;
++  try { text = await r.run({ taskId: "t1", systemPrompt: "s", prompt: "p" }); } catch (e) { err = e; }
++  ok("T1 successful primary extraction", err === null && text === "MOCK_OK", `text=${JSON.stringify(text)} err=${err && err.message}`);
++  await m1.close();
++}
++
++// T2 — hanging primary -> per-attempt deadline -> successful fallback
++{
++  delete process.env.TDAI_LLM_FALLBACK_MODELS;
++  const hang = await startMock("hang");
++  const good = await startMock("ok");
++  process.env.TDAI_LLM_FALLBACK_TARGETS = `http://127.0.0.1:${good.port}/v1|-|mock-fallback`;
++  const r = mkRunner({ primaryPort: hang.port, timeoutMs: 4000 }); // perAttempt = 2000ms
++  const t0 = Date.now();
++  let text = "", err = null;
++  try { text = await r.run({ taskId: "t2", systemPrompt: "s", prompt: "p" }); } catch (e) { err = e; }
++  const ms = Date.now() - t0;
++  const warned = logs.some(([lvl, m]) => lvl === "warn" && m.includes("per-attempt timeout (upstream hung)") && m.includes("mock-fallback"));
++  ok("T2 hang + successful fallback", err === null && text === "MOCK_OK" && warned && ms >= 1800 && ms < 3900,
++    `ms=${ms} warned=${warned} goodHits=${good.hits.length} err=${err && err.message}`);
++  await hang.close(); await good.close();
++}
++
++// T3 — caller cancellation stays fatal (no failover)
++{
++  const hang = await startMock("hang");
++  const good = await startMock("ok");
++  process.env.TDAI_LLM_FALLBACK_TARGETS = `http://127.0.0.1:${good.port}/v1|-|mock-fallback`;
++  const r = mkRunner({ primaryPort: hang.port, timeoutMs: 15000 });
++  const ac = new AbortController();
++  setTimeout(() => ac.abort(), 300);
++  const t0 = Date.now();
++  let err = null;
++  try { await r.run({ taskId: "t3", systemPrompt: "s", prompt: "p", abortSignal: ac.signal }); } catch (e) { err = e; }
++  const ms = Date.now() - t0;
++  ok("T3 caller cancellation fatal (no failover)", err !== null && ms < 1500 && good.hits.length === 0,
++    `ms=${ms} goodHits=${good.hits.length} err=${err && (err.name + ": " + err.message)}`);
++  await hang.close(); await good.close();
++}
++
++// T4 — overall ceiling expiry stays fatal when every attempt hangs
++{
++  const hang1 = await startMock("hang");
++  const hang2 = await startMock("hang");
++  process.env.TDAI_LLM_FALLBACK_TARGETS = `http://127.0.0.1:${hang2.port}/v1|-|mock-fallback2`;
++  const r = mkRunner({ primaryPort: hang1.port, timeoutMs: 3000 }); // perAttempt = 1500ms
++  const t0 = Date.now();
++  let err = null;
++  try { await r.run({ taskId: "t4", systemPrompt: "s", prompt: "p" }); } catch (e) { err = e; }
++  const ms = Date.now() - t0;
++  ok("T4 overall ceiling expiry fatal", err !== null && ms >= 2400 && ms < 8000 && !String(err.message).includes("usedModel"),
++    `ms=${ms} err=${err && err.message}`);
++  await hang1.close(); await hang2.close();
++}
++
++// T5 — all candidates fail -> last error surfaces
++{
++  process.env.TDAI_LLM_FALLBACK_TARGETS = "http://127.0.0.1:9/v1|-|mock-dead";
++  const r = mkRunner({ primaryPort: 9, timeoutMs: 4000 });
++  let err = null;
++  try { await r.run({ taskId: "t5", systemPrompt: "s", prompt: "p" }); } catch (e) { err = e; }
++  ok("T5 all candidates fail -> last error surfaces", err !== null && String(err.message).length > 0 && !String(err.message).includes("usedModel"),
++    `err=${err && err.message}`);
++}
++
++// T6 — failure with instanceId set reports the underlying error (no ReferenceError masking)
++{
++  const hang = await startMock("hang");
++  delete process.env.TDAI_LLM_FALLBACK_TARGETS;
++  const r = mkRunner({ primaryPort: hang.port, timeoutMs: 1200 }); // perAttempt = 600ms
++  let err = null;
++  try { await r.run({ taskId: "t6", systemPrompt: "s", prompt: "p", instanceId: "test-instance" }); } catch (e) { err = e; }
++  ok("T6 no ReferenceError masking (instanceId set)", err !== null && !String(err.message).includes("usedModel is not defined") && String(err.message).length > 0,
++    `err=${err && err.message}`);
++  await hang.close();
++}
++
++// T7 — behavioural guard: caller cancels while a transient-failing request is
++// in flight -> fatal, fallback never reached, no failover warning.
++{
++  const flaky = await startMock("err500");
++  const good = await startMock("ok");
++  process.env.TDAI_LLM_FALLBACK_TARGETS = `http://127.0.0.1:${good.port}/v1|-|mock-fallback`;
++  const r = mkRunner({ primaryPort: flaky.port, timeoutMs: 15000 });
++  const ac = new AbortController();
++  const mark = logs.length;
++  setTimeout(() => ac.abort(), 120);
++  let err = null;
++  try { await r.run({ taskId: "t7", systemPrompt: "s", prompt: "p", abortSignal: ac.signal }); } catch (e) { err = e; }
++  const warned = logs.slice(mark).some(([lvl, m]) => lvl === "warn" && m.includes("model failover"));
++  ok("T7 cancellation during transient failure -> fatal, no failover", err !== null && good.hits.length === 0 && !warned,
++    `goodHits=${good.hits.length} warned=${warned} err=${err && err.message}`);
++  await flaky.close(); await good.close();
++}
++
++// T7b — source invariant guard (deterministic): the ladder catch must throw on
++// cancellation BEFORE considering transients (gate-2 correction 22-45-54-822-300495).
++{
++  let src = "";
++  try { src = (await import("node:fs")).readFileSync(new URL("../src/adapters/standalone/llm-runner.ts", import.meta.url), "utf8"); } catch (e) { /* fall back below */ }
++  const hasGuard = src.includes("const cancelled = !!callerSignal?.aborted || timeoutSignal.aborted;") &&
++    src.includes("if (cancelled || (!transient && !ownAttemptTimeout)) {");
++  ok("T7b source invariant: cancelled-first precedence guard present", src === "" ? false : hasGuard, `len=${src.length}`);
++}
++
++const fails = results.filter((r) => !r.pass).length;
++console.log(`\nISSUE-712-REGRESSION: ${results.length - fails} PASS / ${fails} FAIL`);
++await sleep(50);
++process.exit(fails === 0 ? 0 : 1);

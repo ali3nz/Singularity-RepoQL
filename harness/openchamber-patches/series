@@ -1,0 +1,17 @@
+# OpenChamber delta series — recorded, currently EMPTY.
+#
+# The five fleet commits on top of upstream v2.5.2 are not reproducible from
+# published sources, so no patch file is listed. apply.sh exits 3 for this file
+# rather than reporting a false success. See README.md.
+#
+# Regenerate (one patch per line, relative to this directory):
+#   git format-patch --no-signature --zero-commit --no-numbered \
+#       v2.5.2..9ad2a0200 -o patches
+# then list them here, e.g.:
+#   patches/0001-....patch
+#   patches/0002-....patch
+base_tag=v2.5.2
+base_commit=c4919abc1e7a0a3beeaa126666487806bf79cfe0
+fork_commit=9ad2a0200
+expected_patches=5
+expected_files=32

@@ -1,0 +1,66 @@
+# Runtime state and generated data — never commit
+data/
+state/
+workspaces/
+knowledge-store/
+evidence/
+backups/
+
+# Credentials and private configuration
+.env
+.env.local
+*.env
+!.env.example
+!**/.env.example
+product-secrets/
+.admin-key
+*.pem
+*.key
+
+# Databases and generated memory files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Backups and editor temporaries
+*.bak
+*.bak-*
+*.orig
+*.rej
+*~
+
+# Node
+node_modules/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Rust outputs are local; dependency lockfiles remain source-controlled.
+target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# RepoQL workspace state (index cache is local; concepts may be committed
+# deliberately)
+.repoql/cache/
+
+# Private disclosure-guard overlay — release machine only, never committed
+tests/forbidden-refs.local.txt
+
+# Harness engine runtime state (created on first run; never shipped)
+harness/kit/runs/
+
+# RepoQL: the release export never ships .repoql/ (host state and index cache
+# are local); concepts under .repoql/concepts/ stay committable on purpose.
+.repoql/*
+!.repoql/.gitignore
+!.repoql/concepts/
+.pytest_cache/

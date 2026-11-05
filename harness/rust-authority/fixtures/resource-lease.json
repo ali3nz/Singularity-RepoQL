@@ -1,0 +1,551 @@
+{
+  "schema": "orchestra-resource-lease-v1",
+  "scenarios": [
+    {
+      "name": "basic",
+      "operations": [
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha",
+          "threadId": "T1",
+          "heartbeatMs": 2000
+        },
+        {
+          "action": "resource_heartbeat",
+          "resourceId": "orchestration/config",
+          "caseId": "beta"
+        },
+        {
+          "action": "resource_heartbeat",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha",
+          "threadId": "T1",
+          "heartbeatMs": 2000
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "beta"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "orchestration/config",
+          "caseId": "beta"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "beta"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_audit"
+        }
+      ],
+      "expected": [
+        {
+          "ok": false,
+          "reason": "absent",
+          "resourceId": "orchestration/config"
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "alpha",
+            "threadId": "T1",
+            "heartbeatMs": 2000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        false,
+        true,
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "alpha",
+            "threadId": "T1",
+            "heartbeatMs": 2000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "alpha",
+            "threadId": "T1",
+            "heartbeatMs": 2000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        {
+          "ok": false,
+          "reason": "held-by-other-case",
+          "holder": {
+            "caseId": "alpha",
+            "ownerIsSelf": true
+          }
+        },
+        {
+          "ok": false,
+          "reason": "not-lease-owner"
+        },
+        {
+          "ok": false,
+          "reason": "not-lease-owner",
+          "resourceId": "orchestration/config",
+          "holder": {
+            "caseId": "alpha",
+            "ownerIsSelf": false
+          }
+        },
+        {
+          "ok": true
+        },
+        {
+          "ok": true,
+          "note": "absent"
+        },
+        {
+          "ok": false,
+          "reason": "absent",
+          "resourceId": "orchestration/config"
+        },
+        {
+          "ok": true,
+          "problems": [],
+          "leaseIds": []
+        }
+      ]
+    },
+    {
+      "name": "unknown",
+      "operations": [
+        {
+          "action": "resource_acquire",
+          "resourceId": "custom/domain",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config"
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "custom/domain",
+          "caseId": "alpha",
+          "extraResourceIds": [
+            "custom/domain"
+          ]
+        },
+        {
+          "action": "resource_audit"
+        },
+        {
+          "action": "resource_audit",
+          "extraResourceIds": [
+            "custom/domain"
+          ]
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "custom/domain",
+          "caseId": "alpha"
+        }
+      ],
+      "expected": [
+        {
+          "ok": false,
+          "reason": "unknown-resource-id",
+          "resourceId": "custom/domain"
+        },
+        {
+          "ok": false,
+          "reason": "missing-case-id",
+          "resourceId": "orchestration/config"
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "custom/domain",
+            "caseId": "alpha",
+            "threadId": null,
+            "heartbeatMs": 60000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        {
+          "ok": false,
+          "problems": [
+            {
+              "resourceId": "custom/domain",
+              "problem": "unknown-resource-id"
+            }
+          ],
+          "leaseIds": [
+            "custom/domain"
+          ]
+        },
+        {
+          "ok": true,
+          "problems": [],
+          "leaseIds": [
+            "custom/domain"
+          ]
+        },
+        {
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "parallel-domains",
+      "operations": [
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "deploy/bridge",
+          "caseId": "beta"
+        },
+        {
+          "action": "resource_audit"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "deploy/bridge",
+          "caseId": "beta"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "deploy/bridge",
+          "caseId": "beta"
+        }
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "alpha",
+            "threadId": null,
+            "heartbeatMs": 60000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "deploy/bridge",
+            "caseId": "beta",
+            "threadId": null,
+            "heartbeatMs": 60000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        {
+          "ok": true,
+          "problems": [],
+          "leaseIds": [
+            "deploy/bridge",
+            "orchestration/config"
+          ]
+        },
+        {
+          "ok": true
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "deploy/bridge",
+            "caseId": "beta",
+            "threadId": null,
+            "heartbeatMs": 60000,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        },
+        {
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "dead-foreign-takeover",
+      "seed": {
+        "leases": {
+          "orchestration/config": {
+            "resourceId": "orchestration/config",
+            "caseId": "deadCase",
+            "ownerPid": 99999999,
+            "since": "2026-01-01T00:00:00.000Z",
+            "heartbeatAt": 0,
+            "heartbeatMs": 60000
+          }
+        }
+      },
+      "operations": [
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "newCase"
+        },
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "newCase"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "newCase"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "orchestration/config",
+          "caseId": "newCase"
+        }
+      ],
+      "expected": [
+        {
+          "ok": false,
+          "reason": "not-lease-owner",
+          "resourceId": "orchestration/config",
+          "holder": {
+            "caseId": "deadCase",
+            "ownerIsSelf": false
+          }
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "newCase",
+            "threadId": null,
+            "heartbeatMs": 60000,
+            "ownerIsSelf": true,
+            "takeover": true
+          }
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "newCase",
+            "threadId": null,
+            "heartbeatMs": 60000,
+            "ownerIsSelf": true,
+            "takeover": true
+          }
+        },
+        {
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "live-foreign-expired",
+      "seed": {
+        "leases": {
+          "orchestration/config": {
+            "resourceId": "orchestration/config",
+            "caseId": "existing",
+            "ownerPid": "$OWN_PID",
+            "since": "2026-01-01T00:00:00.000Z",
+            "heartbeatAt": 0,
+            "heartbeatMs": 1
+          }
+        }
+      },
+      "operations": [
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "newCase"
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "orchestration/config",
+          "caseId": "newCase"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "existing"
+        }
+      ],
+      "expected": [
+        {
+          "ok": false,
+          "reason": "owner-alive-heartbeat-stale",
+          "holder": {
+            "caseId": "existing",
+            "ownerIsSelf": true
+          }
+        },
+        {
+          "ok": false,
+          "reason": "not-lease-owner"
+        },
+        {
+          "ok": true,
+          "lease": {
+            "resourceId": "orchestration/config",
+            "caseId": "existing",
+            "threadId": null,
+            "heartbeatMs": 1,
+            "ownerIsSelf": true,
+            "takeover": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "audit-malformed",
+      "seed": {
+        "leases": {
+          "custom/domain": {
+            "resourceId": "custom/domain",
+            "caseId": "",
+            "ownerPid": 99999999
+          },
+          "deploy/bridge": {
+            "resourceId": "deploy/bridge",
+            "caseId": "C",
+            "ownerPid": 99999999
+          }
+        }
+      },
+      "operations": [
+        {
+          "action": "resource_audit"
+        },
+        {
+          "action": "resource_audit",
+          "extraResourceIds": [
+            "custom/domain"
+          ]
+        },
+        {
+          "action": "resource_release",
+          "resourceId": "custom/domain",
+          "caseId": ""
+        }
+      ],
+      "expected": [
+        {
+          "ok": false,
+          "problems": [
+            {
+              "resourceId": "custom/domain",
+              "problem": "lease-without-case"
+            },
+            {
+              "resourceId": "custom/domain",
+              "problem": "unknown-resource-id"
+            }
+          ],
+          "leaseIds": [
+            "custom/domain",
+            "deploy/bridge"
+          ]
+        },
+        {
+          "ok": false,
+          "problems": [
+            {
+              "resourceId": "custom/domain",
+              "problem": "lease-without-case"
+            }
+          ],
+          "leaseIds": [
+            "custom/domain",
+            "deploy/bridge"
+          ]
+        },
+        {
+          "ok": false,
+          "reason": "not-owner-pid"
+        }
+      ]
+    },
+    {
+      "name": "invalid-store",
+      "seed": {
+        "leases": []
+      },
+      "operations": [
+        {
+          "action": "resource_acquire",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        },
+        {
+          "action": "resource_audit"
+        },
+        {
+          "action": "resource_confirm",
+          "resourceId": "orchestration/config",
+          "caseId": "alpha"
+        }
+      ],
+      "expected": [
+        {
+          "error": true
+        },
+        {
+          "error": true
+        },
+        {
+          "error": true
+        }
+      ]
+    }
+  ]
+}

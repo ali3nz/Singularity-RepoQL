@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en" data-theme="classic">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b1320">
+<title>Ghost / Control Center</title>
+<style>
+:root,:host{color-scheme:dark;--bg:#0b1320;--bg2:#0f1725;--panel:#121d2d;--panel-2:#152234;--line:#24364f;--line-soft:#1c2a3c;--text:#ebf1f8;--muted:#9fb0c4;--accent:#7de6d4;--accent-2:#95b8ff;--amber:#ffc978;--red:#ff8d9d;--green:#7de6d4;--radius:16px;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;--shadow:0 20px 60px rgba(3,9,19,.38)}
+:host([data-theme="classic"]),html[data-theme="classic"]{--bg:#0b1320;--bg2:#0f1725;--panel:#121d2d;--panel-2:#152234;--line:#24364f;--text:#ebf1f8;--muted:#9fb0c4;--accent:#7de6d4;--accent-2:#95b8ff}
+:host([data-theme="neon"]),html[data-theme="neon"]{--bg:#070b12;--bg2:#08111b;--panel:#0d1622;--panel-2:#0f1b28;--line:#1d3441;--text:#ebf4fb;--muted:#94a9bd;--accent:#70ebd1;--accent-2:#66b6ff}
+*{box-sizing:border-box}body,:host{margin:0;display:block;background:linear-gradient(180deg,var(--bg),#08111b 50%,var(--bg2));color:var(--text);font:14px/1.55 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body:before,:host:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 15% 0,rgba(102,182,255,.11),transparent 28%),radial-gradient(circle at 85% 0,rgba(125,230,212,.09),transparent 26%);z-index:-1}a{color:var(--accent)}button,input,select,textarea{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shell{max-width:1480px;margin:0 auto;padding:24px clamp(16px,2.4vw,34px) 42px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:14px}.sigil{width:44px;height:44px;border-radius:14px;background:linear-gradient(180deg,#102231,#0d1b27);border:1px solid #2b455d;display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 26px rgba(0,0,0,.25)}.sigil svg{width:24px;color:var(--accent)}.brand strong{display:block;font-size:18px;letter-spacing:2.2px}.brand small{display:block;color:var(--muted);font:11px var(--mono);letter-spacing:1.8px;margin-top:3px}.topright{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.clock,.statusline-meta,.micro,.eyebrow,.label,.readonly,.controlhint,.scope,.footnote{font-family:var(--mono)}.theme-picker,.connection-pill{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--muted);font-size:12px}.theme-picker select{background:transparent;border:0;color:var(--text)}
+.intro{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;padding:26px 0 18px}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:11px;letter-spacing:1.7px}.intro h1{margin:0;font-size:clamp(28px,4vw,42px);line-height:1.05;letter-spacing:-1.1px}.intro p{margin:8px 0 0;color:var(--muted);max-width:760px}.connection{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}.dot{width:8px;height:8px;border-radius:50%;background:#617387}.connection.live .dot{background:var(--green);box-shadow:0 0 0 5px rgba(125,230,212,.08),0 0 18px rgba(125,230,212,.35)}.connection.offline{color:var(--amber)}.connection.offline .dot{background:var(--amber)}
+.notice{margin-bottom:18px;padding:14px 16px;border-radius:14px;border:1px solid #695134;background:rgba(255,201,120,.08);color:var(--amber);box-shadow:var(--shadow)}.notice[hidden]{display:none}
+.hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:18px;padding:26px;border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid var(--line);box-shadow:var(--shadow)}.hero.unknown{border-color:#42506a}.hero.warning{border-color:#715839}.statusline{display:flex;align-items:center;gap:12px;margin-bottom:8px}.statusorb{width:14px;height:14px;border-radius:50%;border:3px solid rgba(125,230,212,.25);background:var(--green);box-shadow:0 0 18px rgba(125,230,212,.28)}.hero.warning .statusorb{background:var(--amber);border-color:rgba(255,201,120,.25)}.hero.unknown .statusorb{background:#96a7b9;border-color:rgba(150,167,185,.25)}.statusline h2{margin:0;font-size:28px;letter-spacing:-.6px}.badge{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;border:1px solid #35536a;background:rgba(125,230,212,.08);color:var(--accent);font:11px var(--mono);letter-spacing:1px}.hero p{margin:0;color:var(--muted)}.statuscopy{margin-top:8px;max-width:700px;min-height:42px}.hero p.work-identity{font-size:18px;line-height:1.35;color:var(--text);font-weight:650;margin:10px 0 4px}.hero p.work-detail{font-size:12px;color:var(--muted);margin:0 0 14px}.model{margin-top:16px;padding-top:16px;border-top:1px solid var(--line-soft);font-size:13px;color:#c4d0df;overflow-wrap:anywhere}.model span{display:block;color:var(--muted);font-size:10px;letter-spacing:1.1px;margin-bottom:4px}.hero-right{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start}.hero-stat{padding:16px;border-radius:18px;background:var(--panel-2);border:1px solid var(--line-soft)}.hero-stat .label{display:block;font-size:10px;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted)}.duration{margin-top:8px;font:700 30px/1 var(--mono);letter-spacing:-1px;color:var(--text)}.activity-bars{display:none}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0 24px}.metric{padding:18px;border-radius:18px;background:var(--panel);border:1px solid var(--line-soft);box-shadow:var(--shadow)}.metric .label{display:block;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}.metric .value{margin-top:10px;font:700 25px/1.1 var(--mono);color:var(--text);overflow-wrap:anywhere}.metric .hint{margin-top:8px;color:var(--muted);font-size:12px}.metric .value.amber,.amber{color:var(--amber)}.metric .value.red,.red{color:var(--red)}.metric .value.cyan,.cyan{color:var(--accent)}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,.8fr);gap:18px;align-items:start}.stack{display:grid;gap:18px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}.panelhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line-soft)}.panelhead h3{margin:0;font-size:16px;letter-spacing:-.2px}.panelhead p,.panelhead span,.micro{color:var(--muted);font-size:11px}.control-chip,.task-chip,.mini-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid #36506a;background:rgba(149,184,255,.07);color:var(--text);font:11px var(--mono)}.control-chip.red,.task-chip.failed{border-color:#6c4550;color:var(--red);background:rgba(255,141,157,.08)}.control-chip.amber,.task-chip.paused{border-color:#6b5532;color:var(--amber);background:rgba(255,201,120,.08)}.task-chip.running{border-color:#38645b;color:var(--green);background:rgba(125,230,212,.08)}.task-chip.muted,.mini-chip.muted{border-color:#415267;color:var(--muted);background:rgba(255,255,255,.03)}
+.schedule-wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:0}.calendar-week{padding:18px;border-right:1px solid var(--line-soft);background:linear-gradient(180deg,rgba(255,255,255,.02),transparent)}.week-intro{margin-bottom:10px;color:var(--muted);font-size:12px}.week-list{display:grid;gap:10px}.week-controls{display:flex;gap:6px;align-items:center;justify-content:space-between;margin-bottom:12px}.week-controls .button{font-size:11px;padding:7px 9px;min-height:34px}.week-label{color:var(--muted);font:11px var(--mono);margin:2px 0 10px}.week-day{width:100%;text-align:left;padding:14px;border-radius:16px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--text)}.week-day.active{border-color:#4a89a1;background:linear-gradient(180deg,rgba(125,230,212,.1),rgba(149,184,255,.07))}.week-day .wk-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:6px}.week-day b{font-size:15px}.week-day small{display:block;color:var(--muted)}.week-day .count{font:12px var(--mono);color:var(--accent)}.agenda-side{padding:18px 20px 20px}.cal-summary{font-size:13px;color:var(--muted);margin-bottom:14px}.cal-banner{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:12px 14px;border-radius:14px;background:rgba(255,201,120,.08);border:1px solid #695134;color:var(--amber)}.cal-banner[hidden]{display:none}.cal-banner strong{font-size:20px;line-height:1}.calendar-entries{display:grid;gap:12px}.cal-day{display:grid;gap:10px}.cal-dayhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 2px 2px}.cal-dayhead b{font-size:16px}.cal-entry{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px;border:1px solid var(--line-soft);border-radius:16px;background:var(--panel-2)}.cal-times{color:var(--muted);font:12px var(--mono)}.cal-title{font-weight:600}.cal-chip{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #415267;background:rgba(255,255,255,.03);font:11px var(--mono)}.cal-entry.running .cal-chip,.cal-entry.completed .cal-chip{border-color:#38645b;color:var(--green)}.cal-entry.failed .cal-chip,.cal-entry.missed .cal-chip{border-color:#6c4550;color:var(--red)}.cal-entry.upcoming .cal-chip{border-color:#35546a;color:var(--accent-2)}.cal-entry.unknown .cal-chip{color:var(--muted)}.cal-entry.draft{border-style:dashed;border-color:#6e5c3c;background:rgba(255,201,120,.05)}.cal-entry.draft .cal-chip{color:var(--amber);border-color:#715b37}.cal-entry .draft-note{display:block;margin-top:5px;font-size:11px;color:var(--muted)}.cal-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:0 20px 18px;color:var(--muted);font-size:11px}
+.tasks-panel .task-list,.plan-panel .plan-list{display:grid;gap:12px;padding:18px 20px 20px}.tasks-note,.plan-note{padding:0 20px 0;color:var(--muted);font-size:12px}.tasks-note.error,.plan-note.error,.prompt-status.error,.prompt-count.error{color:var(--amber)}.task-row,.plan-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;padding:16px;border-radius:16px;background:var(--panel-2);border:1px solid var(--line-soft)}.task-title,.plan-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.task-title b,.plan-title b{font-size:15px}.task-detail,.plan-detail{margin-top:6px;color:var(--muted);font-size:13px}.task-meta,.plan-meta{margin-top:8px;color:var(--muted);font-size:11px;font-family:var(--mono);overflow-wrap:anywhere}.task-action,.plan-actions{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;justify-content:flex-end}.button{appearance:none;border:1px solid #31465d;background:#17273a;color:var(--text);border-radius:12px;padding:9px 12px;min-height:38px;font-size:12px}.button:hover{border-color:#537492}.button.danger{border-color:#6c4550;background:rgba(255,141,157,.07)}.button.secondary{background:transparent}.button:disabled{opacity:.45;cursor:default}
+.scheduler-note{padding:0 20px 12px;color:var(--muted);font-size:12px;line-height:1.6}.scheduler-note.error{color:var(--amber)}.scheduler-panel .schedule-list{display:grid;gap:12px;padding:8px 20px 20px}.schedule-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;padding:16px;border-radius:16px;background:var(--panel-2);border:1px solid var(--line-soft)}.schedule-row.active{border-color:rgba(88,224,200,.23)}.schedule-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.schedule-title b{font-size:15px}.schedule-detail{margin-top:6px;color:var(--muted);font-size:13px}.schedule-meta{margin-top:8px;color:var(--muted);font-size:11px;font-family:var(--mono);overflow-wrap:anywhere}.schedule-actions{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.plan-form{padding:0 20px 20px;display:grid;gap:12px}.form-grid{display:grid;grid-template-columns:1fr 120px 120px 130px;gap:10px}.field{display:grid;gap:6px}.field label{font-size:11px;color:var(--muted);font-family:var(--mono)}.field input,.field select,.field textarea{width:100%;border:1px solid #31465d;border-radius:12px;background:#0c1725;color:var(--text);padding:11px 12px}.field textarea{min-height:140px;resize:vertical}.action-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.mini-note{font-size:11px;color:var(--muted)}
+.collapsible{margin-top:18px}.collapsible details{background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}.collapsible summary{list-style:none;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}.collapsible summary::-webkit-details-marker{display:none}.summary-copy strong{display:block;font-size:15px}.summary-copy span{display:block;color:var(--muted);font-size:12px}.diagnostic-body{padding:0 20px 20px}
+.live-activity .panelhead,.event-panel .panelhead{border-bottom:1px solid var(--line-soft)}.activity-scroll{max-height:380px;overflow:auto;padding:14px 18px;display:grid;gap:10px;scrollbar-color:#36506a #0e1620}.activity-entry{padding:12px 14px;border-radius:14px;border:1px solid var(--line-soft);background:var(--panel-2);font:12px/1.55 var(--mono)}.activity-entry details,details.activity-entry{overflow:hidden}.activity-entry summary{cursor:pointer}.activity-entry pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1420;border:1px solid var(--line-soft);padding:10px;border-radius:10px;margin:8px 0 0}.activity-label{display:block;margin-top:10px;color:var(--muted);font-size:10px;letter-spacing:1px}.activity-foot{padding:0 18px 18px;color:var(--muted);font-size:11px}.activity-state{font:11px var(--mono);padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);color:var(--muted)}
+.filters{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line-soft);background:rgba(255,255,255,.01)}.filter{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:6px 0;min-height:32px}.filter[aria-pressed=true]{color:var(--accent);border-color:var(--accent)}.loghead,.event{display:grid;grid-template-columns:72px 82px minmax(0,1fr);gap:12px;padding:12px 20px;align-items:start}.loghead{font:10px var(--mono);color:var(--muted);border-bottom:1px solid var(--line-soft)}.logs{max-height:420px;overflow:auto}.event{font:12px/1.5 var(--mono);border-bottom:1px solid var(--line-soft)}.event time{color:#8fa3b7}.event .kind{width:max-content;padding:4px 8px;border-radius:999px;border:1px solid #2c4a49;color:var(--accent);font-size:10px}.event.rate_limit .kind{color:var(--amber);border-color:#6b5532}.event.timeout .kind,.event.connection_failure .kind,.event.provider_error .kind,.event.exhausted .kind{color:var(--red);border-color:#6c4550}.event .message small{display:block;margin-top:4px;color:var(--muted);font-size:10px}.logfoot{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;padding:14px 20px;font:10px var(--mono);color:var(--muted)}.pager{display:flex;align-items:center;gap:8px}
+.secondary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:18px}.details-list{padding:8px 20px 18px}.drow{padding:12px 0;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;gap:14px}.drow:last-child{border-bottom:0}.drow span{color:var(--muted);font-size:12px}.drow strong{max-width:64%;text-align:right;overflow-wrap:anywhere;font-size:12px}.note{padding:0 20px 18px;color:var(--muted);font-size:12px;line-height:1.65}.session{display:flex;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line-soft);font:12px var(--mono)}.session:last-child{border-bottom:0}.session small{display:block;color:var(--muted);margin-top:3px}.empty{padding:28px 20px;text-align:center;color:var(--muted);font-size:12px}
+.prompt-dialog,.control-dialog{width:min(780px,calc(100vw - 32px));border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--text);padding:18px;box-shadow:var(--shadow)}.control-dialog::backdrop,.prompt-dialog::backdrop{background:rgba(4,8,16,.72)}.control-dialog h3,.prompt-dialog h3{margin:0 0 12px}.prompt-tabs{display:flex;gap:8px;flex-wrap:wrap}.prompt-tab{border:1px solid #31465d;background:#152234;color:var(--muted);border-radius:999px;padding:7px 11px;font:11px var(--mono)}.prompt-tab.active{color:var(--text);border-color:#3f8a7c;background:#12242a}.prompt-meta,.prompt-help,.prompt-status,.prompt-count{margin-top:10px;color:var(--muted);font:11px/1.7 var(--mono)}.prompt-dialog textarea{width:100%;min-height:240px;margin-top:12px;background:#0c1725;color:var(--text);border:1px solid #31465d;border-radius:12px;padding:12px;font:12px/1.6 var(--mono)}.prompt-history{margin-top:12px;max-height:160px;overflow:auto}.prompt-history-label{font:10px var(--mono);color:var(--muted);margin-bottom:4px}.prompt-history-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line-soft);font:11px/1.5 var(--mono);color:var(--muted)}.prompt-confirm-label{display:block;margin-top:14px;color:var(--muted);font:11px/1.8 var(--mono)}.prompt-confirm-label input{width:100%;margin-top:6px;background:#0c1725;color:var(--text);border:1px solid #31465d;border-radius:10px;padding:10px 12px}.prompt-confirm-label code{color:var(--accent)}
+.footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;padding-top:24px;color:var(--muted);font:11px/1.7 var(--mono)}
+@media(max-width:1100px){.layout,.secondary,.hero{grid-template-columns:1fr}.schedule-wrap{grid-template-columns:1fr}.calendar-week{border-right:0;border-bottom:1px solid var(--line-soft)}.week-list{grid-template-columns:repeat(auto-fit,minmax(155px,1fr))}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid{grid-template-columns:1fr 1fr}.hero-right{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.shell{padding:16px 14px 32px}.intro{align-items:flex-start;flex-direction:column}.topbar{align-items:flex-start;flex-direction:column}.hero{padding:18px}.hero-right{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.task-row,.plan-row,.schedule-row,.cal-entry{grid-template-columns:1fr}.task-action,.plan-actions,.schedule-actions{justify-content:flex-start}.loghead,.event{grid-template-columns:62px 72px 1fr;padding-left:14px;padding-right:14px}.panelhead,summary,.diagnostic-body,.tasks-panel .task-list,.plan-panel .plan-list,.scheduler-panel .schedule-list,.plan-form,.activity-scroll{padding-left:16px;padding-right:16px}.cal-foot{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="sigil" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 20V10a7 7 0 0 1 14 0v10l-3-2-4 2-4-2-3 2Z"/><path d="M9 10v3m6-3v3"/></svg></div>
+      <div><strong>GHOST</strong><small>CONTROL CENTER / DAILY OPERATIONS</small></div>
+    </div>
+    <div class="topright">
+      <span class="clock" id="clock"></span>
+      <label class="theme-picker" for="theme-picker">Theme<select id="theme-picker"><option value="classic">Classic</option><option value="neon">Neon</option></select></label>
+    </div>
+  </header>
+
+  <section class="intro">
+    <div>
+      <p class="eyebrow">DAILY SCHEDULE · TASK CONTROL · DIAGNOSTICS</p>
+      <h1>Ghost, without the clutter.</h1>
+      <p>See today’s schedule first, manage active automations, and adjust prompts or draft upcoming work without digging through low-value telemetry.</p>
+    </div>
+    <div class="connection" id="connection"><span class="dot"></span><span id="connectionText">Connecting to telemetry</span></div>
+  </section>
+
+  <div class="notice" id="notice" role="status" hidden></div>
+
+  <section class="hero unknown" id="hero" aria-label="Current Ghost status">
+    <div>
+      <p class="eyebrow">CURRENT STATE</p>
+      <div class="statusline"><span class="statusorb"></span><h2 id="state">Awaiting telemetry</h2><span class="badge" id="phase">CONNECTING</span></div>
+      <p class="statuscopy" id="statuscopy">Connecting to the observer. No Ghost activity is assumed until fresh evidence is received.</p>
+      <div class="model"><span>MODEL</span><b id="model">Not observed</b></div>
+    </div>
+    <div class="hero-right">
+      <article class="hero-stat"><span class="label">Turn elapsed</span><div class="duration" id="elapsed">—</div><div class="scope" id="elapsedScope">No active turn</div></article>
+      <article class="hero-stat"><span class="label">Last verified update</span><div class="duration" id="progress">—</div><div class="scope">Observed provider advancement</div></article>
+      <article class="hero-stat"><span class="label">Rate-limit retries</span><div class="duration amber" id="retries">—</div><div class="scope" id="retryHint">Managed HTTP 429 telemetry</div></article>
+      <article class="hero-stat"><span class="label">Timeout evidence</span><div class="duration" id="timeouts">—</div><div class="scope">Explicit provider errors only</div></article>
+    </div>
+  </section>
+
+  <section class="metrics" aria-label="Runtime metrics">
+    <article class="metric"><span class="label">Inference deadline</span><div class="value" id="deadline">—</div><div class="hint" id="deadlineHint">Observed model policy</div></article>
+    <article class="metric"><span class="label">Collector health</span><div class="value" id="collector">Connecting</div><div class="hint">Snapshot freshness and observer integrity</div></article>
+    <article class="metric"><span class="label">Provider runs</span><div class="value" id="runCount">—</div><div class="hint">Active verified provider work</div></article>
+    <article class="metric"><span class="label">Last recovery</span><div class="value" id="recovery">—</div><div class="hint">Most recent provider recovery event</div></article>
+  </section>
+
+  <main class="layout">
+    <div class="stack">
+      <section class="panel calendar-panel" id="calendar-panel" aria-label="Ghost schedule">
+        <div class="panelhead">
+          <div><h3>Ghost schedule</h3><p class="micro">Weekly calendar and daily agenda · Pacific/Auckland</p></div>
+          <span class="control-chip" id="calendar-state">CONNECTING</span>
+        </div>
+        <div class="schedule-wrap">
+          <div class="calendar-week">
+            <div class="week-intro">Select a day to focus the agenda.</div>
+            <div class="week-controls"><button class="button" type="button" id="calendar-prev" aria-label="Previous week">←</button><button class="button" type="button" id="calendar-today">Today</button><button class="button" type="button" id="calendar-next" aria-label="Next week">→</button></div>
+            <div class="week-label" id="calendar-week-label">Current week</div>
+            <div class="week-list" id="calendar-week"><div class="empty">Loading calendar…</div></div>
+          </div>
+          <div class="agenda-side">
+            <div class="cal-summary" id="calendar-summary">Reading schedule…</div>
+            <div class="cal-banner" id="calendar-banner" role="status" hidden></div>
+            <div class="calendar-entries" id="calendar-entries"><div class="empty">Reading Ghost’s schedule…</div></div>
+            <button type="button" class="button secondary" id="calendar-plan-day" style="margin-top:16px">+ Plan work for this day</button>
+          </div>
+        </div>
+        <div class="cal-foot"><span id="calendar-note"></span><span class="micro" id="calendar-range"></span></div>
+      </section>
+
+      <div class="collapsible">
+        <details class="live-activity" open>
+          <summary>
+            <div class="summary-copy"><strong>Live activity</strong><span>Current turn updates, tool calls, and public status</span></div>
+            <span class="activity-state" id="activity-state">CONNECTING</span>
+          </summary>
+          <div class="diagnostic-body">
+            <div class="paneltools" style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="button" id="activity-latest">Jump to latest ↓</button></div>
+            <div class="activity-scroll" id="activity-scroll" tabindex="0" role="region" aria-label="Ghost activity"><div class="empty">Waiting for verified activity. No private thought trace is published.</div></div>
+            <div class="activity-foot" id="activity-note">Display only · redacted details · scroll for history</div>
+          </div>
+        </details>
+
+        <details class="event-panel">
+          <summary>
+            <div class="summary-copy"><strong>Diagnostics log</strong><span>Sanitized provider events, retries, and error signals</span></div>
+            <span class="micro" id="feedState">READ-ONLY / CONNECTING</span>
+          </summary>
+          <div class="diagnostic-body">
+            <div class="paneltools" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div class="filters" role="group" aria-label="Filter activity" style="flex:1"><button class="filter" data-filter="all" aria-pressed="true">All events</button><button class="filter" data-filter="retry" aria-pressed="false">Retries</button><button class="filter" data-filter="error" aria-pressed="false">Errors</button><span class="controlhint" id="eventCount"></span></div><button class="button" id="pause" aria-pressed="false">Pause feed</button></div>
+            <div class="loghead"><span>LOCAL TIME</span><span>EVENT</span><span>DETAIL</span></div>
+            <div class="logs" id="logs" tabindex="0" aria-label="Ghost event log"><div class="empty">Waiting for observed events. Nothing is simulated.</div></div>
+            <div class="logfoot"><span>NEWEST FIRST</span><span>Pagination</span></div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <aside class="stack">
+      <section class="panel tasks-panel" aria-labelledby="tasks-heading">
+        <div class="panelhead">
+          <div><h3 id="tasks-heading">Active automations</h3><p class="micro">Pause or resume existing Ghost tasks · edit their live prompts</p></div>
+          <span class="control-chip" id="tasks-state">CONNECTING</span>
+        </div>
+        <p class="tasks-note" id="tasks-note" role="status" aria-live="polite">Reading scheduled task state…</p>
+        <div class="task-list" id="task-list"><div class="empty">Reading scheduled task state…</div></div>
+      </section>
+
+      <section class="panel scheduler-panel" aria-labelledby="scheduler-heading">
+        <div class="panelhead">
+          <div><h3 id="scheduler-heading">Registered Ghost schedules</h3><p class="micro">Live Windows Task Scheduler readback · current user</p></div>
+          <span class="control-chip" id="scheduler-state">CONNECTING</span>
+        </div>
+        <p class="scheduler-note" id="scheduler-note" role="status" aria-live="polite">Reading the native Task Scheduler. No registered job is assumed until a fresh readback is verified.</p>
+        <div class="schedule-list" id="scheduler-list"><div class="empty">Reading Task Scheduler readback…</div></div>
+      </section>
+
+      <section class="panel plan-panel" aria-labelledby="planner-heading">
+        <div class="panelhead">
+          <div><h3 id="planner-heading">Schedule planner</h3><p class="micro">Create or edit Ghost work drafts for the calendar</p></div>
+          <span class="control-chip amber">DRAFT EDITOR</span>
+        </div>
+        <p class="plan-note" id="plan-note">Saving here changes only the draft. An existing registered schedule changes only after a separate, confirmed update.</p>
+        <form class="plan-form" id="plan-form">
+          <input type="hidden" id="plan-id">
+          <input type="hidden" id="plan-revision">
+          <div class="form-grid">
+            <div class="field" style="grid-column:1 / -1"><label for="plan-title">Task title</label><input id="plan-title" maxlength="90" placeholder="e.g. Morning monitoring review" required></div>
+            <div class="field"><label for="plan-date">Date</label><input id="plan-date" type="date" required></div>
+            <div class="field"><label for="plan-time">Time</label><input id="plan-time" type="time" required></div>
+            <div class="field"><label for="plan-recurrence">Repeat</label><select id="plan-recurrence"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></div>
+          </div>
+          <div class="field"><label for="plan-prompt">Task prompt</label><textarea id="plan-prompt" maxlength="4000" placeholder="Describe what Ghost should do, any scope, and the expected output."></textarea></div>
+          <div class="action-row"><button type="button" class="button secondary" id="plan-reset">Clear</button><button type="submit" class="button" id="plan-save">Save draft</button></div>
+          <div class="mini-note">Saved drafts are not executable until you review and explicitly activate a revision.</div>
+        </form>
+        <div class="plan-list" id="plan-list"><div class="empty">No draft plans saved yet.</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panelhead"><div><h3>Runtime integrity</h3><p class="micro">Observer and provider coverage</p></div><span class="mini-chip muted">READ ONLY</span></div>
+        <div class="details-list">
+          <div class="drow"><span>Snapshot age</span><strong id="snapshotAge">—</strong></div>
+          <div class="drow"><span>Coverage</span><strong class="cyan">Redacted display only</strong></div>
+        </div>
+        <p class="note" id="coverage-note">Connection health is not task progress. Provider coverage is verified independently.</p>
+      </section>
+    </aside>
+  </main>
+
+  <section class="secondary">
+    <section class="panel">
+      <div class="panelhead"><div><h3>Conversations</h3><p class="micro">Latest 3</p></div></div>
+      <div id="sessions"><div class="empty">Awaiting native session metadata.</div></div>
+      <p class="note">Conversation list is metadata only. Live activity above includes redacted tool details, never private reasoning.</p>
+    </section>
+    <section class="panel" aria-label="Ghost memory statistics">
+      <div class="panelhead"><div><h3>Persistent memory</h3><p class="micro">Metadata only</p></div></div>
+      <div class="details-list" id="memory-stats">Awaiting memory metadata.</div>
+      <p class="note" id="memory-note">File counts and sizes describe stored memory, not model context usage or memory quality.</p>
+    </section>
+    <section class="panel">
+      <div class="panelhead"><div><h3>Current work</h3><p class="micro">Live attribution summary</p></div></div>
+      <div class="details-list">
+        <div class="drow"><span>Work identity</span><strong id="work-title-summary">Awaiting telemetry</strong></div>
+        <div class="drow"><span>Detail</span><strong id="work-detail-summary">Waiting for fresh telemetry.</strong></div>
+        <div class="drow"><span>Updated</span><strong id="updated">Automatic refresh · every 5 seconds</strong></div>
+      </div>
+    </section>
+  </section>
+
+  <dialog class="control-dialog" id="task-confirm" aria-labelledby="task-confirm-title">
+    <h3 id="task-confirm-title">Confirm</h3>
+    <p id="task-confirm-message"></p>
+    <div class="action-row"><button class="button" id="task-confirm-cancel">Cancel</button><button class="button danger" id="task-confirm-yes">Confirm</button></div>
+  </dialog>
+
+  <dialog class="control-dialog prompt-dialog" id="activation-dialog" aria-labelledby="activation-title">
+    <h3 id="activation-title">Review task activation</h3>
+    <p class="mini-note">Review the exact saved revision below. Confirming asks the authenticated Windows host to register or update its per-user Task Scheduler job. The dashboard reports success only after an independent scheduler readback matches this revision.</p>
+    <label class="field" for="activation-json">Version-bound activation proposal
+      <textarea id="activation-json" readonly spellcheck="false" aria-label="Activation proposal JSON"></textarea>
+    </label>
+    <p class="prompt-status" id="activation-status" role="status" aria-live="polite"></p>
+    <div class="action-row"><button type="button" class="button secondary" id="activation-close">Close</button><button type="button" class="button secondary" id="activation-copy">Copy preview</button><button type="button" class="button danger" id="activation-confirm" disabled>Confirm activation</button></div>
+  </dialog>
+
+  <dialog class="control-dialog prompt-dialog" id="prompt-dialog" aria-labelledby="prompt-title">
+    <h3 id="prompt-title">Task prompt</h3>
+    <div class="prompt-tabs" id="prompt-tabs" role="tablist" hidden></div>
+    <div class="prompt-meta" id="prompt-meta"></div>
+    <textarea id="prompt-text" spellcheck="false" aria-label="Prompt text"></textarea>
+    <div class="prompt-help" id="prompt-help"></div>
+    <div class="prompt-count" id="prompt-count"></div>
+    <div class="prompt-history" id="prompt-history" hidden></div>
+    <p class="prompt-status" id="prompt-status" role="status" aria-live="polite"></p>
+    <label class="prompt-confirm-label">Type <code id="prompt-confirm-word"></code> to confirm a save or restore<input id="prompt-confirm-input" autocomplete="off" spellcheck="false"></label>
+    <div class="action-row"><button class="button" id="prompt-cancel">Close</button><button class="button danger" id="prompt-save" disabled>Save prompt</button></div>
+  </dialog>
+
+  <footer class="footer">
+    <span>GHOST CONTROL CENTER / authenticated operator console<br>Daily schedule first, diagnostics second. Partial or stale provider evidence is always labelled.</span>
+    <span>Operator timezone view: Pacific/Auckland<br>Draft schedule entries do not imply execution.</span>
+  </footer>
+</div>
+<script type="module">
+import {mountGhost} from '/ghost/dashboard.js';
+mountGhost(document);
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Fleet861 release-candidate MSI. Side-by-side isolation from the production
+       package is carried by five distinct identities, none of which the
+       production WXS shares:
+          1. Package/ProductCode below (the production package has no explicit
+             ProductCode and a different UpgradeCode).
+          2. UpgradeCode 7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61, so a MajorUpgrade
+             of this package can never chain onto or remove a production install.
+          3. Per-user install root %LOCALAPPDATA%\Singularity\Fleet861RC
+             (LocalAppDataFolder), so no file lands in <ProgramFiles>\Singularity
+             RepoQL and no per-machine component can collide with a real
+             installation product. Director decision 2026-11-05: keep this
+             path; never install the RC to C:\Program Files (no elevation).
+          4. Scope="perUser": this product registers under HKCU Uninstall while
+             the production product registers per-machine under HKLM, so the two
+             ARP entries cannot replace or upgrade each other.
+          5. Nothing here registers tasks, services or user state: the RC payload
+             is files only and the read-only Readiness.ps1 is the launch target.
+       Installing this package still requires Test-RCIsolation.ps1 to pass on the
+       target host first. -->
+  <Package Name="Singularity RepoQL Windows (Fleet861 RC)"
+           Manufacturer="Singularity RepoQL"
+           Version="0.1.0.0"
+           ProductCode="3C9A51E7-8B24-4D6F-A0C5-6D7E9B1F4A28"
+           UpgradeCode="7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61"
+           Scope="perUser" Compressed="yes">
+    <!-- Per-user install must be enforced by MSI properties, not only by
+         Scope="perUser": on an elevated client (this host's SSH session is
+         elevated) Windows Installer otherwise falls back to a per-machine
+         install and registers the product under HKLM. ALLUSERS=2 with
+         MSIINSTALLPERUSER=1 keeps the ARP entry, file targets and state in the
+         calling user's profile, which is what makes the RC entry removable
+         without elevation and keeps it in a different registry hive from the
+         production product. -->
+    <Property Id="ALLUSERS" Value="2" />
+    <Property Id="MSIINSTALLPERUSER" Value="1" />
+    <MajorUpgrade DowngradeErrorMessage="A newer Singularity RepoQL Fleet861 RC package is already installed." />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Singularity\Fleet861RC" />
+    </StandardDirectory>
+    <Feature Id="ProductFeature" Title="Singularity RepoQL Windows (Fleet861 RC)" Level="1">
+      <ComponentGroupRef Id="ProductPayload" />
+    </Feature>
+  </Package>
+  <Fragment>
+    <ComponentGroup Id="ProductPayload" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.Payload)\**" />
+    </ComponentGroup>
+  </Fragment>
+</Wix>

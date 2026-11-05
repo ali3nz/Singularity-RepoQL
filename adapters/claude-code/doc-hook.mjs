@@ -1,0 +1,281 @@
+#!/usr/bin/env node
+// doc-hook.mjs — Claude Code documentation-policy hooks ↔ the shared Singularity
+// documentation system (scripts/doc-policy.mjs + scripts/doc-ingest-node.mjs).
+//
+// Pure Node: no Python runtime is required. The ingestion engine it drives
+// (scripts/doc-ingest-node.mjs) maintains the SAME ledger and status contract as
+// scripts/memory-doc-ingest.py, which stays available for manual use and for
+// installs that explicitly inject the Python subprocess executor.
+//
+//   node doc-hook.mjs session-start   # inside SessionStart
+//   node doc-hook.mjs stop            # inside Stop
+//
+// session-start: injects the BOUNDED start-of-work documentation guidance (the
+// same rules text the OpenChamber runbook-nudge start reminder uses) and
+// snapshots the per-session BASELINE (documentation census + git dirty list, if
+// the workspace is a repo). The baseline means pre-existing dirty files are
+// never attributed to this session.
+//
+// stop: the final-answer closeout check. It runs ONLY where it has something
+// to check (never a blanket block):
+//   1. retries any PENDING/FAILED MemoryCore documentation ingestion for this
+//      workspace's ledger (event-driven; no-op when the ledger is clean);
+//   2. AUTO-DISCOVERY: diffs the session's documentation baseline against the
+//      present state and INGESTS new/changed eligible Markdown automatically
+//      (content-hash dedup inside memory-doc-ingest renders repeats as
+//      DOC_INGEST_UNCHANGED with no write); tracked and untracked files covered;
+//   3. verifies closure from the INGESTION LEDGER, not from claimed status
+//      text: a DOC_UPDATED assessment passes only when every documented file
+//      is DOC_INGEST_VERIFIED in the ledger right now;
+//   4. material implementation changes observed during this session (git-based)
+//      must not close without a recorded documentation assessment: the hook
+//      BLOCKS with precise remediation, bounded to MAX_BLOCKS per session and
+//      always honouring stop_hook_active; chat/read-only sessions (no observed
+//      material change, no assessment) are never blocked. Non-git workspaces
+//      cannot observe changes, so no block is applied there (reported honestly).
+import { dirname, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  loadAssessment,
+  recordAutomaticLearningAssessment,
+  evaluateAssessment,
+  collectEvidence,
+  observeWorkspace,
+  saveSessionBaseline,
+  acknowledgeResolvedDocs,
+  ingestDocChange,
+  MAX_DOC_INGEST_PER_PASS,
+  classifyFiles,
+} from "../../scripts/doc-policy.mjs";
+import { evaluateCandidates } from "../../scripts/selflearn-candidates.mjs";
+import { retryPendingIngestion } from "../../scripts/doc-ingest-node.mjs";
+
+const MAX_BLOCKS = 3;
+const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n) : s; };
+const policyOn = (env) => String((env && env.OPENCHAMBER_DOC_POLICY) || process.env.OPENCHAMBER_DOC_POLICY || "on").trim().toLowerCase() !== "off";
+
+export function blockStatePath(session, root) {
+  const stateKey = String(session || "").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64) || "unknown";
+  return join(resolve(root), "data", "doc-policy", `blocks-${stateKey}.count`);
+}
+
+function readCounter(p) {
+  try { return Number(readFileSync(p, "utf8")) || 0; } catch { return 0; }
+}
+
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
+
+function bumpCounter(session, root) {
+  try {
+    const p = blockStatePath(session, root);
+    mkdirSync(dirname(p), { recursive: true });
+    const tmp = `${p}.${Date.now()}`;
+    writeFileSync(tmp, String(readCounter(p) + 1));
+    renameSync(tmp, p);
+  } catch { /* counting must never break the hook */ }
+}
+
+// Ingestion retry is performed in-process by the Node engine; there is
+// deliberately no subprocess runtime dependency here.
+const START_GUIDANCE =
+  "[singularity docs start] Before substantial work: check the project's tracking records for active related work, " +
+  "read the relevant existing runbook/documentation if one covers this task, use the Kanzo MCP to check " +
+  "the complete board including human and closed tasks and claim the exact scope before shared changes. " +
+  "If the task is active, verify native Kanzo `doing` readback; closeout `done` is not implementation success. " +
+  "For relevant prior context use scoped, bounded MemoryCore recall, then verify against source. Search RepoQL concepts for the files " +
+  "and decisions it touches, and search this installation's current indexed documentation when operational context " +
+  "helps (`node scripts/doc-ingest-node.mjs search \"<topic>\"`; bounded result). Reuse and improve existing docs; do not " +
+  "create duplicates. For material changes, documentation is required (features, behaviour/API/deployment/config/security changes, bug fixes worth remembering, " +
+  "troubleshooting and recovery procedures). Formatting-only, typo and throwaway edits may be reported with " +
+  "DOC_NOT_REQUIRED and a concrete reason.";
+
+function workspaceRootOf(input, optsEnv = {}) {
+  return resolve(input.cwd || optsEnv.SINGULARITY_REPO_ROOT || process.env.SINGULARITY_REPO_ROOT || process.cwd());
+}
+
+function openDocIngestScript() {
+  // The Node engine ships with the product, so it is always available; the
+  // previous Python-script probe existed only because that runtime could be
+  // absent. Kept as a named seam for tests that assert engine availability.
+  return true;
+}
+
+export async function runDocHook(argv, opts = {}) {
+  let input = {};
+  let inputOk = true;
+  try { input = JSON.parse(String(opts.stdin ?? readFileSync(0, "utf8"))) || {}; } catch { /* malformed payload */ inputOk = false; }
+  // A payload that cannot be parsed carries no trustworthy session identity or
+  // workspace: falling back to the caller's cwd would let a malformed invocation
+  // act against an ambiguous (possibly unrelated) tree. Treat it as a no-op.
+  if (!inputOk) return { exitCode: 0, stdout: null, stderr: [] };
+  const stderr = [];
+  const kind = argv[0] || "";
+  const root = workspaceRootOf(input, opts.env || {});
+
+  if (kind === "session-start") {
+    if (!policyOn(opts.env)) return { exitCode: 0, stdout: null, stderr };
+    try {
+      // Baseline: pre-existing dirty files stay unattributable to this session.
+      await saveSessionBaseline(input.session_id || "unknown", root, { env: opts.env || process.env });
+    } catch { /* baseline failure must not break the session */ }
+    // Durable-queue resume (release-review requirement: liveness must not depend on one session
+    // finishing). Bounded to ONE candidate; the scheduler CLI drains backlog.
+    try {
+      const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1 });
+      for (const o of resumed.outcomes || []) stderr.push(`singularity selflearn: resume ${o.id} -> ${o.state}${o.detail ? ` (${clip(o.detail, 100)})` : ""}`);
+    } catch (e) {
+      stderr.push(`singularity selflearn: resume skipped (${clip(String(e?.message || e), 100)})`);
+    }
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: START_GUIDANCE },
+      }),
+      stderr,
+    };
+  }
+
+  if (kind === "stop") {
+    if (input.stop_hook_active) return { exitCode: 0, stdout: null, stderr }; // never loop on our own block
+    if (!policyOn(opts.env)) return { exitCode: 0, stdout: null, stderr };
+    const session = input.session_id;
+
+    // 1. event-driven retry of pending ingestion for this workspace ledger
+    //    (in-process Node engine: same ledger, same statuses, no Python).
+    if (openDocIngestScript()) {
+      try {
+        const results = await retryPendingIngestion(root, { env: opts.env || process.env });
+        for (const r of results) {
+          if (r && r.status && r.status !== "DOC_INGEST_UNCHANGED") {
+            stderr.push(`singularity doc hook: ${r.file || ""} -> ${r.status}`);
+          }
+        }
+      } catch (e) {
+        stderr.push(`singularity doc hook: ingestion retry unavailable (${clip(String(e?.message || e).split("\n")[0], 120)})`);
+      }
+    }
+
+    let obs = null;
+    let autoIngest = [];
+    let materialObserved = false;
+    let observable = false;
+    if (session) {
+      try {
+        // 2. AUTO-DISCOVERY: ingest new/changed eligible docs since the baseline.
+        obs = await observeWorkspace(root, session, { env: opts.env || process.env });
+        observable = obs.observable;
+        if (obs.baselineRec) {
+          const targets = obs.changedDocs.slice(0, MAX_DOC_INGEST_PER_PASS);
+          const processed = [];
+          for (const doc of targets) {
+            const res = await ingestDocChange(doc.path, doc.root, session, { env: opts.env || process.env });
+            processed.push({ doc, result: res });
+            autoIngest.push({ file: doc.rel, ...res });
+            if (res.status && res.status !== "DOC_INGEST_UNCHANGED") {
+              stderr.push(`singularity doc hook: auto-ingest ${doc.rel} -> ${res.status}`);
+            }
+          }
+          if (obs.changedDocs.length > targets.length) {
+            stderr.push(`singularity doc hook: ${obs.changedDocs.length - targets.length} documentation change(s) remain queued for another pass`);
+          }
+          // Acknowledge only revisions observed before ingestion began. A
+          // complete fresh census would swallow edits made during this pass.
+          try {
+            acknowledgeResolvedDocs(session, root, obs, processed);
+          } catch { /* stale baseline retries safely next pass */ }
+        }
+        // 4. observed material changes this session (never pre-existing dirt).
+        if (observable) {
+          const { material } = classifyFiles(obs.newDirty || []);
+          materialObserved = material.length > 0;
+          if (materialObserved) {
+            stderr.push(`singularity doc hook: observed material change(s): ${clip(material.slice(0, 4).join(", "), 120)}${material.length > 4 ? ", ..." : ""}`);
+          }
+        }
+      } catch (e) {
+        stderr.push(`singularity doc hook: observed state unavailable, continuing (${clip(String(e?.message || e), 120)})`);
+      }
+    }
+
+    // 2b. AUTOMATIC LEARNING: the SAME shared function the OpenChamber plugin
+    // uses. Creates a durable candidate and runs one bounded lesson evaluation
+    // on this completion event; a failure here never blocks the doc closeout.
+    if (session) {
+      try {
+        const learning = await recordAutomaticLearningAssessment(session, root, {
+          env: { ...(opts.env || process.env), SINGULARITY_REPO_ROOT: root, SELFLEARN_INLINE: "1" },
+          results: autoIngest, observable, dirty: obs?.dirty || null, newDirty: obs?.newDirty || null,
+        });
+        if (learning?.candidate) stderr.push(`singularity selflearn: candidate ${learning.candidate.state} (${learning.candidate.id})`);
+      } catch (e) {
+        stderr.push(`singularity selflearn: assessment skipped (${clip(String(e?.message || e), 100)})`);
+      }
+    }
+
+    // 3./4. verify closure from LEDGER evidence, never claimed statuses.
+    if (session) {
+      let record = null;
+      try { record = loadAssessment(session, root); } catch { record = null; }
+      if (record) {
+        // An AUTOMATIC LEARNING-ONLY record (captureStatus DEFERRED, no
+        // documentation status) is the self-learning queue pointer, not a
+        // documentation assessment: it must never masquerade as the agent's
+        // claimed disposition, since that would swap the honest "material
+        // implementation change without a documentation assessment" closure
+        // message for a generic assessment reminder (and Chinese docs through
+        // the separate doc pipeline stay unaffected). Whenever the agent later
+        // records a real assessment, docStatus appears and this path is used.
+        const learningOnly = record.automatic === true && (record.docStatus == null);
+        if (!learningOnly) {
+          let findings;
+          try {
+            const evidence = record.docStatus === "DOC_UPDATED" && (record.docs || []).length
+              ? await collectEvidence(record.docs, root)
+              : null;
+            findings = evaluateAssessment(record, { evidence });
+          } catch (e) {
+            findings = [`FINDING: assessment evaluation failed (${clip(String(e?.message || e), 120)})`];
+          }
+          if (findings.length) return blockOnce(session, root, findings, stderr);
+          return { exitCode: 0, stdout: null, stderr };
+        }
+        stderr.push(`singularity doc hook: automatic learning record present (${record.captureStatus || "pending"}), no documentation assessment recorded yet`);
+      }
+      if (materialObserved && (!record || (record.automatic === true && (record.docStatus == null)))) {
+        return blockOnce(session, root, [
+          "FINDING: material implementation change observed without a documentation assessment — record one (node scripts/doc-policy.mjs assess --session <id> --files ... --doc-status DOC_UPDATED|DOC_NOT_REQUIRED [<reason>] --capture-status CAPTURED|NO_LESSON|DEFERRED); documentation-only or trivial work may report DOC_NOT_REQUIRED with a concrete reason.",
+        ], stderr);
+      }
+    }
+    return { exitCode: 0, stdout: null, stderr };
+  }
+
+  return { exitCode: 0, stdout: null, stderr };
+}
+
+function blockOnce(session, root, findings, stderr) {
+  const soFar = readCounter(blockStatePath(session, root));
+  if (soFar >= MAX_BLOCKS) {
+    stderr.push(`singularity doc hook: blocking limit reached for session — allowing completion with ${findings.length} unresolved finding(s) (reported honestly, not closed silently)`);
+    return { exitCode: 0, stdout: null, stderr };
+  }
+  bumpCounter(session, root);
+  stderr.push(`singularity doc hook: blocking this finish (attempt ${soFar + 1}/${MAX_BLOCKS}) — ${findings.length} documentation finding(s)`);
+  return {
+    exitCode: 2,
+    stdout: JSON.stringify({
+      decision: "block",
+      reason: findings.join("\n"),
+      systemMessage: "Documentation closeout incomplete. Fix the findings above (create/update the runbook, then verify ingestion with node scripts/doc-ingest-node.mjs verify --file <doc> --root <root>, and re-run scripts/doc-policy.mjs assess with matching states), then finish again. Use DOC_NOT_REQUIRED ONLY for genuinely non-material changes with a concrete reason.",
+    }),
+    stderr,
+  };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const res = await runDocHook(process.argv.slice(2), { env: process.env });
+  for (const line of res.stderr) process.stderr.write(line + "\n");
+  if (res.stdout) process.stdout.write(res.stdout + "\n");
+  process.exit(res.exitCode);
+}

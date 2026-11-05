@@ -1,0 +1,6874 @@
+{
+  "source": "pinned original JavaScript; no Rust parity asserted",
+  "cases": [
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": null
+      },
+      "expected": null
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": ""
+      },
+      "expected": null
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": "0"
+      },
+      "expected": {
+        "value": 0
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": "12 rows"
+      },
+      "expected": {
+        "value": 12
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": "-5"
+      },
+      "expected": {
+        "value": 5
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": "abc"
+      },
+      "expected": null
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": "9000 bytes"
+      },
+      "expected": {
+        "value": 9000
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": "⚡ 42"
+      },
+      "expected": {
+        "value": 42
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.parse_progress",
+        "raw": 6
+      },
+      "expected": {
+        "value": 6
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": null,
+        "b": null
+      },
+      "expected": -1
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "value": 2
+        },
+        "b": {
+          "value": 1
+        }
+      },
+      "expected": 1
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "value": 3
+        },
+        "b": {
+          "value": 3
+        }
+      },
+      "expected": 0
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "value": 1
+        },
+        "b": {
+          "value": 9
+        }
+      },
+      "expected": -1
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "kind": "line-count",
+          "value": 3
+        },
+        "b": {
+          "kind": "file-size",
+          "value": 2
+        }
+      },
+      "expected": -1
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "kind": "marker-count",
+          "value": 4
+        },
+        "b": {
+          "kind": "marker-count",
+          "value": 2
+        }
+      },
+      "expected": 1
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "kind": "line-count",
+          "value": 0
+        },
+        "b": null
+      },
+      "expected": -1
+    },
+    {
+      "request": {
+        "op": "phase_driver.compare",
+        "a": {
+          "value": "3"
+        },
+        "b": {
+          "value": 2
+        }
+      },
+      "expected": -1
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": null,
+        "probe": null,
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no declared driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "x",
+          "progress": null
+        },
+        "probe": null,
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "no progress checkpoint declared"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "first checkpoint line-count 0",
+        "value": {
+          "kind": "line-count",
+          "value": 0
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress went backwards (line-count 2 -> line-count 0)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "first checkpoint line-count 12",
+        "value": {
+          "kind": "line-count",
+          "value": 12
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "progress line-count 2 -> line-count 12",
+        "value": {
+          "kind": "line-count",
+          "value": 12
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress checkpoint unreadable"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress checkpoint unreadable"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "first checkpoint line-count 3",
+        "value": {
+          "kind": "line-count",
+          "value": 3
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "progress line-count 2 -> line-count 3",
+        "value": {
+          "kind": "line-count",
+          "value": 3
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "12 rows",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": null,
+        "raw": "3",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "first checkpoint marker-count 0",
+        "value": {
+          "kind": "marker-count",
+          "value": 0
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress went backwards (marker-count 2 -> marker-count 0)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "first checkpoint marker-count 12",
+        "value": {
+          "kind": "marker-count",
+          "value": 12
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "progress marker-count 2 -> marker-count 12",
+        "value": {
+          "kind": "marker-count",
+          "value": 12
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress checkpoint unreadable"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress checkpoint unreadable"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "first checkpoint marker-count 3",
+        "value": {
+          "kind": "marker-count",
+          "value": 3
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "progress marker-count 2 -> marker-count 3",
+        "value": {
+          "kind": "marker-count",
+          "value": 3
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "12 rows",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": {
+          "alive": false,
+          "why": "not running"
+        },
+        "raw": "3",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (not running)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "0",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "0",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "12 rows",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "12 rows",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "3",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "marker-count"
+        },
+        "probe": null,
+        "raw": "3",
+        "prev": {
+          "kind": "marker-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "driver not alive (probe returned no aliveness)"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12",
+        "prev": null,
+        "now": 2000,
+        "extensionCount": 3,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "extension cap 3 reached"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12",
+        "prev": null,
+        "now": 6000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "wall-clock ceiling 4x base timeout reached"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12",
+        "prev": {
+          "kind": "line-count",
+          "value": 12
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress unchanged (line-count 12) — stalled driver"
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "12",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": true,
+        "reason": "progress line-count 2 -> line-count 12",
+        "value": {
+          "kind": "line-count",
+          "value": 12
+        }
+      }
+    },
+    {
+      "request": {
+        "op": "phase_driver.evaluate",
+        "decl": {
+          "driver": "relocation-driver.sh --seed 7",
+          "progress": "/tmp/driver.done",
+          "progressKind": "line-count"
+        },
+        "probe": {
+          "alive": true
+        },
+        "raw": "0",
+        "prev": {
+          "kind": "line-count",
+          "value": 2
+        },
+        "now": 2000,
+        "extensionCount": 0,
+        "baseMs": 1000,
+        "startedAt": 1500,
+        "maxExtensions": 3,
+        "wallCeilingFactor": 4
+      },
+      "expected": {
+        "granted": false,
+        "reason": "progress went backwards (line-count 2 -> line-count 0)"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-118",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-118",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-119",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-119",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-120",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-120",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-121",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-121",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-122",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-122",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-123",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-123",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-124",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-124",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-125",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-125",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-126",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-126",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-127",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-127",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-128",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-128",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-129",
+        "exists": true,
+        "state": {
+          "runState": "COMPLETED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-129",
+        "exists": true,
+        "runState": "COMPLETED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-130",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-130",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-131",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-131",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-132",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-132",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-133",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-133",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-134",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-134",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-135",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-135",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-136",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-136",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-137",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-137",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-138",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-138",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-139",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-139",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-140",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-140",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-141",
+        "exists": true,
+        "state": {
+          "runState": "ABORTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-141",
+        "exists": true,
+        "runState": "ABORTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-142",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-142",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-143",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-143",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run.log quiet 21min while RUNNING (worker stall?)"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "possible worker stall"
+        },
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-144",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-144",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run.log quiet 61min while RUNNING (worker stall?)"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "possible worker stall"
+        },
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-145",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-145",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-146",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-146",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-147",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-147",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-148",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-148",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "coordinator DEAD while run is RUNNING"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "coordinator died mid-run; detached resume --go is the proven recovery"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-149",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-149",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "coordinator DEAD while run is RUNNING"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "coordinator died mid-run; detached resume --go is the proven recovery"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-150",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-150",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "coordinator DEAD while run is RUNNING"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "coordinator died mid-run; detached resume --go is the proven recovery"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-151",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-151",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-152",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-152",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-153",
+        "exists": true,
+        "state": {
+          "runState": "RUNNING",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-153",
+        "exists": true,
+        "runState": "RUNNING",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-154",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-154",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-155",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-155",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-156",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-156",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-157",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-157",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-158",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-158",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-159",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-159",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-160",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-160",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is PLANNED (age 0min) with coordinator DEAD"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "PLANNED run not engaged; bounded resume --go"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-161",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-161",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is PLANNED (age 21min) with coordinator DEAD"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "PLANNED run not engaged; bounded resume --go"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-162",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-162",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is PLANNED (age 61min) with coordinator DEAD"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "PLANNED run not engaged; bounded resume --go"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-163",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-163",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-164",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-164",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-165",
+        "exists": true,
+        "state": {
+          "runState": "PLANNED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-165",
+        "exists": true,
+        "runState": "PLANNED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-166",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-166",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-167",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-167",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-168",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-168",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-169",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-169",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-170",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-170",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-171",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-171",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-172",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-172",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is REMEDIATION_EXHAUSTED (age 0min) with coordinator DEAD"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "REMEDIATION_EXHAUSTED run not engaged; bounded resume --go"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-173",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-173",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is REMEDIATION_EXHAUSTED (age 21min) with coordinator DEAD"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "REMEDIATION_EXHAUSTED run not engaged; bounded resume --go"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-174",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-174",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is REMEDIATION_EXHAUSTED (age 61min) with coordinator DEAD"
+        ],
+        "actionable": {
+          "kind": "RESUME",
+          "why": "REMEDIATION_EXHAUSTED run not engaged; bounded resume --go"
+        },
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-175",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-175",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-176",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-176",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-177",
+        "exists": true,
+        "state": {
+          "runState": "REMEDIATION_EXHAUSTED",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-177",
+        "exists": true,
+        "runState": "REMEDIATION_EXHAUSTED",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-178",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-178",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "RUNNING",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-179",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-179",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "RUNNING",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-180",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-180",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "RUNNING",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-181",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-181",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-182",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-182",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-183",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-183",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-184",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-184",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "DEAD",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-185",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-185",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "DEAD",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-186",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-186",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "DEAD",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-187",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-187",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-188",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-188",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-189",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-189",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-190",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-190",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-191",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-191",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-192",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-192",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "RUNNING"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-193",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-193",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-194",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-194",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-195",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "RUNNING",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-195",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-196",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-196",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-197",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-197",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-198",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-198",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null,
+        "coordinatorState": "DEAD"
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-199",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 0,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-199",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 0,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-200",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 21,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-200",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 21,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-201",
+        "exists": true,
+        "state": {
+          "runState": "UNKNOWN",
+          "workers": [
+            "alpha",
+            "beta"
+          ],
+          "currentPhase": 2,
+          "completedThrough": 1,
+          "finalAcceptance": null
+        },
+        "coordinatorState": "DEAD",
+        "halted": true,
+        "logAgeMinutes": 61,
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "latest gate signal"
+      },
+      "expected": {
+        "runId": "golden-201",
+        "exists": true,
+        "runState": "UNKNOWN",
+        "currentPhase": 2,
+        "completedThrough": 1,
+        "workers": [
+          "alpha",
+          "beta"
+        ],
+        "workerStatuses": {
+          "alpha": "complete",
+          "beta": "missing"
+        },
+        "logAgeMinutes": 61,
+        "finalAcceptance": null,
+        "findings": [
+          "run is HALTED (operator marker file present) — automatic paths refuse; removal is an explicit operator action"
+        ],
+        "actionable": null
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-held-false",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          },
+          "workers": [
+            "alpha"
+          ]
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": null,
+        "workerStatuses": {
+          "alpha": "missing"
+        },
+        "staleEvidence": false,
+        "signalName": "newest artifact"
+      },
+      "expected": {
+        "runId": "golden-held-false",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": null,
+        "completedThrough": 0,
+        "workers": [
+          "alpha"
+        ],
+        "workerStatuses": {
+          "alpha": "missing"
+        },
+        "logAgeMinutes": null,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "final acceptance HELD with current evidence — operator decision required"
+        ],
+        "actionable": {
+          "kind": "ESCALATE",
+          "why": "held acceptance is a genuine operator decision"
+        },
+        "coordinatorState": "DEAD",
+        "staleEvidence": false
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "golden-held-true",
+        "exists": true,
+        "state": {
+          "runState": "NEEDS_HUMAN_REVIEW",
+          "finalAcceptance": {
+            "verdict": "NEEDS_HUMAN_REVIEW"
+          },
+          "workers": [
+            "alpha"
+          ]
+        },
+        "coordinatorState": "DEAD",
+        "halted": false,
+        "logAgeMinutes": null,
+        "workerStatuses": {
+          "alpha": "missing"
+        },
+        "staleEvidence": true,
+        "signalName": "newest artifact"
+      },
+      "expected": {
+        "runId": "golden-held-true",
+        "exists": true,
+        "runState": "NEEDS_HUMAN_REVIEW",
+        "currentPhase": null,
+        "completedThrough": 0,
+        "workers": [
+          "alpha"
+        ],
+        "workerStatuses": {
+          "alpha": "missing"
+        },
+        "logAgeMinutes": null,
+        "finalAcceptance": {
+          "verdict": "NEEDS_HUMAN_REVIEW"
+        },
+        "findings": [
+          "held acceptance with staged evidence older than newest artifact (remediation landed after the snapshot)"
+        ],
+        "actionable": {
+          "kind": "RE_DRIVE_HOLD",
+          "why": "acceptance re-judged pre-fix evidence; one fresh-evidence re-drive is bounded"
+        },
+        "coordinatorState": "DEAD",
+        "staleEvidence": true
+      }
+    },
+    {
+      "request": {
+        "op": "nanny.observe",
+        "runId": "absent",
+        "exists": false
+      },
+      "expected": {
+        "runId": "absent",
+        "exists": false,
+        "runState": null,
+        "currentPhase": null,
+        "completedThrough": 0,
+        "workers": [],
+        "workerStatuses": {},
+        "logAgeMinutes": null,
+        "finalAcceptance": null,
+        "findings": [],
+        "actionable": null
+      }
+    }
+  ]
+}

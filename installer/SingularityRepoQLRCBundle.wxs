@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <!-- Fleet861 RC bundle. Distinct Bundle UpgradeCode from the production
+       bundle (E83EDB61-178B-4CD3-92F0-9C97E6D6292F) so ARP shows two separate
+       products and one can be removed without touching the other.
+       LaunchTarget is the read-only readiness probe, never the production
+       Configure-Singularity wizard: that wizard writes to the live
+       %LOCALAPPDATA%\Singularity\WindowsNative\memory tree and targets port
+       18100, which the RC must not mutate before isolation is demonstrated.
+       The RC installs per-user under %LOCALAPPDATA%\Singularity\Fleet861RC so
+       the launch target and the MSI share one no-elevation root. -->
+  <Bundle Name="Singularity RepoQL Setup (Fleet861 RC)"
+          Version="0.1.0"
+          Manufacturer="Singularity RepoQL"
+          UpgradeCode="B1D6E4A9-3F58-47C2-8E90-2A5C7B3D4186">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkLicense"
+          LicenseUrl=""
+          ShowVersion="yes"
+          LaunchTarget="[LocalAppDataFolder]Singularity\Fleet861RC\Readiness.ps1" />
+    </BootstrapperApplication>
+    <Chain>
+      <MsiPackage Id="SingularityRepoQLFleet861RCFiles"
+                  SourceFile="!(bindpath.Msi)\Singularity-RepoQL-Fleet861RC-x64.msi"
+                  Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

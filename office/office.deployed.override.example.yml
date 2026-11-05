@@ -1,0 +1,17 @@
+# Deployed-shape override — example only.
+#
+# The live host starts Claude Office with an extra compose file that pins the
+# image it built. This is the portable shape of that file: copy it next to your
+# deployment and edit the two values. It changes nothing else about the service.
+#
+#   CLAUDE_OFFICE_IMAGE=local/claude-office:layout-clock-20261027 \
+#     docker compose -f office/office.compose.yml \
+#                    -f office/office.deployed.override.example.yml up -d
+#
+# Note the container name: the live deployment calls it `claude-office`, the
+# product compose file calls it `singularity-office`. Pick one and keep it, so a
+# second stack cannot silently reuse the name.
+services:
+  office:
+    image: ${CLAUDE_OFFICE_IMAGE:-local/claude-office:layout-clock-20261027}
+    container_name: ${CLAUDE_OFFICE_CONTAINER:-singularity-office}

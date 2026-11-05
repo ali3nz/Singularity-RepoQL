@@ -1,0 +1,34 @@
+{
+  "schema": "singularity-connector-packages/v1",
+  "repoqlVersion": "1.7.18",
+  "connectorAbi": 1,
+  "authors": "Singularity",
+  "packages": [
+    {
+      "scheme": "kanzo",
+      "title": "Kanzo board",
+      "id": "RepoQL.Connectors.Kanzo",
+      "version": "1.0.0",
+      "source": "connectors/kanzo",
+      "suite": "connectors/kanzo/suite.json",
+      "package": "RepoQL.Connectors.Kanzo.1.0.0.nupkg",
+      "sha256": "d2997efd778ad02925c0cd6b3742cb2e57f6b0d8ee8cb42fd5e7ef1e962ad2e7",
+      "bytes": 1904461,
+      "sourceTestGenerations": 5,
+      "packageTestGenerations": 5
+    },
+    {
+      "scheme": "memorycore",
+      "title": "Tencent MemoryCore",
+      "id": "Tencent.MemoryCore",
+      "version": "1.0.0",
+      "source": "connectors/memorycore",
+      "suite": "connectors/memorycore/suite.json",
+      "package": "Tencent.MemoryCore.1.0.0.nupkg",
+      "sha256": "dab690507a5114c84d8b849b1921ae5d000f59dcaadfbd3b0eeee291baa80336",
+      "bytes": 1881078,
+      "sourceTestGenerations": 4,
+      "packageTestGenerations": 4
+    }
+  ]
+}
