@@ -18,6 +18,7 @@ import os
 import secrets
 import shutil
 import socket
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -188,38 +189,154 @@ class Provisioner:
 
 # -- default Windows/Linux adapters -------------------------------------------
 
-def _which(name: str) -> str | None:
-    return shutil.which(name)
+def _which(name: str, path: str | None = None) -> str | None:
+    """PATH lookup relative to the adapter's env, not a hidden global."""
+    return shutil.which(name, path=path if path is not None else os.environ.get("PATH"))
 
 
-def build_adapters() -> dict[str, Adapter]:
+def _localappdata(env: dict) -> Path | None:
+    raw = env.get("LOCALAPPDATA")
+    return Path(raw) if raw else None
+
+
+def _first_file(candidates) -> Path | None:
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate)
+        try:
+            if path.is_file() and not path.is_symlink():
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def _sibling_module(name: str):
+    """Import a sibling lane module (openmausbot/headless.py) from the tree."""
+    import importlib
+    here = Path(__file__).resolve().parent
+    directory = here.parent / name
+    if str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
+    return importlib.import_module("headless" if name == "openmausbot" else name)
+
+
+def build_adapters(env: dict | None = None) -> dict[str, Adapter]:
+    """Real Windows/Linux probes, path-overridable for tests and the RC.
+
+    Every default is either an RC-owned location or the vendor's per-user
+    install; nothing here reaches the network or a fleet endpoint.
+    """
+    env = dict(os.environ if env is None else env)
+    search_path = env.get("PATH")
+    local = _localappdata(env)
+    root_default = (local / "Singularity" / "Fleet861RC") if local else None
+
+    def omb_root() -> Path | None:
+        raw = env.get("SINGULARITY_OMB_ROOT")
+        return Path(raw) if raw else root_default
+
+    def omb_state() -> Path | None:
+        raw = env.get("SINGULARITY_OMB_STATE")
+        if raw:
+            return Path(raw)
+        base = omb_root()
+        return (base / "state") if base else None
+
+    def omb_node() -> str | None:
+        raw = env.get("SINGULARITY_OMB_NODE")
+        if raw:
+            return raw
+        if local:
+            candidate = local / "Singularity" / "Runtime" / "node" / "node.exe"
+            if candidate.is_file():
+                return str(candidate)
+        return shutil.which("node")
+
     def kanzo_detect():
-        if _which("kanzo") or _which("kanzo.exe"):
-            return CONNECTED, "kanzo binary on PATH"
+        binary = _first_file([env.get("SINGULARITY_KANZO_EXE"), _which("kanzo", search_path),
+                              _which("kanzo.exe", search_path)])
+        if binary:
+            return CONNECTED, f"kanzo binary {binary.name} present"
         return NEEDS_ATTENTION, "kanzo binary not found"
 
     def kanzo_ensure(created: list[Path]):
         raise RuntimeError("kanzo install is not automated in this build; place kanzo.exe on PATH")
 
     def repoql_detect():
-        if _which("rql") or _which("rql.exe"):
-            return CONNECTED, "rql binary on PATH"
+        binary = _first_file([env.get("SINGULARITY_RQL_EXE"), _which("rql", search_path),
+                              _which("rql.exe", search_path)])
+        if binary:
+            return CONNECTED, f"rql binary {binary.name} present"
         return NEEDS_ATTENTION, "rql binary not found"
 
     def repoql_ensure(created: list[Path]):
         raise RuntimeError("rql provisioning requires the staged release; see INSTALLATION")
 
     def tencent_detect():
-        return (CONNECTED, "loopback 8125 reachable") if _port_open("127.0.0.1", 8125) else (
-            NEEDS_ATTENTION, "no MemoryCore listener on 127.0.0.1:8125")
+        try:
+            port = int(env.get("SINGULARITY_TENCENT_PANEL_PORT", "8125"))
+        except ValueError:
+            return UNAVAILABLE, "panel port is not an integer"
+        if _port_open("127.0.0.1", port):
+            return CONNECTED, f"MemoryPanel loopback 127.0.0.1:{port} reachable"
+        return NEEDS_ATTENTION, f"no MemoryPanel listener on 127.0.0.1:{port}"
+
+    def tencent_ensure(created: list[Path]):
+        supervisor = env.get("SINGULARITY_MEMORY_SUPERVISOR")
+        config = env.get("SINGULARITY_MEMORY_STACK_CONFIG")
+        if not supervisor or not config:
+            raise RuntimeError(
+                "native memory stack is not staged (set SINGULARITY_MEMORY_SUPERVISOR and "
+                "SINGULARITY_MEMORY_STACK_CONFIG)")
+        node = omb_node()
+        if not node:
+            raise RuntimeError("no Node runtime for the memory supervisor")
+        result = subprocess.run([node, supervisor, "start", "--config", config, "--json"],
+                                capture_output=True, text=True, timeout=600)
+        if result.returncode != 0:
+            raise RuntimeError("memory supervisor start failed: "
+                               + (result.stderr or result.stdout).strip()[:200])
+        return "native memory stack started"
 
     def openmausbot_detect():
-        return (CONNECTED, "loopback 8799 reachable") if _port_open("127.0.0.1", 8799) else (
-            NEEDS_ATTENTION, "no OpenMausBot listener on 127.0.0.1:8799")
+        module = _sibling_module("openmausbot")
+        root, state, node = omb_root(), omb_state(), omb_node()
+        if not root or not state or not node:
+            return UNAVAILABLE, "RC root/state/node is not resolvable"
+        try:
+            port = int(env.get("SINGULARITY_OMB_PORT", str(module.DEFAULT_PORT)))
+        except ValueError:
+            return UNAVAILABLE, "OMB port is not an integer"
+        return module.detect(state, node, port)
+
+    def openmausbot_ensure(created: list[Path]):
+        module = _sibling_module("openmausbot")
+        root, state, node = omb_root(), omb_state(), omb_node()
+        if not root or not state or not node:
+            raise RuntimeError("RC root/state/node is not resolvable")
+        tarball = env.get("SINGULARITY_OMB_TARBALL")
+        integrity = env.get("SINGULARITY_OMB_INTEGRITY")
+        if not module.payload_ready(root):
+            if not tarball:
+                raise RuntimeError("OpenMausBot payload is not staged and no tarball is configured")
+            module.verify_source(tarball, integrity=integrity)
+            module.extract_payload(tarball, module.payload_dir(root))
+        port = int(env.get("SINGULARITY_OMB_PORT", str(module.DEFAULT_PORT)))
+        if os.name == "nt":
+            result = module.start_via_task(root, state, node, port=port)
+        else:
+            result = module.start(root, state, node, port=port)
+        return "headless OpenMausBot " + ("started" if result.get("started") else "already running")
 
     def claude_detect():
-        if _which("claude") or _which("claude.exe"):
-            return CONNECTED, "claude CLI on PATH"
+        home = env.get("USERPROFILE") or str(Path.home())
+        binary = _first_file([env.get("SINGULARITY_CLAUDE_EXE"),
+                              Path(home) / ".local" / "bin" / "claude.exe",
+                              _which("claude", search_path), _which("claude.exe", search_path)])
+        if binary:
+            return CONNECTED, f"claude CLI {binary.name} present (login is the owner's step)"
         return NEEDS_ATTENTION, "claude CLI not installed"
 
     def claude_ensure(created: list[Path]):
@@ -228,8 +345,8 @@ def build_adapters() -> dict[str, Adapter]:
     return {
         "kanzo": Adapter(kanzo_detect, kanzo_ensure),
         "repoql": Adapter(repoql_detect, repoql_ensure),
-        "tencent": Adapter(tencent_detect, None),
-        "openmausbot": Adapter(openmausbot_detect, None),
+        "tencent": Adapter(tencent_detect, tencent_ensure),
+        "openmausbot": Adapter(openmausbot_detect, openmausbot_ensure),
         "claude_code": Adapter(claude_detect, claude_ensure),
     }
 

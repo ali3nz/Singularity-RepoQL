@@ -1,13 +1,18 @@
 """Provisioner contract tests: idempotency, independence, rollback, privacy."""
 import json
 import os
+import socket
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from provisioner import (Adapter, CONNECTED, INTEGRATIONS, NEEDS_ATTENTION, UNAVAILABLE,
-                         Provisioner)
+                         Provisioner, build_adapters)
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "openmausbot"))
+import headless  # noqa: E402
 
 
 def fake(name, sequence):
@@ -153,6 +158,83 @@ class ProvisionerTests(unittest.TestCase):
         if os.name != "nt":
             self.assertEqual(prov.state_dir.stat().st_mode & 0o777, 0o700)
             self.assertEqual(prov.credentials_dir.stat().st_mode & 0o777, 0o700)
+
+
+class RealAdapterTests(unittest.TestCase):
+    """The default factory must probe real, overridable, local locations only."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def adapters(self, **env):
+        values = {k: str(v) for k, v in env.items()}
+        values.setdefault("PATH", os.environ.get("PATH", ""))
+        return build_adapters(values)
+
+    def node_shim(self) -> Path:
+        """A `node` that claims the package's minimum version."""
+        if os.name == "nt":
+            return Path(sys.executable)
+        shim = self.root / "bin" / "node"
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        shim.write_text('#!/bin/sh\nif [ "$1" = "-v" ]; then echo v24.0.0; exit 0; fi\nexit 0\n')
+        shim.chmod(0o755)
+        return shim
+
+    def test_kanzo_and_repoql_use_explicit_binaries(self):
+        kanzo = self.root / "kanzo.exe"
+        rql = self.root / "rql.exe"
+        kanzo.write_bytes(b"MZ")
+        rql.write_bytes(b"MZ")
+        adapters = self.adapters(SINGULARITY_KANZO_EXE=kanzo, SINGULARITY_RQL_EXE=rql)
+        self.assertEqual(adapters["kanzo"].detect()[0], CONNECTED)
+        self.assertEqual(adapters["repoql"].detect()[0], CONNECTED)
+        missing = self.adapters(SINGULARITY_KANZO_EXE=self.root / "nope.exe", PATH="")
+        self.assertEqual(missing["kanzo"].detect()[0], NEEDS_ATTENTION)
+
+    def test_claude_uses_the_per_user_install_path(self):
+        bin_dir = self.root / ".local" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "claude.exe").write_bytes(b"MZ")
+        adapters = self.adapters(USERPROFILE=self.root, SINGULARITY_CLAUDE_EXE=self.root / "absent")
+        state, detail = adapters["claude_code"].detect()
+        self.assertEqual(state, CONNECTED)
+        self.assertIn("login is the owner's step", detail)
+        empty = self.adapters(USERPROFILE=self.root / "other")
+        self.assertEqual(empty["claude_code"].detect()[0], NEEDS_ATTENTION)
+
+    def test_tencent_probes_the_configured_panel_port(self):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            sock.listen(1)
+            port = sock.getsockname()[1]
+            adapters = self.adapters(SINGULARITY_TENCENT_PANEL_PORT=port)
+            self.assertEqual(adapters["tencent"].detect()[0], CONNECTED)
+        adapters = self.adapters(SINGULARITY_TENCENT_PANEL_PORT=port)
+        self.assertEqual(adapters["tencent"].detect()[0], NEEDS_ATTENTION)
+        self.assertEqual(self.adapters(SINGULARITY_TENCENT_PANEL_PORT="x")["tencent"].detect()[0],
+                         UNAVAILABLE)
+
+    def test_tencent_repair_refuses_without_a_staged_stack(self):
+        adapters = self.adapters(SINGULARITY_TENCENT_PANEL_PORT=1)
+        with self.assertRaises(RuntimeError) as caught:
+            adapters["tencent"].ensure([])
+        self.assertIn("not staged", str(caught.exception))
+
+    def test_openmausbot_delegates_to_the_headless_lane(self):
+        site = self.root / "rc"
+        (site / "stage" / "omb" / "dist-server").mkdir(parents=True)
+        (site / "stage" / "omb" / "cli.js").write_text("// cli\n")
+        (site / "stage" / "omb" / headless.MARKER).write_text("// bundle\n")
+        adapters = self.adapters(SINGULARITY_OMB_ROOT=site, SINGULARITY_OMB_STATE=site / "state",
+                                 SINGULARITY_OMB_NODE=self.node_shim(), SINGULARITY_OMB_PORT=1)
+        state, detail = adapters["openmausbot"].detect()
+        self.assertEqual(state, NEEDS_ATTENTION)
+        self.assertIn("not answering", detail)
+        empty = self.adapters(SINGULARITY_OMB_ROOT=self.root / "bare")
+        self.assertEqual(empty["openmausbot"].detect()[0], NEEDS_ATTENTION)
 
 
 if __name__ == "__main__":
