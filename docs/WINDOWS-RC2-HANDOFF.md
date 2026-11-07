@@ -44,6 +44,19 @@ job object). Confirm readiness with an HTTP probe, not with
 Stop command: `Stop-Process -Id <pid of the python running server.py>` (or
 `Get-CimInstance Win32_Process | ? CommandLine -match 'Fleet861RC\\source\\dashboard\\server.py'`).
 
+## Security notice for the director
+
+Nine RC `srq_session` values from `evidence-msi/26-rc-http-suite-fresh-account.log`
+were exposed in tool output during this slice and are considered compromised.
+They are dead: the RC keeps sessions only in memory
+(`dashboard/local_account.py:42`), and both processes that held them (launcher
+`11844`, interpreter `3256`) were terminated, state emptied and the server
+restarted (`20660`/`26772`). All 55 session values in logs `21`, `23` and `26`
+are now `[REDACTED]` with test outcomes unchanged; reporting prints cookie name,
+length and flags only. Log `30` is the value-free revocation record. No
+production session, service or scheduled task was touched, and no auth check was
+relaxed.
+
 ## What is verified
 
 Upgrade over 0.2.0.0, clean uninstall, clean reinstall, isolation gate, Rust and
@@ -72,6 +85,10 @@ unchanged. Full row-by-row evidence is in
 7. **Signing, Burn bundle, Drive and publication** were deliberately not
    touched; nothing was pushed or tagged.
 8. **Python suites** ran on dockerhost Linux, not on Windows.
+9. **Incident S1** (exposed RC session values) is contained and revoked; if the
+   director needs session-level proof rather than mechanism-level proof, the
+   supporting facts are: memory-only store, dead processes, emptied state, new
+   process identity in log `30`.
 
 ## Claims NOT made
 

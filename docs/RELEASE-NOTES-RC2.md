@@ -89,6 +89,29 @@ Several "listener not up" readings were false: `Get-NetTCPConnection
 -LocalPort 18200` returned nothing while `GET /` answered 200. Listener state is
 therefore confirmed by HTTP probes, not by that cmdlet.
 
+## Security incident during this slice
+
+**S1 — RC session cookie values appeared in tool output (contained).** While
+reporting the HTTP suite, nine `srq_session` values from
+`evidence-msi/26-rc-http-suite-fresh-account.log` were surfaced in terminal
+output. Those sessions are treated as compromised. Containment:
+
+1. The RC dashboard keeps sessions **only** in an in-memory dict
+   (`dashboard/local_account.py:42`); nothing is written to disk. Killing the
+   process therefore destroys every issued session.
+2. Both prior server processes (launcher `11844`, interpreter `3256`) were
+   terminated, the RC state directory was emptied, and the server was restarted
+   under a new process pair (`20660`/`26772`). Evidence: log `30`.
+3. All 55 session values across `21`, `23` and `26` were replaced with
+   `[REDACTED]`; a re-scan of the retained logs finds no remaining value, and
+   every test outcome (`SUMMARY pass=27 fail=10`) is unchanged. Future reporting
+   prints cookie **name, length and flags** only.
+4. Nothing production-side was touched or restarted, and no authentication
+   check was weakened to accommodate the suite.
+
+The exposed values are dead: they were memory-only in processes that no longer
+exist. The one session live at handoff was issued after that restart.
+
 ## Test results in numbers
 
 | Battery | Result |
@@ -102,6 +125,7 @@ therefore confirmed by HTTP probes, not by that cmdlet.
 | Node: kanzo-claim | 17/17 pass |
 | Auto-local first navigation on the installed RC | `GET /` → 200, `srq_session` issued with no credentials |
 | dockerhost-blocked firewall probe | blocked with the rule, still serving locally, rule removed, inventory unchanged |
+| Post-incident revocation | prior server processes dead, state empty, session store memory-only, fresh 43-character session with `HttpOnly`/`SameSite=Strict`/`Max-Age=28800` |
 
 ## Residual items
 

@@ -46,6 +46,15 @@ branch. It should either be refreshed from the RC2 archive in a follow-up or
 removed from version control; this slice leaves it untouched and documents it so
 nobody mistakes it for the release source.
 
+## Security incident (row 18 supporting note)
+
+Nine RC `srq_session` values in `evidence-msi/26-…` were exposed in tool output
+and are treated as compromised. Revocation and redaction are recorded in logs
+`30` (value-free revocation) and by re-scanning `21`, `23`, `26` for residual
+values; all 55 values are now `[REDACTED]` and every test outcome is preserved.
+Sessions are memory-only (`dashboard/local_account.py:42`), the holding processes
+were terminated, and state was emptied. Production was not touched.
+
 ## Upstream reconciliation
 
 | Item | Value |
