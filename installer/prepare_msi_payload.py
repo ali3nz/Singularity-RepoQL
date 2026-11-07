@@ -21,7 +21,7 @@ import stat
 import sys
 import zipfile
 
-SOURCE_SHA256 = '2af31d675bed6ba80f0a7a851b7a239dd0bd3e407ed624986a8a842db93bfa47'
+SOURCE_SHA256 = 'ba82e14aa64331e917862cc47a18a8c28eef73a78107366fd7289aa4d8d3714e'
 REQUIRED_BINARIES = {
     'singularity-desktop-bridge.exe': 'bridge',
     'singularity-windows-supervisor.exe': 'supervisor',

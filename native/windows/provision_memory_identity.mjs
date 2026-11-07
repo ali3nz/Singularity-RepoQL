@@ -156,8 +156,11 @@ export function readLayout(memoryRoot) {
 
   const metadataRoot = join(baseDir, 'metadata');
   const database = join(metadataRoot, `tdai_metadata_${instanceId}`, 'metadata.db');
-  if (!existsSync(database)) fail('METADATA_DATABASE_MISSING', database);
-  const otherDatabases = readdirSync(metadataRoot, { withFileTypes: true })
+  // A fresh store has no database file yet: the core creates it when the
+  // internal init-admin call provisions the first system_admin user. Presence
+  // is therefore verified after that call, not before it.
+  // A fresh store has no metadata directory at all yet; init-admin creates it.
+  const otherDatabases = (existsSync(metadataRoot) ? readdirSync(metadataRoot, { withFileTypes: true }) : [])
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(metadataRoot, entry.name, 'metadata.db'))
     .filter((path) => existsSync(path) && path !== database);
@@ -412,6 +415,7 @@ export async function provisionMemoryIdentity({
   if (!receipt.admin.user_id) {
     if (!dryRun) fail('ADMIN_USER_MISSING', 'no system_admin user after init-admin');
   }
+  if (!dryRun && !existsSync(layout.database)) fail('METADATA_DATABASE_MISSING', layout.database);
 
   const entry = {};
   if (!dryRun) entry.backup = backupDatabase(layout.database).backup;

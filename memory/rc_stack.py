@@ -91,7 +91,13 @@ def _run(node, supervisor, verb, config_path, timeout=600):
     return result.returncode, parsed, (result.stderr or "").strip()
 
 
+def _runner(run):
+    """Explicit None means "use the default runner"; it is not callable."""
+    return _run if run is None else run
+
+
 def start(node, supervisor, config_path, *, run=_run):
+    run = _runner(run)
     code, payload, err = run(node, supervisor, "start", config_path)
     if code != 0:
         raise StackError(f"stack start failed: {(err or json.dumps(payload))[:300]}")
@@ -99,6 +105,7 @@ def start(node, supervisor, config_path, *, run=_run):
 
 
 def status(node, supervisor, config_path, *, run=_run):
+    run = _runner(run)
     code, payload, err = run(node, supervisor, "status", config_path)
     if code != 0:
         raise StackError(f"stack status failed: {(err or json.dumps(payload))[:300]}")
@@ -106,6 +113,7 @@ def status(node, supervisor, config_path, *, run=_run):
 
 
 def stop(node, supervisor, config_path, *, run=_run):
+    run = _runner(run)
     code, payload, err = run(node, supervisor, "stop", config_path)
     if code != 0:
         raise StackError(f"stack stop failed: {(err or json.dumps(payload))[:300]}")

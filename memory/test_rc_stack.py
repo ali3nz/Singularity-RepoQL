@@ -135,6 +135,12 @@ class LifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(rc_stack.StackError, "already in use"):
             rc_stack.start("node", "sup", "cfg.json", run=failing)
 
+    def test_explicit_none_runner_falls_back_to_the_default(self):
+        """Callers forward an optional run hook; None must not be called."""
+        with patch.object(rc_stack, "_run", return_value=(0, {"ok": True}, "")) as patched:
+            rc_stack.start("node", "sup", "cfg.json", run=None)
+        patched.assert_called_once()
+
     def test_healthy_requires_running_and_verified_ownership(self):
         good = {"code": "RUNNING", "processes": [
             {"health": "ok", "ownership": "verified"},

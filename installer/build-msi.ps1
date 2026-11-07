@@ -23,6 +23,20 @@ $here = Split-Path -Parent $PSCommandPath
 # package carries a separate UpgradeCode, install directory and file name while
 # still using this single MSI build pipeline.
 $wxs = if ($WxsFile) { [IO.Path]::GetFullPath($WxsFile) } else { Join-Path $here 'SingularityRepoQL.wxs' }
+# Native toolchains write progress to stderr. Under $ErrorActionPreference='Stop'
+# Windows PowerShell 5.1 turns the first such line into a NativeCommandError and
+# aborts the build, so every native step runs through Invoke-Native, which keeps
+# the preference at 'Continue' and reports the real exit code instead.
+function Invoke-Native([string]$FilePath, [string[]]$Arguments) {
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+    return $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previous
+  }
+}
 if (-not (Test-Path -LiteralPath $wxs -PathType Leaf)) { throw 'WXS_SOURCE_MISSING' }
 if (-not $MsiFileName -or $MsiFileName -match '[\\/:*?"<>|]' -or -not $MsiFileName.EndsWith('.msi', [StringComparison]::OrdinalIgnoreCase)) { throw 'MSI_FILE_NAME_INVALID' }
 $SourceZip = [IO.Path]::GetFullPath($SourceZip)
@@ -37,7 +51,7 @@ if ($OutputDirectory.Equals($BuildRoot, [StringComparison]::OrdinalIgnoreCase) -
 # native/windows/build_source_variants.py at rc-fleet893. The previous
 # pin (E8392BA8...) was the 2026-11-05 snapshot, which predated the branch
 # and shipped a payload without its dashboard, memory or MCP work.
-$expectedSourceHash = '2AF31D675BED6BA80F0A7A851B7A239DD0BD3E407ED624986A8A842DB93BFA47'
+$expectedSourceHash = 'BA82E14AA64331E917862CC47A18A8C28EEF73A78107366FD7289AA4D8D3714E'
 $sourceHash = (Get-FileHash -LiteralPath $SourceZip -Algorithm SHA256).Hash
 if ($sourceHash -ne $expectedSourceHash) { throw 'UNEXPECTED_SOURCE_ARCHIVE_HASH' }
 $py = Get-Command py.exe -ErrorAction SilentlyContinue
@@ -67,35 +81,29 @@ try {
     foreach ($manifest in $manifests) {
         if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw ('MISSING_CARGO_MANIFEST: ' + $manifest) }
     }
-    & $py.Source -3 (Join-Path $sourceRoot 'native/windows/check_rust_lock_provenance.py')
-    if ($LASTEXITCODE -ne 0) { throw 'CARGO_LOCK_PROVENANCE_FAILED' }
+    if ((Invoke-Native $py.Source @('-3', (Join-Path $sourceRoot 'native/windows/check_rust_lock_provenance.py'))) -ne 0) { throw 'CARGO_LOCK_PROVENANCE_FAILED' }
     if (-not $SkipRustTests) {
         foreach ($manifest in $manifests) {
-            & $cargo.Source test --manifest-path $manifest --locked --all-targets
-            if ($LASTEXITCODE -ne 0) { throw ('RUST_TESTS_FAILED: ' + $manifest) }
+            if ((Invoke-Native $cargo.Source @('test', '--manifest-path', $manifest, '--locked', '--all-targets')) -ne 0) { throw ('RUST_TESTS_FAILED: ' + $manifest) }
         }
     }
-    & $cargo.Source build --manifest-path $manifests[0] --locked --release --no-default-features --features office,ghost
-    if ($LASTEXITCODE -ne 0) { throw 'DESKTOP_BRIDGE_BUILD_FAILED' }
+    if ((Invoke-Native $cargo.Source @('build', '--manifest-path', $manifests[0], '--locked', '--release', '--no-default-features', '--features', 'office,ghost')) -ne 0) { throw 'DESKTOP_BRIDGE_BUILD_FAILED' }
     foreach ($manifest in @($manifests[1], $manifests[2])) {
-        & $cargo.Source build --manifest-path $manifest --locked --release --bins
-        if ($LASTEXITCODE -ne 0) { throw ('RUST_RELEASE_BUILD_FAILED: ' + $manifest) }
+        if ((Invoke-Native $cargo.Source @('build', '--manifest-path', $manifest, '--locked', '--release', '--bins')) -ne 0) { throw ('RUST_RELEASE_BUILD_FAILED: ' + $manifest) }
     }
     $bridge = Join-Path $sourceRoot $expected[0].Exe
     $supervisor = Join-Path $sourceRoot $expected[1].Exe
     $gateway = Join-Path $sourceRoot $expected[2].Exe
     $auditor = Join-Path $sourceRoot 'native/windows/unified-gateway-rust/target/release/kanzo_board_audit.exe'
-    & $py.Source -3 (Join-Path $here 'prepare_msi_payload.py') --source-zip $SourceZip --output $payload --bridge $bridge --supervisor $supervisor --gateway $gateway --kanzo-audit $auditor
-    if ($LASTEXITCODE -ne 0) { throw 'PAYLOAD_PREPARATION_FAILED' }
+    if ((Invoke-Native $py.Source @('-3', (Join-Path $here 'prepare_msi_payload.py'), '--source-zip', $SourceZip, '--output', $payload, '--bridge', $bridge, '--supervisor', $supervisor, '--gateway', $gateway, '--kanzo-audit', $auditor)) -ne 0) { throw 'PAYLOAD_PREPARATION_FAILED' }
     New-Item -ItemType Directory -Path $tools | Out-Null
-    & $dotnet.Source tool install wix --tool-path $tools --version 6.0.2
-    if ($LASTEXITCODE -ne 0) { throw 'PINNED_WIX_TOOL_INSTALL_FAILED' }
+    if ((Invoke-Native $dotnet.Source @('tool', 'install', 'wix', '--tool-path', $tools, '--version', '6.0.2')) -ne 0) { throw 'PINNED_WIX_TOOL_INSTALL_FAILED' }
     $wix = Join-Path $tools 'wix.exe'
     if (-not (Test-Path -LiteralPath $wix -PathType Leaf)) { throw 'WIX_EXE_MISSING' }
     if (-not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) { New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null }
     if (Test-Path -LiteralPath $release) { throw 'OUTPUT_MSI_ALREADY_EXISTS' }
-    & $wix build -arch x64 -bindpath ('Payload=' + $payload) -out $release $wxs
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $release -PathType Leaf)) { throw 'MSI_BUILD_FAILED' }
+    $wixCode = Invoke-Native $wix @('build', '-arch', 'x64', '-bindpath', ('Payload=' + $payload), '-out', $release, $wxs)
+    if ($wixCode -ne 0 -or -not (Test-Path -LiteralPath $release -PathType Leaf)) { throw 'MSI_BUILD_FAILED' }
     # A self-contained distribution: the package must carry its own CAB. An
     # external cab1.cab beside the MSI means the package cannot be installed
     # from a folder holding only the MSI, which is how it is distributed.

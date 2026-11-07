@@ -51,6 +51,32 @@ class PortPolicy(unittest.TestCase):
                              "SINGULARITY_RC_PANEL_PORT": "18221"})
 
 
+class SourceSelection(unittest.TestCase):
+    def test_module_source_is_the_product_root(self):
+        self.assertTrue((rc.SOURCE / "native" / "windows" / "rc_services.py").is_file())
+        self.assertTrue((rc.SOURCE / "memory" / "rc_stack.py").is_file())
+        self.assertTrue((rc.SOURCE / "dashboard" / "server.py").is_file())
+
+    def test_empty_staged_source_directory_is_ignored(self):
+        """A leftover empty `source` dir must not become the product tree."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Singularity" / "Fleet861RC"
+            (root / "source").mkdir(parents=True)
+            d = rc.defaults({"LOCALAPPDATA": tmp})
+        self.assertEqual(d["source"], rc.SOURCE)
+
+    def test_staged_tree_with_product_entry_points_is_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Singularity" / "Fleet861RC"
+            staged = root / "source"
+            (staged / "native" / "windows").mkdir(parents=True)
+            (staged / "memory").mkdir(parents=True)
+            (staged / "native" / "windows" / "rc_services.py").write_text("", encoding="utf-8")
+            (staged / "memory" / "rc_stack.py").write_text("", encoding="utf-8")
+            d = rc.defaults({"LOCALAPPDATA": tmp})
+        self.assertEqual(d["source"], staged)
+
+
 class WorkspaceMarker(unittest.TestCase):
     def test_marker_matches_the_rql_init_layout_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,28 +89,101 @@ class WorkspaceMarker(unittest.TestCase):
             self.assertTrue((marker / "cache").is_dir())
 
 
+def repoql_case(tmp, graph=True):
+    d = defaults_for(Path(tmp))
+    d["rql"] = Path(tmp) / "rql.exe"
+    d["rql"].write_bytes(b"stub")
+    if graph:
+        cache = d["workspace"] / ".repoql" / "cache"
+        cache.mkdir(parents=True)
+        (cache / "index.duckdb").write_bytes(b"graph")
+    return d
+
+
 class RepoqlStartup(unittest.TestCase):
-    def test_imports_source_then_verifies_a_running_host(self):
+    def test_serves_an_existing_graph_without_importing_it_again(self):
         calls = []
-        started = {"value": False}
+        spawned = []
+        online = {"value": False}
+
+        def run(cmd, cwd=None, timeout=None):
+            calls.append([str(part) for part in cmd])
+            if not online["value"]:
+                return completed('{"running": false, "error": "no host"}', code=1)
+            return completed('{"ready": true, "totalFiles": 1268, "host": {"pid": 7}}')
+
+        def spawn(cmd, cwd=None, log_path=None):
+            spawned.append([str(part) for part in cmd])
+            online["value"] = True
+            return 4242
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = rc.ensure_repoql(repoql_case(tmp), run=run, spawn=spawn, sleep=lambda _s: None)
+        self.assertTrue(report["ok"])
+        self.assertTrue(report["host_started"])
+        self.assertFalse(report["imported"])
+        self.assertEqual(spawned[0][1:], ["serve", "--path", str(Path(tmp) / "Singularity" / "Fleet861RC" / "workspace")])
+        self.assertFalse(any("import" in call for call in calls))
+
+    def test_stale_host_socket_is_removed_before_serve(self):
+        online = {"value": False}
+
+        def run(cmd, cwd=None, timeout=None):
+            if not online["value"]:
+                return completed('{"running": false, "error": "no host"}', code=1)
+            return completed('{"ready": true, "totalFiles": 1, "host": {"pid": 9}}')
+
+        def spawn(cmd, cwd=None, log_path=None):
+            online["value"] = True
+            return 4242
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = repoql_case(tmp)
+            stale = d["workspace"] / ".repoql" / "cache" / "repoql.sock"
+            stale.write_bytes(b"stale")
+            report = rc.ensure_repoql(d, run=run, spawn=spawn, sleep=lambda _s: None)
+        self.assertTrue(report["ok"])
+        self.assertFalse(stale.exists())
+
+    def test_imports_once_when_the_workspace_has_no_graph(self):
+        calls = []
+        online = {"value": False}
 
         def run(cmd, cwd=None, timeout=None):
             calls.append([str(part) for part in cmd])
             if "import" in cmd:
-                started["value"] = True
                 return completed("Import started: local:///source\n")
-            if not started["value"]:
+            if not online["value"]:
                 return completed('{"running": false, "error": "no host"}', code=1)
-            return completed('{"running": true, "verdict": "ready", "host": {"pid": 7}}')
+            return completed('{"ready": true, "totalFiles": 10, "host": {"pid": 7}}')
+
+        def spawn(cmd, cwd=None, log_path=None):
+            online["value"] = True
+            return 4242
 
         with tempfile.TemporaryDirectory() as tmp:
-            d = defaults_for(Path(tmp))
-            d["rql"] = Path(tmp) / "rql.exe"
-            d["rql"].write_bytes(b"stub")
-            report = rc.ensure_repoql(d, run=run, sleep=lambda _s: None)
+            report = rc.ensure_repoql(repoql_case(tmp, graph=False), run=run, spawn=spawn,
+                                      sleep=lambda _s: None)
         self.assertTrue(report["ok"])
-        self.assertEqual(report["pid"], 7)
-        self.assertTrue(any("import" in call for call in calls))
+        self.assertTrue(report["imported"])
+        self.assertEqual(sum(1 for call in calls if "import" in call), 1)
+
+    def test_real_status_shape_counts_as_running_without_an_import(self):
+        """`host status` has no `running` field; ready/host.pid is the contract."""
+        calls = []
+
+        def run(cmd, cwd=None, timeout=None):
+            calls.append([str(part) for part in cmd])
+            return completed('{"ready": true, "queryable": true, "totalFiles": 1268, '
+                             '"host": {"pid": 16400}}')
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = rc.ensure_repoql(repoql_case(tmp), run=run, spawn=lambda *a, **k: 1,
+                                      sleep=lambda _s: None)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["pid"], 16400)
+        self.assertEqual(report["files"], 1268)
+        self.assertFalse(any("import" in call for call in calls))
 
     def test_no_host_after_import_is_a_failure_not_a_pass(self):
         def run(cmd, cwd=None, timeout=None):
@@ -95,7 +194,8 @@ class RepoqlStartup(unittest.TestCase):
             d["rql"] = Path(tmp) / "rql.exe"
             d["rql"].write_bytes(b"stub")
             with self.assertRaises(rc.ServiceError) as caught:
-                rc.ensure_repoql(d, run=run, sleep=lambda _s: None, attempts=2, delay=0)
+                rc.ensure_repoql(d, run=run, spawn=lambda *a, **k: 1, sleep=lambda _s: None,
+                                 attempts=2, delay=0)
         self.assertIn("did not start", str(caught.exception))
 
     def test_missing_rql_binary_is_reported(self):
@@ -104,6 +204,43 @@ class RepoqlStartup(unittest.TestCase):
             with self.assertRaises(rc.ServiceError) as caught:
                 rc.ensure_repoql(d, run=lambda *a, **k: completed())
         self.assertIn("not installed", str(caught.exception))
+
+
+class MemoryStartup(unittest.TestCase):
+    def test_stale_manifest_is_stopped_before_a_fresh_start(self):
+        calls = []
+
+        class Stack:
+            @staticmethod
+            def stop(node, supervisor, config_path, run=None):
+                calls.append("stop")
+                return {"processes": []}
+
+        states = {"n": 0}
+
+        def memory_status(d, run=None):
+            states["n"] += 1
+            if states["n"] == 1:
+                return {"code": "NO_MANIFEST", "healthy": False, "processes": []}
+            return {"code": "RUNNING", "healthy": True,
+                    "processes": [{"name": "core", "health": "ok", "ownership": "verified",
+                                    "port": 18221}]}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            for key in ("node", "supervisor"):
+                d[key] = Path(tmp) / f"{key}.exe"
+                d[key].write_bytes(b"")
+            for key in ("core_dir", "panel_dir"):
+                d[key] = Path(tmp) / key
+                d[key].mkdir()
+            with mock.patch.object(rc, "_rc_stack", return_value=Stack), \
+                    mock.patch.object(rc, "memory_config", return_value=({}, Path(tmp) / "stack.json")), \
+                    mock.patch.object(rc, "memory_status", side_effect=memory_status):
+                report = rc.ensure_memory(d, run=lambda *a, **k: None, spawn=lambda *a, **k: 123,
+                                          sleep=lambda _s: None, attempts=2, delay=0)
+        self.assertEqual(calls, ["stop"])
+        self.assertTrue(report["ok"])
 
 
 class Identity(unittest.TestCase):
@@ -115,19 +252,64 @@ class Identity(unittest.TestCase):
             d = defaults_for(Path(tmp))
             d["admin_key"].parent.mkdir(parents=True, exist_ok=True)
             d["admin_key"].write_text("synthetic-key", encoding="utf-8")
+            d["metadata_db"].parent.mkdir(parents=True, exist_ok=True)
+            d["metadata_db"].write_text("synthetic", encoding="utf-8")
             result = rc.ensure_identity(d, run=run)
         self.assertEqual(result["action"], "reused")
 
-    def test_missing_metadata_store_fails_with_its_path(self):
+    def test_owner_key_without_metadata_store_is_reprovisioned(self):
+        """A key left behind by purged state must not suppress init-admin."""
+        seen = []
+
+        def run(cmd, cwd=None, timeout=None):
+            seen.append(cmd)
+            return completed(stdout='{"provisioned": true, "team_id": "t"}')
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            d["admin_key"].parent.mkdir(parents=True, exist_ok=True)
+            d["admin_key"].write_text("stale-key", encoding="utf-8")
+            script = Path(d["source"]) / "native" / "windows" / "provision_memory_identity.mjs"
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_text("// stub", encoding="utf-8")
+
+            result = rc.ensure_identity(d, run=run, sleep=lambda _s: None, attempts=2)
+        self.assertEqual(result["action"], "provisioned")
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(d["admin_key"].exists())
+
+    def test_fresh_store_provisions_without_waiting_for_the_database(self):
+        """init-admin creates the metadata database; the start must not wait."""
+        seen = []
+
+        def run(cmd, cwd=None, timeout=None):
+            seen.append(cmd)
+            return completed(stdout='{"provisioned": true, "team_id": "t", '
+                                    '"identity_map": {"agents": 9}}')
+
+        def sleep(_seconds):
+            raise AssertionError("a fresh store must not be polled for a database")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            script = Path(d["source"]) / "native" / "windows" / "provision_memory_identity.mjs"
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_text("// stub", encoding="utf-8")
+            result = rc.ensure_identity(d, run=run, sleep=sleep)
+        self.assertEqual(result["action"], "provisioned")
+        self.assertEqual(result["agents"], 9)
+        self.assertEqual(len(seen), 1)
+
+    def test_failed_provisioning_reports_the_provisioner_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = defaults_for(Path(tmp))
             script = Path(d["source"]) / "native" / "windows" / "provision_memory_identity.mjs"
             script.parent.mkdir(parents=True, exist_ok=True)
             script.write_text("// stub", encoding="utf-8")
             with self.assertRaises(rc.ServiceError) as caught:
-                rc.ensure_identity(d, run=lambda *a, **k: completed(), sleep=lambda _s: None,
-                                   attempts=2, delay=0)
-        self.assertIn("metadata store never appeared", str(caught.exception))
+                rc.ensure_identity(d, run=lambda *a, **k: completed(stderr="INIT_ADMIN_FAILED HTTP 500", code=1),
+                                   sleep=lambda _s: None, attempts=2, delay=0)
+        self.assertIn("INIT_ADMIN_FAILED", str(caught.exception))
 
 
 class DashboardEnvironment(unittest.TestCase):
@@ -278,7 +460,8 @@ class IndependentServices(unittest.TestCase):
         rc.ensure_office = lambda *a, **k: {"ok": True, "health": "ok"}
         try:
             with tempfile.TemporaryDirectory() as tmp:
-                report = rc.start(defaults_for(Path(tmp)), run=lambda *a, **k: completed())
+                report = rc.start(defaults_for(Path(tmp)), run=lambda *a, **k: completed(),
+                                  log=lambda _message: None)
         finally:
             (rc.ensure_repoql, rc.ensure_memory, rc.ensure_identity,
              rc.ensure_kanzo, rc.ensure_office) = original

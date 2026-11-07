@@ -45,7 +45,8 @@ DEFAULT_OFFICE_PORT = 18203
 FORBIDDEN_PORTS = frozenset({18100, 18101, 18126, 18128})
 MARKER_GITIGNORE = "cache/\n"
 METADATA_DB = ("state", "data", "core", "metadata", "tdai_metadata_default", "metadata.db")
-SOURCE = Path(__file__).resolve().parent.parent
+# <product>/native/windows/rc_services.py -> <product>
+SOURCE = Path(__file__).resolve().parents[2]
 
 
 class ServiceError(RuntimeError):
@@ -93,7 +94,7 @@ def defaults(env=None):
         "root": root,
         "workspace": root / "workspace",
         "memory_root": root / "memory",
-        "source": root / "source" if (root / "source").is_dir() else SOURCE,
+        "source": _source_root(root, env),
         "node": node,
         "rql": rql,
         "supervisor": None,
@@ -109,6 +110,21 @@ def defaults(env=None):
         "office_install": office_root,
         "office_python": _office_python(office_root),
     }
+
+
+def _source_root(root, env):
+    """The product source the RC runs: installed tree, or an explicit RC copy.
+
+    A directory merely being named `source` is not proof of a product tree; an
+    earlier partial start can leave an empty one behind, and running from it
+    turns every backend into a missing-script failure. A staged RC copy counts
+    only when it actually carries the product entry points.
+    """
+    staged = Path(env.get("SINGULARITY_RC_SOURCE") or root / "source")
+    if (staged / "native" / "windows" / "rc_services.py").is_file() and (
+            staged / "memory" / "rc_stack.py").is_file():
+        return staged
+    return SOURCE
 
 
 def _office_python(office_root):
@@ -239,27 +255,75 @@ def import_source(d, *, run=None):
     return _json_tail(process) or {"returncode": process.returncode}
 
 
-def ensure_repoql(d, *, run=None, sleep=time.sleep, attempts=30, delay=2.0):
-    """Marker + import + a running host, verified by `host status`."""
+def host_running(status):
+    """`host status` reports readiness, not a `running` boolean.
+
+    The live host is identified by its PID plus the readiness flags; treating
+    only a literal `running: true` as up made every start re-import a healthy
+    workspace and then report a timeout on a host that was already serving.
+    """
+    status = status or {}
+    return bool(status.get("running") or status.get("ready") or status.get("queryable")
+                or (status.get("host") or {}).get("pid"))
+
+
+def clear_stale_host_socket(workspace):
+    """Drop the socket a terminated host left behind.
+
+    `host status` reporting no host means nothing owns this workspace, but the
+    socket file survives a hard termination and the next `rql serve` fails to
+    bind it (`Access is denied`). Only the RC-owned socket is removed here.
+    """
+    socket_path = Path(workspace) / ".repoql" / "cache" / "repoql.sock"
+    try:
+        if socket_path.exists():
+            socket_path.unlink()
+            return True
+    except OSError:
+        pass
+    return False
+
+
+def workspace_graph(workspace):
+    """The on-disk graph `rql import` built; importing again is not a start step."""
+    return Path(workspace) / ".repoql" / "cache" / "index.duckdb"
+
+
+def ensure_repoql(d, *, run=None, spawn=None, sleep=time.sleep, attempts=60, delay=2.0):
+    """A running `rql` host over the RC workspace, with the source imported once.
+
+    `host status` never starts anything (it answers `no host`), so the host is
+    started here as `rql serve` exactly as the installed product does. A
+    workspace that already holds an index is served as-is; only a workspace
+    without one is imported, and the import runs against the live host.
+    """
     if not Path(d["rql"]).is_file():
         raise ServiceError(f"rql is not installed at {d['rql']}")
     workspace_marker(d["workspace"])
     status = repoql_status(d, run=run)
-    if not status.get("running"):
-        import_source(d, run=run)
+    pid = None
+    if not host_running(status):
+        clear_stale_host_socket(d["workspace"])
+        pid = _spawn_detached([d["rql"], "serve", "--path", str(d["workspace"])],
+                              cwd=d["workspace"],
+                              log_path=Path(d["root"]) / "logs" / "repoql-host.log", spawn=spawn)
         for _ in range(attempts):
             status = repoql_status(d, run=run)
-            if status.get("running"):
+            if host_running(status):
                 break
             sleep(delay)
-    if not status.get("running"):
+    if not host_running(status):
         reason = status.get("error") or status.get("verdict") or "unknown"
         raise ServiceError(f"RepoQL host did not start: {reason}")
-    files = ((status.get("workspace") or {}).get("files")
+    imported = None
+    if not workspace_graph(d["workspace"]).is_file():
+        imported = import_source(d, run=run)
+    files = (status.get("totalFiles") or (status.get("workspace") or {}).get("files")
              or status.get("files") or status.get("filesIndexed"))
     return {"ok": True, "workspace": str(status.get("workspace", {}).get("root") if isinstance(status.get("workspace"), dict) else d["workspace"]),
-            "verdict": status.get("verdict"), "files": files,
-            "pid": (status.get("host") or {}).get("pid")}
+            "verdict": status.get("verdict") or ("ready" if status.get("ready") else None),
+            "files": files, "pid": (status.get("host") or {}).get("pid"),
+            "host_started": pid is not None, "imported": imported is not None}
 
 
 # --------------------------------------------------------------------- memory
@@ -305,6 +369,13 @@ def ensure_memory(d, *, run=None, spawn=None, sleep=time.sleep, attempts=90, del
     config, config_path = memory_config(d)
     state = memory_status(d, run=run)
     if not state.get("healthy"):
+        # A manifest left by a hard task termination makes the supervisor refuse
+        # a fresh start; stop reconciles the recorded PIDs and clears it.
+        try:
+            stack = _rc_stack(d)
+            stack.stop(d["node"], d["supervisor"], config_path, run=run)
+        except Exception:  # no runnable stack is not a stop failure for startup
+            pass
         pid = _spawn_detached([d["node"], d["supervisor"], "start", "--config", str(config_path), "--json"],
                               cwd=Path(d["memory_root"]), log_path=Path(d["memory_root"]) / "logs" / "start.log",
                               spawn=spawn)
@@ -316,33 +387,49 @@ def ensure_memory(d, *, run=None, spawn=None, sleep=time.sleep, attempts=90, del
         state["launcher_pid"] = pid
     if not state.get("healthy"):
         rows = [f"{row.get('name')}={row.get('health')}/{row.get('ownership')}" for row in state.get("processes", [])]
-        raise ServiceError(f"memory stack is not healthy: {state.get('code')} {' '.join(rows)}".strip())
+        log = Path(d["memory_root"]) / "logs" / "start.log"
+        detail = ""
+        if log.is_file():
+            detail = " · " + " ".join(log.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-2:])[:300]
+        raise ServiceError(f"memory stack is not healthy: {state.get('code')} {' '.join(rows)}{detail}".strip())
     return {"ok": True, "code": state.get("code"),
             "processes": [{k: row.get(k) for k in ("name", "health", "ownership", "port")}
                           for row in state.get("processes", [])],
             "core_port": d["core_port"], "panel_port": d["panel_port"]}
 
 
-def ensure_identity(d, *, run=None, sleep=time.sleep, attempts=60, delay=2.0):
+def ensure_identity(d, *, run=None, sleep=time.sleep, attempts=3, delay=3.0):
     """Provision the RC owner identity once the metadata store exists."""
-    if Path(d["admin_key"]).is_file():
+    key_file = Path(d["admin_key"])
+    # A key without its metadata store belongs to state that no longer exists.
+    # Keeping it would make init-admin skip the only admin it could create, so
+    # the stale RC-owned key is dropped and provisioned again from scratch.
+    if key_file.is_file() and not Path(d["metadata_db"]).is_file():
+        key_file.unlink()
+    if key_file.is_file():
         return {"ok": True, "action": "reused", "admin_key_present": True}
     script = Path(d["source"]) / "native" / "windows" / "provision_memory_identity.mjs"
     if not script.is_file():
         raise ServiceError(f"identity provisioner is missing: {script}")
-    for _ in range(attempts):
-        if Path(d["metadata_db"]).is_file():
-            break
-        sleep(delay)
-    if not Path(d["metadata_db"]).is_file():
-        raise ServiceError(f"memory metadata store never appeared: {d['metadata_db']}")
-    process = _run([d["node"], script, "--memory-root", d["memory_root"], "--json"], timeout=180, run=run)
-    receipt = _json_tail(process) or {}
-    if process.returncode != 0 or not receipt.get("provisioned"):
-        detail = (process.stderr or process.stdout or "no output").strip().splitlines()
-        raise ServiceError("memory identity provisioning failed: " + " ".join(detail[-2:])[:300])
-    return {"ok": True, "action": "provisioned", "admin_key_present": Path(d["admin_key"]).is_file(),
-            "team_id": receipt.get("team_id"), "conflicts": len(receipt.get("conflicts") or [])}
+    # A fresh RC store has no metadata database yet: the internal init-admin call
+    # the provisioner makes creates it. Waiting for the file first deadlocked
+    # every clean install, so the provisioner itself is the readiness step.
+    last = None
+    for attempt in range(max(1, attempts)):
+        process = _run([d["node"], script, "--memory-root", d["memory_root"], "--json"],
+                       timeout=180, run=run)
+        receipt = _json_tail(process) or {}
+        if process.returncode == 0 and receipt.get("provisioned"):
+            return {"ok": True, "action": "provisioned",
+                    "admin_key_present": Path(d["admin_key"]).is_file(),
+                    "team_id": receipt.get("team_id"),
+                    "agents": (receipt.get("identity_map") or {}).get("agents"),
+                    "conflicts": len(receipt.get("conflicts") or [])}
+        last = process
+        if attempt + 1 < max(1, attempts):
+            sleep(delay)
+    detail = (last.stderr or last.stdout or "no output").strip().splitlines()
+    raise ServiceError("memory identity provisioning failed: " + " ".join(detail[-2:])[:300])
 
 
 # --------------------------------------------------------------------- Kanzo
@@ -602,19 +689,25 @@ def backend_status(d, *, run=None):
     return result
 
 
-def start(d, *, run=None, spawn=None):
+def start(d, *, run=None, spawn=None, log=None):
     """Bring up every backend the candidate can own; independent per service."""
     d = layout(d)
+    say = log or (lambda message: print("rc-services: " + message, file=sys.stderr, flush=True))
     report = {"root": str(d["root"]), "services": {}}
-    for name, step in (("repoql", lambda: ensure_repoql(d, run=run)),
+    for name, step in (("repoql", lambda: ensure_repoql(d, run=run, spawn=spawn)),
                        ("memory", lambda: ensure_memory(d, run=run, spawn=spawn)),
                        ("memory_identity", lambda: ensure_identity(d, run=run)),
                        ("kanzo", lambda: ensure_kanzo(d, spawn=spawn)),
                        ("office", lambda: ensure_office(d, spawn=spawn))):
+        say(f"starting {name}")
+        began = time.monotonic()
         try:
             report["services"][name] = {"ok": True, **(step() or {})}
         except Exception as exc:
             report["services"][name] = {"ok": False, "error": str(exc)[:400]}
+        report["services"][name]["seconds"] = round(time.monotonic() - began, 1)
+        say(f"{name}: {'ok' if report['services'][name]['ok'] else 'FAILED'} "
+            f"({report['services'][name]['seconds']}s)")
     report["ok"] = all(row.get("ok") for row in report["services"].values())
     return report
 
