@@ -91,8 +91,25 @@ Add-Check "production_install_dir_untouched" ((Test-Path -LiteralPath $productio
 # 3. The RC loopback port must be free and must not be a production port.
 $productionPorts = @(18100, 18101, 18128)
 Add-Check "rc_port_not_a_production_port" (-not ($productionPorts -contains $Port)) ("port=" + $Port + " production=" + ($productionPorts -join ","))
-$listener = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue)
-Add-Check "rc_port_free" ($listener.Count -eq 0) ("port=" + $Port + " listeners=" + $listener.Count)
+# Occupancy is decided by connecting, not by the socket table. After a process
+# exits, Windows can still list a LISTENING row for the port with owning pid 0;
+# Get-NetTCPConnection reported one here for a port that refused every
+# connection, which failed the gate for an install that was actually safe.
+$portClient = $null
+$portListening = $false
+try {
+    $portClient = New-Object System.Net.Sockets.TcpClient
+    $portConnect = $portClient.BeginConnect('127.0.0.1', $Port, $null, $null)
+    if ($portConnect.AsyncWaitHandle.WaitOne(700)) {
+        $portClient.EndConnect($portConnect)
+        $portListening = $true
+    }
+} catch {
+    $portListening = $false
+} finally {
+    if ($null -ne $portClient) { $portClient.Close() }
+}
+Add-Check "rc_port_free" (-not $portListening) ("port=" + $Port + " listening=" + $portListening)
 
 # 4. No ARP product for the RC yet.
 $arpKeys = @(
