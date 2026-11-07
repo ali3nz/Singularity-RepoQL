@@ -37,7 +37,7 @@ if ($OutputDirectory.Equals($BuildRoot, [StringComparison]::OrdinalIgnoreCase) -
 # native/windows/build_source_variants.py at rc-fleet893. The previous
 # pin (E8392BA8...) was the 2026-11-05 snapshot, which predated the branch
 # and shipped a payload without its dashboard, memory or MCP work.
-$expectedSourceHash = '282FBC77EF2E5B829F70235799FE3EEEAB351CB914649B4E6789E2AF9FADD64B'
+$expectedSourceHash = 'F47D9DE7D53027895BFE9B47BE3AB32095B4D74D4CBE447B83AD7F5D8B31FB34'
 $sourceHash = (Get-FileHash -LiteralPath $SourceZip -Algorithm SHA256).Hash
 if ($sourceHash -ne $expectedSourceHash) { throw 'UNEXPECTED_SOURCE_ARCHIVE_HASH' }
 $py = Get-Command py.exe -ErrorAction SilentlyContinue
