@@ -656,6 +656,11 @@ def panel_env(d):
         "SINGULARITY_KANZO_PORT": str(d["kanzo_port"]),
         "SINGULARITY_MEMORY_SUPERVISOR": str(d["supervisor"]),
         "SINGULARITY_MEMORY_STACK_CONFIG": str(Path(d["memory_root"]) / "stack.json"),
+        # The dashboard only owns a local owner account when this is set, and the
+        # RC opens signed in: without it the key layer answers every /api call
+        # with dashboard_secret_required even though auto-local is the mode.
+        "SINGULARITY_LOCAL_ACCOUNT_AUTH": "1",
+        "SINGULARITY_DASHBOARD_AUTH_MODE": os.environ.get("SINGULARITY_DASHBOARD_AUTH_MODE", "") or "auto-local",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
 

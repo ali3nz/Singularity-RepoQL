@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -337,6 +338,27 @@ class DashboardEnvironment(unittest.TestCase):
             env = rc.panel_env(d)
         self.assertTrue(Path(env["SINGULARITY_TENCENT_OWNER_KEY_FILE"])
                         .is_relative_to(Path(d["memory_root"])))
+
+    @mock.patch.dict(os.environ, {}, clear=False)
+    def test_panel_environment_enables_the_local_owner_account(self):
+        """Auto-local cannot issue a session unless the dashboard owns an account.
+
+        server.py builds LocalAccount only when SINGULARITY_LOCAL_ACCOUNT_AUTH=1;
+        without it every /api call answers dashboard_secret_required and the RC
+        never opens signed in, which is what the installed candidate must do.
+        """
+        os.environ.pop("SINGULARITY_LOCAL_ACCOUNT_AUTH", None)
+        os.environ.pop("SINGULARITY_DASHBOARD_AUTH_MODE", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            env = rc.panel_env(defaults_for(Path(tmp)))
+        self.assertEqual(env["SINGULARITY_LOCAL_ACCOUNT_AUTH"], "1")
+        self.assertEqual(env["SINGULARITY_DASHBOARD_AUTH_MODE"], "auto-local")
+
+    @mock.patch.dict(os.environ, {"SINGULARITY_DASHBOARD_AUTH_MODE": "password"}, clear=False)
+    def test_panel_environment_keeps_an_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = rc.panel_env(defaults_for(Path(tmp)))
+        self.assertEqual(env["SINGULARITY_DASHBOARD_AUTH_MODE"], "password")
 
 
 class KanzoBoard(unittest.TestCase):
