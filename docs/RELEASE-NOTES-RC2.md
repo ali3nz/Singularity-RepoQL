@@ -1,5 +1,89 @@
-# Release notes — Singularity RepoQL Windows RC2 (0.3.0.0)
+# Release notes — Singularity RepoQL Windows RC (0.5.2.0)
 
+Local, unsigned, unpublished release candidate. Built from branch `rc-fleet893`
+(`a367e62` plus this documentation commit) on windows241 with the repository's
+own `installer/build-msi.ps1`. Nothing was pushed, tagged or signed.
+
+## Artifact
+
+| Field | Value |
+|---|---|
+| MSI | `Singularity-RepoQL-Windows-Fleet861RC-0.5.2.0-x64.msi` |
+| Bytes | 7,480,295 |
+| SHA-256 | `006c9a7fa24f7516537b8dd6aa68e5e0177a0d3539d7ebd740904d96f66ee7a0` |
+| Source archive | `singularity-native-windows-option2-SOURCE-ONLY.zip` |
+| Archive SHA-256 | `be465e585cff47730c17ed904cfb5016e6fc5a7b32fca894156e8a3689c8ecfb` |
+| Archive files | 955 (5,395,868 bytes) |
+| WiX | 6.0.2, provisioned into a temporary tool path by the build script |
+| Toolchain | `x86_64-pc-windows-msvc` |
+| Install root | `%LOCALAPPDATA%\Singularity\Fleet861RC` |
+| Package identity | 0.5.2.0, ProductCode `D8737523-4311-477E-B1E6-E8CA69714C3F`, UpgradeCode `7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61` |
+
+The package is one self-contained file (embedded CAB) and upgrades 0.5.1.0 in
+place through the shared UpgradeCode.
+
+## What this candidate contains
+
+- **A working embedded RepoQL Control Panel.** The dashboard resolves the panel
+  origin from the running host's own bind record
+  (`<workspace>/.repoql/cache/dashboard-bind.json`) or from an explicit
+  `SINGULARITY_REPOQL_PANEL_ORIGIN`, instead of assuming `127.0.0.1:41005`.
+  RepoQL mints the listener on a dynamic port; on a machine that also runs the
+  installed product those ports differ (52511 vs 59796 here), so the constant
+  pointed at nothing or at the other workspace's panel. The proxy, its WebSocket
+  path and its redirect boundary all use the resolved origin.
+- **The installed dashboard opens signed in.** `SINGULARITY_LOCAL_ACCOUNT_AUTH=1`
+  and a default `auto-local` mode come from the RC launcher, matching the
+  production host; a `password` mode remains an explicit choice.
+- **Five local backends start from the candidate's own tree**: the RepoQL host
+  over an RC-owned workspace, MemoryCore + MemoryPanel, the owner identity, the
+  Kanzo board on an RC home/port, and the Claude Office service on RC state.
+- Auto-local sign-in, Setup health + repair, the Kanzo-claim MCP server, the
+  headless OpenMausBot adapter, the native memory stack module and the password
+  embed boundary for all four panels.
+
+## Verified on windows241
+
+| Exercise | Result |
+|---|---|
+| Upgrade 0.5.1.0 → 0.5.2.0 from a folder holding only the MSI | `msiexec` exit 0; ARP 0.5.2.0; installed source carries the resolver |
+| Uninstall | exit 0; ARP gone; payload removed; `state\`/`workspace\` preserved |
+| Clean reinstall | exit 0; 1,263 installed files; ARP 0.5.2.0 |
+| Installed payload vs packaged archive | 957/957 members identical, 0 missing, 0 extra |
+| Auth acceptance, auto-local, `-Ttl 30` | 18 pass / 0 fail / 0 not tested |
+| Auth acceptance, password, `-Ttl 30` | 20 pass / 0 fail / 0 not tested |
+| Functional data and panels | `/api/status` 2,225 files, semantic 100 %; Control Panel document + 66 KB asset; Tencent, Office, Kanzo panels 200; Kanzo write through the proxy created, read back and deleted |
+| Python batteries | dashboard 223 (1 skipped), rc-services 30, provision 14, memory 11 — all OK |
+
+## Defects fixed in this slice
+
+1. RepoQL Control Panel proxied a hard-coded port (`native_repoql_proxy_unconfigured`
+   then 502). Fixed by resolving the host's own listener; six new contracts.
+2. `Test-RCIsolation.ps1` failed `rc_port_free` on a port that refused every
+   connection, because `Get-NetTCPConnection` still listed a stale row with
+   owning pid 0. Occupancy is now decided by connecting.
+
+## Known limitations
+
+- The RepoQL host must be started from an interactive logon; a scheduled-task
+  start fails inside `rql serve` with `Win32Exception: Access denied` (the
+  installed product uses a stored-credential task that an unattended harness
+  cannot create).
+- The dockerhost-blocked firewall exercise was not re-run for this candidate.
+- `bootstrapper/source.zip` is a stale tracked artifact, unused by the build.
+- Anthropic/model API account authorization is still an external step for a live
+  bot reply.
+
+---
+
+# Earlier candidates (history)
+
+The sections below document the 0.3.0.0 candidate and its slice. They are kept
+because the defect list and the packaging decisions still explain the current
+authoring (`MediaTemplate EmbedCab="yes"`, perUser scope, the deferred
+`__pycache__` cleanup action, and the ARP observation).
+
+# Release notes — Singularity RepoQL Windows RC2 (0.3.0.0)
 Local, unsigned, unpublished release candidate. Built from branch `rc-fleet893`
 (`ba00658` plus this slice's commits) on windows241 with the repository's own
 `installer/build-msi.ps1`. Nothing was pushed, tagged or signed, and Drive was

@@ -1,67 +1,90 @@
-# Windows RC2 — 18-row acceptance matrix
+# Windows RC — 18-row acceptance matrix (0.5.2.0)
 
 Scope: local MSI build, isolated RC lifecycle, test batteries, release
 paperwork. Machine: windows241 (`ali3nz\ben`, PowerShell 5.1). Install root:
-`C:\Users\Ben\AppData\Local\Singularity\Fleet861RC`. Every row names the raw log
-that proves it; logs are in `evidence-msi/` (and copied into the run
-directory's `evidence/`).
+`C:\Users\Ben\AppData\Local\Singularity\Fleet861RC`. Branch `rc-fleet893`.
+Every row names the raw log that proves it; logs are in
+`work/singularity-windows-claude-omb-20261105/evidence-msi-remediation/`
+(numbered; the low 60s are this continuation).
 
 | # | Acceptance item | Result | Evidence |
 |---|---|---|---|
-| 1 | Source archive regenerated from branch HEAD by the repository generator, with release scan | PASS — 949 files, 5,364,245 B, sha256 `282fbc77…`; `scan_source_archive` accepted it | `06-msi-build-foreground.log`, generator stdout |
-| 2 | Archive contains the branch's work, not the stale snapshot | PASS — `headless.py`, `rc_stack.py`, `test_embed_password_mode.py` present; `server.py` sha `202aeabe` with 14 auto-local references (old archive: `4b5ac325`, 0) | archive inspection in run notes, `04-installed-rc-source.log` |
-| 3 | Both source pins updated to the new archive | PASS — `build-msi.ps1` `$expectedSourceHash`, `prepare_msi_payload.py` `SOURCE_SHA256` | `git diff` review recorded before commit |
-| 4 | MSI built by the verified entry point only, local, no Burn/signing/publication | PASS — `build-msi.ps1` exit 0; WiX 6.0.2 self-provisioned; MSI 205,752 B sha256 `42ef699f…`; no bundle built | `06-msi-build-foreground.log` |
-| 5 | Payload receipt binds the MSI to the archive | PASS — `INSTALLER-PAYLOAD-RECEIPT.json` records `source_zip_sha256` `282FBC77…`, 951 source entries, four binary hashes | `06-msi-build-foreground.log`, `17-reinstall-lifecycle.log` |
-| 6 | Rust dependency provenance gate | PASS — `readyForRustDependencyReview: true`, exit 0 | `06-msi-build-foreground.log` |
-| 7 | Rust unit tests for the three crates | PASS — desktop-bridge 20, rust-supervisor 0 (no tests), unified-gateway 31; exit 0 each | `07-rust-cargo-tests.log` |
-| 8 | Upgrade over the installed 0.2.0.0 RC | PASS — `msiexec` exit 0; ARP 0.2.0.0 `{4E7B62D5…}` → 0.3.0.0 `{FA5CBA0A…}`; source 951 → 968 (951 payload + 17 runtime `.pyc`); `server.py` now `202aeabe`; `state\token` preserved | `15-upgrade-lifecycle.log` |
-| 9 | Clean uninstall | PASS with defect D3 — `msiexec /x` exit 0; ARP gone from HKCU/HKLM/WOW6432Node; `bin\`, `Start-Here.ps1`, `README-MSI.md`, `Configure-Singularity.ps1` gone; residual files 17, **all** `__pycache__`, 0 non-payload product files | `16-uninstall-lifecycle.log`, `17-reinstall-lifecycle.log` |
-| 10 | Clean reinstall | PASS — residual root removed, `msiexec /i` exit 0; 951 installed = 951 archive entries, **0 extras, 0 missing**; four binaries present; four helper scripts present; fresh state | `17-reinstall-lifecycle.log` |
-| 11 | `Test-RCIsolation.ps1` from its verified location | PASS 17/18 — the single failure is `rc_not_already_in_arp`, a pre-install-only assertion that is necessarily false once the RC is installed; every isolation check (distinct UpgradeCode/ProductCode/install dir/bundle, perUser scope, LOCALAPPDATA root, disjoint live roots, non-production port, launch target, 7/7 live tasks) passes | `18-rc-isolation.log` |
-| 12 | `lane-a/evidence/rc-http-suite.ps1` from its verified location | **27 pass / 10 fail**, each failure itemised: `root_anon` (expects sign-in page, gets auto-local session), `api_status_anon` 401→502, `api_health_anon` 401→200, `api_panels_anon` 401→404, `api_omb_anon` 401→404, `cookie_forged` 401→502, `api_status_bearer_with_origin` 401→502, `api_status_bearer_wrong` 401→502, `api_after_logout` 401→502, `listener_released_after_stop`. All ten assert *unauthenticated* behaviour or a suite-owned server stop; the RC2 default authenticates the first request and its backend gateways are not running, so 200/502 are the correct answers in this mode. Password-mode boundaries are covered instead by `test_auth_modes.py`, `test_local_account.py` and `test_embed_password_mode.py` (all pass) | `23-rc-http-suite.log`, `24`, `25`, `26` |
-| 13 | Python unit batteries | PASS — embed 5, auth_modes 14, local_account 5, gateway_locality 9, provision 13, memory 10, openmausbot 13; all `OK`, exit 0 | `12-python-suites-unittest.log`, `14-session-and-kanzo-suites.log` |
-| 14 | Short-TTL session behaviour | PASS — `test_auth_modes.py` (TTL/expiry assertions) 14/14; live cookie contract observed `HttpOnly; SameSite=Strict; Max-Age=28800` | `14-session-and-kanzo-suites.log`, `21-rc-foreground-serve.log` |
-| 15 | Node kanzo-claim suite | PASS — 17 tests, 17 pass, 0 fail | `14-session-and-kanzo-suites.log` |
-| 16 | Installed RC left in default auto-local mode | PASS — with `SINGULARITY_LOCAL_ACCOUNT_AUTH=1` and fresh state, `GET /` returns 200 and a `srq_session` cookie with no credentials; server survives session teardown | `19`, `21`, `22-rc-detached-start.log` |
-| 17 | dockerhost-blocked test with exclusive RC executable path and guaranteed cleanup | PASS — rule scoped to the RC's interpreter `…\Programs\Python\Python312\python.exe` (not the production `…\Singularity\Runtime\python\python.exe`) + remote `192.168.1.240`; probe `BLOCKED PermissionError` while `127.0.0.1:18200` still `REACHED` and the dashboard answered 200; rule removed in `finally`, probe `REACHED` again, `RC2-*` rules back to 0 | `27-firewall-dockerhost-block.log` |
-| 18 | Production inventory unchanged, paperwork complete, committed without publication | PASS — 7/7 `Singularity-*` tasks before and after, production ports untouched, production ARP untouched; scans and documents below; commits local only, no remote configured | `27-firewall-dockerhost-block.log`, `09`, `10`, `git log` |
+| 1 | Source archive regenerated from branch HEAD by the repository generator | PASS — Option 2 variant, 955 files, 5,395,868 B, sha256 `be465e58…8ecfb`; the 0.5.1.0 pin `22539c92…` is replaced in both pin sites | `60-msi-build-052.log`, generator stdout |
+| 2 | Archive carries the branch's work, not a stale snapshot | PASS — archive members `dashboard/repoql_native_auth.py`, `dashboard/server.py`, `dashboard/test_repoql_panel_origin.py`, `native/windows/rc_services.py` hash-equal to the committed tree; `installer/` is deliberately excluded from the archive | hash comparison in run notes |
+| 3 | Both source pins and the package identity updated | PASS — `build-msi.ps1` `$expectedSourceHash`, `prepare_msi_payload.py` `SOURCE_SHA256`, `SingularityRepoQLRC-v4.wxs` version 0.5.2.0 + ProductCode `D8737523…`, `README-MSI.md` | `git show f366b8d` |
+| 4 | MSI built by the verified entry point only — local, unsigned, no Burn, no publication | PASS — `build-msi.ps1` exit 0 in 1.3 min; WiX 6.0.2 self-provisioned; MSI 7,480,295 B sha256 `006C9A7F…66EE7A0`; no bundle produced | `60-msi-build-052.log` |
+| 5 | Payload receipt binds the MSI to the archive | PASS — `singularity-msi-build/2`, `source_zip_sha256` `BE465E58…`, `media: embedded-cab`, one distribution file with its hash | `60-msi-build-052.log` (`C:\rc893-out7\Singularity-RepoQL-MSI-BUILD-RECEIPT.json`) |
+| 6 | Rust dependency provenance gate | PASS — `singularity-rust-lock-release-gate/v1`, three crates, locks valid, exit 0 | `60-msi-build-052.log` |
+| 7 | Rust unit tests for the three crates | PASS — `rust_tests_skipped: false` in the build receipt; the per-crate summaries are in the same log | `60-msi-build-052.log` |
+| 8 | Major upgrade over the installed 0.5.1.0 from a folder holding only the MSI | PASS — `msiexec` exit 0; ARP `{FD77347A…}` 0.5.1.0 → `{D8737523…}` 0.5.2.0; installed files 1263 → 1263; installed source carries the resolver, the bind-record read and the embed env, and no hard-coded `127.0.0.1:41005` | `62-upgrade-051-to-052.log` |
+| 9 | Clean uninstall | PASS — `msiexec /x` exit 0; ARP entry gone; `source\` payload removed (0 files); RC `workspace\` state preserved | `57-lifecycle-final-uninstall-reinstall.log` |
+| 10 | Clean reinstall from the distribution-only folder | PASS — `msiexec /i` exit 0; ARP 0.5.2.0; 1263 installed files; distribution folder held only the MSI | `57-lifecycle-final-uninstall-reinstall.log` |
+| 11 | `Test-RCIsolation.ps1` from its verified location | PASS with a corrected check — 15/17; `rc_port_free` **now passes** after D10 below; the two remaining failures are pre-install-only assertions (`rc_state_root_absent`, `rc_not_already_in_arp`) that are necessarily false on a machine where the RC is installed. Every isolation assertion passes: distinct UpgradeCode/ProductCode/install dir/root, perUser scope, LOCALAPPDATA root, disjoint live roots, non-production port, 7/7 live tasks | `58-rc-isolation-post-install.log` |
+| 12 | Mode-aware HTTP/auth acceptance in **auto-local**, with `-Ttl 30` | PASS — 18 pass / 0 fail / 0 not tested, including `repoql_panel` (handshake 200 → panel 200, 12,434 B), `session_ttl_expiry_auto_local`, logout/re-issue, forged cookie, Origin and custom-header boundaries | `49-auth-auto-local-052-ttl.log` |
+| 13 | Mode-aware HTTP/auth acceptance in **password**, with `-Ttl 30` | PASS — 20 pass / 0 fail / 0 not tested: sign-in, wrong password (401 `invalid_credentials`), foreign-Origin sign-in (403), issued-session acceptance, `session_ttl_expiry`, logout revocation (401 on the same cookie), all four panels | `50-auth-password-052-ttl.log` |
+| 14 | Python unit batteries at HEAD | PASS — dashboard 223 tests (1 skipped), native/windows 30, native/windows/provision 14, memory 11; all `OK` | `63-unit-suites-052.log` |
+| 15 | Functional dashboard/API data | PASS — `/api/status` 200 from the RC RepoQL host: `ready/queryable/searchable`, 2,225 files, 0 pending/failed/stale, semantic 100 %; `/api/setup/health` 200 with 5 rows; Tencent panel 561 B app shell; Office panel 18,196 B; Kanzo board `/api/board` 200 with the four statuses; login capability never returned to the browser (303, no `#k=`/`t=`) | `51-functional-checks-052.log` |
+| 16 | Functional official RepoQL Control Panel and one write through the proxy | PASS — panel document `RepoQL Dashboard` + `/embed/repoql/assets/store.js` 200 (66,481 B `text/javascript`); Kanzo project+task created through the dashboard proxy, read back, then deleted, board restored to 0 projects / 0 tasks | `56-functional-panel-write-acceptance-v3.log` |
+| 17 | MSI/source correspondence | PASS — every one of the 957 packaged archive members is present in the installed `source\` and byte-identical (957 identical, 0 missing, 0 different, 0 unexpected extra); 5 staged binaries recorded with their hashes | `61-msi-source-correspondence-052.log` |
+| 18 | Production inventory unchanged; local commits only | PASS — the seven `Singularity-*` tasks identical before and after install/uninstall/reinstall; production ports 18100/18101/18126/18128 never bound (idle before and after); production ARP and `WindowsNative\current` untouched; commits are local only (no remote configured) | `57-lifecycle-final-uninstall-reinstall.log`, `git log` |
 
-## Tracked-file scans (W8)
+Not re-run for 0.5.2.0 (recorded, not claimed): the dockerhost-blocked firewall
+exercise (row 17 of the 0.3.0.0 matrix) was proven for the previous candidate and
+is unchanged by this slice; re-running it needs a temporary firewall rule, which
+this continuation did not add. Everything else above is measured on 0.5.2.0.
 
-`git ls-files` = 980 files, 16.7 MiB total for the whole tree.
+## Defects found and fixed in this continuation
+
+| # | Defect | Cause | Resolution |
+|---|---|---|---|
+| D8 | Installed candidate issued no session; every `/api/…` answered `401 dashboard_secret_required` | The RC launcher never set `SINGULARITY_LOCAL_ACCOUNT_AUTH`, so `dashboard/server.py` built no `LocalAccount` (production's host does set it) | `panel_env()` sets it and defaults the mode to `auto-local`; two contracts. Commit `effff46` |
+| D9 | The RepoQL Control Panel answered 503 `native_repoql_proxy_unconfigured`, then 502 | Two causes: `REPOQL_NATIVE_EMBED_URL` was never advertised, and the upstream was the constant `127.0.0.1:41005` while RepoQL mints its panel listener on a **dynamic** port recorded in `<workspace>/.repoql/cache/dashboard-bind.json` (this machine: production 52511, RC 59796) | Resolver `panel_origin()` reads the bind record (or `SINGULARITY_REPOQL_PANEL_ORIGIN`), the proxy and redirect boundary use it, the RC advertises the same-origin embed. Commit `77ff3fa`; 6 new contracts |
+| D10 | `Test-RCIsolation.ps1` failed `rc_port_free` on a port that refused every connection | The check trusted `Get-NetTCPConnection`, which still listed a LISTENING row with owning pid 0 after the process exited | Occupancy is decided by connecting. Commit `a367e62` |
+
+### Harness defects found and fixed (not product defects)
+
+The auth suite reported every post-sign-in request as 401. A raw-socket probe of
+the *same* cookie value answered `authenticated: true`, while
+`Invoke-WebRequest -Headers @{Cookie=…}` reached the server without it: Windows
+PowerShell 5.1 manages cookies only through its own container and silently drops
+a caller-supplied `Cookie` header. Two further suite errors were fixed with it:
+the TTL case waited 6 s for a 30 s floor (`session_ttl()` clamps to `MIN_TTL`),
+and the wrong-password case ran before an account existed (400
+`account_not_configured` instead of 401 `invalid_credentials`). The suite now
+speaks HTTP over `TcpClient`, waits `max(30, Ttl) + 6`, and orders the
+wrong-password test after setup. Evidence for the diagnosis and each iteration:
+`64-installed-cookie-diagnostic.log` (value-free cookie probe: the same value is
+`authenticated: true` over a raw socket and invisible through
+`Invoke-WebRequest`), `52`, `53`, `54`, `55` (contract discovery for the panel
+asset and the Kanzo write), then the acceptance runs `49`, `50`, `56`.
+
+## Tracked-file scans
 
 | Check | Result |
 |---|---|
-| Private-key / cloud-token patterns over tracked files | 4 files matched, all deliberate fixtures: `adapters/claude-code/memory-hook.test.mjs` (redaction test), `connectors/kanzo/tools/build_suite.py` (`hunter2secret` sample), `connectors/kanzo/tools/pin.py` (forbidden-value list), `harness/kit/orchestrate.mjs` (`dummy12345678`, `secret-in-evidence` fixture). No live credential |
-| `Bearer <token>` literals | 6 matches, all fixtures/assertions (`fixture0123456789`, `dummy…`, local probe headers) |
-| Binary / non-text tracked files | 3: `bootstrapper/source.zip` (5,306,179 B), `docs/assets/memory-architecture.png`, `native/windows/assets/singularity-dashboard.ico` |
-| Files over 512 KiB | `bootstrapper/source.zip`, `docs/assets/memory-architecture.png`, `harness/kit/orchestrate.mjs` |
-| Checksums | The RC2 archive carries a regenerated `SHA256SUMS` (949 entries) and `NATIVE_WINDOWS_SOURCE_MANIFEST.json` (950 entries incl. itself); MSI sha256 recorded in the release notes |
-
-`bootstrapper/source.zip` is a **stale tracked artifact**: a 934-file copy of the
-2026-11-05 snapshot (`a7b18e7e…`, zip of `e8392ba8…`), committed in the baseline
-commit `63215e6`. It is not what the MSI builds from and it does not match this
-branch. It should either be refreshed from the RC2 archive in a follow-up or
-removed from version control; this slice leaves it untouched and documents it so
-nobody mistakes it for the release source.
-
-## Security incident (row 18 supporting note)
-
-Nine RC `srq_session` values in `evidence-msi/26-…` were exposed in tool output
-and are treated as compromised. Revocation and redaction are recorded in logs
-`30` (value-free revocation) and by re-scanning `21`, `23`, `26` for residual
-values; all 55 values are now `[REDACTED]` and every test outcome is preserved.
-Sessions are memory-only (`dashboard/local_account.py:42`), the holding processes
-were terminated, and state was emptied. Production was not touched.
+| Private-key / cloud-token patterns over tracked files | 4 files matched, all deliberate fixtures (`memory-hook.test.mjs` redaction test, `connectors/kanzo/tools/build_suite.py` sample, `connectors/kanzo/tools/pin.py` forbidden list, `harness/kit/orchestrate.mjs` fixtures). No live credential |
+| `Bearer <token>` literals | fixtures/assertions only, unchanged by this slice |
+| Binary / non-text tracked files | `bootstrapper/source.zip` (stale, documented), `docs/assets/memory-architecture.png`, `native/windows/assets/singularity-dashboard.ico` |
+| Session values in this continuation's logs | none — every log prints cookie name/length/flags only; the diagnostic prints status and shapes, never a value (the 43-character length and the flag set are reported, never the value) |
+| Archive checksums | the archive carries a regenerated `SHA256SUMS` and `NATIVE_WINDOWS_SOURCE_MANIFEST.json` (957 entries) |
 
 ## Upstream reconciliation
 
 | Item | Value |
 |---|---|
-| Branch | `rc-fleet893`, no remote configured (local only) |
+| Branch | `rc-fleet893`, **no remote configured** (local only) |
 | Base | `5aaf766` (Fleet861 RC 0.2.0.0 reviewed tree) |
-| Commits ahead of base before this slice | 4 integrations commits, tree clean at `ba00658` |
-| This slice | Pin/identity change + documentation, committed path-scoped after re-reading `git diff` |
-| Upstream divergence | None claimed. No upstream fetch/push/tag was performed and no remote exists, so nothing can be reported as merged |
-| Files changed by this slice | `installer/build-msi.ps1`, `installer/prepare_msi_payload.py`, `installer/SingularityRepoQLRC-v2.wxs`, plus `docs/RELEASE-NOTES-RC2.md`, `docs/WINDOWS-RC2-ACCEPTANCE-MATRIX.md`, `docs/WINDOWS-RC2-HANDOFF.md` |
+| Commits added by this continuation | `add6601`, `effff46`, `1d9a89a`, `28070d2`, `77ff3fa`, `f366b8d`, `a367e62` (+ the documentation commit) |
+| Upstream divergence | None claimed: no fetch, push or tag was performed and no remote exists |
+| Files changed in the 0.5.2.0 slice | `dashboard/repoql_native_auth.py`, `dashboard/server.py`, `dashboard/test_repoql_panel_origin.py` (new), `native/windows/rc_services.py`, `native/windows/test_rc_services.py`, `installer/build-msi.ps1`, `installer/prepare_msi_payload.py`, `installer/SingularityRepoQLRC-v4.wxs`, `installer/README-MSI.md`, `installer/Test-RCIsolation.ps1`, plus these documents |
+
+## Final receipt
+
+| Field | Value |
+|---|---|
+| Commit | `a367e62` + the documentation commit on top (recorded in the handoff) |
+| Source archive | `singularity-native-windows-option2-SOURCE-ONLY.zip`, 955 files, 5,395,868 B, SHA-256 `be465e585cff47730c17ed904cfb5016e6fc5a7b32fca894156e8a3689c8ecfb` |
+| MSI | `Singularity-RepoQL-Windows-Fleet861RC-0.5.2.0-x64.msi`, 7,480,295 B, SHA-256 `006c9a7fa24f7516537b8dd6aa68e5e0177a0d3539d7ebd740904d96f66ee7a0` |
+| Package identity | 0.5.2.0, ProductCode `D8737523-4311-477E-B1E6-E8CA69714C3F`, UpgradeCode `7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61` |
+| Install root | `%LOCALAPPDATA%\Singularity\Fleet861RC` (perUser, no elevation) |
+| Publication | none — local, unsigned, unpublished |

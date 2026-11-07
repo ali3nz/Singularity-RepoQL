@@ -1,99 +1,93 @@
-# Windows RC2 handoff sheet
+# Windows RC 0.5.2.0 — handoff
 
-State at handoff: RC 0.3.0.0 **installed** on windows241 under
-`C:\Users\Ben\AppData\Local\Singularity\Fleet861RC`, dashboard running detached
-on loopback `127.0.0.1:18200` in default auto-local mode, production untouched.
+Local, unsigned, unpublished release candidate. Branch `rc-fleet893` (no remote
+configured). Everything below is measured on windows241; nothing is claimed for
+another machine or for an upstream merge.
 
-## Where things are
+## What the package is
 
-| Thing | Path |
+| Field | Value |
 |---|---|
-| MSI | windows241 `%TEMP%\rc2-out\Singularity-RepoQL-Windows-Fleet861RC-0.3.0.0-x64.msi` (sha256 `42ef699f…`) |
-| Build receipt | windows241 `%TEMP%\rc2-out\Singularity-RepoQL-MSI-BUILD-RECEIPT.json` |
-| MSI install logs | windows241 `%TEMP%\rc2\msi-upgrade.log`, `msi-uninstall.log`, `msi-reinstall.log` |
-| RC tree | windows241 `%LOCALAPPDATA%\Singularity\Fleet861RC` (`source\`, `bin\`, helper scripts) |
-| RC state | windows241 `%LOCALAPPDATA%\Singularity\Fleet861RC\state` |
-| RC logs | windows241 `%LOCALAPPDATA%\Singularity\Fleet861RC\logs` (`rc2-serve.out`, `http-suite-rc2final.txt`) |
-| Launcher used | windows241 `%LOCALAPPDATA%\Singularity\Fleet861RC\pkg\rc2_serve.py` (spawns the server detached) |
-| Source archive | dockerhost `work/singularity-windows-claude-omb-20261105/dist-rc2/singularity-native-windows-option2-SOURCE-ONLY.zip` |
-| Repo tree | dockerhost `work/singularity-windows-claude-omb-20261105/tree`, branch `rc-fleet893` |
-| Raw logs | `work/singularity-windows-claude-omb-20261105/evidence-msi/01..27` and the run directory's `evidence/` |
+| MSI | `Singularity-RepoQL-Windows-Fleet861RC-0.5.2.0-x64.msi` |
+| Bytes / SHA-256 | 7,480,295 / `006c9a7fa24f7516537b8dd6aa68e5e0177a0d3539d7ebd740904d96f66ee7a0` |
+| Source archive | `singularity-native-windows-option2-SOURCE-ONLY.zip`, 955 files, 5,395,868 B, SHA-256 `be465e585cff47730c17ed904cfb5016e6fc5a7b32fca894156e8a3689c8ecfb` |
+| Identity | Version 0.5.2.0, ProductCode `D8737523-4311-477E-B1E6-E8CA69714C3F`, UpgradeCode `7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61` |
+| Scope | perUser, no elevation; install root `%LOCALAPPDATA%\Singularity\Fleet861RC` |
+| Media | one embedded CAB — the MSI alone is the distribution |
 
-## How to reproduce
+## What changed since 0.5.1.0
+
+1. **The RepoQL Control Panel now points at the host that serves it.** RepoQL
+   mints its panel listener on a dynamic port and records the origin in
+   `<workspace>/.repoql/cache/dashboard-bind.json`; the dashboard proxied the
+   constant `127.0.0.1:41005`, which on this machine is no host at all
+   (production host 52511, RC host 59796). `panel_origin()` resolves
+   `SINGULARITY_REPOQL_PANEL_ORIGIN` or the bind record, the proxy, the WebSocket
+   path and the redirect boundary all use it, and the RC launcher advertises the
+   same-origin embed. The panel went from 503/502 to 200 with its own assets.
+2. **`Test-RCIsolation.ps1` decides port occupancy by connecting**, not by a
+   socket-table row that Windows can leave behind with owning pid 0.
+3. Carried over from 0.5.1.0: the installed dashboard owns its local account
+   (`SINGULARITY_LOCAL_ACCOUNT_AUTH=1`, default mode `auto-local`) and the five
+   backends start from the candidate's own tree.
+
+## How it was proven (logs in `evidence-msi-remediation/`)
+
+| Claim | Log |
+|---|---|
+| Build from the committed tree, embedded CAB, WiX 6.0.2, Rust gate + tests | `60-msi-build-052.log` |
+| Upgrade 0.5.1.0 → 0.5.2.0 from a distribution-only folder | `62-upgrade-051-to-052.log` |
+| Uninstall, clean reinstall, production inventory unchanged | `57-lifecycle-final-uninstall-reinstall.log` |
+| RC isolation gate (with the post-install pre-install assertions named) | `58-rc-isolation-post-install.log` |
+| Auth acceptance, auto-local, `-Ttl 30` (expiry + logout) | `49-auth-auto-local-052-ttl.log` (18/0/0) |
+| Auth acceptance, password, `-Ttl 30` (expiry + logout) | `50-auth-password-052-ttl.log` (20/0/0) |
+| Real data: RepoQL status, setup health, three panels | `51-functional-checks-052.log` |
+| Official Control Panel document + asset, Kanzo write cycle through the proxy | `56-functional-panel-write-acceptance-v3.log` (7/0) |
+| Installed payload vs archive, byte for byte | `61-msi-source-correspondence-052.log` (957/957) |
+| Python batteries at HEAD | `63-unit-suites-052.log` |
+| Post-reinstall smoke | `59-post-reinstall-smoke.log` |
+
+## What an operator should know
+
+- **State is preserved across uninstall.** `state\`, `workspace\`, `memory\` and
+  the installed board's own home stay; only the packaged payload is removed.
+- **The RC needs an interactive logon** to start the RepoQL host. A
+  `rql serve` launched from a scheduled task exits with
+  `Win32Exception: Access denied` before its startup phase, for both the
+  user-local and the installed binary; the same command from an ordinary logon
+  starts in ~2 s. This is a harness limitation of the installed product's own
+  task (`Interactive/Background`, stored credentials), not something this
+  candidate can create unattended.
+- **Ports**: dashboard 18200, Kanzo 18202, Office 18203, Memory core/panel
+  18221/18226, RepoQL panel = whatever that workspace's host binds (read from the
+  bind record). Production 18100/18101/18126/18128 are never bound.
+- **Isolation gate sequencing**: run `Test-RCIsolation.ps1` *before* the first
+  install. After an install it correctly reports `rc_state_root_absent` and
+  `rc_not_already_in_arp` as failed; that is the gate describing a machine that
+  already has the candidate, not a packaging fault.
+- **No secrets in this tree or in the logs.** Session values are never printed;
+  the RepoQL login capability is never returned to the browser (the launch route
+  answers 303 with no `#k=`/`t=`).
+
+## Open items (external only)
+
+- Anthropic/model API account authorization for a live bot reply.
+- The dockerhost-blocked firewall exercise was not re-run for 0.5.2.0; it was
+  proven for the previous candidate and no rule was added in this continuation.
+- `bootstrapper/source.zip` remains a stale tracked artifact (documented, not
+  used by the build).
+
+## Resume
 
 ```powershell
-# regenerate the archive from the tree (dockerhost or any host with node)
-python3 native/windows/build_source_variants.py --output-dir <out> --variant 2
+# install (distribution folder holds only the MSI)
+msiexec /i .\Singularity-RepoQL-Windows-Fleet861RC-0.5.2.0-x64.msi /qn /norestart
 
-# build (windows241, MSVC + cargo + dotnet + py on PATH; vcvars64 imported)
-powershell -File installer\build-msi.ps1 -SourceZip <zip> -BuildRoot <new dir> `
-  -OutputDirectory <out> -WxsFile installer\SingularityRepoQLRC-v2.wxs `
-  -MsiFileName Singularity-RepoQL-Windows-Fleet861RC-0.3.0.0-x64.msi
+# start the five backends, then the dashboard
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" `
+  "$env:LOCALAPPDATA\Singularity\Fleet861RC\source\native\windows\rc_services.py" launch
 
-# lifecycle
-msiexec /i <msi> /qn /norestart /l*v upgrade.log
-msiexec /x {FA5CBA0A-50E7-521E-926E-DC517FB2993F} /qn /norestart /l*v uninstall.log
-msiexec /i <msi> /qn /norestart /l*v reinstall.log
+# re-run the acceptance in either mode
+powershell -NoProfile -ExecutionPolicy Bypass -File .\rc-auth-suite.ps1 -Mode auto-local -Ttl 30
+powershell -NoProfile -ExecutionPolicy Bypass -File .\rc-auth-suite.ps1 -Mode password -Ttl 30
 ```
-
-Launch the RC server only through a detached launcher: a process started
-directly by an SSH session is killed when that session closes (win32-OpenSSH
-job object). Confirm readiness with an HTTP probe, not with
-`Get-NetTCPConnection`, which under-reports this listener.
-
-Stop command: `Stop-Process -Id <pid of the python running server.py>` (or
-`Get-CimInstance Win32_Process | ? CommandLine -match 'Fleet861RC\\source\\dashboard\\server.py'`).
-
-## Security notice for the director
-
-Nine RC `srq_session` values from `evidence-msi/26-rc-http-suite-fresh-account.log`
-were exposed in tool output during this slice and are considered compromised.
-They are dead: the RC keeps sessions only in memory
-(`dashboard/local_account.py:42`), and both processes that held them (launcher
-`11844`, interpreter `3256`) were terminated, state emptied and the server
-restarted (`20660`/`26772`). All 55 session values in logs `21`, `23` and `26`
-are now `[REDACTED]` with test outcomes unchanged; reporting prints cookie name,
-length and flags only. Log `30` is the value-free revocation record. No
-production session, service or scheduled task was touched, and no auth check was
-relaxed.
-
-## What is verified
-
-Upgrade over 0.2.0.0, clean uninstall, clean reinstall, isolation gate, Rust and
-Python and Node batteries, auto-local first navigation, and the firewall probe
-that proves the RC works with the fleet host unreachable while leaving the
-production inventory (7 scheduled tasks, production ports, production ARP)
-unchanged. Full row-by-row evidence is in
-`docs/WINDOWS-RC2-ACCEPTANCE-MATRIX.md`.
-
-## What is not verified, or is left for the director
-
-1. **Anthropic login** on windows241 — the only external step. Until someone
-   signs in, a bot model reply returns `Not logged in · Please run /login`.
-2. **Live panel rendering** was verified over HTTP, not in a browser; no visual
-   inspection of the tencent/office/kanzo/RepoQL panels was performed.
-3. **Backend gateways** (`unified-repoql-control`, memory core, Office/Ghost)
-   were not started, so auth-gated proxy endpoints answer 502. This is why ten
-   `rc-http-suite` assertions fail in auto-local mode; see the matrix row 12.
-4. **Uninstall bytecode residue** (defect D3): `msiexec /x` cannot remove
-   runtime `__pycache__` files. A follow-up should set
-   `PYTHONDONTWRITEBYTECODE=1` in the launcher or add a cleanup action.
-5. **ARP hive** (defect D4): the RC registers machine-wide when installed from
-   an elevated session, as the 0.2.0.0 package did.
-6. **`bootstrapper/source.zip`** is a stale tracked snapshot and is not the
-   source this MSI was built from.
-7. **Signing, Burn bundle, Drive and publication** were deliberately not
-   touched; nothing was pushed or tagged.
-8. **Python suites** ran on dockerhost Linux, not on Windows.
-9. **Incident S1** (exposed RC session values) is contained and revoked; if the
-   director needs session-level proof rather than mechanism-level proof, the
-   supporting facts are: memory-only store, dead processes, emptied state, new
-   process identity in log `30`.
-
-## Claims NOT made
-
-No product `runtimeVerified` / `native_runtime_accepted` attestation is claimed:
-the payload receipt still records `native_runtime_accepted: false`, and the build
-receipt records `product_runtime_accepted: false`. This slice proves packaging,
-lifecycle, and local HTTP/window behaviour — not a full native runtime
-acceptance.
