@@ -12,7 +12,7 @@ from urllib.error import HTTPError
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from local_account import LocalAccount, AccountRefused
+from local_account import LocalAccount, AccountRefused, COOKIE_TTL, MIN_TTL, session_ttl
 from repoql_bridge import Config
 from server import build_server
 
@@ -130,6 +130,19 @@ class HTTPAccountBoundary(unittest.TestCase):
         self.assertEqual(self.request('/api/ghost/plans',method='POST',cookie=cookie,origin=False)[0],403)
         self.assertEqual(self.request('/app.js',cookie=None,origin=False)[0],401)
 
+
+    def test_session_ttl_can_only_shorten_the_session(self):
+        # The acceptance switch shortens a live session so expiry can be proven
+        # against the real server; it can never extend the product window.
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('SINGULARITY_DASHBOARD_SESSION_TTL', None)
+            self.assertEqual(session_ttl(), COOKIE_TTL)
+            os.environ['SINGULARITY_DASHBOARD_SESSION_TTL'] = '5'
+            self.assertEqual(session_ttl(), MIN_TTL)
+            os.environ['SINGULARITY_DASHBOARD_SESSION_TTL'] = '999999'
+            self.assertEqual(session_ttl(), COOKIE_TTL)
+            os.environ['SINGULARITY_DASHBOARD_SESSION_TTL'] = 'not-a-number'
+            self.assertEqual(session_ttl(), COOKIE_TTL)
 
 if __name__ == '__main__':
     unittest.main()

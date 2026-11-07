@@ -124,7 +124,8 @@ def main() -> int:
         shutil.copy2(guidance, a.output / guidance.name)
         # The bootstrapper's Launch button opens this interactive, current-user
         # wizard. No key values are passed through MSI properties or Burn logs.
-        for name in ('Configure-Singularity.ps1', 'Configure-Singularity.cmd', 'Readiness.ps1'):
+        for name in ('Configure-Singularity.ps1', 'Configure-Singularity.cmd', 'Readiness.ps1',
+                     'Start-Singularity.ps1'):
             shutil.copy2(Path(__file__).with_name(name), a.output / name)
         result = {'schema': 'singularity-msi-payload/1', 'source_zip_sha256': SOURCE_SHA256,
                   'source_file_count': source_count, 'binary_sha256': bin_hashes,

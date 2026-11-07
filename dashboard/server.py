@@ -40,7 +40,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit, urljoin, unquote
 
-from local_account import LocalAccount, AccountRefused, COOKIE_NAME as ACCOUNT_COOKIE_NAME, COOKIE_TTL as ACCOUNT_COOKIE_TTL
+from local_account import (LocalAccount, AccountRefused, session_ttl,
+                           COOKIE_NAME as ACCOUNT_COOKIE_NAME)
 from access import AccessVerifier
 from repoql_bridge import Config, RepoQL, UpstreamError, host_uptime_seconds, summarise_log
 from variant_features import features as variant_features, route_allowed as variant_route_allowed
@@ -749,7 +750,7 @@ class Handler(BaseHTTPRequestHandler):
         pending = getattr(self, '_pending_session', None)
         if pending:
             self.send_header('Set-Cookie', f'{ACCOUNT_COOKIE_NAME}={pending}; HttpOnly; '
-                             f'SameSite=Strict; Path=/; Max-Age={ACCOUNT_COOKIE_TTL}')
+                             f'SameSite=Strict; Path=/; Max-Age={session_ttl()}')
             self._pending_session = None
         super().end_headers()
 
@@ -1047,7 +1048,7 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError, TypeError, KeyError):
             self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
             return
-        self._account_response(HTTPStatus.OK, {'ok': True}, cookie=token, max_age=ACCOUNT_COOKIE_TTL)
+        self._account_response(HTTPStatus.OK, {'ok': True}, cookie=token, max_age=session_ttl())
 
     def _account_response(self, status: HTTPStatus, payload: dict, *, cookie: str, max_age: int) -> None:
         data = json.dumps(payload, separators=(',', ':')).encode('utf-8')

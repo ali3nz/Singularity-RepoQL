@@ -20,6 +20,10 @@ import time
 
 COOKIE_NAME = 'srq_session'
 COOKIE_TTL = 8 * 3600
+# Only ever shortens a session; the shape of the cookie (HttpOnly,
+# SameSite=Strict, Path=/) is unchanged. Used by short-TTL acceptance runs.
+TTL_ENV = 'SINGULARITY_DASHBOARD_SESSION_TTL'
+MIN_TTL = 30
 # Owner addendum A2: 'auto-local' is the RC default (silent loopback session);
 # 'password' keeps the original create-account flow as an explicit opt-in.
 AUTH_MODES = ('auto-local', 'password')
@@ -27,6 +31,22 @@ MODE_FILE = 'auth-mode.json'
 _PASSWORD_N = 1 << 14
 _USER_RE = re.compile(r'[A-Za-z][A-Za-z0-9_.-]{2,39}\Z')
 _COOKIE_RE = re.compile(r'(?:^|;\s*)srq_session=([A-Za-z0-9_-]{43,64})(?:;|$)')
+
+
+def session_ttl() -> int:
+    """Session lifetime in seconds, clamped to [MIN_TTL, COOKIE_TTL].
+
+    A configured value can only shorten a session, so this switch cannot be
+    used to extend or bypass the product's authentication window.
+    """
+    raw = os.environ.get(TTL_ENV, '').strip()
+    if not raw:
+        return COOKIE_TTL
+    try:
+        value = int(raw)
+    except ValueError:
+        return COOKIE_TTL
+    return max(MIN_TTL, min(value, COOKIE_TTL))
 
 
 class AccountRefused(ValueError):
@@ -190,7 +210,7 @@ class LocalAccount:
         with self.lock:
             now = self.clock()
             self.sessions = {k: exp for k, exp in self.sessions.items() if exp > now}
-            self.sessions[key] = now + COOKIE_TTL
+            self.sessions[key] = now + session_ttl()
         return value
 
     @staticmethod

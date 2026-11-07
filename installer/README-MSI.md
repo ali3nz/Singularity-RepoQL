@@ -36,3 +36,45 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-RCIsolation.ps1 -Rece
 ```
 
 Exit code `0` means the candidate carries its own MSI and Bundle identities, its own install directory, its own state root and its own loopback port, and the production task set is unchanged. A non-zero exit lists the failed checks in `failed`; do not install the candidate until they are resolved. Build the candidate package with `build-msi.ps1 -WxsFile .\SingularityRepoQLRC.wxs -MsiFileName Singularity-RepoQL-Fleet861RC-x64.msi`; the default parameters still produce the reviewed production package.
+
+## Release candidate 3 (0.5.0.0)
+
+The candidate is distributed as **one self-contained MSI**. Its CAB is embedded
+(`MediaTemplate EmbedCab="yes"`), so a folder holding only
+`Singularity-RepoQL-Fleet861RC-v3-x64.msi` installs without any companion file;
+`build-msi.ps1` fails the build if an external `*.cab` is emitted and the build
+receipt lists every distribution file with its SHA-256.
+
+It is a **per-user, limited-privileges** package (`Scope="perUser"`,
+`InstallPrivileges="limited"`). Install it as the owner, from a normal (not
+elevated) shell or by double-clicking the MSI: no elevation is requested, and
+the ARP entry, files and state stay in `%LOCALAPPDATA%\Singularity\Fleet861RC`.
+An earlier per-user candidate still registered under `HKLM` because Windows
+Installer discards `ALLUSERS=2`/`MSIINSTALLPERUSER` on a UAC-compliant package;
+the limited-privileges authoring is what makes the per-user scope effective.
+Uninstall removes every payload file and any runtime `__pycache__` the installed
+tree accumulated. RC-owned runtime state (`state`, `workspace`, `memory`,
+`logs`, `provision`) is deliberately preserved, exactly like the production
+product's user state.
+
+Start it with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-Singularity.ps1
+```
+
+That launcher starts the candidate's own local backends and then the dashboard:
+
+| Backend | What starts | Port |
+|---|---|---|
+| RepoQL host | RC-owned workspace (`workspace\.repoql` marker + import of the installed source), launched by `rql` itself | repoql host, local |
+| MemoryCore + MemoryPanel | the vendor memory supervisor from this machine's build dirs, configured into `memory\` and started on RC ports | 18221 core / 18226 panel |
+| Dashboard | auto-local session, loopback only | 18200 |
+
+No dockerhost, fleet endpoint or production credential is involved. Claude
+Office (port 8001) and the local Kanzo board (port 4242) are **third-party
+products this candidate does not ship**: the launcher does not start them and
+the dashboard reports them as unavailable until they are installed and, for
+Office, until the owner completes its own login. `Start-Singularity.ps1
+-NoDashboard` starts only the local backends, which is what the acceptance run
+uses to prove the panels independently of the browser.

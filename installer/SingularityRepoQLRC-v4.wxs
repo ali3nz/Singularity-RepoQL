@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Fleet861 RC v4 (final RC3 candidate). Version 0.5.0.0 replaces the
+       intermediate 0.4.0.0 build in place through the shared UpgradeCode
+       7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61; the ProductCode changes because MSI
+       major-upgrade semantics require a new one.
+
+       Three defects are fixed here relative to the 0.3.0.0 package:
+
+       1. MediaTemplate EmbedCab="yes": the CAB lives inside the MSI. The
+          0.3.0.0 build emitted an external cab1.cab beside a 205 KB MSI, so the
+          MSI alone could not be installed from a clean folder. The distribution
+          is now one hashed file.
+       2. InstallPrivileges="limited": the package is deliberately *not* UAC
+          compliant. Windows Installer deletes ALLUSERS=2 and ignores
+          MSIINSTALLPERUSER on a UAC-compliant package, which is why the earlier
+          per-user package still registered under HKLM when installed from an
+          elevated shell. A limited-privileges package installs per-user, so the
+          ARP entry, file targets and state stay in the installing owner's
+          profile and no elevation is required.
+       3. A deferred uninstall action removes runtime __pycache__ directories
+          that Windows Installer cannot own. It runs with the install folder as
+          its working directory, uses REMOVE="ALL" only, and can only touch
+          paths inside the RC install root; errors are ignored so residue can
+          never fail an uninstall. -->
+  <Package Name="Singularity RepoQL Windows (Fleet861 RC)"
+           Manufacturer="Singularity RepoQL"
+           Version="0.5.0.0"
+           ProductCode="C41F8E27-6D95-5B3C-9A18-73E2D0B6F4A9"
+           UpgradeCode="7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61"
+           Scope="perUser" InstallPrivileges="limited" Compressed="yes">
+    <Property Id="ALLUSERS" Value="2" />
+    <Property Id="MSIINSTALLPERUSER" Value="1" />
+    <MajorUpgrade DowngradeErrorMessage="A newer Singularity RepoQL Fleet861 RC package is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Singularity\Fleet861RC" />
+    </StandardDirectory>
+    <Feature Id="ProductFeature" Title="Singularity RepoQL Windows (Fleet861 RC)" Level="1">
+      <ComponentGroupRef Id="ProductPayload" />
+    </Feature>
+    <CustomAction Id="RemovePayloadBytecode"
+                  Directory="INSTALLFOLDER"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore"
+                  ExeCommand="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$ErrorActionPreference='SilentlyContinue'; Get-ChildItem -LiteralPath (Get-Location) -Recurse -Directory -Force -Filter '__pycache__' | Remove-Item -Recurse -Force&quot;" />
+    <InstallExecuteSequence>
+      <Custom Action="RemovePayloadBytecode" After="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+  <Fragment>
+    <ComponentGroup Id="ProductPayload" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.Payload)\**" />
+    </ComponentGroup>
+  </Fragment>
+</Wix>

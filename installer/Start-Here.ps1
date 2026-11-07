@@ -22,6 +22,7 @@ foreach ($item in $checks.GetEnumerator()) {
   Write-Host ('{0,-34} {1}' -f $item.Key, $(if ($item.Value) { 'FOUND' } else { 'MISSING' }))
 }
 Write-Host ''
+Write-Host 'Run Start-Singularity.ps1 to start the local backends and the dashboard.'
 Write-Host 'Run Configure-Singularity.cmd to enter provider API keys and verify Tencent owner sign-in.'
 Write-Host 'Use Readiness.ps1 for the read-only native Windows acceptance inventory.'
 Write-Host 'Existing Windows lifecycle scripts remain authoritative for native service and Claude Code setup.'
