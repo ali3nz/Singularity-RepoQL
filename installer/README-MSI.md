@@ -52,7 +52,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-RCIsolation.ps1 -Rece
 
 Exit code `0` means the candidate carries its own MSI identity, its own install directory, its own state root and its own loopback port, and the production task set is unchanged. A non-zero exit lists the failed checks in `failed`; do not install the candidate until they are resolved. Build the candidate package with `build-msi.ps1 -WxsFile .\SingularityRepoQLRC-v4.wxs -MsiFileName Singularity-RepoQL-Fleet861RC-v3-x64.msi`; the default parameters still produce the reviewed production package.
 
-## Release candidate 3 (0.5.0.0)
+## Release candidate 3 (0.5.1.0)
+
+The version moved from `0.5.0.0` to `0.5.1.0` with a new `ProductCode`
+(`FD77347A-07F3-4CBC-97D4-D19103888AB9`, same `UpgradeCode`). The `0.5.0.0`
+candidate was rebuilt with the corrected Option 2 source archive and the
+installed-dashboard sign-in fix, and Windows Installer refuses a different
+payload that carries the same product code *and* version (`1638`,
+`ERROR_PRODUCT_VERSION`). With the version bump, an owner holding `0.5.0.0`
+takes the fix through an ordinary major upgrade instead of uninstalling first.
 
 ### Distribution
 

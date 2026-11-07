@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <!-- Fleet861 RC v4 (final RC3 candidate). Version 0.5.0.0 replaces the
-       intermediate 0.4.0.0 build in place through the shared UpgradeCode
+  <!-- Fleet861 RC v4 (final RC3 candidate). Version 0.5.1.0 replaces the
+       intermediate 0.5.0.0 candidate in place through the shared UpgradeCode
        7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61; the ProductCode changes because MSI
        major-upgrade semantics require a new one.
+
+       The version moved from 0.5.0.0 because the 0.5.0.0 candidate was rebuilt
+       with a corrected source archive and the installed-dashboard sign-in fix:
+       installing a different payload with the same ProductCode *and* version is
+       refused with 1638 (ERROR_PRODUCT_VERSION), so an owner holding the earlier
+       0.5.0.0 package could not take the fix without uninstalling first. A new
+       version plus a new ProductCode makes that an ordinary major upgrade.
 
        Three authored properties are load-bearing, and each was verified on the
        target host rather than assumed:
@@ -37,8 +44,8 @@
           never fail an uninstall. -->
   <Package Name="Singularity RepoQL Windows (Fleet861 RC)"
            Manufacturer="Singularity RepoQL"
-           Version="0.5.0.0"
-           ProductCode="C41F8E27-6D95-5B3C-9A18-73E2D0B6F4A9"
+           Version="0.5.1.0"
+           ProductCode="FD77347A-07F3-4CBC-97D4-D19103888AB9"
            UpgradeCode="7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61"
            Scope="perUser" Compressed="yes">
     <MajorUpgrade DowngradeErrorMessage="A newer Singularity RepoQL Fleet861 RC package is already installed." />
