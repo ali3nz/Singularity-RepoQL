@@ -1,4 +1,4 @@
-# Windows RC — 18-row acceptance matrix (0.5.2.0)
+# Windows RC — 19-row acceptance matrix (0.5.2.0)
 
 Scope: local MSI build, isolated RC lifecycle, test batteries, release
 paperwork. Machine: windows241 (`ali3nz\ben`, PowerShell 5.1). Install root:
@@ -28,10 +28,19 @@ Every row names the raw log that proves it; logs are in
 | 17 | MSI/source correspondence | PASS — every one of the 957 packaged archive members is present in the installed `source\` and byte-identical (957 identical, 0 missing, 0 different, 0 unexpected extra); 5 staged binaries recorded with their hashes. The archive was generated at `77ff3fa`; the documentation commits after it (`30b8b1d`, the receipt note) are **not** in this build, so the three `docs/WINDOWS-RC2-*`/`RELEASE-NOTES-RC2.md` copies inside the payload are the previous revision while every packaged code file is byte-identical to HEAD | `61-msi-source-correspondence-052.log` |
 | 18 | Production inventory unchanged; local commits only | PASS — the seven `Singularity-*` tasks identical before and after install/uninstall/reinstall; production ports 18100/18101/18126/18128 never bound (idle before and after); production ARP and `WindowsNative\current` untouched; commits are local only (no remote configured) | `57-lifecycle-final-uninstall-reinstall.log`, `git log` |
 
-Not re-run for 0.5.2.0 (recorded, not claimed): the dockerhost-blocked firewall
-exercise (row 17 of the 0.3.0.0 matrix) was proven for the previous candidate and
-is unchanged by this slice; re-running it needs a temporary firewall rule, which
-this continuation did not add. Everything else above is measured on 0.5.2.0.
+### Network-confinement item (re-run on 0.5.2.0 after the 18 rows)
+
+Row 19 closes the one item the previous report carried as "recorded, not claimed".
+The script is `fw052-dockerhost-block.ps1` (sha256 `b9dcdfd7…`), a re-measurement
+of `27-firewall-dockerhost-block.log` with a uniquely named rule and a removal
+proof. Its first attempt aborted before creating anything on a harness guard that
+demanded an interpreter inside the RC tree; the RC runs on the system Python 3.12
+(the production stack has its own `Singularity\Runtime\python`), so the guard was
+replaced with a command-line identity check. Log 65 keeps both attempts.
+
+| # | Acceptance item | Result | Evidence |
+|---|---|---|---|
+| 19 | Dockerhost-blocked firewall exercise on 0.5.2.0 with a uniquely named RC rule, removed and verified | PASS — rule `RC052-TEMP-BLOCK-DOCKERHOST-PROBE`, outbound Block, matched by program (`…\Programs\Python\Python312\python.exe`, the RC's interpreter, not under `Singularity\Runtime`) and by remote address `192.168.1.240` only. Control probe before the rule `REACHED`; with it, dockerhost:22 and :443 both `BLOCKED PermissionError`, while the RC kept serving locally (`/` 200, 17,116 B; `/api/status` 200) and its process stayed alive. Removed inside the same `try/finally`: rules named/prefix `0` after, total firewall rules 741 → 742 → 741, post-cleanup probe `REACHED`, 7/7 `Singularity-*` tasks Running, RC ARP still 0.5.2.0, RC server stopped and port released | `65-firewall-dockerhost-block-052.log`, `fw052-dockerhost-block.ps1` |
 
 ## Defects found and fixed in this continuation
 
