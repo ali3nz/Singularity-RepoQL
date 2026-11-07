@@ -51,7 +51,11 @@ if ($OutputDirectory.Equals($BuildRoot, [StringComparison]::OrdinalIgnoreCase) -
 # native/windows/build_source_variants.py at rc-fleet893. The previous
 # pin (E8392BA8...) was the 2026-11-05 snapshot, which predated the branch
 # and shipped a payload without its dashboard, memory or MCP work.
-$expectedSourceHash = 'BA82E14AA64331E917862CC47A18A8C28EEF73A78107366FD7289AA4D8D3714E'
+# This candidate is Option 2 (Claude Desktop Code Complete), so the archive
+# must be the variant-2 build: the earlier 5BEA6F83... pin was the variant-3
+# archive, whose manifest declares the OpenChamber GUI while the package and
+# its dashboard run variant 2.
+$expectedSourceHash = '22539C928CA52B9202F1C80BC2E4B1B028E3485C79F3F97A3E40FF17442E6F70'
 $sourceHash = (Get-FileHash -LiteralPath $SourceZip -Algorithm SHA256).Hash
 if ($sourceHash -ne $expectedSourceHash) { throw 'UNEXPECTED_SOURCE_ARCHIVE_HASH' }
 $py = Get-Command py.exe -ErrorAction SilentlyContinue
