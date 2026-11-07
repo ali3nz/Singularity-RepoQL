@@ -623,7 +623,22 @@ class App:
 EMBED_PREFIX = "/embed/repoql"
 # Office art the Pixi client loads from root-absolute URLs (see native_panel_proxy.static_asset).
 OFFICE_ASSET_PREFIXES = ("/sprites/", "/rooms/")
-NATIVE_REPOQL_UPSTREAM = ("127.0.0.1", 41005)
+# The Control Panel listener is the running RepoQL host's own, read from its
+# workspace bind record; 41005 is only a fallback origin. A hard-coded port
+# would proxy a different workspace's panel on a machine that runs more than
+# one (the installed product and this candidate do).
+NATIVE_REPOQL_DEFAULT_UPSTREAM = ("127.0.0.1", 41005)
+
+
+def native_repoql_upstream() -> tuple[str, int]:
+    from repoql_native_auth import panel_origin
+
+    return panel_origin() or NATIVE_REPOQL_DEFAULT_UPSTREAM
+
+
+def upstream_authority(upstream: tuple[str, int]) -> str:
+    host, port = upstream
+    return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
 MAX_EMBED_BODY = 32 * 1024 * 1024
 
 
@@ -1376,7 +1391,8 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 raise PermissionError("invalid native panel redirect port") from exc
             if (parsed.scheme != "http" or parsed.hostname not in
-                    ("localhost", "127.0.0.1", "::1") or port != NATIVE_REPOQL_UPSTREAM[1]):
+                    ("localhost", "127.0.0.1", "::1")
+                    or port != native_repoql_upstream()[1]):
                 raise PermissionError("foreign native panel redirect refused")
         # A protocol-relative URL is never relative to the fixed upstream.
         if location.startswith("//") or parsed.path.startswith("//"):
@@ -1478,13 +1494,15 @@ class Handler(BaseHTTPRequestHandler):
         except PermissionError:
             self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_header'})
             return
-        headers["Host"] = "127.0.0.1:41005"
+        upstream = native_repoql_upstream()
+        authority = upstream_authority(upstream)
+        headers["Host"] = authority
         headers["Accept-Encoding"] = "identity"
         if "Origin" in headers:
-            headers["Origin"] = "http://127.0.0.1:41005"
+            headers["Origin"] = "http://" + authority
         if method in ("POST", "PUT", "PATCH", "DELETE") and body is not None:
             headers["Content-Length"] = str(len(body))
-        conn = http.client.HTTPConnection(*NATIVE_REPOQL_UPSTREAM, timeout=30)
+        conn = http.client.HTTPConnection(*upstream, timeout=30)
         try:
             conn.request(method, upstream_path, body=body, headers=headers)
             response = conn.getresponse()
@@ -1560,12 +1578,14 @@ class Handler(BaseHTTPRequestHandler):
                 if key.lower() == 'origin':
                     continue
                 lines.append(f"{key}: {value}")
-            lines.append("Host: 127.0.0.1:41005")
+            upstream_target = native_repoql_upstream()
+            upstream_authority_text = upstream_authority(upstream_target)
+            lines.append("Host: " + upstream_authority_text)
             if self.headers.get("Origin"):
-                lines.append("Origin: http://127.0.0.1:41005")
+                lines.append("Origin: http://" + upstream_authority_text)
             lines.append("Connection: Upgrade")
             lines.append("Upgrade: websocket")
-            upstream = socket.create_connection(NATIVE_REPOQL_UPSTREAM, timeout=10)
+            upstream = socket.create_connection(upstream_target, timeout=10)
             upstream.sendall(("\r\n".join(lines) + "\r\n\r\n").encode("latin-1"))
             self.connection.settimeout(None)
             upstream.settimeout(None)

@@ -642,6 +642,12 @@ def panel_env(d):
         "SINGULARITY_RQL_BIN": str(d["rql"]),
         "SINGULARITY_STATE_DIR": str(Path(d["root"]) / "state"),
         "SINGULARITY_PROVISION_STATE_DIR": str(Path(d["root"]) / "provision"),
+        # The embedded official RepoQL Control Panel is a same-origin embed, and
+        # its upstream is the RC host's own listener, discovered from the RC
+        # workspace's bind record. Without the embed URL the panel reports
+        # native_repoql_proxy_unconfigured even though the host is running.
+        "REPOQL_NATIVE_EMBED_URL": "/embed/repoql",
+        "REPOQL_NATIVE_WORKSPACE": str(d["workspace"]),
         "SINGULARITY_TENCENT_HOST": "127.0.0.1",
         "SINGULARITY_TENCENT_PORT": str(d["panel_port"]),
         "SINGULARITY_TENCENT_OWNER_KEY_FILE": str(d["admin_key"]),

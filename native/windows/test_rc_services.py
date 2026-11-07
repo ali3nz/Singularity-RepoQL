@@ -360,6 +360,20 @@ class DashboardEnvironment(unittest.TestCase):
             env = rc.panel_env(defaults_for(Path(tmp)))
         self.assertEqual(env["SINGULARITY_DASHBOARD_AUTH_MODE"], "password")
 
+    def test_panel_environment_wires_the_repoql_control_panel(self):
+        """The embedded official panel is a same-origin embed of the RC host.
+
+        embed_config only reports it configured for the /embed/repoql URL, and
+        the proxy resolves the upstream from the RC workspace's own bind record;
+        without both the panel answers native_repoql_proxy_unconfigured.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            env = rc.panel_env(d)
+        self.assertEqual(env["REPOQL_NATIVE_EMBED_URL"], "/embed/repoql")
+        self.assertEqual(env["REPOQL_NATIVE_WORKSPACE"], str(d["workspace"]))
+        self.assertNotIn("41005", env.values())
+
 
 class KanzoBoard(unittest.TestCase):
     def test_board_binary_is_staged_and_started_with_rc_home_and_port(self):
