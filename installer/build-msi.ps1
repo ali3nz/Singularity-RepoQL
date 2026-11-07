@@ -55,7 +55,10 @@ if ($OutputDirectory.Equals($BuildRoot, [StringComparison]::OrdinalIgnoreCase) -
 # must be the variant-2 build: the earlier 5BEA6F83... pin was the variant-3
 # archive, whose manifest declares the OpenChamber GUI while the package and
 # its dashboard run variant 2.
-$expectedSourceHash = '22539C928CA52B9202F1C80BC2E4B1B028E3485C79F3F97A3E40FF17442E6F70'
+# Regenerated for 0.5.2.0: the RepoQL Control Panel upstream now comes from the
+# host's own dashboard bind record (dashboard/repoql_native_auth.py) and the RC
+# launcher advertises the same-origin embed (native/windows/rc_services.py).
+$expectedSourceHash = 'BE465E585CFF47730C17ED904CFB5016E6FC5A7B32FCA894156E8A3689C8ECFB'
 $sourceHash = (Get-FileHash -LiteralPath $SourceZip -Algorithm SHA256).Hash
 if ($sourceHash -ne $expectedSourceHash) { throw 'UNEXPECTED_SOURCE_ARCHIVE_HASH' }
 $py = Get-Command py.exe -ErrorAction SilentlyContinue
