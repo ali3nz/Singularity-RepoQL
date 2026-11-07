@@ -703,10 +703,57 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(target.stat().st_size))
         self.end_headers()
 
+    # -- auto-local session (owner addendum A2) ---------------------------
+    def _auto_local_request_allowed(self) -> bool:
+        """Cheap anti-drive-by checks for silent loopback session issuance."""
+        try:
+            if not ipaddress.ip_address(self.client_address[0]).is_loopback:
+                return False
+        except ValueError:
+            return False
+        host = (self.headers.get('Host') or '').strip().lower()
+        name, _, port = host.partition(':')
+        if name not in ('127.0.0.1', 'localhost'):
+            return False
+        if port and port != str(self.server.server_address[1]):
+            return False
+        site = (self.headers.get('Sec-Fetch-Site') or '').strip().lower()
+        if site and site not in ('same-origin', 'none'):
+            return False
+        origin = self.headers.get('Origin')
+        if origin:
+            try:
+                parsed = urlparse(origin)
+            except ValueError:
+                return False
+            if parsed.scheme != self.request_scheme() or parsed.netloc.lower() != host:
+                return False
+        return True
+
+    def _maybe_issue_auto_local(self) -> None:
+        account = getattr(getattr(self, 'app', None), 'local_account', None)
+        if account is None or not account.auto_local:
+            return
+        if account.authenticated(self.headers.get('Cookie', '')):
+            return
+        if not self._auto_local_request_allowed():
+            return
+        self._pending_session = account.issue_session()
+        self._auto_session_ok = True
+
+    def end_headers(self) -> None:
+        pending = getattr(self, '_pending_session', None)
+        if pending:
+            self.send_header('Set-Cookie', f'{ACCOUNT_COOKIE_NAME}={pending}; HttpOnly; '
+                             f'SameSite=Strict; Path=/; Max-Age={ACCOUNT_COOKIE_TTL}')
+            self._pending_session = None
+        super().end_headers()
+
     def route(self, method: str) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
         params = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
+        self._maybe_issue_auto_local()
         try:
             profile = variant_features()
             if not variant_route_allowed(path, profile):
@@ -724,6 +771,9 @@ class Handler(BaseHTTPRequestHandler):
                     and not self.request_origin_allowed(require_origin=True)):
                     self.send_json(HTTPStatus.FORBIDDEN, {'error': 'account_origin_refused'})
                     return
+            if path == '/setup' or path.startswith('/api/setup/'):
+                self.serve_setup_health(method, path)
+                return
             # MUST precede every dashboard route, including DELETE and /api/*.
             # This host is only Office; its Access audience grants no dashboard access.
             if self.is_public_office_host():
@@ -920,10 +970,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
             return
         if path == '/api/account/status' and method == 'GET':
-            self.send_json(HTTPStatus.OK, {'configured': account.configured(),
-                           'authenticated': account.authenticated(self.headers.get('Cookie', ''))})
+            self.send_json(HTTPStatus.OK, {
+                'configured': account.configured(),
+                'authenticated': account.authenticated(self.headers.get('Cookie', ''))
+                                 or getattr(self, '_auto_session_ok', False),
+                'mode': account.mode,
+                'auto_local': account.auto_local,
+            })
             return
-        if path not in ('/api/account/setup', '/api/account/login', '/api/account/logout') or method != 'POST':
+        if path not in ('/api/account/setup', '/api/account/login', '/api/account/logout', '/api/account/mode') or method != 'POST':
             self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
             return
         if (self.headers.get('Origin') != f'http://{expected}'
@@ -931,6 +986,28 @@ class Handler(BaseHTTPRequestHandler):
                 or self.headers.get('Content-Type', '').split(';')[0].lower() != 'application/json'
                 or self.headers.get('Sec-Fetch-Site') == 'cross-site'):
             self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+            return
+        if path == '/api/account/mode' and method == 'POST':
+            try:
+                size = int(self.headers.get('Content-Length', '-1'))
+                if size < 2 or size > 1024:
+                    raise ValueError('invalid_size')
+                data = json.loads(self.rfile.read(size).decode('utf-8'))
+                if not isinstance(data, dict) or set(data) != {'mode'} or not isinstance(data['mode'], str):
+                    raise ValueError('invalid_body')
+                applied = account.set_mode(data['mode'])
+            except AccountRefused as exc:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': str(exc)})
+                return
+            except (ValueError, UnicodeError, TypeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
+                return
+            if applied == 'auto-local':
+                self._pending_session = account.issue_session()
+                self._auto_session_ok = True
+            self.send_json(HTTPStatus.OK, {'ok': True, 'mode': applied,
+                                           'auto_local': account.auto_local,
+                                           'configured': account.configured()})
             return
         if path == '/api/account/logout':
             account.revoke(self.headers.get('Cookie', ''))
@@ -971,7 +1048,64 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def serve_setup_health(self, method: str, path: str) -> None:
+        """Setup health + Repair (W7). Same loopback and session rules as the dashboard."""
+        import setup_health
+
+        if not self.authorized():
+            self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'setup_auth_required'})
+            return
+        port = self.server.server_address[1]
+        host = self.headers.get('Host', '')
+        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or self.client_address[0] != '127.0.0.1':
+            self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+            return
+        if path == '/api/setup/health' and method == 'GET':
+            self.send_json(HTTPStatus.OK, {'rows': setup_health.rows()})
+            return
+        if path == '/api/setup/repair' and method == 'POST':
+            if (self.headers.get('Origin') != f'http://{host}'
+                    or self.headers.get('X-Requested-With') != 'repoql-dashboard'):
+                self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > 4096:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_body'})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b'{}')
+            except ValueError:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_json'})
+                return
+            only = payload.get('only') if isinstance(payload, dict) else None
+            if only is not None and not (isinstance(only, list) and all(isinstance(x, str) for x in only)):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_only'})
+                return
+            try:
+                summary = setup_health.repair(only)
+            except Exception as exc:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR,
+                               {'error': 'repair_failed', 'detail': type(exc).__name__})
+                return
+            self.send_json(HTTPStatus.OK, summary)
+            return
+        if path == '/setup' and method == 'GET':
+            body = setup_health.page_html(setup_health.rows()).encode('utf-8')
+            self.send_response(HTTPStatus.OK)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
+
     def authorized(self) -> bool:
+        if getattr(self, '_auto_session_ok', False):
+            return True
         if self.app.local_account is not None:
             if self.app.local_account.authenticated(self.headers.get('Cookie', '')):
                 return True

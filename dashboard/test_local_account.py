@@ -56,7 +56,10 @@ class AccountStorage(unittest.TestCase):
 class HTTPAccountBoundary(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.env = patch.dict(os.environ, {'SINGULARITY_LOCAL_ACCOUNT_AUTH': '1'}, clear=False)
+        # Owner addendum A5: this suite pins the password contract explicitly;
+        # auto-local is covered by test_auth_modes.py.
+        self.env = patch.dict(os.environ, {'SINGULARITY_LOCAL_ACCOUNT_AUTH': '1',
+                                          'SINGULARITY_DASHBOARD_AUTH_MODE': 'password'}, clear=False)
         self.env.start()
         root = Path(self.temp.name)
         config = Config(workspace=root, rql=root / 'rql', state_dir=root / 'state',
