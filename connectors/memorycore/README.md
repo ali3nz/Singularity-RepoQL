@@ -64,3 +64,14 @@ rql connector status
 ```
 
 The install command opens RepoQL's local review page for the `data` source root; choose the store's folder there. Then read `memorycore://data/overview.md` for what the copy holds, and `memorycore://data/records/<day>/<id>.md` for one memory. The suite's fixtures are shaped after the store's real files as of 2026-10-27, with invented content.
+
+
+## Scoped writes and the RC probe
+
+MemoryPanel and this connector read the same store the gateway writes. A local
+RC check writes one conversation through `POST /v2/conversation/add`, recalls it
+through `/v2/conversation/search`, deletes it through `/v2/conversation/delete`
+(session plus message ids) and proves the marker is gone. That sequence lives in
+[`../../memory/rc_stack.py`](../../memory/rc_stack.py) `probe()`, runs only
+against an RC-owned stack, and is what the Windows acceptance evidence used; the
+connector's own offline contract is `rql connector test` with `suite.json`.
