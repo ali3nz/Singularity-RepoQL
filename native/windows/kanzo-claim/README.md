@@ -9,7 +9,7 @@ native Kanzo SQLite board and never uses the dockerhost coordination code or key
 | Tool | Behaviour |
 |------|-----------|
 | `check_work` | `available`, conflicting receipts, active-claim count, tamper flag |
-| `claim_work` | atomic claim with TTL (default 90 s, max 15 min); refuses overlapping scopes |
+| `claim_work` | atomic claim with TTL (default 90 s, max 15 min); refuses overlapping scopes; optional `task_id` records the native Kanzo task it covers |
 | `create_work` | local task record bound to a scope |
 | `heartbeat` | extends an active claim; owner-only |
 | `close_work` | releases a claim; owner-only |
@@ -40,9 +40,10 @@ file, with stale-lock recovery.
 }
 ```
 
-`npm test` runs 14 tests: 10 layer contracts (conflict, overlap, release, heartbeat,
-expiry, restart, tamper, invalid scope, private files) and 4 MCP tests that spawn two
-real server processes against one state directory.
+`npm test` runs 17 tests: 11 layer contracts (conflict, overlap, release, heartbeat,
+expiry, restart, task binding, tamper, invalid scope, private files) and 6 MCP tests
+that spawn real server processes against one state directory, including concurrent
+startup on one shared key and a claim surviving a full server restart.
 
 ## Documented limit
 

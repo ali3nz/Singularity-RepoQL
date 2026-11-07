@@ -8,6 +8,10 @@ import { ClaimStore, ensurePrivateDir } from './store.mjs';
 export const DEFAULT_TTL_MS = 90_000;
 export const MAX_TTL_MS = 15 * 60_000;
 
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 export function normalizeScope(scope) {
   if (typeof scope !== 'string') throw new Error('invalid_scope');
   const cleaned = scope.trim().replace(/\\/g, '/').replace(/\/+$/, '');
@@ -40,16 +44,50 @@ export class ClaimLayer {
   }
 
   _loadOrCreateKey() {
-    try {
+    const read = () => {
       const buf = fs.readFileSync(this.keyPath);
       if (buf.length < 32) throw new Error('claim_key_invalid');
       return buf;
+    };
+    try {
+      return read();
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
-      const key = crypto.randomBytes(32);
-      const fd = fs.openSync(this.keyPath, 'wx', 0o600);
-      try { fs.writeSync(fd, key); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-      return key;
+    }
+    const key = crypto.randomBytes(32);
+    // Two sessions may initialise the same state dir at once: that is the normal
+    // multi-agent case, and both must end up on ONE shared HMAC key. Publish it
+    // through link(2), so a concurrent creator either wins the link or reads the
+    // winner's complete key instead of dying on EEXIST or reading a partial file.
+    const tmp = path.join(this.dir, `claim-key.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`);
+    try {
+      fs.writeFileSync(tmp, key, { mode: 0o600 });
+      try {
+        fs.linkSync(tmp, this.keyPath);
+        return key;
+      } catch (err) {
+        if (err.code === 'EEXIST') return read();
+        if (!['EPERM', 'ENOSYS', 'EXDEV', 'EACCES'].includes(err.code)) throw err;
+      }
+    } finally {
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+    }
+    // Filesystems without hard links: exclusive create, then poll for the
+    // winner's key to become complete (bounded; the writer fsyncs immediately).
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const fd = fs.openSync(this.keyPath, 'wx', 0o600);
+        try { fs.writeSync(fd, key); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        return key;
+      } catch (err) {
+        if (err.code !== 'EEXIST' || attempt >= 100) throw err;
+      }
+      try {
+        return read();
+      } catch (err) {
+        if (err.code !== 'ENOENT' && err.message !== 'claim_key_invalid') throw err;
+        sleepSync(10);
+      }
     }
   }
 
@@ -107,9 +145,12 @@ export class ClaimLayer {
     };
   }
 
-  async claimWork({ scope, session, owner, ttlSeconds }) {
+  async claimWork({ scope, session, owner, ttlSeconds, taskId }) {
     const wanted = normalizeScope(scope);
     if (typeof session !== 'string' || !session.trim()) throw new Error('session_required');
+    if (taskId !== undefined && (typeof taskId !== 'string' || !taskId.trim() || taskId.length > 200)) {
+      throw new Error('invalid_task_id');
+    }
     const ttl = Math.min(Math.max(Number(ttlSeconds ?? 0) * 1000 || this.ttlMs, 1_000), MAX_TTL_MS);
     return this.store.mutate((doc) => {
       this._expire(doc);
@@ -123,7 +164,10 @@ export class ClaimLayer {
       const claim = {
         id: crypto.randomUUID(), scope: wanted, session: session.trim(),
         owner: (owner || session).toString().slice(0, 200),
-        created_at: now, expires_at: now + ttl, status: 'active', task_id: null,
+        created_at: now, expires_at: now + ttl, status: 'active',
+        // Optional pointer to the native Kanzo task this claim covers; the layer
+        // records it and never edits the native board itself.
+        task_id: taskId ? taskId.trim() : null,
       };
       claim.sig = this._sign(claim);
       doc.claims.push(claim);

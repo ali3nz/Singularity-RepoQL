@@ -124,6 +124,16 @@ test('create_work records a task and lists it', async () => {
   assert.equal(tasks[0].title, 'Setup health panel');
 });
 
+test('a claim records the native Kanzo task it covers', async () => {
+  const c = clock();
+  const { layer } = freshLayer(c.now);
+  const receipt = await layer.claimWork({ scope: 'installer', session: 'a', taskId: 'fleet#893' });
+  assert.equal(receipt.task_id, 'fleet#893');
+  const plain = await layer.claimWork({ scope: 'docs', session: 'a' });
+  assert.equal(plain.task_id, null);
+  await assert.rejects(() => layer.claimWork({ scope: 'other', session: 'a', taskId: '' }), /invalid_task_id/);
+});
+
 test('invalid scopes are refused', async () => {
   const c = clock();
   const { layer } = freshLayer(c.now);

@@ -36,6 +36,7 @@ const TOOLS = [
       properties: {
         scope: { type: 'string' }, session: { type: 'string' },
         owner: { type: 'string' }, ttl_seconds: { type: 'number' },
+        task_id: { type: 'string', description: 'Optional native Kanzo task id this claim covers' },
       },
       required: ['scope', 'session'],
     },
@@ -73,8 +74,8 @@ const TOOLS = [
 // MCP arguments are snake_case; the layer API is camelCase.
 const HANDLERS = {
   check_work: ({ scope }) => layer.checkWork({ scope }),
-  claim_work: ({ scope, session, owner, ttl_seconds }) =>
-    layer.claimWork({ scope, session, owner, ttlSeconds: ttl_seconds }),
+  claim_work: ({ scope, session, owner, ttl_seconds, task_id }) =>
+    layer.claimWork({ scope, session, owner, ttlSeconds: ttl_seconds, taskId: task_id }),
   create_work: ({ scope, title, session }) => layer.createWork({ scope, title, session }),
   heartbeat: ({ claim_id, session, ttl_seconds }) =>
     layer.heartbeat({ claim_id, session, ttlSeconds: ttl_seconds }),

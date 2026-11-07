@@ -107,6 +107,65 @@ test('heartbeat keeps a claim, and TTL expiry releases it', async () => {
   } finally { a.close(); b.close(); }
 });
 
+test('concurrent startup in one state dir keeps one shared key', async () => {
+  // Multi-agent is the normal case: several MCP servers initialise the same
+  // state dir at once and must all survive and agree on ONE HMAC key.
+  const dir = stateDir();
+  const clients = Array.from({ length: 4 }, () => new Client(dir));
+  try {
+    const claims = await Promise.all(clients.map((c, i) =>
+      c.call('claim_work', { scope: `concurrent/${i}`, session: `session-${i}`, ttl_seconds: 60 })));
+    claims.forEach((reply, i) => {
+      assert.equal(reply.isError, false, `client ${i} must start and claim: ${JSON.stringify(reply.body)}`);
+      assert.equal(reply.body.status, 'active');
+    });
+    const key = fs.readFileSync(path.join(dir, 'claim-key'));
+    assert.ok(key.length >= 32);
+    // The shared key is what makes cross-session refusal real: a claim signed by
+    // client 0 must verify (not be rejected as tampered) in client 3.
+    const check = await clients[3].call('check_work', { scope: 'concurrent/0' });
+    assert.equal(check.body.available, false);
+    assert.equal(check.body.tampered, false, 'claims from another session must verify');
+    assert.equal(check.body.conflicts[0].session, 'session-0');
+  } finally { clients.forEach((c) => c.close()); }
+});
+
+test('a claim survives an MCP server restart', async () => {
+  // Restart is a fresh process over the same state dir: the claim must still be
+  // enforced, must still verify against the shared key, and must still be
+  // releasable by its owning session.
+  const dir = stateDir();
+  const first = new Client(dir);
+  let claimId;
+  try {
+    const claimed = await first.call('claim_work', {
+      scope: 'restart/scope', session: 'session-a', ttl_seconds: 60, task_id: 'fleet#893',
+    });
+    assert.equal(claimed.isError, false);
+    claimId = claimed.body.claim_id;
+    assert.equal(claimed.body.task_id, 'fleet#893');
+  } finally { first.close(); }
+  await new Promise((r) => setTimeout(r, 150));
+
+  const second = new Client(dir);
+  try {
+    const check = await second.call('check_work', { scope: 'restart/scope' });
+    assert.equal(check.body.available, false, 'restart must not drop an active claim');
+    assert.equal(check.body.tampered, false, 'the restarted server must share the HMAC key');
+    assert.equal(check.body.conflicts[0].claim_id, claimId);
+
+    const clash = await second.call('claim_work', { scope: 'restart/scope', session: 'session-b', ttl_seconds: 60 });
+    assert.equal(clash.isError, true);
+    assert.equal(clash.body.error, 'scope_conflict');
+
+    const released = await second.call('close_work', { claim_id: claimId, session: 'session-a' });
+    assert.equal(released.isError, false);
+    assert.equal(released.body.status, 'released');
+    const after = await second.call('check_work', { scope: 'restart/scope' });
+    assert.equal(after.body.available, true);
+  } finally { second.close(); }
+});
+
 test('unknown tool and missing state dir fail loudly', async () => {
   const c = new Client(stateDir());
   try {
