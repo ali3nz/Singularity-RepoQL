@@ -1,11 +1,13 @@
 """Unit contracts for the zero-touch RC local service bootstrap (fleet#893)."""
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -139,6 +141,13 @@ class DashboardEnvironment(unittest.TestCase):
         self.assertEqual(env["SINGULARITY_WORKSPACE"], str(d["workspace"]))
         self.assertNotIn(env["SINGULARITY_PORT"], {"18100", "18101", "18126", "18128"})
         self.assertEqual(env["PYTHONDONTWRITEBYTECODE"], "1")
+        self.assertEqual(env["SINGULARITY_KANZO_PORT"], "18202")
+        self.assertEqual(env["SINGULARITY_OFFICE_PORT"], "18203")
+        self.assertEqual(env["SINGULARITY_OFFICE_NATIVE_AUTH_MODE"], "key_file")
+        self.assertTrue(Path(env["SINGULARITY_OFFICE_PANEL_KEY_FILE"])
+                        .is_relative_to(Path(d["root"])))
+        self.assertNotIn("4242", env["SINGULARITY_KANZO_PORT"])
+        self.assertNotEqual(env["SINGULARITY_OFFICE_HEALTH_PORT"], "8001")
 
     def test_owner_key_path_is_inside_the_rc_memory_root(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -148,9 +157,116 @@ class DashboardEnvironment(unittest.TestCase):
                         .is_relative_to(Path(d["memory_root"])))
 
 
+class KanzoBoard(unittest.TestCase):
+    def test_board_binary_is_staged_and_started_with_rc_home_and_port(self):
+        spawned = []
+
+        def spawn(cmd, cwd=None, log_path=None):
+            spawned.append([str(part) for part in cmd])
+            return 4242
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            d["vendor_kanzo"].parent.mkdir(parents=True, exist_ok=True)
+            d["vendor_kanzo"].write_bytes(b"MZ stub")
+            d["vendor_kanzo"].chmod(0o755)
+            started = {"value": False}
+
+            def ping(port):
+                return started["value"]
+
+            def spawning(cmd, cwd=None, log_path=None):
+                started["value"] = True
+                return spawn(cmd, cwd, log_path)
+
+            with mock.patch.object(rc, "_kanzo_board", lambda port: {"tasks": 3, "statuses": 5, "projects": 1}):
+                report = rc.ensure_kanzo(d, spawn=spawning, sleep=lambda _s: None, ping=ping)
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["tasks"], 3)
+            self.assertTrue(Path(report["binary"]).is_file())
+            self.assertTrue(Path(report["binary"]).resolve().is_relative_to(Path(d["root"]).resolve()))
+            self.assertEqual(spawned[0][1], "--home")
+            self.assertEqual(Path(spawned[0][2]), d["kanzo_home"])
+            self.assertIn("18202", spawned[0])
+            self.assertNotIn("4242", spawned[0])
+
+    def test_missing_board_binary_is_reported_not_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            with self.assertRaises(rc.ServiceError) as caught:
+                rc.ensure_kanzo(d, spawn=lambda *a, **k: 1, sleep=lambda _s: None)
+        self.assertIn("Kanzo board binary is unavailable", str(caught.exception))
+
+    def test_unresponsive_board_is_a_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            d["vendor_kanzo"].parent.mkdir(parents=True, exist_ok=True)
+            d["vendor_kanzo"].write_bytes(b"MZ stub")
+            with self.assertRaises(rc.ServiceError) as caught:
+                rc.ensure_kanzo(d, spawn=lambda *a, **k: 1, sleep=lambda _s: None,
+                                attempts=2, delay=0, ping=lambda port: False)
+        self.assertIn("did not answer", str(caught.exception))
+
+
+class OfficeService(unittest.TestCase):
+    def _install(self, d):
+        backend = Path(d["office_install"]) / "source" / "backend" / "app"
+        backend.mkdir(parents=True, exist_ok=True)
+        (backend / "main.py").write_text("# stub", encoding="utf-8")
+        Path(d["office_python"]).parent.mkdir(parents=True, exist_ok=True)
+        Path(d["office_python"]).write_bytes(b"stub")
+
+    def test_config_state_and_keys_are_rc_owned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            self._install(d)
+            rc.office_config(d)
+            config = json.loads(Path(d["office_config"]).read_text(encoding="utf-8"))
+            self.assertEqual(config["port"], 18203)
+            self.assertEqual(Path(config["stateDir"]), d["office_state"])
+            self.assertEqual(Path(config["backendDir"]), Path(d["office_install"]) / "source" / "backend")
+            keys = json.loads((Path(d["office_state"]) / "keys.json").read_text(encoding="utf-8"))
+            self.assertEqual(Path(d["office_panel_key"]).read_text(encoding="utf-8"), keys["apiKey"])
+            self.assertTrue(Path(d["office_launcher"]).is_file())
+
+    def test_service_starts_with_the_installed_venv_and_rc_config(self):
+        spawned = []
+
+        def spawn(cmd, cwd=None, log_path=None):
+            spawned.append([str(part) for part in cmd])
+            return 5150
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            self._install(d)
+            started = {"value": False}
+
+            def health(port):
+                return started["value"]
+
+            def spawning(cmd, cwd=None, log_path=None):
+                started["value"] = True
+                return spawn(cmd, cwd, log_path)
+
+            report = rc.ensure_office(d, spawn=spawning, sleep=lambda _s: None, health=health)
+            self.assertTrue(report["ok"])
+            self.assertEqual(spawned[0][0], str(d["office_python"]))
+            self.assertIn("--config", spawned[0])
+            self.assertIn(str(d["office_config"]), spawned[0])
+
+    def test_missing_office_distribution_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = defaults_for(Path(tmp))
+            with self.assertRaises(rc.ServiceError) as caught:
+                rc.ensure_office(d, spawn=lambda *a, **k: 1, sleep=lambda _s: None,
+                                 health=lambda port: True)
+        self.assertIn("Claude Office distribution is unavailable", str(caught.exception))
+
+
 class IndependentServices(unittest.TestCase):
     def test_one_failing_service_does_not_hide_the_others(self):
-        original = (rc.ensure_repoql, rc.ensure_memory, rc.ensure_identity)
+        original = (rc.ensure_repoql, rc.ensure_memory, rc.ensure_identity,
+                    rc.ensure_kanzo, rc.ensure_office)
 
         def fail(*_a, **_k):
             raise rc.ServiceError("synthetic failure")
@@ -158,14 +274,19 @@ class IndependentServices(unittest.TestCase):
         rc.ensure_repoql = lambda *a, **k: {"ok": True, "verdict": "ready"}
         rc.ensure_memory = fail
         rc.ensure_identity = lambda *a, **k: {"ok": True, "action": "provisioned"}
+        rc.ensure_kanzo = lambda *a, **k: {"ok": True, "tasks": 1}
+        rc.ensure_office = lambda *a, **k: {"ok": True, "health": "ok"}
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 report = rc.start(defaults_for(Path(tmp)), run=lambda *a, **k: completed())
         finally:
-            rc.ensure_repoql, rc.ensure_memory, rc.ensure_identity = original
+            (rc.ensure_repoql, rc.ensure_memory, rc.ensure_identity,
+             rc.ensure_kanzo, rc.ensure_office) = original
         self.assertFalse(report["ok"])
         self.assertFalse(report["services"]["memory"]["ok"])
         self.assertTrue(report["services"]["repoql"]["ok"])
+        self.assertTrue(report["services"]["kanzo"]["ok"])
+        self.assertTrue(report["services"]["office"]["ok"])
 
 
 if __name__ == "__main__":

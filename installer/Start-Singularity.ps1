@@ -8,9 +8,10 @@ third-party Office/Ghost surfaces, the owner's own login.
     candidate's source, loopback only);
   * MemoryCore + MemoryPanel from the machine's vendor build dirs, configured
     into the RC root and started on RC ports;
-  * Claude Office (port 8001) and the local Kanzo board (port 4242) are *not*
-    started: this candidate does not ship either third-party product, and the
-    dashboard reports them as unavailable rather than faking them.
+  * a real Kanzo board staged into the RC root and started with an RC-owned
+    `--home` and RC port (never the production board or 4242);
+  * the locally installed Claude Office distribution started from RC-owned
+    service config, state, logs and port (never the production port).
 
 Nothing here binds a production port (18100/18101/18126/18128), touches the
 production tree, or imports a production credential.

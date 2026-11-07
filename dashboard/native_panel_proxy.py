@@ -267,7 +267,7 @@ def serve(handler, kind, method, parsed, *, public_root=False):
             # Incoming browser writes were verified against the public dashboard
             # origin above; only then is Origin rewritten for the fixed upstream.
             if method not in ('GET', 'HEAD'):
-                headers['Origin'] = 'http://127.0.0.1:4242'
+                headers['Origin'] = 'http://%s:%d' % UPSTREAM['kanzo']
         else:
             headers['X-Tdai-Service-Id'] = 'default'
             headers['X-Tdai-User-Key'] = backend_key(kind)

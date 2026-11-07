@@ -5,32 +5,42 @@
        7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61; the ProductCode changes because MSI
        major-upgrade semantics require a new one.
 
-       Three defects are fixed here relative to the 0.3.0.0 package:
+       Three authored properties are load-bearing, and each was verified on the
+       target host rather than assumed:
 
-       1. MediaTemplate EmbedCab="yes": the CAB lives inside the MSI. The
-          0.3.0.0 build emitted an external cab1.cab beside a 205 KB MSI, so the
-          MSI alone could not be installed from a clean folder. The distribution
-          is now one hashed file.
-       2. InstallPrivileges="limited": the package is deliberately *not* UAC
-          compliant. Windows Installer deletes ALLUSERS=2 and ignores
-          MSIINSTALLPERUSER on a UAC-compliant package, which is why the earlier
-          per-user package still registered under HKLM when installed from an
-          elevated shell. A limited-privileges package installs per-user, so the
-          ARP entry, file targets and state stay in the installing owner's
-          profile and no elevation is required.
+       1. Self-contained media. MediaTemplate EmbedCab="yes" packs the payload
+          CAB inside the MSI. The 0.3.0.0 package shipped a 205,752-byte MSI
+          beside an external 7,238,629-byte cab1.cab, so the MSI alone could not
+          be installed from a clean folder. build-msi.ps1 now fails the build if
+          any *.cab is emitted beside the output and writes every distribution
+          file with its SHA-256 into the build receipt.
+
+       2. Per-user authoring without a privilege requirement. Scope="perUser"
+          with no ALLUSERS/MSIINSTALLPERUSER properties produces
+          SummaryInformation WordCount 0xA: compressed (bit 1) and "elevated
+          privileges are not required to install this package" (bit 3). Windows
+          Installer then runs the install with user privileges; verified by
+          installing from a medium-integrity scheduled task with no UAC prompt.
+          Adding ALLUSERS=2/MSIINSTALLPERUSER=1 here would only make the package
+          dual-scope, which this candidate is not.
+
+          Known platform behaviour, deliberately not claimed otherwise: Windows
+          11 build 26300 still publishes the Add/Remove Programs entry under
+          HKLM for this per-user package (no HKCU entry). Files, runtime state
+          and the install root remain in the owner's profile, and the install
+          itself needs no elevation.
+
        3. A deferred uninstall action removes runtime __pycache__ directories
           that Windows Installer cannot own. It runs with the install folder as
-          its working directory, uses REMOVE="ALL" only, and can only touch
-          paths inside the RC install root; errors are ignored so residue can
+          its working directory, uses REMOVE="ALL" only, can only touch paths
+          inside the RC install root, and errors are ignored so residue can
           never fail an uninstall. -->
   <Package Name="Singularity RepoQL Windows (Fleet861 RC)"
            Manufacturer="Singularity RepoQL"
            Version="0.5.0.0"
            ProductCode="C41F8E27-6D95-5B3C-9A18-73E2D0B6F4A9"
            UpgradeCode="7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61"
-           Scope="perUser" InstallPrivileges="limited" Compressed="yes">
-    <Property Id="ALLUSERS" Value="2" />
-    <Property Id="MSIINSTALLPERUSER" Value="1" />
+           Scope="perUser" Compressed="yes">
     <MajorUpgrade DowngradeErrorMessage="A newer Singularity RepoQL Fleet861 RC package is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <StandardDirectory Id="LocalAppDataFolder">

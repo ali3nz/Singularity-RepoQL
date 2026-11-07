@@ -13,14 +13,16 @@ acceptance. This module starts what the candidate can own:
     an RC-owned config on RC ports, with state, logs and secrets under the RC
     root, then the owner identity in that RC metadata store.
 
+  * **Kanzo board** - the real local `kanzo.exe` board staged into the RC root
+    and started with an RC-owned `--home` and an RC port. The production board
+    (`C:\\Users\\Ben\\kanzo`, port 4242) is never opened, written or bound.
+  * **Claude Office** - the locally installed Claude Office distribution started
+    from an RC-owned service config, state, log directory and port. The RC owns
+    its API/ingest keys and DB; the installed distribution is read only.
+
 Everything is idempotent and stays inside RC-owned roots. Nothing here reads a
 production config, connects to dockerhost, or falls back to a stub: a backend
 that cannot start is reported as a failure with its exact reason.
-
-Two backends are deliberately *not* started here because the candidate does not
-ship them: the local Kanzo board (`kanzo.exe`, a third-party install) and
-Claude Office (a third-party service with its own login). `status` reports them
-as unavailable rather than pretending they work.
 """
 from __future__ import annotations
 
@@ -38,6 +40,8 @@ from pathlib import Path
 DEFAULT_CORE_PORT = 18221
 DEFAULT_PANEL_PORT = 18226
 DEFAULT_DASHBOARD_PORT = 18200
+DEFAULT_KANZO_PORT = 18202
+DEFAULT_OFFICE_PORT = 18203
 FORBIDDEN_PORTS = frozenset({18100, 18101, 18126, 18128})
 MARKER_GITIGNORE = "cache/\n"
 METADATA_DB = ("state", "data", "core", "metadata", "tdai_metadata_default", "metadata.db")
@@ -69,15 +73,22 @@ def defaults(env=None):
     try:
         core_port = int(env.get("SINGULARITY_RC_CORE_PORT", DEFAULT_CORE_PORT))
         panel_port = int(env.get("SINGULARITY_RC_PANEL_PORT", DEFAULT_PANEL_PORT))
+        kanzo_port = int(env.get("SINGULARITY_RC_KANZO_PORT", DEFAULT_KANZO_PORT))
+        office_port = int(env.get("SINGULARITY_RC_OFFICE_PORT", DEFAULT_OFFICE_PORT))
+        dashboard_port = int(env.get("SINGULARITY_RC_DASHBOARD_PORT", DEFAULT_DASHBOARD_PORT))
     except ValueError:
         raise ServiceError("RC service ports must be integers") from None
-    for port in (core_port, panel_port):
+    ports = (core_port, panel_port, kanzo_port, office_port, dashboard_port)
+    for port in ports:
         if not 1 <= port <= 65535:
             raise ServiceError("RC service port out of range")
         if port in FORBIDDEN_PORTS:
             raise ServiceError(f"port {port} belongs to the production stack")
-    if core_port == panel_port:
-        raise ServiceError("core and panel need distinct ports")
+    if len(set(ports)) != len(ports):
+        raise ServiceError("RC services need distinct ports")
+    kanzo = Path(env.get("SINGULARITY_RC_KANZO_EXE") or root / "bin" / "kanzo.exe")
+    vendor_kanzo = vendor / "Runtime" / "kanzo" / "kanzo.exe"
+    office_root = Path(env.get("SINGULARITY_RC_OFFICE_INSTALL") or vendor / "WindowsNative" / "office")
     return {
         "root": root,
         "workspace": root / "workspace",
@@ -90,17 +101,41 @@ def defaults(env=None):
         "panel_dir": vendor / "runtime" / "build" / "MemoryPanel",
         "core_port": core_port,
         "panel_port": panel_port,
-        "dashboard_port": int(env.get("SINGULARITY_RC_DASHBOARD_PORT", DEFAULT_DASHBOARD_PORT)),
+        "kanzo_port": kanzo_port,
+        "office_port": office_port,
+        "dashboard_port": dashboard_port,
+        "kanzo": kanzo,
+        "vendor_kanzo": vendor_kanzo,
+        "office_install": office_root,
+        "office_python": _office_python(office_root),
     }
 
 
+def _office_python(office_root):
+    scripts = Path(office_root) / "venv" / "Scripts"
+    for name in ("pythonw.exe", "python.exe"):
+        if (scripts / name).is_file():
+            return scripts / name
+    return scripts / "python.exe"
+
+
 def layout(d):
-    """Resolve the supervisor script and the owner-key path for this root."""
+    """Resolve every script, key file and RC-owned subtree for this root."""
     source = Path(d["source"])
+    root = Path(d["root"])
     resolved = dict(d)
     resolved["supervisor"] = Path(d.get("supervisor") or source / "scripts" / "native-memory-supervisor.mjs")
     resolved["admin_key"] = Path(d["memory_root"]) / "state" / "secrets" / "admin-user-key"
     resolved["metadata_db"] = Path(d["memory_root"]).joinpath(*METADATA_DB)
+    resolved["kanzo_home"] = root / "kanzo"
+    resolved["office_root"] = root / "office"
+    resolved["office_service_dir"] = root / "office" / "service"
+    resolved["office_state"] = root / "office" / "state"
+    resolved["office_logs"] = root / "office" / "logs"
+    resolved["office_config"] = root / "office" / "service" / "service.json"
+    resolved["office_launcher"] = root / "office" / "service" / "rc_office_service.py"
+    resolved["office_panel_key"] = root / "state" / "office-panel-key"
+    resolved["service_state"] = root / "state" / "rc-services.json"
     return resolved
 
 
@@ -310,6 +345,201 @@ def ensure_identity(d, *, run=None, sleep=time.sleep, attempts=60, delay=2.0):
             "team_id": receipt.get("team_id"), "conflicts": len(receipt.get("conflicts") or [])}
 
 
+# --------------------------------------------------------------------- Kanzo
+
+
+def _http_json(port, path, timeout=5):
+    with urllib.request.urlopen(f"http://127.0.0.1:{int(port)}{path}", timeout=timeout) as response:
+        raw = response.read(1024 * 1024 + 1)
+        if response.status != 200 or len(raw) > 1024 * 1024:
+            raise ServiceError(f"unexpected reply from 127.0.0.1:{port}{path}")
+        return json.loads(raw)
+
+
+def _kanzo_ping(port):
+    """The board's own readiness contract: 200 plus the literal body `kanzo`."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{int(port)}/api/ping", timeout=3) as response:
+            return response.status == 200 and response.read(64).strip() == b"kanzo"
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def _kanzo_board(port):
+    board = _http_json(port, "/api/board?project=all")
+    tasks = board.get("tasks")
+    if not isinstance(tasks, list) or not isinstance(board.get("statuses"), list):
+        raise ServiceError("Kanzo /api/board did not return a board")
+    return {"tasks": len(tasks), "statuses": len(board["statuses"]),
+            "projects": len(board.get("projects") or [])}
+
+
+def _stage_kanzo(d):
+    """Provision the RC's own board binary from the machine's local install."""
+    target = Path(d["kanzo"])
+    if target.is_file():
+        return target
+    source = Path(d["vendor_kanzo"])
+    if not source.is_file():
+        raise ServiceError(f"Kanzo board binary is unavailable: {target} and {source} are missing")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(source.read_bytes())
+    return target
+
+
+def ensure_kanzo(d, *, spawn=None, sleep=time.sleep, attempts=30, delay=1.0, ping=None):
+    """An RC-owned, real Kanzo board on an RC port. Never production 4242."""
+    binary = _stage_kanzo(d)
+    home = Path(d["kanzo_home"])
+    home.mkdir(parents=True, exist_ok=True)
+    ping = ping or _kanzo_ping
+    if not ping(d["kanzo_port"]):
+        pid = _spawn_detached([binary, "--home", str(home), "--port", str(d["kanzo_port"]), "--no-open"],
+                              cwd=home, log_path=Path(d["root"]) / "logs" / "kanzo.log", spawn=spawn)
+        for _ in range(attempts):
+            if ping(d["kanzo_port"]):
+                break
+            sleep(delay)
+    if not ping(d["kanzo_port"]):
+        raise ServiceError(f"Kanzo board did not answer on 127.0.0.1:{d['kanzo_port']}")
+    board = _kanzo_board(d["kanzo_port"])
+    _remember_pid(d, "kanzo", locals().get("pid"))
+    return {"ok": True, "port": d["kanzo_port"], "home": str(home),
+            "binary": str(binary), "pid": locals().get("pid"), **board}
+
+
+# --------------------------------------------------------------------- Office
+
+OFFICE_LAUNCHER = '''"""RC-owned Claude Office launcher (generated by rc_services.py)."""
+import json, os, pathlib, sys
+args = sys.argv[1:]
+cfg = json.loads(pathlib.Path(args[args.index("--config") + 1]).read_text(encoding="utf-8-sig"))
+state = pathlib.Path(cfg["stateDir"])
+logs = pathlib.Path(cfg["logDir"])
+logs.mkdir(parents=True, exist_ok=True)
+handle = open(logs / "backend.log", "a", encoding="utf-8", buffering=1)
+sys.stdout = sys.stderr = handle
+keys = json.loads((state / "keys.json").read_text(encoding="utf-8-sig"))
+os.environ.update(
+    CLAUDE_OFFICE_API_KEY=keys["apiKey"],
+    CLAUDE_OFFICE_INGEST_KEY=keys["ingestKey"],
+    SUMMARY_ENABLED="false",
+    SUMMARY_BACKEND="disabled",
+    SERVE_STATIC="true",
+    DATABASE_URL="sqlite+aiosqlite:///" + (state / "office.db").as_posix(),
+)
+sys.path.insert(0, str(pathlib.Path(cfg["backendDir"])))
+import uvicorn
+uvicorn.run("app.main:app", host="127.0.0.1", port=int(cfg["port"]), log_level="info")
+'''
+
+
+def _office_health(port):
+    try:
+        payload = _http_json(port, "/health", timeout=3)
+        return payload.get("status") == "ok"
+    except (ServiceError, urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def office_paths(d):
+    """Create the RC-owned Office service, state and log directories."""
+    for key in ("office_service_dir", "office_state", "office_logs"):
+        Path(d[key]).mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def office_keys(d, *, token_factory=None):
+    """Stable RC-owned Office API/ingest keys; reused on every later start."""
+    path = Path(d["office_state"]) / "keys.json"
+    if path.is_file():
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    make = token_factory or (lambda: __import__("secrets").token_urlsafe(32))
+    keys = {"apiKey": make(), "ingestKey": make()}
+    path.write_text(json.dumps(keys), encoding="utf-8")
+    return keys
+
+
+def office_config(d):
+    """The RC-owned service config over the installed, read-only distribution."""
+    install = Path(d["office_install"])
+    backend = install / "source" / "backend"
+    if not backend.is_dir():
+        raise ServiceError(f"Claude Office distribution is unavailable: {backend} is missing")
+    if not Path(d["office_python"]).is_file():
+        raise ServiceError(f"Claude Office venv interpreter is unavailable: {d['office_python']}")
+    office_paths(d)
+    keys = office_keys(d)
+    config = {
+        "port": int(d["office_port"]),
+        "backendDir": str(backend),
+        "stateDir": str(d["office_state"]),
+        "logDir": str(d["office_logs"]),
+        "serveStatic": True,
+    }
+    Path(d["office_config"]).write_text(json.dumps(config, indent=2), encoding="utf-8")
+    Path(d["office_launcher"]).write_text(OFFICE_LAUNCHER, encoding="utf-8")
+    panel_key = Path(d["office_panel_key"])
+    panel_key.parent.mkdir(parents=True, exist_ok=True)
+    panel_key.write_text(keys["apiKey"], encoding="utf-8")
+    return config
+
+
+def ensure_office(d, *, spawn=None, sleep=time.sleep, attempts=90, delay=1.0, health=None):
+    """Start the real local Claude Office service with RC-owned state and port."""
+    office_config(d)
+    health = health or _office_health
+    pid = None
+    if not health(d["office_port"]):
+        pid = _spawn_detached([d["office_python"], "-B", d["office_launcher"],
+                               "--config", d["office_config"]],
+                              cwd=Path(d["office_root"]),
+                              log_path=Path(d["office_logs"]) / "launch.log", spawn=spawn)
+        for _ in range(attempts):
+            if health(d["office_port"]):
+                break
+            sleep(delay)
+    if not health(d["office_port"]):
+        raise ServiceError(f"Claude Office did not become healthy on 127.0.0.1:{d['office_port']}")
+    _remember_pid(d, "office", pid)
+    return {"ok": True, "port": d["office_port"], "state": str(d["office_state"]),
+            "pid": pid, "health": "ok"}
+
+
+# --------------------------------------------------------------- service state
+
+
+def _read_state(d):
+    path = Path(d["service_state"])
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
+def _remember_pid(d, name, pid):
+    if not pid:
+        return
+    state = _read_state(d)
+    state[name] = int(pid)
+    path = Path(d["service_state"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def _stop_pid(pid):
+    if not pid:
+        return False
+    try:
+        if os.name == "nt":
+            process = subprocess.run(["taskkill", "/PID", str(int(pid)), "/T", "/F"],
+                                     capture_output=True, text=True, timeout=60, check=False)
+            return process.returncode == 0
+        os.kill(int(pid), 15)
+        return True
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
 # ------------------------------------------------------------ dashboard context
 
 
@@ -330,7 +560,13 @@ def panel_env(d):
         "SINGULARITY_TENCENT_OWNER_KEY_FILE": str(d["admin_key"]),
         "TENCENT_PANEL_BASE": f"http://127.0.0.1:{d['panel_port']}",
         "SINGULARITY_OFFICE_HEALTH_HOST": "127.0.0.1",
-        "SINGULARITY_OFFICE_HEALTH_PORT": "8001",
+        "SINGULARITY_OFFICE_HEALTH_PORT": str(d["office_port"]),
+        "SINGULARITY_OFFICE_HOST": "127.0.0.1",
+        "SINGULARITY_OFFICE_PORT": str(d["office_port"]),
+        "SINGULARITY_OFFICE_NATIVE_AUTH_MODE": "key_file",
+        "SINGULARITY_OFFICE_PANEL_KEY_FILE": str(d["office_panel_key"]),
+        "SINGULARITY_KANZO_HOST": "127.0.0.1",
+        "SINGULARITY_KANZO_PORT": str(d["kanzo_port"]),
         "SINGULARITY_MEMORY_SUPERVISOR": str(d["supervisor"]),
         "SINGULARITY_MEMORY_STACK_CONFIG": str(Path(d["memory_root"]) / "stack.json"),
         "PYTHONDONTWRITEBYTECODE": "1",
@@ -353,10 +589,16 @@ def backend_status(d, *, run=None):
                         "panel_listening": _port_open("127.0.0.1", d["panel_port"]),
                         "panel_http": _panel_ready(f"http://127.0.0.1:{d['panel_port']}"),
                         "owner_key_present": Path(d["admin_key"]).is_file()}
-    result["kanzo_board"] = {"ok": _port_open("127.0.0.1", 4242),
-                             "detail": "third-party local Kanzo board is not installed by this candidate"}
-    result["office"] = {"ok": _port_open("127.0.0.1", 8001),
-                        "detail": "Claude Office is a third-party service with its own login"}
+    ping = _kanzo_ping(d["kanzo_port"])
+    kanzo = {"ok": ping, "port": d["kanzo_port"]}
+    if ping:
+        try:
+            kanzo.update(_kanzo_board(d["kanzo_port"]))
+        except (ServiceError, urllib.error.URLError, OSError, ValueError) as exc:
+            kanzo.update(ok=False, error=type(exc).__name__)
+    result["kanzo_board"] = kanzo
+    result["office"] = {"ok": _office_health(d["office_port"]), "port": d["office_port"],
+                        "panel_key_present": Path(d["office_panel_key"]).is_file()}
     return result
 
 
@@ -366,7 +608,9 @@ def start(d, *, run=None, spawn=None):
     report = {"root": str(d["root"]), "services": {}}
     for name, step in (("repoql", lambda: ensure_repoql(d, run=run)),
                        ("memory", lambda: ensure_memory(d, run=run, spawn=spawn)),
-                       ("memory_identity", lambda: ensure_identity(d, run=run))):
+                       ("memory_identity", lambda: ensure_identity(d, run=run)),
+                       ("kanzo", lambda: ensure_kanzo(d, spawn=spawn)),
+                       ("office", lambda: ensure_office(d, spawn=spawn))):
         try:
             report["services"][name] = {"ok": True, **(step() or {})}
         except Exception as exc:
@@ -379,6 +623,10 @@ def stop(d, *, run=None):
     """Stop the RC-owned stack and host without touching any other install."""
     d = layout(d)
     report = {}
+    state = _read_state(d)
+    for name in ("kanzo", "office"):
+        stopped = _stop_pid(state.get(name))
+        report[name] = {"stopped": stopped, "pid": state.get(name)}
     try:
         rc_stack = _rc_stack(d)
         config_path = Path(d["memory_root"]) / "stack.json"
