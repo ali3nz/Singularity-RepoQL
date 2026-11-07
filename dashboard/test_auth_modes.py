@@ -122,8 +122,11 @@ class AutoLocal(HTTPCase):
     mode = None  # product default
 
     def test_first_request_is_already_signed_in(self):
-        status, headers, _ = self.request('/')
+        status, headers, body = self.request('/')
         self.assertEqual(status, 200)
+        # A1: the very first navigation is the dashboard, never the sign-in page.
+        self.assertIn(b'__SINGULARITY_LOCAL_LOGIN__', body)
+        self.assertNotIn(b'Singularity RepoQL sign in', body)
         cookie = headers.get('set-cookie', '')
         self.assertIn('srq_session=', cookie)
         self.assertIn('HttpOnly', cookie)

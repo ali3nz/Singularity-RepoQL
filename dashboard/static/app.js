@@ -2762,6 +2762,48 @@ async function viewHarnessEvents(params) {
     <td>${esc(ev.agent || "—")}</td><td class="wrap">${esc(ev.detail || "")}</td><td class="mono">${ev.occurrences > 1 ? fmt(ev.occurrences) : ""}</td></tr>`, "No events match these filters.");
 }
 
+// Dashboard access (fleet#893 A2): the local dashboard signs in automatically on
+// this computer; password mode stays available as the explicit opt-in, and the
+// Setup health page (one row per integration, one Fix action) is one click away.
+async function renderDashboardAccess() {
+  const modeEl = document.getElementById("auth-mode");
+  const button = document.getElementById("auth-toggle");
+  const out = document.getElementById("auth-saved");
+  if (!modeEl || !button || !out) return;
+  let info;
+  try {
+    info = await api("/api/account/status");
+  } catch (e) {
+    modeEl.textContent = "unavailable";
+    out.textContent = e.message;
+    return;
+  }
+  const auto = info.mode !== "password";
+  modeEl.innerHTML = auto
+    ? `${pill("ok")} <span class="muted small">no password on this computer</span>`
+    : `${pill("warning")} <span class="muted small">${info.configured ? "owner account required" : "no owner account yet"}</span>`;
+  button.textContent = auto ? "Require a password" : "Sign in automatically";
+  button.dataset.mode = auto ? "password" : "auto-local";
+  button.disabled = false;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const result = await api("/api/account/mode", { method: "POST", body: { mode: button.dataset.mode } });
+      if (result.mode === "password") {
+        // The mode switch revoked this session: continue on the account page.
+        location.href = "/account.html";
+        return;
+      }
+      out.textContent = "Automatic local sign-in restored.";
+      toast("Dashboard access changed", "Automatic local sign-in");
+      await renderDashboardAccess();
+    } catch (e) {
+      out.textContent = e.message;
+      button.disabled = false;
+    }
+  });
+}
+
 async function viewHarnessSettings(params) {
   APP.innerHTML = pageHead("Nannies and Settings", "Effective state of fleet nannies plus the dashboard's own bounded telemetry controls.") +
     `<div id="harness-body"><div class="loading">Reading settings…</div></div>`;
@@ -2770,7 +2812,16 @@ async function viewHarnessSettings(params) {
   const settings = n.settings || {};
   const cg = n.catgpt || {};
   body.innerHTML = `
-    <div class="block"><div class="block-title">Telemetry controls</div>
+    <div class="block"><div class="block-title">Dashboard access</div>
+      <p class="muted small">This dashboard opens already signed in on this computer. Requiring a password switches it to the private owner-account flow; the way back is the same button.</p>
+      <div class="grid cols-2" style="margin-bottom:12px">
+        <div class="field"><span class="label">Mode</span><span class="value" id="auth-mode">reading…</span></div>
+        <div class="field"><span class="label">Integrations</span><span class="value"><a href="/setup">Open Setup health</a> <span class="muted small">one row per integration, one Fix action</span></span></div>
+      </div>
+      <button class="btn small" id="auth-toggle" disabled>Reading…</button>
+      <div id="auth-saved" class="muted small" style="margin-top:8px"></div>
+    </div>
+    <div class="block" style="margin-top:14px"><div class="block-title">Telemetry controls</div>
       <p class="muted small">These controls affect only this dashboard's telemetry. Review, lease, asset-safety and compliance gates stay with their authoritative systems and are not configurable here.</p>
       <div class="table-wrap"><table class="data"><thead><tr><th>Setting</th><th>Requested</th><th>Effective</th><th>Control</th></tr></thead><tbody>
         ${Object.values(settings).map((row) => `<tr>
@@ -2888,6 +2939,7 @@ async function viewHarnessSettings(params) {
     }
   };
   document.querySelectorAll("[data-cg-action]").forEach((b) => b.addEventListener("click", () => cgAction(b.dataset.cgAction)));
+  await renderDashboardAccess();
 }
 
 // Keep Office on the authenticated dashboard origin. A separate Office hostname

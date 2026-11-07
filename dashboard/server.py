@@ -704,12 +704,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     # -- auto-local session (owner addendum A2) ---------------------------
+    def _loopback_peer(self) -> bool:
+        """True only for a loopback peer address (never a raise on a bad address)."""
+        try:
+            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        except (ValueError, IndexError):
+            return False
+
     def _auto_local_request_allowed(self) -> bool:
         """Cheap anti-drive-by checks for silent loopback session issuance."""
-        try:
-            if not ipaddress.ip_address(self.client_address[0]).is_loopback:
-                return False
-        except ValueError:
+        if not self._loopback_peer():
             return False
         host = (self.headers.get('Host') or '').strip().lower()
         name, _, port = host.partition(':')
@@ -753,7 +757,15 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         params = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
-        self._maybe_issue_auto_local()
+        # Consent is per request: never inherit a previous request's auto-local
+        # grant (an HTTP/1.1 keep-alive handler instance is reused otherwise).
+        self._auto_session_ok = False
+        self._pending_session = None
+        # Duck-typed handlers (the variant/HTTP unit tests) call route() without the
+        # socket machinery, so the auto-local hook is optional rather than assumed.
+        hook = getattr(self, '_maybe_issue_auto_local', None)
+        if hook is not None:
+            hook()
         try:
             profile = variant_features()
             if not variant_route_allowed(path, profile):
@@ -1056,8 +1068,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'setup_auth_required'})
             return
         port = self.server.server_address[1]
-        host = self.headers.get('Host', '')
-        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or self.client_address[0] != '127.0.0.1':
+        host = (self.headers.get('Host') or '').strip().lower()
+        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or not self._loopback_peer():
             self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
             return
         if path == '/api/setup/health' and method == 'GET':
@@ -1580,7 +1592,12 @@ class Handler(BaseHTTPRequestHandler):
         relative = "index.html" if path in ("/", "") else path.lstrip("/")
         local_account = getattr(getattr(self, "app", None), "local_account", None)
         if local_account is not None:
-            if not local_account.authenticated(self.headers.get('Cookie', '')):
+            # A first auto-local request carries no cookie yet, but this request's
+            # grant is already decided (A1: the dashboard opens signed in, never
+            # on the sign-in page).
+            signed_in = (getattr(self, '_auto_session_ok', False)
+                         or local_account.authenticated(self.headers.get('Cookie', '')))
+            if not signed_in:
                 if relative in ('index.html', 'account.html'):
                     relative = 'account.html'
                 else:
