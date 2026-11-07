@@ -83,7 +83,14 @@ class Provisioner:
         if path.exists() and path.stat().st_size >= 32:
             return path, False
         value = secrets.token_urlsafe(32)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            # A concurrent repair created the credential first: reuse it rather
+            # than failing the integration or overwriting another attempt's key.
+            if path.stat().st_size >= 32:
+                return path, False
+            raise
         try:
             os.write(fd, value.encode())
             os.fsync(fd)
@@ -114,8 +121,8 @@ class Provisioner:
         for name in targets:
             adapter = self.adapters.get(name)
             started = self.clock()
-            if adapter is None or adapter.ensure is None:
-                results.append(self._finish(name, "skipped", NEEDS_ATTENTION, NEEDS_ATTENTION,
+            if adapter is None:
+                results.append(self._finish(name, "skipped", UNAVAILABLE, UNAVAILABLE,
                                             False, "no adapter", started))
                 continue
             ctx = Context(state_dir=self.state_dir)
@@ -123,6 +130,14 @@ class Provisioner:
             try:
                 state, _ = adapter.detect()
                 before = state
+                if adapter.ensure is None:
+                    # Detection-only integration: report the state it actually has,
+                    # never a fabricated needs-attention just because no automated
+                    # repair exists yet.
+                    results.append(self._finish(name, "skipped", state, state, False,
+                                                "detect-only integration; no automated repair",
+                                                started))
+                    continue
                 if state == CONNECTED:
                     results.append(self._finish(name, "noop", state, state, False,
                                                 "already connected", started))

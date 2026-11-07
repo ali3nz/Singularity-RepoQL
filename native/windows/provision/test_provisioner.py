@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from provisioner import (Adapter, CONNECTED, INTEGRATIONS, NEEDS_ATTENTION, UNAVAILABLE,
                          Provisioner)
@@ -113,6 +114,28 @@ class ProvisionerTests(unittest.TestCase):
         self.assertNotIn(secret, latest)
         self.assertIn(str(token), latest)
         self.assertEqual(len(secret), len(secret.strip()), "no stray newline in the token")
+
+    def test_detect_only_integration_reports_its_real_state(self):
+        # No automated repair must not turn a connected integration into a
+        # fabricated needs-attention row.
+        adapters = {name: Adapter(lambda: (CONNECTED, "ok"), None) for name in INTEGRATIONS}
+        row = self.build(adapters).repair(only=["tencent"])["results"][0]
+        self.assertEqual(row["action"], "skipped")
+        self.assertEqual(row["state_before"], CONNECTED)
+        self.assertEqual(row["state_after"], CONNECTED)
+
+    def test_concurrent_credential_creation_reuses_the_winner(self):
+        # Two repairs may race on the same integration; the loser must adopt the
+        # existing private credential instead of failing or overwriting it.
+        prov = self.build({name: Adapter(lambda: (CONNECTED, "ok"), None) for name in INTEGRATIONS})
+        path, created = prov.ensure_credential("kanzo")
+        self.assertTrue(created)
+        original = path.read_text(encoding="utf-8")
+        with patch("provisioner.os.open", side_effect=FileExistsError):
+            again, created_again = prov.ensure_credential("kanzo")
+        self.assertFalse(created_again)
+        self.assertEqual(again, path)
+        self.assertEqual(again.read_text(encoding="utf-8"), original)
 
     def test_each_attempt_writes_a_durable_receipt(self):
         adapters = {name: Adapter(lambda: (CONNECTED, "ok"), None) for name in INTEGRATIONS}
