@@ -2,7 +2,9 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <!-- Fleet861 RC v2. Byte-for-byte the v1 package identity except for two
        values that MSI major-upgrade semantics require to change:
-          1. Version 0.2.0.0 (higher than v1 0.1.0.0).
+          1. Version 0.3.0.0 (higher than v1 0.1.0.0 and than the RC2
+             predecessor 0.2.0.0), so the RC2 package replaces the
+             0.2.0.0 build in place through FindRelatedProducts.
           2. A distinct ProductCode, because a major upgrade installs a new
              product and removes the old one through FindRelatedProducts/
              RemoveExistingProducts driven by the shared UpgradeCode.
@@ -14,8 +16,8 @@
        decision of 2026-11-05. -->
   <Package Name="Singularity RepoQL Windows (Fleet861 RC)"
            Manufacturer="Singularity RepoQL"
-           Version="0.2.0.0"
-           ProductCode="4E7B62D5-9C31-4A8F-B2D7-5F0C8E3A6B94"
+           Version="0.3.0.0"
+           ProductCode="FA5CBA0A-50E7-521E-926E-DC517FB2993F"
            UpgradeCode="7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61"
            Scope="perUser" Compressed="yes">
     <!-- Per-user install must be enforced by MSI properties, not only by

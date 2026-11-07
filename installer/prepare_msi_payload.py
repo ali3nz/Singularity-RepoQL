@@ -3,7 +3,10 @@
 
 The payload includes source and three actual compiled Windows binaries. It does
 not register tasks, provision credentials or claim live Windows functionality.
-Input ZIP is pinned to the independently uploaded Drive snapshot.
+Input ZIP is pinned to the variant-2 archive built by
+native/windows/build_source_variants.py from the rc-fleet893 tree. That
+archive carries regenerated SHA256SUMS and
+NATIVE_WINDOWS_SOURCE_MANIFEST.json, and it never touches Drive.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ import stat
 import sys
 import zipfile
 
-SOURCE_SHA256 = 'e8392ba81e1114c874196d2814bafdea825729b725fd52f4e2049668b242856c'
+SOURCE_SHA256 = '282fbc77ef2e5b829f70235799fe3eeeab351cb914649b4e6789e2af9fadd64b'
 REQUIRED_BINARIES = {
     'singularity-desktop-bridge.exe': 'bridge',
     'singularity-windows-supervisor.exe': 'supervisor',
