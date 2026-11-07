@@ -222,6 +222,15 @@ def _sibling_module(name: str):
     return importlib.import_module("headless" if name == "openmausbot" else name)
 
 
+def _rc_services():
+    """The RC's own zero-touch backend bootstrap (native/windows/rc_services.py)."""
+    import importlib
+    directory = Path(__file__).resolve().parent.parent
+    if str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
+    return importlib.import_module("rc_services")
+
+
 def build_adapters(env: dict | None = None) -> dict[str, Adapter]:
     """Real Windows/Linux probes, path-overridable for tests and the RC.
 
@@ -272,11 +281,19 @@ def build_adapters(env: dict | None = None) -> dict[str, Adapter]:
         return NEEDS_ATTENTION, "rql binary not found"
 
     def repoql_ensure(created: list[Path]):
-        raise RuntimeError("rql provisioning requires the staged release; see INSTALLATION")
+        """Create the RC workspace and leave a verified local host serving it."""
+        module = _rc_services()
+        data = module.layout(module.defaults(env))
+        report = module.ensure_repoql(data)
+        return ("RepoQL host " + str(report.get("verdict") or "ready")
+                + " on the RC-owned workspace")
 
     def tencent_detect():
+        # Native RC installs run MemoryPanel on their own loopback port; the
+        # Linux/docker dashboard default stays 8125 when no native marker is set.
+        default_port = "18226" if env.get("SINGULARITY_WINDOWS_NATIVE") == "1" else "8125"
         try:
-            port = int(env.get("SINGULARITY_TENCENT_PANEL_PORT", "8125"))
+            port = int(env.get("SINGULARITY_TENCENT_PANEL_PORT") or default_port)
         except ValueError:
             return UNAVAILABLE, "panel port is not an integer"
         if _port_open("127.0.0.1", port):
@@ -287,9 +304,15 @@ def build_adapters(env: dict | None = None) -> dict[str, Adapter]:
         supervisor = env.get("SINGULARITY_MEMORY_SUPERVISOR")
         config = env.get("SINGULARITY_MEMORY_STACK_CONFIG")
         if not supervisor or not config:
-            raise RuntimeError(
-                "native memory stack is not staged (set SINGULARITY_MEMORY_SUPERVISOR and "
-                "SINGULARITY_MEMORY_STACK_CONFIG)")
+            # No pre-staged config: build the RC-owned one from the machine's
+            # vendor build dirs, start it and provision the owner identity.
+            module = _rc_services()
+            data = module.layout(module.defaults(env))
+            module.ensure_memory(data)
+            identity = module.ensure_identity(data)
+            return ("memory stack started on RC ports "
+                    + f"{data['core_port']}/{data['panel_port']}; owner identity "
+                    + str(identity.get("action")))
         node = omb_node()
         if not node:
             raise RuntimeError("no Node runtime for the memory supervisor")

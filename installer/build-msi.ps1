@@ -96,13 +96,21 @@ try {
     if (Test-Path -LiteralPath $release) { throw 'OUTPUT_MSI_ALREADY_EXISTS' }
     & $wix build -arch x64 -bindpath ('Payload=' + $payload) -out $release $wxs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $release -PathType Leaf)) { throw 'MSI_BUILD_FAILED' }
+    # A self-contained distribution: the package must carry its own CAB. An
+    # external cab1.cab beside the MSI means the package cannot be installed
+    # from a folder holding only the MSI, which is how it is distributed.
+    $strayCab = @(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.cab' -File -ErrorAction SilentlyContinue)
+    if ($strayCab.Count -gt 0) { throw ('EXTERNAL_MEDIA_EMITTED: ' + ($strayCab.Name -join ',')) }
     $receipt = [ordered]@{
-        schema = 'singularity-msi-build/1'
+        schema = 'singularity-msi-build/2'
         msi = $release
         wxs_source = $wxs
         msi_sha256 = (Get-FileHash -LiteralPath $release -Algorithm SHA256).Hash
         source_zip_sha256 = $sourceHash
         msi_bytes = (Get-Item -LiteralPath $release).Length
+        media = 'embedded-cab'
+        distribution_files = @((Split-Path -Leaf $release))
+        distribution_sha256 = @{ (Split-Path -Leaf $release) = (Get-FileHash -LiteralPath $release -Algorithm SHA256).Hash }
         windows_msvc_host = $hostTriple
         rust_tests_skipped = [bool]$SkipRustTests
         native_host_install_tested = $false

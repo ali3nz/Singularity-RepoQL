@@ -217,11 +217,20 @@ class RealAdapterTests(unittest.TestCase):
         self.assertEqual(self.adapters(SINGULARITY_TENCENT_PANEL_PORT="x")["tencent"].detect()[0],
                          UNAVAILABLE)
 
-    def test_tencent_repair_refuses_without_a_staged_stack(self):
-        adapters = self.adapters(SINGULARITY_TENCENT_PANEL_PORT=1)
+    def test_tencent_repair_names_the_missing_vendor_input(self):
+        # With no pre-staged config the adapter builds and starts the RC-owned
+        # stack; on a machine without the vendor runtime it must fail naming the
+        # exact missing input, never fall back to a stub.
+        adapters = self.adapters(SINGULARITY_TENCENT_PANEL_PORT=1, LOCALAPPDATA=self.root)
         with self.assertRaises(RuntimeError) as caught:
             adapters["tencent"].ensure([])
-        self.assertIn("not staged", str(caught.exception))
+        self.assertIn("node is missing", str(caught.exception))
+
+    def test_tencent_native_default_port_is_the_rc_panel(self):
+        adapters = self.adapters(LOCALAPPDATA=self.root, SINGULARITY_WINDOWS_NATIVE="1")
+        state, detail = adapters["tencent"].detect()
+        self.assertEqual(state, NEEDS_ATTENTION)
+        self.assertIn("18226", detail)
 
     def test_openmausbot_delegates_to_the_headless_lane(self):
         site = self.root / "rc"

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Fleet861 RC v3. Same isolation identities as v2 (distinct UpgradeCode from
+       production, per-user install root %LOCALAPPDATA%\Singularity\Fleet861RC,
+       per-user ARP scope), with three defects fixed:
+
+          1. Version 0.4.0.0 and a new ProductCode, so the package replaces the
+             installed 0.3.0.0 RC through FindRelatedProducts on the shared
+             UpgradeCode 7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61 (unchanged).
+          2. MediaTemplate EmbedCab="yes": the CAB is inside the MSI. v2 emitted
+             an external cab1.cab beside a 205 KB MSI, so the MSI alone could not
+             be installed from a fresh folder. The distribution is now one file.
+          3. A deferred uninstall action removes runtime __pycache__ directories
+             that Windows Installer cannot own (Python bytecode written after
+             installation). It runs with the install folder as its working
+             directory and can only touch paths inside the RC install root.
+       The action is REMOVE="ALL" only, runs after RemoveFiles, and ignores
+       errors so a residue problem can never fail an uninstall. -->
+  <Package Name="Singularity RepoQL Windows (Fleet861 RC)"
+           Manufacturer="Singularity RepoQL"
+           Version="0.4.0.0"
+           ProductCode="B7E4D1C2-9F3A-5D68-8C41-2A6F0E9B7D53"
+           UpgradeCode="7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61"
+           Scope="perUser" Compressed="yes">
+    <Property Id="ALLUSERS" Value="2" />
+    <Property Id="MSIINSTALLPERUSER" Value="1" />
+    <MajorUpgrade DowngradeErrorMessage="A newer Singularity RepoQL Fleet861 RC package is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Singularity\Fleet861RC" />
+    </StandardDirectory>
+    <Feature Id="ProductFeature" Title="Singularity RepoQL Windows (Fleet861 RC)" Level="1">
+      <ComponentGroupRef Id="ProductPayload" />
+    </Feature>
+    <CustomAction Id="RemovePayloadBytecode"
+                  Directory="INSTALLFOLDER"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore"
+                  ExeCommand="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$ErrorActionPreference='SilentlyContinue'; Get-ChildItem -LiteralPath (Get-Location) -Recurse -Directory -Force -Filter '__pycache__' | Remove-Item -Recurse -Force&quot;" />
+    <InstallExecuteSequence>
+      <Custom Action="RemovePayloadBytecode" After="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+  <Fragment>
+    <ComponentGroup Id="ProductPayload" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.Payload)\**" />
+    </ComponentGroup>
+  </Fragment>
+</Wix>
