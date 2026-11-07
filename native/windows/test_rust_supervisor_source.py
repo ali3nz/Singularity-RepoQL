@@ -43,6 +43,8 @@ class RustSupervisorSourceTests(unittest.TestCase):
         self.assertIn('job_object_terminates_owned_child_on_close',LIB)
         self.assertIn('suspended_child_cannot_execute_before_job_assignment',LIB)
         self.assertIn('CREATE_SUSPENDED',LIB)
+        self.assertIn('const CREATE_NO_WINDOW: u32 = 0x08000000;',LIB)
+        self.assertIn('command.creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW);',LIB)
         self.assertIn('spawn_contained(&mut cmd)',LIB)
         self.assertIn('ResumeThread(thread.0)',LIB)
         self.assertNotIn('let mut child = cmd.spawn()',LIB)

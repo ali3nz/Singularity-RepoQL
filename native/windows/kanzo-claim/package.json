@@ -1,0 +1,11 @@
+{
+  "name": "singularity-kanzo-claim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Windows-local claim/lease layer over the existing Kanzo store (fleet#893 W3).",
+  "main": "server.mjs",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

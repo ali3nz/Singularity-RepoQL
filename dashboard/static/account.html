@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
+<title>Singularity RepoQL sign in</title>
+<style>
+:root{font-family:system-ui,Segoe UI,Arial,sans-serif;color:#e8edff;background:#090d18}
+*{box-sizing:border-box}body{min-height:100vh;display:grid;place-items:center;margin:0;padding:20px;background:radial-gradient(ellipse at 30% 10%,#1a2344 0%,#090d18 60%)}
+main{width:min(430px,100%);padding:34px;border:1px solid #313b5b;border-radius:18px;background:#121829;box-shadow:0 20px 70px #0006}
+h1{font-size:1.5rem;margin:.3rem 0 .6rem}p{line-height:1.5;color:#aeb9d9;font-size:.95rem}
+label{display:block;font-size:.9rem;margin:1.2rem 0 .35rem;color:#d9e2ff}
+input{width:100%;padding:12px;border:1px solid #404d70;border-radius:9px;background:#0b1121;color:#fff;font:inherit}
+input:focus{outline:2px solid #8f98ef;outline-offset:1px}
+button{margin-top:24px;width:100%;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:650;background:#a6a8ff;color:#11142a;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}.eyebrow{letter-spacing:.14em;text-transform:uppercase;color:#a6a8ff;font-size:.73rem;font-weight:700}
+#error{min-height:1.2rem;color:#ff9ca7}small{display:block;margin-top:1rem;color:#97a1c1}#confirm-wrap{display:none}
+</style></head><body><main><div class="eyebrow">Singularity RepoQL</div><h1 id="heading">Sign in</h1>
+<p id="intro">Use your private dashboard account. Your password stays on this computer.</p>
+<form id="account-form" autocomplete="on"><label for="username">Username</label>
+<input id="username" name="username" autocomplete="username" minlength="3" maxlength="40" required pattern="[A-Za-z][A-Za-z0-9_.-]{2,39}">
+<label for="password">Password</label><input id="password" type="password" name="password" autocomplete="current-password" minlength="12" maxlength="256" required>
+<div id="confirm-wrap"><label for="confirmation">Confirm password</label><input id="confirmation" type="password" autocomplete="new-password" minlength="12" maxlength="256"></div>
+<p id="error" role="alert" aria-live="polite"></p><button type="submit" id="submit">Sign in</button></form>
+<small>Private dashboard · this Windows PC only · no cloud account required</small></main>
+<script>
+'use strict';
+(async()=>{
+  const $=id=>document.getElementById(id), err=$('error'), submit=$('submit');
+  let setup=false;
+  try{
+    const r=await fetch('/api/account/status',{cache:'no-store',credentials:'same-origin'});
+    if(!r.ok)throw Error('Cannot read account state');
+    const info=await r.json();if(info.authenticated){location.replace('/');return;}
+    setup=!info.configured;
+    if(setup){$('heading').textContent='Create your account';$('intro').textContent='Choose a username and password. This account protects the dashboard on this computer.';
+      $('confirm-wrap').style.display='block';$('confirmation').required=true;$('password').autocomplete='new-password';submit.textContent='Create account';}
+  }catch{err.textContent='Dashboard account service is unavailable.';submit.disabled=true;return;}
+  $('account-form').addEventListener('submit',async ev=>{
+    ev.preventDefault();err.textContent='';
+    const username=$('username').value.trim(),password=$('password').value;
+    if(setup&&password!==$('confirmation').value){err.textContent='Passwords do not match.';return;}
+    submit.disabled=true;
+    try{
+      const r=await fetch(setup?'/api/account/setup':'/api/account/login',{
+        method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'repoql-dashboard'},
+        credentials:'same-origin',cache:'no-store',body:JSON.stringify({username,password})});
+      if(!r.ok){const p=await r.json().catch(()=>({}));
+        err.textContent=p.error==='too_many_attempts'?'Too many attempts. Try again after a minute.':
+          p.error==='account_already_configured'?'An account already exists. Reload to sign in.':
+          p.error==='invalid_credentials'?'Incorrect username or password.':
+          'Unable to sign in. Check your account details.';return;}
+      location.replace('/');
+    }catch{err.textContent='The local dashboard is unavailable.';}
+    finally{submit.disabled=false;$('password').value='';$('confirmation').value='';}
+  });
+})();
+</script></body></html>

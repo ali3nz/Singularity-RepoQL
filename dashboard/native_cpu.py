@@ -22,7 +22,8 @@ def sample_cpu(pid=None, *, executable=None, runner=subprocess.run):
         args.extend(['--pid', str(pid)])
     try:
         proc = runner(args, shell=False, check=False, stdout=subprocess.PIPE,
-                      stderr=subprocess.DEVNULL, timeout=4)
+                      stderr=subprocess.DEVNULL, timeout=4,
+                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if proc.returncode != 0 or len(proc.stdout) > 16384:
             raise ValueError('native probe failed')
         data = json.loads(proc.stdout)

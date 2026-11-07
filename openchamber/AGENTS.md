@@ -34,6 +34,10 @@ merely because another installation provides them.
 Do not assume a prior memory is still accurate without considering
 its source, scope, and freshness.
 
+## Native Kanzo lifecycle
+
+Before implementation/review, use the available Kanzo MCP to inspect overlapping open, claimed and closed work. Claim only the assigned scope through the existing authorized command. While an active implementation is genuinely in progress, transition the associated existing Kanzo task to native `doing` using the established lifecycle tool, and verify the actual persisted status. A `claim_work` result is not evidence the board stage changed. On stop, close the task through the existing closeout lifecycle, preserve remaining work and validation status, verify `done` and claim release, and never equate administrative closure with successful acceptance. The dashboard reads and edits the Kanzo board, not a shadow copy. Read-only work needs no artificial task.
+
 ## Code intelligence (RepoQL)
 
 When the RepoQL MCP server is connected, it is the first stop for
@@ -323,3 +327,18 @@ Prefer verified, scoped, maintainable implementations.
 
 Memory improves continuity. It does not replace evidence,
 authorization, or the user's current instructions.
+
+## Retrieval and saving discipline for the native Windows package
+
+The Dockerhost's current memory policy has been adapted, not copied as a Linux
+operating procedure. Start with scoped RepoQL source retrieval, read and verify
+the current file, then recall only relevant authorized MemoryCore records.
+Preserve the actual capturing identity; a role selector or a structured SQL
+mirror does not authorize another agent's records. Save durable behavior in
+reviewed docs or source-scoped concepts, and let the installed runtime's
+approved capture path do its work. Do not add manual duplicate memory writers,
+pretend capture completes synchronously, or use legacy MEX as a backend.
+Kanzo is work state; Agent Chat is communication, not a task claim. The full
+Windows rules and category matrix are in `docs/WINDOWS-AGENT-MEMORY-POLICY.md`
+when installed with the complete product. Do not use the Linux Dockerhost
+SSH/timer paths from its reviewed AGENTS file on Windows.

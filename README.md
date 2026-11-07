@@ -32,7 +32,7 @@ Read DETAILS-FOR-NERDS.md and docs/NATIVE-WINDOWS-INSTALLATION.md, then follow t
 
 Connect all included tools to Claude Code in my chosen project: code search, memory, task tracking, Ghost scheduling, the dashboard, and Claude Office. Configure startup when I sign in. Preserve my existing files, settings, and other apps. Keep passwords and API keys private; ask before adding paid services or making system-wide changes.
 
-Test the connections in a fresh Claude Code session, including saving and finding a harmless memory and running a harmless scheduled job. Fix setup problems yourself. Only ask me for permissions, account sign-ins, or choices you cannot make for me. Tell me clearly if anything could not be tested.
+Test the connections in a fresh Claude Code session, including saving and finding a harmless memory and running a harmless scheduled job. For Memory Graph, build and configure the local Windows Rust unified gateway per docs/WINDOWS-LOCAL-UNIFIED-GATEWAY.md; never reuse Dockerhost tokens or an SSH-tunneled graph. Apply the port ownership and unique-local-fixture tests before claiming it works. Fix setup problems yourself. Only ask me for permissions, account sign-ins, or choices you cannot make for me. Tell me clearly if anything could not be tested.
 
 Create the "Singularity Dashboard" desktop shortcut with native/windows/manage_dashboard_shortcut.ps1 and check that it opens the dashboard.
 
@@ -66,3 +66,42 @@ If something isn't working, tell your agent what happened and ask it to check th
 ## License
 
 [MIT](LICENSE), with [separate notices for included third-party software](THIRD_PARTY_NOTICES.md).
+
+
+### Windows dashboard and memory source candidate (1 November 2026)
+
+The portable native Windows source carries the newer Dockerhost dashboard UX
+and a Windows-specific unified Rust graph gateway **source candidate**. The
+port does not install a gateway or accept an SSH tunnel to Dockerhost as a
+Windows memory source. Review `docs/WINDOWS-AGENT-MEMORY-POLICY.md` and
+`docs/WINDOWS-LOCAL-UNIFIED-GATEWAY.md` before runtime acceptance. The former
+includes the practical RepoQL search, identity-scoped recall and durable
+learning policy reviewed on Dockerhost; the latter covers Windows-only data
+paths, build and the outstanding live verification. No Windows release is
+accepted from source tests alone.
+
+For the comprehensive Windows parity installation and acceptance sequence, see
+[Windows dashboard, memory and Kanzo acceptance](docs/WINDOWS-DASHBOARD-MEMORY-KANZO-ACCEPTANCE-20261101.md).
+The tested source port includes a read-only Rust Kanzo board auditor and explicit
+Windows-local memory graph configuration. A card marked Closed reflects native
+Kanzo administrative closure, not a claim of implementation success.
+
+### Updating an existing Claude Code installation
+
+Installing newer source files does **not** automatically replace a workflow rule
+that Claude Code previously installed under `%USERPROFILE%\.claude\rules`.
+From the verified **installed** source directory, the Windows installation agent
+should run this read-only check before claiming memory policy parity:
+
+```powershell
+node native/windows/refresh_installed_claude_rules.mjs --source (Get-Location).Path --home $env:USERPROFILE
+```
+
+If the existing Claude Code installation receipt confirms that Singularity owns
+that exact rule, run the same command with `--apply`. The update preserves user
+settings, hooks, skills, agents and other rules. If the file was modified by
+another tool or the install journal has no ownership claim, the updater refuses
+to overwrite it. A new independent Claude Code session is still required to
+confirm that the revised guidance loads, and actual MemoryCore writes/recall
+and Kanzo claims must be validated separately. See
+`docs/WINDOWS-DASHBOARD-MEMORY-KANZO-ACCEPTANCE-20261101.md`.

@@ -116,3 +116,36 @@ def read_feed(after=0, limit=80, *, root: Path | None = None) -> dict:
             'last_id': selected[-1]['id'] if selected else after,
             'has_more': len(ordered) > limit,
             'source': 'durable-inbox', 'read_only': True}
+
+
+def read_presence(*, root: Path | None = None, now=None) -> dict:
+    """Return recent observed sender roles, never asserting actual worker activity."""
+    from datetime import datetime, timezone, timedelta
+    root = root if root is not None else ROOT
+    if not root.is_dir():
+        return {'available': False, 'agents': [], 'reason': 'Agent Chat state directory unavailable'}
+    now = now if now is not None else datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=5)
+    observed = {}
+    for _, path, _kind, _recipient in _files(root):
+        for line in _latest_lines(path):
+            try:
+                row = json.loads(line)
+                role = str(row.get('from') or '')
+                if not re.fullmatch(r'[a-z0-9_-]{1,32}', role):
+                    continue
+                when = datetime.fromisoformat(str(row.get('createdAt') or '').replace('Z', '+00:00'))
+                if when.tzinfo is None:
+                    continue
+                when = when.astimezone(timezone.utc)
+                if when < cutoff or when > now:
+                    continue
+                if role not in observed or observed[role] < when:
+                    observed[role] = when
+            except (ValueError, TypeError, json.JSONDecodeError, OverflowError):
+                continue
+    return {'available': True, 'agents': [
+        {'role': role, 'status': 'idle', 'last_seen': when.isoformat()}
+        for role, when in sorted(observed.items())
+    ], 'source': 'durable-inbox-recent-senders', 'read_only': True,
+        'working_status_verified': False}

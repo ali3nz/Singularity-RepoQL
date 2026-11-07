@@ -38,12 +38,44 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _NO_REDIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
 
 
+def _user_home() -> Path | None:
+    """Best-effort home directory that never raises.
+
+    ``Path.home()`` raises RuntimeError on Windows when USERPROFILE is not in
+    the environment (a service context, or a caller that clears the environment
+    before launching the dashboard). A missing default token path must degrade
+    to "harness unverified", never crash App construction.
+    """
+    for name in ("USERPROFILE", "HOME"):
+        value = os.environ.get(name)
+        if value:
+            return Path(value)
+    try:
+        return Path.home()
+    except (RuntimeError, KeyError):
+        return None
+
+
+def _fallback_root() -> Path:
+    root = os.environ.get("TEMP") or os.environ.get("TMP")
+    return Path(root) if root else Path(os.getcwd())
+
+
 def _default_token_file() -> Path:
     if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
         root = os.environ.get("LOCALAPPDATA")
+        if root:
+            return Path(root) / "Singularity" / "Harness" / "coordinator.token"
         # Never silently fall back to a Linux XDG path on a Windows build.
-        return (Path(root) if root else Path.home() / "AppData" / "Local") / "Singularity" / "Harness" / "coordinator.token"
-    return Path(os.environ.get("SINGULARITY_STATE_DIR") or Path.home() / ".local" / "state" / "singularity-dashboard") / "coordinator.token"
+        home = _user_home()
+        base = home / "AppData" / "Local" if home else _fallback_root()
+        return base / "Singularity" / "Harness" / "coordinator.token"
+    state = os.environ.get("SINGULARITY_STATE_DIR")
+    if state:
+        return Path(state) / "coordinator.token"
+    home = _user_home()
+    base = home / ".local" / "state" / "singularity-dashboard" if home else _fallback_root()
+    return base / "coordinator.token"
 
 
 def _valid_base_url(base: str, *, allow_remote: bool) -> bool:

@@ -790,8 +790,10 @@ def _expected_action_arguments(job: dict, config: HostConfig) -> str:
         char in config_path for char in ('"', "\r", "\n")
     ):
         raise HostError(503, "host_or_config_path_invalid")
+    wrapper = str(config.host_script.with_name("silent_python_host.py"))
+    log = str(config.config_path.parent / ("ghost-job-" + job["jobId"] + ".log"))
     return (
-        f'-B "{host}" --config "{config_path}" --execute-job {job["jobId"]} '
+        f'-B "{wrapper}" --log "{log}" -- "{host}" --config "{config_path}" --execute-job {job["jobId"]} '
         f'--revision {job["revision"]} '
         f'--prompt-revision {job["promptRevision"]} '
         f'--prompt-sha256 {job["promptSha256"]}'
@@ -840,7 +842,7 @@ def _matching_task(task: dict, job: dict, config: HostConfig, *, enabled: bool) 
     action = actions[0]
     if (
         not isinstance(action, dict)
-        or not _same_path(str(action.get("execute", "")), str(config.python_exe))
+        or not _same_path(str(action.get("execute", "")), str(config.python_exe.with_name("pythonw.exe")))
         or action.get("arguments") != _expected_action_arguments(job, config)
         or not _same_path(str(action.get("workingDirectory", "")), str(config.workspace))
     ):

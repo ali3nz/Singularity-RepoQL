@@ -47,7 +47,8 @@ def control_request(method, body=None, *, executable=None, runner=subprocess.run
     try:
         result = runner([str(exe), 'ghost-control', method], input=payload,
                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
-                        shell=False, timeout=180)
+                        shell=False, timeout=180,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if len(result.stdout) > 1024 * 1024:
             return unavailable()
         decoded = json.loads(result.stdout)

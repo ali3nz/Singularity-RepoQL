@@ -104,6 +104,7 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         raise ValueError('DASHBOARD_DEPENDENCY_MISSING')
     env = {
         'SINGULARITY_WINDOWS_NATIVE':'1',
+        'SINGULARITY_LOCAL_ACCOUNT_AUTH':'1',
         'PYTHONDONTWRITEBYTECODE':'1',
         'SINGULARITY_INSTALL_VARIANT':str(variant),
         'SINGULARITY_WORKSPACE':str(workspace),
@@ -113,6 +114,12 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         'SINGULARITY_BIND':'127.0.0.1',
         'SINGULARITY_ALLOW_PEERS':'127.0.0.1/32,::1/128',
         'SINGULARITY_PORT':str(port),
+        # Bind all unified dashboard calls to a project-owned Windows executable.
+        # The gateway may be absent: missing is explicitly unavailable, never an
+        # invitation to use a fleet SSH forward or a Dockerhost credential.
+        'SINGULARITY_WINDOWS_GATEWAY_EXE':str(source_root.parent / 'bin' / 'unified-repoql-control.exe'),
+        'UNIFIED_SERVICE_BASE':'http://127.0.0.1:18101',
+        'UNIFIED_GATEWAY_TOKEN_FILE':str(state_dir / 'unified-gateway.token'),
     }
     if variant in (2,4):
         env.update(_native_ghost_environment(source_root,state_dir,native_bridge_exe,ghost_control_config,windows=windows))
@@ -137,7 +144,9 @@ def main(argv=None):
     # Import only from the verified staged dashboard path, not from PATH or cwd.
     sys.path.insert(0,str(a.source_root/'dashboard'))
     import server
-    return server.main(['--config',str(a.source_root/'dashboard'/'config.example.json'),a.mode])
+    # Config.load uses the validated SINGULARITY_* environment above; the
+    # Linux example JSON is deliberately excluded from Windows public archives.
+    return server.main([a.mode])
 
 
 if __name__=='__main__':

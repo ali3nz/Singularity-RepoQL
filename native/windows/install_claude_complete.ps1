@@ -147,10 +147,30 @@ function Invoke-Claude([string]$Action) {
 }
 function Invoke-Mcp([string]$Action) {
   $args = @($McpScript,'--variant','2','--workspace',$Workspace,'--rql-exe',$RepoqlExe,'--kanzo-exe',$KanzoExe)
+  # Opt in to the local OMB MCP only after the user has paired a private token.
+  # No token is passed in arguments, persisted to .mcp.json, or copied to logs.
+  $ombEligible = $false
+  if ($Action -in @('plan','apply')) {
+    $ombExe = Join-Path $env:LOCALAPPDATA 'Programs/OpenMausBot/OpenMausBot.exe'
+    $ombToken = Join-Path $env:LOCALAPPDATA 'Singularity/OpenMausBot/mcp-session.token'
+    $ombScript = Join-Path (Split-Path $ombExe -Parent) 'resources/server/mcp-server.js'
+    if ((Test-Path -LiteralPath $ombExe -PathType Leaf) -and
+        (Test-Path -LiteralPath $ombScript -PathType Leaf) -and
+        (Test-Path -LiteralPath $ombToken -PathType Leaf)) {
+      $args += @('--omb-exe',(Assert-Local $ombExe 'OMB_EXE'),'--node-exe',$NodeExe)
+      $ombEligible = $true
+    }
+  }
   if ($Action -eq 'apply') { $args += '--apply' }
   if ($Action -eq 'rollback') { $args += '--rollback' }
   if ($Action -eq 'verify') { $args += '--verify' }
   Invoke-Checked $NodeExe $args
+  if ($Action -eq 'apply' -and $ombEligible) {
+    # Common ancestor instructions apply to every existing/future OMB bot.
+    # Refuses foreign rules instead of replacing any user-authored content.
+    $rules = Assert-Local (Join-Path $SourceRoot 'native/windows/openmausbot/install_shared_rules.mjs') 'OMB_RULES_INSTALLER'
+    Invoke-Checked $NodeExe @($rules,'apply')
+  }
 }
 function Assert-SupervisorTaskAbsent {
   # Scheduler errors are unknown state, NEVER evidence of task absence.

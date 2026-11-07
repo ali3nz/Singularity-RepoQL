@@ -28,6 +28,8 @@ $iconDest=Join-Path $AssetRoot 'singularity-dashboard.ico'
 $launcherDest=Join-Path $AssetRoot 'open_dashboard.ps1'
 $iconSrc=Join-Path $PSScriptRoot 'assets\singularity-dashboard.ico'
 $launcherSrc=Join-Path $PSScriptRoot 'open_dashboard.ps1'
+$stagedSource=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$opener=Join-Path (Split-Path -Parent $stagedSource) 'bin\singularity-dashboard-open.exe'
 $url="http://127.0.0.1:$DashboardPort/"
 function Get-LinkInfo([string]$Path) {
   $sh=New-Object -ComObject WScript.Shell
@@ -42,20 +44,20 @@ function Emit($o) { $o | ConvertTo-Json -Compress }
 switch ($Mode) {
   'Status' {
     $port=$null
-    if (Test-Owned $shortcut) { $m=[regex]::Match((Get-LinkInfo $shortcut).Arguments,'-DashboardPort (\d+)'); if ($m.Success) { $port=[int]$m.Groups[1].Value } }
+    if (Test-Owned $shortcut) { $m=[regex]::Match((Get-LinkInfo $shortcut).Arguments,'(?:--port|-DashboardPort) (\d+)'); if ($m.Success) { $port=[int]$m.Groups[1].Value } }
     Emit @{mode='Status';exists=(Test-Path -LiteralPath $shortcut);owned=(Test-Owned $shortcut);path=$shortcut;url=$(if($port){"http://127.0.0.1:$port/"}else{$null});iconPresent=(Test-Path -LiteralPath $iconDest);launcherPresent=(Test-Path -LiteralPath $launcherDest)}
   }
   'Create' {
     if ((Test-Path -LiteralPath $shortcut) -and -not (Test-Owned $shortcut)) { throw 'SHORTCUT_FOREIGN_FILE_REFUSED' }
-    foreach ($s in @($iconSrc,$launcherSrc)) { if (-not (Test-Path -LiteralPath $s -PathType Leaf)) { throw 'SHORTCUT_SOURCE_MISSING' } }
+    if (-not (Test-Path -LiteralPath $iconSrc -PathType Leaf)) { throw 'SHORTCUT_ICON_MISSING' }
+    if (-not (Test-Path -LiteralPath $opener -PathType Leaf)) { throw 'WINDOWLESS_DASHBOARD_OPENER_REQUIRED' }
     New-Item -ItemType Directory -Force -Path $AssetRoot | Out-Null
     Copy-Item -LiteralPath $iconSrc -Destination $iconDest -Force
-    Copy-Item -LiteralPath $launcherSrc -Destination $launcherDest -Force
     $sh=New-Object -ComObject WScript.Shell
     try {
       $l=$sh.CreateShortcut($shortcut)
-      $l.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-      $l.Arguments='-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$launcherDest+'" -DashboardPort '+$DashboardPort+' -StateDir "'+$StateDir+'"'
+      $l.TargetPath=$opener
+      $l.Arguments='--port '+$DashboardPort+' --state-dir "'+$StateDir+'"'
       $l.IconLocation=$iconDest+',0'
       $l.Description=$marker
       $l.WorkingDirectory=$AssetRoot

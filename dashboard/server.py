@@ -40,6 +40,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit, urljoin, unquote
 
+from local_account import (LocalAccount, AccountRefused, session_ttl,
+                           COOKIE_NAME as ACCOUNT_COOKIE_NAME)
 from access import AccessVerifier
 from repoql_bridge import Config, RepoQL, UpstreamError, host_uptime_seconds, summarise_log
 from variant_features import features as variant_features, route_allowed as variant_route_allowed
@@ -346,6 +348,8 @@ class App:
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
         self.token_path = self.config.state_dir / "token"
         self.token = self._load_token()
+        self.local_account = (LocalAccount(config.state_dir)
+                              if os.environ.get('SINGULARITY_LOCAL_ACCOUNT_AUTH') == '1' else None)
         self.exclusions = ExclusionStore(self.config.state_dir / "exclusions.json")
         self.cpu_db = self.config.state_dir / "cpu.db"
         self.mutation_lock = threading.Lock()
@@ -402,6 +406,8 @@ class App:
         return token
 
     def dashboard_url(self) -> str:
+        if self.local_account is not None:
+            return f"http://127.0.0.1:{self.config.port}/"
         host = self.config.bind
         if host in ("0.0.0.0", "", "::"):
             host = "127.0.0.1"
@@ -617,7 +623,22 @@ class App:
 EMBED_PREFIX = "/embed/repoql"
 # Office art the Pixi client loads from root-absolute URLs (see native_panel_proxy.static_asset).
 OFFICE_ASSET_PREFIXES = ("/sprites/", "/rooms/")
-NATIVE_REPOQL_UPSTREAM = ("127.0.0.1", 41005)
+# The Control Panel listener is the running RepoQL host's own, read from its
+# workspace bind record; 41005 is only a fallback origin. A hard-coded port
+# would proxy a different workspace's panel on a machine that runs more than
+# one (the installed product and this candidate do).
+NATIVE_REPOQL_DEFAULT_UPSTREAM = ("127.0.0.1", 41005)
+
+
+def native_repoql_upstream() -> tuple[str, int]:
+    from repoql_native_auth import panel_origin
+
+    return panel_origin() or NATIVE_REPOQL_DEFAULT_UPSTREAM
+
+
+def upstream_authority(upstream: tuple[str, int]) -> str:
+    host, port = upstream
+    return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
 MAX_EMBED_BODY = 32 * 1024 * 1024
 
 
@@ -666,6 +687,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
 
     def do_HEAD(self) -> None:
+        if self.app.local_account is not None:
+            self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'head_not_supported_for_private_dashboard'})
+            return
         """HEAD for the static surface so liveness probes that assume HEAD stop 501ing.
 
         Mirrors the GET static path (root / -> index.html, containment-bounded,
@@ -685,7 +709,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-store" if self.app.local_account is not None else "no-cache")
+        if self.app.local_account is not None:
+            self.send_header("Content-Security-Policy", "frame-ancestors 'self'")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         # st_size can differ by the Access-injection marker on a real GET body;
@@ -693,14 +719,88 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(target.stat().st_size))
         self.end_headers()
 
+    # -- auto-local session (owner addendum A2) ---------------------------
+    def _loopback_peer(self) -> bool:
+        """True only for a loopback peer address (never a raise on a bad address)."""
+        try:
+            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        except (ValueError, IndexError):
+            return False
+
+    def _auto_local_request_allowed(self) -> bool:
+        """Cheap anti-drive-by checks for silent loopback session issuance."""
+        if not self._loopback_peer():
+            return False
+        host = (self.headers.get('Host') or '').strip().lower()
+        name, _, port = host.partition(':')
+        if name not in ('127.0.0.1', 'localhost'):
+            return False
+        if port and port != str(self.server.server_address[1]):
+            return False
+        site = (self.headers.get('Sec-Fetch-Site') or '').strip().lower()
+        if site and site not in ('same-origin', 'none'):
+            return False
+        origin = self.headers.get('Origin')
+        if origin:
+            try:
+                parsed = urlparse(origin)
+            except ValueError:
+                return False
+            if parsed.scheme != self.request_scheme() or parsed.netloc.lower() != host:
+                return False
+        return True
+
+    def _maybe_issue_auto_local(self) -> None:
+        account = getattr(getattr(self, 'app', None), 'local_account', None)
+        if account is None or not account.auto_local:
+            return
+        if account.authenticated(self.headers.get('Cookie', '')):
+            return
+        if not self._auto_local_request_allowed():
+            return
+        self._pending_session = account.issue_session()
+        self._auto_session_ok = True
+
+    def end_headers(self) -> None:
+        pending = getattr(self, '_pending_session', None)
+        if pending:
+            self.send_header('Set-Cookie', f'{ACCOUNT_COOKIE_NAME}={pending}; HttpOnly; '
+                             f'SameSite=Strict; Path=/; Max-Age={session_ttl()}')
+            self._pending_session = None
+        super().end_headers()
+
     def route(self, method: str) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
         params = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
+        # Consent is per request: never inherit a previous request's auto-local
+        # grant (an HTTP/1.1 keep-alive handler instance is reused otherwise).
+        self._auto_session_ok = False
+        self._pending_session = None
+        # Duck-typed handlers (the variant/HTTP unit tests) call route() without the
+        # socket machinery, so the auto-local hook is optional rather than assumed.
+        hook = getattr(self, '_maybe_issue_auto_local', None)
+        if hook is not None:
+            hook()
         try:
             profile = variant_features()
             if not variant_route_allowed(path, profile):
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "feature_not_in_install_variant"})
+                return
+            if getattr(getattr(self, 'app', None), 'local_account', None) is not None:
+                if path.startswith('/api/account/'):
+                    self.serve_local_account(method, path)
+                    return
+                # Cookie traffic must carry an exact Origin on every mutation.
+                # Machine clients with a local bearer token do not use cookies.
+                if (method in ('POST', 'PUT', 'PATCH', 'DELETE')
+                    and self.app.local_account.authenticated(self.headers.get('Cookie', ''))
+                    and not self.bearer_authorized()
+                    and not self.request_origin_allowed(require_origin=True)):
+                    self.send_json(HTTPStatus.FORBIDDEN, {'error': 'account_origin_refused'})
+                    return
+            if path == '/setup' or path.startswith('/api/setup/'):
+                self.serve_setup_health(method, path)
                 return
             # MUST precede every dashboard route, including DELETE and /api/*.
             # This host is only Office; its Access audience grants no dashboard access.
@@ -885,7 +985,163 @@ class Handler(BaseHTTPRequestHandler):
         assertion = self.headers.get("Cf-Access-Jwt-Assertion")
         return verifier.identity(assertion) if verifier and assertion else None
 
+    def serve_local_account(self, method: str, path: str) -> None:
+        """Local only, single account. Never put owner credentials in browser URLs."""
+        account = self.app.local_account
+        if account is None:
+            self.send_json(HTTPStatus.NOT_FOUND, {'error': 'not_found'})
+            return
+        host = self.headers.get('Host', '')
+        expected = f'127.0.0.1:{self.server.server_address[1]}'
+        if (host != expected or self.client_address[0] != '127.0.0.1'
+                or self.headers.get('X-Forwarded-For') or self.headers.get('X-Forwarded-Proto')):
+            self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+            return
+        if path == '/api/account/status' and method == 'GET':
+            self.send_json(HTTPStatus.OK, {
+                'configured': account.configured(),
+                'authenticated': account.authenticated(self.headers.get('Cookie', ''))
+                                 or getattr(self, '_auto_session_ok', False),
+                'mode': account.mode,
+                'auto_local': account.auto_local,
+            })
+            return
+        if path not in ('/api/account/setup', '/api/account/login', '/api/account/logout', '/api/account/mode') or method != 'POST':
+            self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
+            return
+        if (self.headers.get('Origin') != f'http://{expected}'
+                or self.headers.get('X-Requested-With') != 'repoql-dashboard'
+                or self.headers.get('Content-Type', '').split(';')[0].lower() != 'application/json'
+                or self.headers.get('Sec-Fetch-Site') == 'cross-site'):
+            self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+            return
+        if path == '/api/account/mode' and method == 'POST':
+            try:
+                size = int(self.headers.get('Content-Length', '-1'))
+                if size < 2 or size > 1024:
+                    raise ValueError('invalid_size')
+                data = json.loads(self.rfile.read(size).decode('utf-8'))
+                if not isinstance(data, dict) or set(data) != {'mode'} or not isinstance(data['mode'], str):
+                    raise ValueError('invalid_body')
+                applied = account.set_mode(data['mode'])
+            except AccountRefused as exc:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': str(exc)})
+                return
+            except (ValueError, UnicodeError, TypeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
+                return
+            if applied == 'auto-local':
+                self._pending_session = account.issue_session()
+                self._auto_session_ok = True
+            self.send_json(HTTPStatus.OK, {'ok': True, 'mode': applied,
+                                           'auto_local': account.auto_local,
+                                           'configured': account.configured()})
+            return
+        if path == '/api/account/logout':
+            account.revoke(self.headers.get('Cookie', ''))
+            self._account_response(HTTPStatus.OK, {'ok': True}, cookie='', max_age=0)
+            return
+        try:
+            size = int(self.headers.get('Content-Length', '-1'))
+            if size < 2 or size > 4096:
+                raise ValueError('invalid_size')
+            raw = self.rfile.read(size)
+            data = json.loads(raw.decode('utf-8'))
+            if not isinstance(data, dict) or set(data) != {'username', 'password'}:
+                raise ValueError('invalid_body')
+            if path == '/api/account/setup':
+                token = account.setup(data['username'], data['password'])
+            else:
+                token = account.login(data['username'], data['password'], self.client_address[0])
+        except AccountRefused as exc:
+            code = str(exc)
+            self.send_json(HTTPStatus.TOO_MANY_REQUESTS if code == 'too_many_attempts' else
+                           HTTPStatus.CONFLICT if code == 'account_already_configured' else
+                           HTTPStatus.UNAUTHORIZED if code == 'invalid_credentials' else
+                           HTTPStatus.BAD_REQUEST, {'error': code})
+            return
+        except (ValueError, UnicodeError, TypeError, KeyError):
+            self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
+            return
+        self._account_response(HTTPStatus.OK, {'ok': True}, cookie=token, max_age=session_ttl())
+
+    def _account_response(self, status: HTTPStatus, payload: dict, *, cookie: str, max_age: int) -> None:
+        data = json.dumps(payload, separators=(',', ':')).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Set-Cookie', f'{ACCOUNT_COOKIE_NAME}={cookie}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age}')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def serve_setup_health(self, method: str, path: str) -> None:
+        """Setup health + Repair (W7). Same loopback and session rules as the dashboard."""
+        import setup_health
+
+        if not self.authorized():
+            self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'setup_auth_required'})
+            return
+        port = self.server.server_address[1]
+        host = (self.headers.get('Host') or '').strip().lower()
+        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or not self._loopback_peer():
+            self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+            return
+        if path == '/api/setup/health' and method == 'GET':
+            self.send_json(HTTPStatus.OK, {'rows': setup_health.rows()})
+            return
+        if path == '/api/setup/repair' and method == 'POST':
+            if (self.headers.get('Origin') != f'http://{host}'
+                    or self.headers.get('X-Requested-With') != 'repoql-dashboard'):
+                self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > 4096:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_body'})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b'{}')
+            except ValueError:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_json'})
+                return
+            only = payload.get('only') if isinstance(payload, dict) else None
+            if only is not None and not (isinstance(only, list) and all(isinstance(x, str) for x in only)):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_only'})
+                return
+            try:
+                summary = setup_health.repair(only)
+            except Exception as exc:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR,
+                               {'error': 'repair_failed', 'detail': type(exc).__name__})
+                return
+            self.send_json(HTTPStatus.OK, summary)
+            return
+        if path == '/setup' and method == 'GET':
+            body = setup_health.page_html(setup_health.rows()).encode('utf-8')
+            self.send_response(HTTPStatus.OK)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
+
     def authorized(self) -> bool:
+        if getattr(self, '_auto_session_ok', False):
+            return True
+        if self.app.local_account is not None:
+            if self.app.local_account.authenticated(self.headers.get('Cookie', '')):
+                return True
+            # Keep a separate capability for explicit local automation clients
+            # such as Claude Code; browser requests must use the owner cookie.
+            if (self.headers.get('Origin') or self.headers.get('Sec-Fetch-Site')
+                or self.headers.get('Sec-Fetch-Mode')):
+                return False
         header = self.headers.get("Authorization", "")
         if header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), self.app.token):
             return True
@@ -1030,7 +1286,9 @@ class Handler(BaseHTTPRequestHandler):
             local_peer = ipaddress.ip_address(self.client_address[0]).is_loopback
         except (ValueError, IndexError, TypeError):
             local_peer = False
-        return self.bearer_authorized() and local_peer
+        account = getattr(getattr(self, 'app', None), 'local_account', None)
+        owner_cookie = bool(account and account.authenticated(getattr(self, 'headers', {}).get('Cookie', '')))
+        return local_peer and (self.bearer_authorized() or owner_cookie)
 
     def serve_ghost_api(self, method: str, path: str) -> None:
         from ghost_bridge import control_headers_valid, control_request, read_status
@@ -1133,7 +1391,8 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 raise PermissionError("invalid native panel redirect port") from exc
             if (parsed.scheme != "http" or parsed.hostname not in
-                    ("localhost", "127.0.0.1", "::1") or port != NATIVE_REPOQL_UPSTREAM[1]):
+                    ("localhost", "127.0.0.1", "::1")
+                    or port != native_repoql_upstream()[1]):
                 raise PermissionError("foreign native panel redirect refused")
         # A protocol-relative URL is never relative to the fixed upstream.
         if location.startswith("//") or parsed.path.startswith("//"):
@@ -1235,13 +1494,15 @@ class Handler(BaseHTTPRequestHandler):
         except PermissionError:
             self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_header'})
             return
-        headers["Host"] = "127.0.0.1:41005"
+        upstream = native_repoql_upstream()
+        authority = upstream_authority(upstream)
+        headers["Host"] = authority
         headers["Accept-Encoding"] = "identity"
         if "Origin" in headers:
-            headers["Origin"] = "http://127.0.0.1:41005"
+            headers["Origin"] = "http://" + authority
         if method in ("POST", "PUT", "PATCH", "DELETE") and body is not None:
             headers["Content-Length"] = str(len(body))
-        conn = http.client.HTTPConnection(*NATIVE_REPOQL_UPSTREAM, timeout=30)
+        conn = http.client.HTTPConnection(*upstream, timeout=30)
         try:
             conn.request(method, upstream_path, body=body, headers=headers)
             response = conn.getresponse()
@@ -1317,12 +1578,14 @@ class Handler(BaseHTTPRequestHandler):
                 if key.lower() == 'origin':
                     continue
                 lines.append(f"{key}: {value}")
-            lines.append("Host: 127.0.0.1:41005")
+            upstream_target = native_repoql_upstream()
+            upstream_authority_text = upstream_authority(upstream_target)
+            lines.append("Host: " + upstream_authority_text)
             if self.headers.get("Origin"):
-                lines.append("Origin: http://127.0.0.1:41005")
+                lines.append("Origin: http://" + upstream_authority_text)
             lines.append("Connection: Upgrade")
             lines.append("Upgrade: websocket")
-            upstream = socket.create_connection(NATIVE_REPOQL_UPSTREAM, timeout=10)
+            upstream = socket.create_connection(upstream_target, timeout=10)
             upstream.sendall(("\r\n".join(lines) + "\r\n\r\n").encode("latin-1"))
             self.connection.settimeout(None)
             upstream.settimeout(None)
@@ -1348,6 +1611,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "feature_not_in_install_variant"})
             return
         relative = "index.html" if path in ("/", "") else path.lstrip("/")
+        local_account = getattr(getattr(self, "app", None), "local_account", None)
+        if local_account is not None:
+            # A first auto-local request carries no cookie yet, but this request's
+            # grant is already decided (A1: the dashboard opens signed in, never
+            # on the sign-in page).
+            signed_in = (getattr(self, '_auto_session_ok', False)
+                         or local_account.authenticated(self.headers.get('Cookie', '')))
+            if not signed_in:
+                if relative in ('index.html', 'account.html'):
+                    relative = 'account.html'
+                else:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'account_login_required'})
+                    return
+            elif relative == 'account.html':
+                relative = 'index.html'
         target = (STATIC_DIR / relative).resolve()
         # Component-boundary containment: a string prefix would accept sibling dirs like static-foo.
         if not target.is_relative_to(STATIC_DIR.resolve()) or not target.is_file():
@@ -1368,13 +1646,16 @@ class Handler(BaseHTTPRequestHandler):
             public_profile = variant_features()
             feature_json = json.dumps(public_profile, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
             body = body.replace(b"<head>", ("<head>\n<script>window.__SINGULARITY_VARIANT__=" + feature_json + ";</script>").encode("utf-8"), 1)
-        if target.name == "index.html" and self.access_identity() is not None:
+        if target.name == "index.html" and local_account is not None:
+            body = body.replace(b"<head>", b"<head>\n<script>window.__SINGULARITY_LOCAL_LOGIN__=true;</script>", 1)
+        if target.name == "index.html" and (self.access_identity() is not None or
+             (local_account and local_account.authenticated(self.headers.get('Cookie', '')))):
             # Tell the SPA that Access already vouched for this browser, so it does
             # not look for the loopback capability key in the URL fragment.
             body = body.replace(b"<head>", b"<head>\n<script>window.__RQDASH_ACCESS__=true;</script>", 1)
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-store" if local_account is not None else "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(body)))
@@ -1388,6 +1669,9 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET":
             if path == "/api/features":
                 return variant_features()
+            if path == "/api/openmausbot/overview":
+                from native_openmausbot import overview
+                return overview(app.config.state_dir)
             if path == "/api/native/windows/readiness":
                 from native_readiness import report
                 return report(app.config)
@@ -1422,6 +1706,9 @@ class Handler(BaseHTTPRequestHandler):
                         return json.load(src)
                 except (OSError, ValueError):
                     return {"available": False, "reason": "OpenChamber summary unreadable"}
+            if path == "/api/agentchat/presence":
+                from agentchat_feed import read_presence
+                return read_presence()
             if path == "/api/agentchat/feed":
                 from agentchat_feed import read_feed
                 return read_feed(params.get("after", "0"), params.get("limit", "80"))
@@ -2419,6 +2706,9 @@ def build_server(config: Config) -> ThreadingHTTPServer:
     app = App(config)
     handler = type("BoundHandler", (Handler,), {"app": app})
     ThreadingHTTPServer.request_queue_size = 32
+    if app.local_account is not None:
+        if config.bind != '127.0.0.1' or config.public_url or config.access_team_domain or config.access_aud:
+            raise ValueError('LOCAL_ACCOUNT_REQUIRES_PRIVATE_LOOPBACK')
     server = ThreadingHTTPServer((config.bind, config.port), handler)
     server.daemon_threads = True
     return server

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CRATES = (
     ('native/desktop-bridge', 'singularity-desktop-bridge'),
     ('native/windows/rust-supervisor', 'singularity-windows-supervisor'),
+    ('native/windows/unified-gateway-rust', 'unified-repoql-control'),
 )
 _SHA = re.compile(r'^[a-f0-9]{64}$')
 

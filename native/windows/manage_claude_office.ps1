@@ -658,6 +658,8 @@ if ($Mode -eq 'Install') {
   $venvPython = Join-Path $venvDir 'Scripts\python.exe'
   if (-not (Test-Path -LiteralPath $venvPython)) { throw 'OFFICE_VENV_PYTHON_MISSING' }
   $null = Assert-Python313 $venvPython
+  $venvPythonw = Join-Path $venvDir 'Scripts\pythonw.exe'
+  if (-not (Test-Path -LiteralPath $venvPythonw -PathType Leaf)) { throw 'OFFICE_VENV_PYTHONW_MISSING' }
   & $venvPython -m ensurepip --upgrade 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'OFFICE_ENSUREPIP_FAILED' }
   $installArgs = @('-m','pip','install','--disable-pip-version-check','--no-input','--no-warn-script-location','-r',(Join-Path $root 'requirements-lock.txt'))
@@ -706,14 +708,14 @@ uvicorn.run('app.main:app', host='127.0.0.1', port=int(cfg['port']), log_level='
   [IO.File]::WriteAllText($runnerPath, $runner, (New-Object Text.UTF8Encoding($false)))
   $arguments = '-B "' + $runnerPath + '" --config "' + $serviceJson + '"'
   foreach ($value in @($runnerPath,$serviceJson)) { if ($value.Contains([char]10) -or $value.Contains([char]13)) { throw 'OFFICE_ARGUMENTS_INVALID' } }
-  $receipt = [ordered]@{schema=$receiptSchema;taskName=$TaskName;installRoot=$root;pythonExe=$venvPython;arguments=$arguments;userId=$user;
+  $receipt = [ordered]@{schema=$receiptSchema;taskName=$TaskName;installRoot=$root;pythonExe=$venvPythonw;arguments=$arguments;userId=$user;
     sourceCommit=$pinInfo.commit;sourceDirty=$pinInfo.dirty;sourceGitPresent=$pinInfo.gitPresent;staticBuildId=$buildId;requirementsLockSha256=(Get-Sha256 (Join-Path $root 'requirements-lock.txt'));layoutAssetSha256=(Get-Sha256 $layout);
     stageManifestSha256=(Get-Sha256 (Join-Path $root 'STAGE-MANIFEST.json'));port=$Port;installedAtUtc=(Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')}
   Write-OfficeReceipt $receipt $receiptPath
-  $action = New-ScheduledTaskAction -Execute $venvPython -Argument $arguments -WorkingDirectory $root
+  $action = New-ScheduledTaskAction -Execute $venvPythonw -Argument $arguments -WorkingDirectory $root
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
   $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-  $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+  $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
   $registered = Get-OfficeTask
   Assert-TaskOwned $registered (Get-Receipt)

@@ -80,7 +80,10 @@ function bumpCounter(session, root) {
 // deliberately no subprocess runtime dependency here.
 const START_GUIDANCE =
   "[singularity docs start] Before substantial work: check the project's tracking records for active related work, " +
-  "read the relevant existing runbook/documentation if one covers this task, search RepoQL concepts for the files " +
+  "read the relevant existing runbook/documentation if one covers this task, use the Kanzo MCP to check " +
+  "the complete board including human and closed tasks and claim the exact scope before shared changes. " +
+  "If the task is active, verify native Kanzo `doing` readback; closeout `done` is not implementation success. " +
+  "For relevant prior context use scoped, bounded MemoryCore recall, then verify against source. Search RepoQL concepts for the files " +
   "and decisions it touches, and search this installation's current indexed documentation when operational context " +
   "helps (`node scripts/doc-ingest-node.mjs search \"<topic>\"`; bounded result). Reuse and improve existing docs; do not " +
   "create duplicates. For material changes, documentation is required (features, behaviour/API/deployment/config/security changes, bug fixes worth remembering, " +

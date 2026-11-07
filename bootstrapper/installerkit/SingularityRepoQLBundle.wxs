@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <!-- Stable bundle family identity. Separate from the MSI UpgradeCode. -->
+  <Bundle Name="Singularity RepoQL Setup"
+          Version="0.1.0"
+          Manufacturer="Singularity RepoQL"
+          UpgradeCode="E83EDB61-178B-4CD3-92F0-9C97E6D6292F">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkLicense"
+          LicenseUrl=""
+          ShowVersion="yes"
+          LaunchTarget="[ProgramFiles64Folder]Singularity RepoQL\Configure-Singularity.cmd" />
+    </BootstrapperApplication>
+    <Chain>
+      <MsiPackage Id="SingularityRepoQLFiles"
+                  SourceFile="!(bindpath.Msi)\Singularity-RepoQL-Windows-Preview-x64.msi"
+                  Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

@@ -21,6 +21,8 @@ Preserve unrelated Windows state and keep Codex operational. Existing operator
 authorization covers project installation, dependencies, tests, and publication;
 do not introduce another approval round trip for already-authorized actions.
 
+Kanzo stage and claim semantics are specified in the installed `adapters/claude-code/singularity-workflow.md` rules. Require an authoritative board readback for To do → `doing` (In progress) and administrative `done` (Closed); never infer a claim from Agent Chat presence or success from Done. Reuse the native lifecycle tools and existing coordinator gates. The Windows `kanzo_board_audit` Rust CLI gives read-only stage counts, not claim evidence.
+
 The official `repoql@repoql-plugins` Claude Code plugin owns RepoQL MCP;
 project `.mcp.json` owns **Kanzo only**. RepoQL is pinned to **1.7.18**,
 connectors use the **parse/fetch/render** contract, with no `abi` manifest field.
@@ -35,6 +37,7 @@ an unverified `rql.exe`, or allow a plugin to bootstrap an unreviewed build.
 - `native/windows/verify_option2_connectors.py` — separate read-only connector sweep inventory
 - `connectors/memorycore/manifest.yaml`, `connectors/kanzo/manifest.yaml` — connector ABI and scope
 - `native/windows/configure_claude_code_windows.mjs` — 17 agents, 10 Singularity skills, hooks
+- `native/windows/refresh_installed_claude_rules.mjs` — narrowly refreshes the installer-owned Claude workflow rule on existing installations, with plan and crash recovery; does not overwrite foreign rules
 - `adapters/claude-code/singularity-workflow.md` — installed Claude rules
 - `native/windows/claude_complete_acceptance_matrix.py` — explicit missing/live evidence
 
@@ -95,3 +98,30 @@ Use the evidence matrix to mark unrun items **NOT_RUN**, not PASS.
 
 The installer and dashboard launcher are currently **source-only and not
 certified on Windows**. Do not claim production readiness.
+
+## Native Windows memory policy alignment
+
+The Dockerhost's current agent memory lessons are adapted to Windows in
+`docs/WINDOWS-AGENT-MEMORY-POLICY.md` and the *installed* Claude rules at
+`adapters/claude-code/singularity-workflow.md`. Do not overwrite these with
+Linux fleet AGENTS or move Dockerhost secrets, indexes or SSH tunnels into the
+Windows product. RepoQL is the evidence locator, reviewed source/documents
+are authoritative, and MemoryCore is supplementary, scoped session history.
+Test real cross-session recall, source freshness, negative concept applicability,
+role separation and gateway locality separately. Existing legacy Harness MEX
+modules do not authorize MEX use on Windows.
+
+## Existing Claude Code installations after a source update
+
+A new source archive does **not** automatically replace an installed
+`~/.claude/rules/singularity-workflow.md`. The native installer correctly
+refuses a different, pre-existing rule, even when it was created by the last
+release. For a previously installed native configuration with an ownership
+receipt, run the **read-only** `node native/windows/refresh_installed_claude_rules.mjs
+--source . --home $HOME` plan first, then on native Windows use the same command
+with `--apply`. It checks the exact original installation receipt, source path
+and installed hash, and updates only the owned rule and its rollback receipt.
+Do not use this mechanism to rewrite user-owned rules, agent definitions, hooks,
+or MCP settings. Newly added hook implementation is read from the staged source
+path already recorded in Claude Code settings, so a source port requires that
+the registered staged path actually refers to the updated source.

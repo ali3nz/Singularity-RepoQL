@@ -267,7 +267,10 @@ def serve(handler, kind, method, parsed, *, public_root=False):
             # Incoming browser writes were verified against the public dashboard
             # origin above; only then is Origin rewritten for the fixed upstream.
             if method not in ('GET', 'HEAD'):
-                headers['Origin'] = 'http://127.0.0.1:4242'
+                # Use the configured upstream port: an RC board listens on its own
+                # RC port, and a hard-coded production port would make every
+                # write fail its origin check.
+                headers['Origin'] = 'http://127.0.0.1:%d' % _upstream('kanzo', 4242)[1]
         else:
             headers['X-Tdai-Service-Id'] = 'default'
             headers['X-Tdai-User-Key'] = backend_key(kind)

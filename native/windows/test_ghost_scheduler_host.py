@@ -131,7 +131,7 @@ class FakeTaskScheduler(host_mod.TaskScheduler):
             "state": state,
             "actions": [
                 {
-                    "execute": str(self.config.python_exe),
+                    "execute": str(self.config.python_exe.with_name("pythonw.exe")),
                     "arguments": host_mod._expected_action_arguments(job, self.config),
                     "workingDirectory": str(self.config.workspace),
                 }
@@ -580,7 +580,7 @@ class GhostHostTests(unittest.TestCase):
             self.host.get_state()
         self.assertEqual(caught.exception.status, 503)
         self.assertEqual(caught.exception.code, "scheduler_readback_mismatch")
-        task["actions"][0]["execute"] = str(self.config.python_exe)
+        task["actions"][0]["execute"] = str(self.config.python_exe.with_name("pythonw.exe"))
         task["taskName"] = "singularity-ghost-schedule-" + registered["jobId"]
         with self.assertRaises(host_mod.HostError) as case_mismatch:
             self.host.get_state()

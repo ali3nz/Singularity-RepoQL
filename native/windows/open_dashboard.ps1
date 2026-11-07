@@ -2,10 +2,9 @@
 .SYNOPSIS
   Open the local Singularity dashboard in the default browser.
 .DESCRIPTION
-  Reads the dashboard's private capability key from the current user's own state folder and
-  opens the loopback dashboard link in the browser. The key is never printed, logged or
-  written anywhere else. If the key file does not exist yet, the plain dashboard address is
-  opened, which shows the page that explains how to get a fresh link.
+  Opens the private loopback dashboard in the default browser. The browser
+  signs in with the local username/password chosen on first launch. No
+  capability token is sent to the browser or stored in browser storage.
 #>
 [CmdletBinding()]
 param(
@@ -16,9 +15,4 @@ $ErrorActionPreference='Stop'
 if (-not $StateDir) { $StateDir=Join-Path $env:LOCALAPPDATA 'Singularity\Dashboard' }
 $base="http://127.0.0.1:$DashboardPort/"
 $target=$base
-$tokenFile=Join-Path $StateDir 'token'
-if (Test-Path -LiteralPath $tokenFile -PathType Leaf) {
-  $key=(Get-Content -LiteralPath $tokenFile -Raw).Trim()
-  if ($key -match '^[A-Za-z0-9_\-]{16,128}$') { $target=$base+'#k='+$key }
-}
 Start-Process $target

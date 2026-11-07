@@ -243,7 +243,10 @@ function Expected-Arguments($Job) {
       $config.Contains('"') -or $config.Contains([char]10) -or $config.Contains([char]13)) {
     throw 'TASK_SCRIPT_ARGUMENT_INVALID'
   }
-  return '-B "' + $script + '" --config "' + $config + '" --execute-job ' + [string]$Job.jobId +
+  $wrapper=Join-Path (Split-Path -Parent $script) 'silent_python_host.py'
+  $log=Join-Path (Split-Path -Parent $config) ('ghost-job-'+[string]$Job.jobId+'.log')
+  foreach ($value in @($wrapper,$log)) { $null=Assert-LocalPath $value $false }
+  return '-B "' + $wrapper + '" --log "' + $log + '" -- "' + $script + '" --config "' + $config + '" --execute-job ' + [string]$Job.jobId +
     ' --revision ' + [string]$Job.revision +
     ' --prompt-revision ' + [string]$Job.promptRevision +
     ' --prompt-sha256 ' + [string]$Job.promptSha256
@@ -282,7 +285,7 @@ function Assert-TaskMatches($Task,$Job,[bool]$Enabled) {
       $snap.description -cne (Expected-Description $Job) -or
       $snap.enabled -ne $Enabled -or
       $snap.actions.Count -ne 1 -or
-      [string]$snap.actions[0].execute -ine [string]$Job.pythonExe -or
+      [string]$snap.actions[0].execute -ine (Join-Path (Split-Path -Parent ([string]$Job.pythonExe)) 'pythonw.exe') -or
       [string]$snap.actions[0].arguments -cne (Expected-Arguments $Job) -or
       [string]$snap.actions[0].workingDirectory -ine [string]$Job.workspace -or
       $snap.principal.userId -cne [string]$Job.executionIdentitySid -or
@@ -330,7 +333,10 @@ function New-TaskXml($Job) {
   }
   $name=Get-TaskName ([string]$Job.jobId)
   $description=Get-XmlEscaped (Expected-Description $Job)
-  $command=Get-XmlEscaped ([string]$Job.pythonExe)
+  $windowlessPython=Join-Path (Split-Path -Parent ([string]$Job.pythonExe)) 'pythonw.exe'
+  $null=Assert-LocalPath $windowlessPython $true
+  $null=Assert-LocalPath (Join-Path (Split-Path -Parent ([string]$Job.hostScript)) 'silent_python_host.py') $true
+  $command=Get-XmlEscaped $windowlessPython
   $arguments=Get-XmlEscaped (Expected-Arguments $Job)
   $working=Get-XmlEscaped ([string]$Job.workspace)
   $sid=Get-XmlEscaped ([string]$Job.executionIdentitySid)

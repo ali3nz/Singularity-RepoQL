@@ -155,6 +155,8 @@ mod owned_job {
     use std::process::Child;
     type Handle = *mut c_void;
     const CREATE_SUSPENDED: u32 = 0x00000004;
+    // A supervised console child must not display a console at startup.
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     const TH32CS_SNAPTHREAD: u32 = 0x00000004;
     const THREAD_SUSPEND_RESUME: u32 = 0x0002;
     // THREADENTRY32 is a public Win32 structure. The primary thread must
@@ -242,7 +244,7 @@ mod owned_job {
         // CREATE_SUSPENDED avoids any user code running before job assignment.
         pub(super) fn spawn_suspended(command: &mut std::process::Command) -> Result<Child, String> {
             use std::os::windows::process::CommandExt;
-            command.creation_flags(CREATE_SUSPENDED);
+            command.creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW);
             command.spawn().map_err(|e| format!("suspended process creation failed: {e}"))
         }
         pub(super) fn resume_only_primary_thread(pid: u32) -> Result<(), String> {

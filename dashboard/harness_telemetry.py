@@ -1648,7 +1648,8 @@ class Harness:
                 def task_probe():
                     return subprocess.run(
                         ["schtasks.exe", "/Query", "/TN", "Singularity-Rust-Native-Supervisor", "/FO", "CSV", "/NH"],
-                        capture_output=True, text=True, timeout=4, check=False)
+                        capture_output=True, text=True, timeout=4, check=False,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             status = "unverified"
             try:
                 probe = task_probe()

@@ -38,7 +38,7 @@ checksum = "'''+checksum+'''"
         self.assertTrue(result['readyForRustDependencyReview'])
         self.assertFalse(result['releaseReady'])
         self.assertFalse(result['nativeWindowsBuildVerified'])
-        self.assertEqual(len(result['checks']),2)
+        self.assertEqual(len(result['checks']),len(CRATES))
 
     def test_missing_lockfile_fails_closed(self):
         self._lock(*CRATES[0])

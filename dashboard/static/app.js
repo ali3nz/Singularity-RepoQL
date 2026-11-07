@@ -1,5 +1,7 @@
-import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric} from './observability.js';
+import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
+import {mountGhost} from './ghost/dashboard.js';
+import {mountNativeKanban} from './kanban_native.js';
 import {initNavigationUI, navPathFor} from './navigation_ui.js';
 import {renderRepoqlCheatSheet, bindRepoqlCheatSheet} from './repoql_cheatsheet.js';
 import {renderMemoryArchitecturePage, bindMemoryArchitecturePage, renderOrchestraWorkflowPage, bindOrchestraWorkflowPage} from './workflow_graphs.js';
@@ -12,10 +14,83 @@ const TOASTS = document.getElementById("toasts");
 const CONN = document.getElementById("conn");
 const CONN_LABEL = document.getElementById("connLabel");
 const HOST_LINE = document.getElementById("hostLine");
+const THEME_SLOT = document.getElementById("theme-switcher-slot");
+const THEME_KEY = "repoql.dashboard.theme";
+const THEME_LAST_DARK_KEY = "repoql.dashboard.theme.dark";
+const THEME_LAST_LIGHT_KEY = "repoql.dashboard.theme.light";
 
-// The legacy Linux host has a 4-core systemd quota. Native Windows does not.
-// Native Rust reports raw process CPU in percent of one logical core; it may
-// exceed 100% for a multicore process, which is correct and must not be capped.
+// A theme chooses the atmosphere, not the meaning of colours. Data roles remain
+// distinguishable within every theme, including the two neon alternatives.
+const THEME_CATALOG = [
+  { id: "neon", label: "Neon Grid", mode: "dark", note: "Graphite command deck with spectrum neon accents and distinct workspace colours.", swatches: ["#3ee7ff", "#b8ff4a", "#ff5fa8", "#5ca8ff", "#b47cff"] },
+  { id: "neon-violet", label: "Neon Violet", mode: "dark", note: "Violet atmosphere with independent lime, coral, blue and teal workspace accents.", swatches: ["#76e9ff", "#c6ff63", "#ff79ba", "#72b6ff", "#cf96ff"] },
+  { id: "neon-emerald", label: "Neon Emerald", mode: "dark", note: "Emerald atmosphere with bright blue, violet, pink and gold workspace accents.", swatches: ["#58e7e9", "#bfff63", "#ff74ae", "#72c0ff", "#b998ff"] },
+  { id: "light-paper", label: "Paper Light", mode: "light", note: "Neutral white with restrained multi-colour categories.", swatches: ["#377bbd", "#8063b2", "#248c79", "#ad7635", "#ad6385"] },
+  { id: "light-sky", label: "Sky Light", mode: "light", note: "Cool light surfaces and balanced category colour.", swatches: ["#2f79b5", "#7965b0", "#288c7c", "#a77938", "#ad6484"] },
+  { id: "light-sand", label: "Sand Light", mode: "light", note: "Warm neutral surfaces and clear blue, purple and green roles.", swatches: ["#376ca5", "#8362ad", "#278573", "#ab7435", "#b06983"] },
+  { id: "light-mint", label: "Mint Light", mode: "light", note: "Fresh pale surfaces with balanced violet, blue and gold accents.", swatches: ["#327ab2", "#7d62b0", "#258b77", "#a77a37", "#ae6985"] },
+];
+
+const themeCatalog = () => THEME_CATALOG.map((entry) => ({ ...entry, swatches: [...entry.swatches] }));
+const themeById = (id) => THEME_CATALOG.find((entry) => entry.id === id);
+const themeModeOf = (id) => themeById(id)?.mode || "dark";
+const sanitizeThemeChoice = (value) => themeById(value)?.id || THEME_CATALOG[0].id;
+
+function storedTheme() {
+  try { return sanitizeThemeChoice(localStorage.getItem(THEME_KEY)); } catch { return THEME_CATALOG[0].id; }
+}
+
+function applyTheme(themeId, {persist = true} = {}) {
+  const safe = sanitizeThemeChoice(themeId);
+  const html = document.documentElement || document.querySelector?.('html');
+  const info = themeById(safe);
+  if (!html || !info) return safe;
+  html.dataset.theme = safe;
+  html.dataset.themeMode = info.mode;
+  document.body?.setAttribute?.('data-theme-mode', info.mode);
+  const meta = document.querySelector('meta[name="color-scheme"]');
+  if (meta) meta.setAttribute('content', info.mode === 'light' ? 'light dark' : 'dark light');
+  const control = document.getElementById('theme-select');
+  if (control && control.value !== safe) control.value = safe;
+  document.querySelectorAll('[data-theme-preview]').forEach((node) => {
+    node.classList.toggle('active', node.dataset.themePreview === safe);
+    node.setAttribute('aria-pressed', String(node.dataset.themePreview === safe));
+  });
+  const modePill = document.getElementById('theme-mode-pill');
+  if (modePill) modePill.textContent = info.mode === 'light' ? 'Light mode' : 'Dark mode';
+  const modeToggle = document.getElementById('theme-mode-toggle');
+  if (modeToggle) {
+    modeToggle.textContent = info.mode === 'light' ? 'Switch to dark' : 'Switch to light';
+    modeToggle.setAttribute('aria-label', modeToggle.textContent);
+  }
+  const description = document.getElementById('theme-description');
+  if (description) description.textContent = info.note;
+  const currentSwatches = document.getElementById('theme-current-swatches');
+  if (currentSwatches) currentSwatches.innerHTML = info.swatches.map(c => `<i style="--swatch:${c}"></i>`).join('');
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_KEY, safe);
+      localStorage.setItem(info.mode === 'light' ? THEME_LAST_LIGHT_KEY : THEME_LAST_DARK_KEY, safe);
+    } catch {}
+  }
+  return safe;
+}
+
+function renderThemeSwitcher() {
+  if (!THEME_SLOT) return;
+  const groups = { dark: THEME_CATALOG.filter(t => t.mode === 'dark'), light: THEME_CATALOG.filter(t => t.mode === 'light') };
+  const options = (items) => items.map(t => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join('');
+  THEME_SLOT.innerHTML = `<section class="theme-panel compact" aria-label="Dashboard appearance">
+    <label class="theme-select-wrap compact" for="theme-select">Theme
+      <select id="theme-select" class="select compact"><optgroup label="Dark neon">${options(groups.dark)}</optgroup><optgroup label="Light">${options(groups.light)}</optgroup></select>
+    </label>
+  </section>`;
+  document.getElementById('theme-select')?.addEventListener('change', e => applyTheme(e.target.value));
+  applyTheme(storedTheme(), {persist:false});
+}
+
+// repoql-host.service runs with CPUQuota=400% (4 cores). CPU samples are
+// recorded as percent of one core; display them as a percentage of that quota.
 const nativeInstall = Boolean(window.__SINGULARITY_VARIANT__?.variant);
 const CPU_QUOTA_CORES = nativeInstall ? 1 : 4;
 const CPU_QUOTA_LABEL = nativeInstall ? "one logical core" : "4-core quota";
@@ -155,18 +230,18 @@ async function api(path, options = {}) {
   if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
   if (options.body) headers.set("Content-Type", "application/json");
   if ((options.method || "GET") !== "GET") headers.set("X-Requested-With", "repoql-dashboard");
-  const hub = new AbortController();
+  const controller = new AbortController();
   const owner = state.routeAbort?.signal;
-  const onNavigation = () => hub.abort('route_changed');
-  if (owner?.aborted) hub.abort('route_changed');
+  const onNavigation = () => controller.abort('route_changed');
+  if (owner?.aborted) controller.abort('route_changed');
   else owner?.addEventListener('abort', onNavigation, {once:true});
-  const timer = setTimeout(() => hub.abort('timeout'), options.timeoutMs ?? 120000);
+  const timer = setTimeout(() => controller.abort('timeout'), options.timeoutMs ?? 120000);
   try {
     const response = await fetch(path, {
       method: options.method || "GET",
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: hub.signal,
+      signal: controller.signal,
     });
     const text = await response.text();
     let payload = null;
@@ -186,7 +261,7 @@ async function api(path, options = {}) {
     return payload;
   } catch (error) {
     if (error.name === "AbortError") {
-      if (hub.signal.reason === 'route_changed') throw new ApiError('navigation_cancelled', -1);
+      if (controller.signal.reason === 'route_changed') throw new ApiError('navigation_cancelled', -1);
       throw new ApiError('request timed out', 0);
     }
     if (!(error instanceof ApiError)) {
@@ -207,7 +282,7 @@ function showSignpost(message) {
       <div class="card">
         <h1>Fresh dashboard link required</h1>
         <p>${esc(message || "This tab holds no valid dashboard key.")}</p>
-        <p>On the dashboard host, run <code>python3 dashboard/server.py link</code> and open the printed link
+        <p>On dockerhost, run <code>repoql-dashboard link</code> and open the printed link
         (the key travels in the URL fragment and is stored only for this tab).</p>
       </div>
     </div>`;
@@ -294,6 +369,63 @@ function clearTimers() {
   state.timers.clear();
 }
 
+// These are narrow runtime probes, not an attestation of the memory capture
+// pipeline or the coordinator's policy gates. Avoid silently treating a 200
+// response as a healthy ingest or a successful run.
+function architectureProbeState(kind, value, nowMs = Date.now()) {
+  if (kind === 'harness') {
+    if (!value || value.enabled !== true) return ['Unavailable', 'Telemetry is not reported as enabled.'];
+    if (value.last_error) return ['Needs attention', 'The collector reports an ingest error.'];
+    if (!value.last_ingest) return ['Unknown', 'No successful ingest timestamp was reported.'];
+    const timestamp = Date.parse(value.last_ingest);
+    if (!Number.isFinite(timestamp) || timestamp > nowMs + 60000) return ['Unknown', 'Ingest timestamp is invalid or in the future.'];
+    if (nowMs - timestamp > 300000) return ['Needs attention', 'Telemetry has not reported an ingest within five minutes.'];
+    return ['Responding', `Last reported ingest: ${value.last_ingest}`];
+  }
+  if (!value || value.available === false || value.ok !== true || value.rust !== true) {
+    return ['Unavailable', 'The unified Rust service did not report a healthy response.'];
+  }
+  return ['Responding', 'Unified Rust service responded. This does not establish MemoryCore or graph coverage.'];
+}
+function architectureRuntimeChecks() {
+  const guide = APP.querySelector('.arch-guide');
+  if (!guide) return;
+  guide.insertAdjacentHTML('afterend', `<section class="arch-runtime block" aria-label="Current service observations">
+    <div class="block-title">Current service observations</div>
+    <p class="muted">These read-only checks show whether telemetry and the unified Rust plane respond. They do not validate capture, recall, worker gates, or end-to-end correctness.</p>
+    <div class="arch-runtime-results" id="arch-runtime-results" role="status" aria-live="polite">Not checked</div>
+    <button class="btn" type="button" id="arch-runtime-refresh">Check services</button>
+    <a href="#/harness">Inspect Harness evidence</a>
+  </section>`);
+  const results = APP.querySelector('#arch-runtime-results');
+  const button = APP.querySelector('#arch-runtime-refresh');
+  const check = async () => {
+    if (button.disabled) return;
+    button.disabled = true;
+    results.textContent = 'Checking services…';
+    const epoch = state.routeEpoch;
+    const probes = await Promise.allSettled([
+      api('/api/harness/health', {timeoutMs:8000}),
+      api('/api/unified/health', {timeoutMs:8000}),
+    ]);
+    if (epoch !== state.routeEpoch || !results.isConnected) return;
+    const labels = ['Harness telemetry', 'Unified Rust plane'];
+    results.replaceChildren();
+    probes.forEach((probe, i) => {
+      const [status, detail] = probe.status === 'fulfilled'
+        ? architectureProbeState(i === 0 ? 'harness' : 'unified', probe.value)
+        : ['Unavailable', 'The service check could not complete.'];
+      const row = document.createElement('p');
+      row.innerHTML = `<strong>${labels[i]}: ${esc(status)}</strong> · ${esc(detail)}`;
+      results.appendChild(row);
+    });
+    button.disabled = false;
+  };
+  button.addEventListener('click', check);
+  // Load only on explicit request: opening an explanation page does not impose
+  // an unexpected telemetry request or report invented runtime state.
+}
+
 async function route() {
   const epoch = ++state.routeEpoch;
   state.routeAbort?.abort('route_changed');
@@ -302,20 +434,38 @@ async function route() {
   state.cleanup = null;
   clearTimers();
   const { path, params } = parseRoute();
+  // One visual identity per workspace. Presentation only: no change to
+  // routing, MCP authority, task ownership or API calls.
+  APP.dataset.workspace = path === '/kanban' ? 'work'
+    : path.startsWith('/ghost') ? 'ghost'
+    : path === '/agentchat' ? 'chat'
+    : path === '/unified/graph' || path.startsWith('/architecture/memory') || path.startsWith('/knowledge/') ? 'memory'
+    : path === '/office' ? 'office'
+    : path.startsWith('/unified/tencent') ? 'tencent'
+    : path.startsWith('/harness') ? 'harness'
+    : path.startsWith('/diagnostics') || path.startsWith('/unified/usage') ? 'attention'
+    : 'repoql';
   if (!featureAllowed(path)) {
     APP.innerHTML = '<div class="empty">This component is not included in the selected Singularity installation option.</div>';
     return;
   }
-  markNav(path);
+  markNav(path === '/ghost/planner' ? '/ghost' : path);
   if (state.routeEpoch > 1) window.scrollTo(0, 0);
   try {
-    if (path === "/ghost") return viewGhostOperations();
+    if (path === "/ghost/planner" && nativeInstall) {
+      APP.innerHTML = pageHead('Ghost planner', 'Not part of the verified native Windows source.') +
+        '<p class="empty">The household planner is not installed on this Windows product. Ghost Operations remains available in supported installation options.</p>';
+      return;
+    }
+    if (path === "/ghost/planner") return await viewGhostPlanner();
+    if (path === "/ghost") return await viewGhostOperations();
     if (path === "/unified/graph") return await viewUnifiedGraph();
+    if (path === "/openmausbot") return await viewOpenMausBotWindows();
     if (path === "/unified/tencent") return await viewTencentNative();
     if (path === "/unified/tencent-advanced") return await viewTencentNative();
     if (path === "/repoql/control") return await viewRepoqlNative();
-    if (path === "/architecture/memory") { APP.innerHTML = renderMemoryArchitecturePage(); const binding = bindMemoryArchitecturePage(); state.cleanup = () => binding?.dispose(); return; }
-    if (path === "/architecture/orchestra") { APP.innerHTML = renderOrchestraWorkflowPage(); const binding = bindOrchestraWorkflowPage(); state.cleanup = () => binding?.dispose(); return; }
+    if (path === "/architecture/memory") { APP.innerHTML = renderMemoryArchitecturePage(); architectureRuntimeChecks(); const binding = bindMemoryArchitecturePage(); state.cleanup = () => binding?.dispose(); return; }
+    if (path === "/architecture/orchestra") { APP.innerHTML = renderOrchestraWorkflowPage(); architectureRuntimeChecks(); const binding = bindOrchestraWorkflowPage(); state.cleanup = () => binding?.dispose(); return; }
     if (path === "/repoql/cheat-sheet") { APP.innerHTML = renderRepoqlCheatSheet(); return bindRepoqlCheatSheet(); }
     if (path === "/knowledge/connectors") return await viewConnectors();
     if (path === "/knowledge/connections") return await viewLinks({...params, collection: params.collection || "see_also"}, true);
@@ -354,7 +504,7 @@ async function route() {
     if (path === "/harness/usage") { location.hash = '#/unified/usage'; return; }
     if (path === "/harness/events") return await viewHarnessEvents(params);
     if (path === "/harness/settings") return await viewHarnessSettings(params);
-    if (path === "/kanban") return await viewKanban();
+    if (path === "/kanban") return await viewKanban(params);
     if (path === "/office") return await viewOffice();
     if (path === "/agentchat") return await viewAgentChat();
     if (path.startsWith("/knowledge/item")) return await viewKnowledgeItem(params);
@@ -369,11 +519,28 @@ async function route() {
   }
 }
 
+async function viewOpenMausBotWindows() {
+  APP.innerHTML = pageHead('OpenMausBot', 'Windows-local agent inventory. No remote Dockerhost dependency or background model calls.') +
+    '<section class="block" id="windows-omb-status">Checking the local OpenMausBot service…</section>';
+  const report = await api('/api/openmausbot/overview', {timeoutMs: 8000});
+  const holder = document.getElementById('windows-omb-status');
+  if (!holder) return;
+  if (!report.available) {
+    holder.innerHTML = `<h2>OpenMausBot is not connected</h2><p class="muted small">Local service: ${esc(report.reason || 'not configured')}. Install and pair a Windows-local OpenMausBot instance before enabling this optional integration. No external host was contacted.</p>`;
+    return;
+  }
+  const rows = (report.bots || []).map(bot => `<tr><td>${esc(bot.name)}</td><td class="mono">${esc(bot.id)}</td><td>${esc(bot.working ? 'Working' : 'Idle')}</td><td class="muted">Registration, Tencent, Duo and Kanzo not verified</td></tr>`).join('');
+  holder.innerHTML = `<h2>${Number(report.total) || 0} local bot(s)</h2><p class="muted small">This is a read-only inventory, not a registration or execution receipt. No credentials are exposed to this page.</p>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Bot</th><th>Identity</th><th>Runtime</th><th>External integrations</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No bots in this workspace.</td></tr>'}</tbody></table></div>`;
+}
+
 async function viewGhostOperations() {
-  const {mountGhost} = await import('./ghost/dashboard.js');
   const epoch=state.routeEpoch;
-  APP.innerHTML=pageHead('Ghost Operations','Persistent agent · Live activity, schedule, memory, and authorized operator controls') +
-    '<section id="ghost-integrated" aria-label="Ghost Operations"><div class="loading">Loading Ghost controls…</div></section>';
+  APP.innerHTML = pageHead('Ghost Protocol','') +
+    '<section id="ghost-integrated" aria-label="Ghost Protocol"><div class="loading">Loading Ghost controls…</div></section>';
+  const heading = APP.querySelector('.page-head h1');
+  heading.tabIndex = -1;
+  heading.focus({preventScroll: true});
   // The original Ghost markup and styles are reused, but mounted in this page.
   // No external application, nested browsing context, or duplicate controls.
   const response=await fetch('/ghost/index.html',{cache:'no-store',signal:state.routeAbort?.signal});
@@ -388,6 +555,32 @@ async function viewGhostOperations() {
   const css=document.createElement('style');css.textContent=style.textContent;
   shadow.append(css,document.importNode(shell,true));
   state.cleanup=mountGhost(shadow);
+}
+
+async function viewGhostPlanner() {
+  const epoch=state.routeEpoch;
+  APP.innerHTML = pageHead('Household Planner','', '<a class="btn small" href="#/ghost">Ghost operations</a>') +
+    '<section id="ghost-planner-integrated" aria-label="Ghost Household Planner"><div class="loading">Loading planner…</div></section>';
+  const heading = APP.querySelector('.page-head h1');
+  heading.tabIndex = -1;
+  heading.focus({preventScroll: true});
+  // Additive to the accepted Ghost Operations console: same shadow-root
+  // isolation and the planner's own controller copy, never a replacement.
+  const [response, module] = await Promise.all([
+    fetch('/ghost/planner/index.html',{cache:'no-store',signal:state.routeAbort?.signal}),
+    import('./ghost/planner/dashboard.js'),
+  ]);
+  if(!response.ok)throw new Error('Ghost planner unavailable');
+  const markup=new DOMParser().parseFromString(await response.text(),'text/html');
+  if(epoch!==state.routeEpoch)return;
+  const host=document.getElementById('ghost-planner-integrated');
+  if(!host)return;
+  const style=markup.querySelector('style'),shell=markup.querySelector('.shell');
+  if(!style||!shell)throw new Error('Ghost planner assets missing');
+  const shadow=host.attachShadow({mode:'open'});
+  const css=document.createElement('style');css.textContent=style.textContent;
+  shadow.append(css,document.importNode(shell,true));
+  state.cleanup=module.mountGhost(shadow);
 }
 
 // -------------------------------------------------------------- shared views
@@ -446,11 +639,13 @@ const DIAGNOSTICS_TABS = [
   { id: "cpu", label: "CPU & Performance", href: () => href("/diagnostics") },
   { id: "errors", label: "Errors", href: () => href("/diagnostics", { tab: "errors" }) },
   { id: "excluded", label: "Excluded Files", href: () => href("/diagnostics", { tab: "excluded" }) },
+  { id: "runtime", label: "Runtime & Services", href: () => href("/diagnostics", { tab: "runtime" }) },
 ];
 const DIAGNOSTICS_SUBTITLES = {
   cpu: "RepoQL host process CPU, measured from its own process and stored independently of any browser.",
   errors: "Indexing failures, analyzer parse errors and service-level warnings from the RepoQL host.",
   excluded: "Live mount-root .repoqlignore rules and dashboard-managed exclusion history.",
+  runtime: "Service health, collectors, versions and Rust state authority. Technical details live here, not on the command centre.",
 };
 const INDEXING_TABS = [
   { id: "files", label: "Index & Files", href: () => href("/indexing") },
@@ -476,144 +671,172 @@ function tabStrip(tabs, active, label) {
 
 // ---------------------------------------------------------------- dashboard
 
-async function viewDashboard() {
-  APP.innerHTML = pageHead("Dashboard", "Live state of the RepoQL host, its index, its knowledge and its CPU footprint.") +
-    `<div id="dash" class="stack"><div class="loading">Reading RepoQL state…</div></div>`;
+// A status indicator is unknown until the endpoint actually reports its value.
+// In particular, null and undefined must never be displayed as a healthy zero.
+function miniatureBrainGraph() {
+  // Decorative, deterministic illustration only; no API request and no implied
+  // live node counts, relationships or memory health.
+  const outline = brainOutline(108).map(({x,y},i) => `${i?'L':'M'}${(x*.34+150).toFixed(1)} ${(y*.34+92).toFixed(1)}`).join(' ')+'Z';
+  const points = Array.from({length:74},(_,i)=>{
+    const theta = (i * 2.399963229728653)+0.25;
+    const radius = Math.sqrt((i+.5)/74)*.85;
+    const x = 150+Math.cos(theta)*radius*102;
+    const y = 93+Math.sin(theta)*radius*62;
+    return {x,y,type:i%7===0?'mem':i%3===0?'tx':'rq'};
+  });
+  const lines=points.map((point,i)=>{
+    const to=points[(i*13+21)%points.length];
+    return `<path d="M${point.x.toFixed(1)} ${point.y.toFixed(1)}L${to.x.toFixed(1)} ${to.y.toFixed(1)}"/>`;
+  }).join('');
+  const dots=points.map(point=>`<circle class="mini-${point.type}" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${point.type==='mem'?2.8:1.85}"/>`).join('');
+  return `<svg class="command-brain-svg" viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path class="mini-brain-outline" d="${outline}"/>
+    <g class="mini-brain-edges">${lines}</g>
+    <g class="mini-brain-dots">${dots}</g>
+    <path class="mini-brain-divider" d="M150 33v122" stroke-dasharray="2 9"/>
+  </svg>`;
+}
 
-  const host = document.getElementById("dash");
-  const next = sequencer();
-
-  const refresh = async () => {
-    const isCurrent = next();
-    const data = await api("/api/overview");
-    if (!isCurrent()) return;
-    const s = data.service;
-    const p = data.performance;
-    const uptime = duration(s.uptime_seconds);
-    const progress = data.indexing.progress_percent;
-    const verdictTone = s.verdict?.includes("ready") ? "green" : s.verdict?.includes("usable") ? "cyan" : "amber";
-    host.innerHTML = `
-      <div class="grid cols-3">
-        <a class="block link" href="${href("/indexing")}">
-          <div class="block-title">RepoQL status <span class="tag">host ${esc(s.version || "")}</span></div>
-          <div class="metric cyan"><span class="value">${esc(displayLabel(s.verdict, "Not reported"))}</span></div>
-          <dl class="kv">
-            <dt>Uptime</dt><dd>${esc(uptime)}</dd>
-            <dt>PID</dt><dd>${esc(s.pid ?? "—")}</dd>
-            <dt>Phase</dt><dd>${esc(s.phase || "—")}</dd>
-            <dt>Last activity</dt><dd>${esc(s.last_activity || "—")}</dd>
-            <dt>Semantic</dt><dd class="${s.semantic_percent === 100 ? "ok" : "warn"}">${esc(s.semantic_percent ?? "—")}%</dd>
-            <dt>Account</dt><dd class="${s.account_authenticated ? "ok" : "warn"}">${s.account_authenticated ? "authenticated" : "anonymous"}</dd>
-          </dl>
-          <div class="small muted" style="margin-top:10px">last log line: ${esc((s.current_activity || "—").slice(0, 120))}</div>
-        </a>
-
-        <a class="block link accent-blue" href="${href("/indexing")}">
-          <div class="block-title">Indexing <span class="tag">${progress == null ? "" : progress + "%"}</span></div>
-          <div class="metric blue"><span class="value">${fmt(data.indexing.total_files)}</span><span class="unit">files</span></div>
-          <div class="progress"><span style="width:${progress ?? 0}%"></span></div>
-          <dl class="kv">
-            <dt>Indexed</dt><dd class="ok">${fmt(data.indexing.complete)}</dd>
-            <dt>Pending</dt><dd>${fmt(data.indexing.pending)}</dd>
-            <dt>Processing</dt><dd>${fmt(data.indexing.active)}</dd>
-            <dt>Failed</dt><dd class="${data.indexing.failed ? "err" : ""}">${fmt(data.indexing.failed)}</dd>
-            <dt>Excluded (dashboard)</dt><dd>${fmt(data.indexing.excluded_rows)}</dd>
-            <dt>Last complete</dt><dd>${esc(data.indexing.last_complete?.ts || "—")}</dd>
-          </dl>
-        </a>
-
-        <a class="block link accent-purple" href="${href("/indexing", { tab: "repositories" })}">
-          <div class="block-title">Repositories</div>
-          <div class="metric purple"><span class="value">${fmt(data.repositories.total)}</span><span class="unit">registered</span></div>
-          <dl class="kv">
-            <dt>Indexed</dt><dd class="ok">${fmt(data.repositories.indexed)}</dd>
-            <dt>Indexing now</dt><dd>${fmt(data.repositories.indexing)}</dd>
-            <dt>With errors</dt><dd class="${data.repositories.errors ? "err" : ""}">${fmt(data.repositories.errors)}</dd>
-            <dt>Unavailable</dt><dd>${fmt(data.repositories.unavailable)}</dd>
-            <dt>System mounts</dt><dd>${fmt(data.repositories.system_mounts)}</dd>
-          </dl>
-        </a>
-
-        <a class="block link" href="${href("/knowledge/all")}">
-          <div class="block-title">Knowledge</div>
-          <div class="metric cyan"><span class="value">${fmt(data.knowledge.concept)}</span><span class="unit">concept capsules</span></div>
-          <dl class="kv">
-            <dt>Wisdom</dt><dd>${fmt(data.knowledge.wisdom)}</dd>
-            <dt>Principles</dt><dd>${fmt(data.knowledge.principle)}</dd>
-            <dt>Rules</dt><dd>${fmt(data.knowledge.rule)}</dd>
-            <dt>Shapes</dt><dd>${fmt(data.knowledge.shape)}</dd>
-            <dt>Links / relationships</dt><dd>${fmt(data.knowledge.links)}</dd>
-          </dl>
-        </a>
-
-        <a class="block link accent-green" href="${href("/diagnostics")}">
-          <div class="block-title">Performance <span class="tag">${esc(p.now.available ? "live" : "no host")}</span></div>
-          <div class="metric green"><span class="value">${p.now.available && p.now.cpu_pct != null ? quotaPct(p.now.cpu_pct).toFixed(1) : "—"}</span><span class="unit">% of ${CPU_QUOTA_LABEL}</span></div>
-          <div id="mini-chart" class="chart-wrap"></div>
-          <dl class="kv">
-            <dt>Average (24h)</dt><dd>${p.avg_24h == null ? "—" : quotaPct(p.avg_24h).toFixed(1) + "%"}</dd>
-            <dt>Peak (24h)</dt><dd>${p.peak_24h == null ? "—" : quotaPct(p.peak_24h).toFixed(1) + "%"}</dd>
-            <dt>Samples (24h)</dt><dd>${fmt(p.samples_24h)}</dd>
-            <dt>Last sample</dt><dd>${esc(p.last_sample || "—")}</dd>
-          </dl>
-        </a>
-
-        <a class="block link ${data.errors.indexing_failures || data.errors.service_errors ? "accent-red" : ""}" href="${href("/diagnostics", { tab: "errors" })}">
-          <div class="block-title">Errors</div>
-          <div class="metric ${data.errors.indexing_failures ? "red" : "green"}"><span class="value">${fmt(data.errors.indexing_failures)}</span><span class="unit">indexing failures</span></div>
-          <dl class="kv">
-            <dt>Parse warnings</dt><dd>${fmt(data.errors.parse_warnings)}</dd>
-            <dt>Service warnings</dt><dd class="${data.errors.service_warnings ? "warn" : ""}">${fmt(data.errors.service_warnings)}</dd>
-            <dt>Service errors</dt><dd class="${data.errors.service_errors ? "err" : ""}">${fmt(data.errors.service_errors)}</dd>
-            <dt>Log window</dt><dd>${fmt((data.errors.recent?.info || 0) + (data.errors.recent?.warning || 0) + (data.errors.recent?.error || 0))} lines</dd>
-          </dl>
-        </a>
-      </div>
-
-      <div class="grid cols-2">
-        <a class="block link accent-cyan workflow-link-card" href="${href("/architecture/memory")}">
-          <div class="block-title">Memory architecture workflow</div>
-          <div class="subtle-hero">Temporal memory, capture pipeline, tombstones, retrieval and governed write-back shown as an interactive graph.</div>
-          <div class="hero-pills">
-            <span class="pill cyan">RepoQL primary</span>
-            <span class="pill purple">Tencent MemoryCore</span>
-            <span class="pill green">Temporal memory</span>
-            <span class="pill amber">Tombstones</span>
-          </div>
-        </a>
-        <a class="block link accent-purple workflow-link-card" href="${href("/architecture/orchestra")}">
-          <div class="block-title">Harness & orchestra workflow</div>
-          <div class="subtle-hero">Mode-aware orchestration for Solo, Duo, Quad and Super, including hooks, gates, agent chat and freebuff/openchamber pools.</div>
-          <div class="hero-pills">
-            <span class="pill blue">Solo</span>
-            <span class="pill cyan">Duo</span>
-            <span class="pill purple">Quad</span>
-            <span class="pill green">Super</span>
-          </div>
-        </a>
-      </div>
-
-      <div class="block">
-        <div class="block-title">Recent host activity <span class="tag">repoql-host log</span></div>
-        <div id="activity" class="mono small"></div>
-      </div>`;
-
-    const chart = document.getElementById("mini-chart");
-    if (chart) renderChart(chart, p.series, { bucketSeconds: p.bucket_seconds, height: 92, label: "CPU % of " + CPU_QUOTA_LABEL, scale: 1 / CPU_QUOTA_CORES, compact: true });
-
-    const feed = await api("/api/activity?limit=12").catch(() => ({ rows: [] }));
-    document.getElementById("activity").innerHTML = feed.rows.map((row) => `
-      <div style="display:grid;grid-template-columns:150px 60px 1fr;gap:10px;padding:4px 0;border-bottom:1px solid rgba(22,32,47,.6)">
-        <span class="muted">${esc(row.ts)}</span>
-        <span class="${row.level.startsWith("E") || row.level.startsWith("F") ? "err" : row.level.startsWith("W") ? "warn" : "muted"}">${esc(row.level)}</span>
-        <span>${esc(row.msg.slice(0, 220))}</span>
-      </div>`).join("") || `<div class="empty">No log lines in the current window.</div>`;
-
-    HOST_LINE.textContent = `pid ${s.pid ?? "—"} · v${s.version ?? "?"} · ${s.phase ?? "?"}`;
+function dashboardSnapshot() {
+  const destinations = [
+    ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','DELIVERY'],
+    ['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','HOUSEHOLD & SCHEDULE'],
+    ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','AGENT ACTIVITY'],
+    ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','KNOWLEDGE'],
+    ['Office Viewer','/office','Open the live protected office scene.','office','WORKSPACE'],
+  ];
+  const REPOQL_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".55" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg>`;
+  const BRAIN_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>`;
+  const iconBadges = {
+    '/kanban': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="5.5" height="15" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="10.2" y="8" width="5.5" height="11.5" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="16.9" y="6" width="3.6" height="13.5" rx="1.6" stroke="currentColor" stroke-width="1.6"/></svg>`,
+    '/ghost': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 18.5V9a4.5 4.5 0 1 1 9 0v9l-2.2-1.5-2.3 1.5-2.3-1.5-2.2 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10.2" r="1" fill="currentColor"/><circle cx="14" cy="10.2" r="1" fill="currentColor"/></svg>`,
+    '/agentchat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H11l-4 3v-3.2A3.5 3.5 0 0 1 5 11.5v-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8.7h6M9 11.3h3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    '/office': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="11" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M9 19.5h6M12 15.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    '/unified/graph': BRAIN_ICON,
+    '/repoql/control': REPOQL_ICON,
+    '/unified/tencent': BRAIN_ICON,
+    '/repoql/cheat-sheet': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 5h10M7 9h10M7 13h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="4" y="3.5" width="16" height="17" rx="2.4" stroke="currentColor" stroke-width="1.6"/></svg>`,
+    '/unified/usage': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 18.5V12M12 18.5V7M19 18.5v-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="5" cy="10.2" r="1.4" fill="currentColor"/><circle cx="12" cy="5.2" r="1.4" fill="currentColor"/><circle cx="19" cy="12.2" r="1.4" fill="currentColor"/></svg>`,
+    '/architecture/memory': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4 4.5 7.5 12 11l7.5-3.5L12 4Zm-7.5 8L12 15.5 19.5 12M4.5 16.5 12 20l7.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    '/architecture/orchestra': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.8" y="5" width="5" height="5" rx="1.4" stroke="currentColor" stroke-width="1.5"/><rect x="15.2" y="5" width="5" height="5" rx="1.4" stroke="currentColor" stroke-width="1.5"/><rect x="9.5" y="14" width="5" height="5" rx="1.4" stroke="currentColor" stroke-width="1.5"/><path d="M8.8 7.5h6.4M12 10.2V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   };
+  // Decorative only: these mini illustrations suggest the kind of workspace
+  // visually, but they never imply live counts or hidden state.
+  const cardIllustrations = {
+    '/kanban': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="17" y="19" width="266" height="152" rx="19" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".28"/><path d="M38 45H262" stroke="currentColor" stroke-opacity=".18"/><circle cx="42" cy="32" r="3" fill="currentColor" fill-opacity=".65"/><circle cx="53" cy="32" r="3" fill="currentColor" fill-opacity=".28"/><circle cx="64" cy="32" r="3" fill="currentColor" fill-opacity=".28"/><g fill="currentColor" fill-opacity=".075" stroke="currentColor" stroke-opacity=".35"><rect x="31" y="55" width="72" height="103" rx="9"/><rect x="114" y="55" width="72" height="103" rx="9"/><rect x="197" y="55" width="72" height="103" rx="9"/></g><g fill="currentColor" fill-opacity=".22"><rect x="39" y="64" width="36" height="5" rx="2.5"/><rect x="122" y="64" width="39" height="5" rx="2.5"/><rect x="205" y="64" width="44" height="5" rx="2.5"/></g><g fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".46"><rect x="39" y="79" width="56" height="25" rx="5"/><rect x="39" y="110" width="56" height="25" rx="5"/><rect x="122" y="79" width="56" height="25" rx="5"/><rect x="122" y="110" width="56" height="33" rx="5"/><rect x="205" y="79" width="56" height="36" rx="5"/></g><g stroke="currentColor" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"><path d="M47 88H74M47 94H63M130 88H162M130 94H148M213 88H246M213 94H234"/></g><circle cx="241" cy="136" r="13" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".55"/><path d="m235 136 4 4 8-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    '/ghost': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="151" cy="95" r="79" stroke="currentColor" stroke-opacity=".13"/><circle cx="151" cy="95" r="59" stroke="currentColor" stroke-opacity=".31"/><circle cx="151" cy="95" r="39" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="4 8"/><path d="M151 23V42M151 148V167M79 95H99M204 95H223" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round"/><path d="M133 121V80a18 18 0 0 1 36 0v41l-9-7-9 7-9-7-9 7Z" fill="currentColor" fill-opacity=".19" stroke="currentColor" stroke-opacity=".83" stroke-width="2" stroke-linejoin="round"/><circle cx="143" cy="88" r="3" fill="currentColor"/><circle cx="159" cy="88" r="3" fill="currentColor"/><circle cx="229" cy="43" r="5" fill="currentColor" fill-opacity=".8"/><circle cx="73" cy="138" r="3" fill="currentColor" fill-opacity=".45"/><path d="m217 46-19 12M84 133l18-10" stroke="currentColor" stroke-opacity=".38" stroke-dasharray="3 5"/></svg>`,
+    '/agentchat': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="47" y="43" width="108" height="71" rx="26" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-opacity=".68"/><path d="M86 114 69 132l2-19" stroke="currentColor" stroke-opacity=".68" stroke-linecap="round" stroke-linejoin="round"/><rect x="146" y="78" width="107" height="60" rx="24" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".42"/><path d="M198 138 214 151l-1-13" stroke="currentColor" stroke-opacity=".42" stroke-linecap="round" stroke-linejoin="round"/><path d="M71 66h57M71 82h41M166 99h50M166 114h30" stroke="currentColor" stroke-opacity=".8" stroke-width="4" stroke-linecap="round"/></svg>`,
+    '/office': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="44" y="31" width="212" height="118" rx="18" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/><rect x="58" y="45" width="184" height="89" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".22"/><path d="M111 162h79M132 149l-8 13M167 149l8 13" stroke="currentColor" stroke-opacity=".4" stroke-linecap="round"/><rect x="74" y="60" width="73" height="28" rx="8" fill="currentColor" fill-opacity=".13"/><rect x="155" y="60" width="70" height="53" rx="8" fill="currentColor" fill-opacity=".09"/><path d="M84 71h36M84 79h22M166 73h48M166 82h32M166 91h39" stroke="currentColor" stroke-opacity=".54" stroke-linecap="round"/></svg>`,
+    '/unified/graph': miniatureBrainGraph(),
+    '/repoql/control': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M42 51 96 35 145 80 220 43 263 89 215 147 144 132 78 156 42 103Z" stroke="currentColor" stroke-opacity=".4" stroke-width="1.7"/><path d="M96 35 78 156M145 80 144 132M220 43 215 147M42 103 145 80 263 89M78 156 215 147M96 35 220 43" stroke="currentColor" stroke-opacity=".27"/><g fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="2"><rect x="29" y="38" width="26" height="26" rx="7"/><rect x="84" y="23" width="24" height="24" rx="7"/><rect x="133" y="68" width="24" height="24" rx="7"/><rect x="208" y="31" width="24" height="24" rx="7"/><rect x="251" y="77" width="24" height="24" rx="7"/><rect x="202" y="135" width="26" height="26" rx="7"/><rect x="132" y="120" width="24" height="24" rx="7"/><rect x="66" y="144" width="24" height="24" rx="7"/><rect x="30" y="91" width="24" height="24" rx="7"/></g><g fill="currentColor"><circle cx="42" cy="51" r="4"/><circle cx="96" cy="35" r="4"/><circle cx="145" cy="80" r="4"/><circle cx="220" cy="43" r="4"/><circle cx="263" cy="89" r="4"/><circle cx="215" cy="147" r="4"/><circle cx="144" cy="132" r="4"/><circle cx="78" cy="156" r="4"/><circle cx="42" cy="103" r="4"/></g></svg>`,
+    '/unified/tencent': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M111 41c-18 0-33 15-33 33 0 3 .3 5.9 1.1 8.7-12.8 6.9-21.6 20.4-21.6 35.9 0 22.5 18.3 40.8 40.8 40.8 15.2 0 28.5-8.3 35.5-20.5 5.2 3.1 11.3 4.9 17.8 4.9 19 0 34.8-15.1 35.6-34 .7.1 1.4.1 2.1.1 22.8 0 41.3-18.5 41.3-41.3S252.1 28 229.3 28c-7.4 0-14.4 1.9-20.5 5.4C202.5 20 189.2 11 173.8 11c-17.1 0-31.5 11.1-36.8 26.4A33 33 0 0 0 111 41Z" stroke="currentColor" stroke-opacity=".28" stroke-width="2"/><g stroke="currentColor" stroke-opacity=".48"><path d="M107 111 138 92M161 73l23-17M165 104l28 18M122 127h52M86 90l23 16"/></g><g fill="currentColor"><circle cx="84" cy="89" r="6"/><circle cx="107" cy="111" r="6"/><circle cx="138" cy="92" r="6"/><circle cx="161" cy="73" r="6"/><circle cx="184" cy="56" r="6"/><circle cx="165" cy="104" r="6"/><circle cx="193" cy="122" r="6"/><circle cx="122" cy="127" r="6"/><circle cx="174" cy="127" r="6"/></g></svg>`,
+    '/repoql/cheat-sheet': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="72" y="29" width="158" height="132" rx="16" fill="currentColor" fill-opacity=".055" stroke="currentColor" stroke-opacity=".33"/><path d="M94 61h113M94 83h85M94 105h99M94 127h53" stroke="currentColor" stroke-opacity=".76" stroke-width="6" stroke-linecap="round"/><path d="M88 37h126" stroke="currentColor" stroke-opacity=".2"/></svg>`,
+    '/unified/usage': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M54 148h191" stroke="currentColor" stroke-opacity=".22" stroke-width="2"/><g fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".55"><rect x="72" y="102" width="28" height="46" rx="8"/><rect x="116" y="80" width="28" height="68" rx="8"/><rect x="160" y="53" width="28" height="95" rx="8"/><rect x="204" y="89" width="28" height="59" rx="8"/></g><path d="M86 93 130 71 174 44 218 79" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-opacity=".82"/><g fill="currentColor"><circle cx="86" cy="93" r="5"/><circle cx="130" cy="71" r="5"/><circle cx="174" cy="44" r="5"/><circle cx="218" cy="79" r="5"/></g></svg>`,
+    '/architecture/memory': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".32"><path d="M150 35 86 63l64 28 64-28-64-28Z"/><path d="M86 95l64 28 64-28"/><path d="M86 127l64 28 64-28"/></g><path d="M106 71h88M106 103h88M106 135h88" stroke="currentColor" stroke-opacity=".45" stroke-linecap="round"/><circle cx="150" cy="63" r="5" fill="currentColor"/><circle cx="150" cy="95" r="5" fill="currentColor"/><circle cx="150" cy="127" r="5" fill="currentColor"/></svg>`,
+    '/architecture/orchestra': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="44" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><rect x="118" y="74" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><rect x="196" y="104" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><path d="M105 65h13c8 0 14 6 14 14v0M183 95h13c8 0 14 6 14 14v0" stroke="currentColor" stroke-opacity=".75" stroke-width="3" stroke-linecap="round"/><circle cx="72" cy="65" r="6" fill="currentColor"/><circle cx="150" cy="95" r="6" fill="currentColor"/><circle cx="228" cy="125" r="6" fill="currentColor"/></svg>`,
+  };
+  const featureCards = new Set(['/kanban','/unified/graph']);
+  const referenceDocuments = [
+    ['RepoQL Cheat Sheet','/repoql/cheat-sheet'],
+    ['Memory Architecture','/architecture/memory'],
+    ['Orchestration Architecture','/architecture/orchestra'],
+  ];
+  const systemKnowledge = [
+    ['RepoQL Dashboard','/repoql/control'],
+    ['Tencent Dashboard','/unified/tencent'],
+    ['Concepts','/knowledge/all'],
+    ['Connections','/links'],
+    ['Connectors','/knowledge/connectors'],
+    ['Indexing and Sources','/indexing'],
+  ];
+  const diagnosticsTools = [
+    ['AI Usage','/unified/usage'],
+    ['Diagnostics','/diagnostics'],
+    ['Harness Control Center','/harness'],
+    ['Live Agents','/harness/agents'],
+    ['Execution History','/harness/runs'],
+  ];
+  if (typeof nativeInstall !== 'undefined' && nativeInstall) diagnosticsTools.push(['Windows Integration Status','/native/status']);
+  // Values are filled only after successful authenticated, read-only responses.
+  // The page itself remains usable even if Kanzo or Agent Chat is unavailable.
+  const overview = [
+    ['To do','ready','work','#/kanban','Kanzo ready tasks'],
+    ['In progress','doing','chat','#/kanban','Kanzo active stage'],
+    ['Review','review','memory','#/kanban','Kanzo review stage'],
+    ['Backlog','backlog','ghost','#/kanban','Kanzo parked work'],
+    ['Recently active agents','agents','repoql','#/agentchat','Agent Chat activity, last 5 min'],
+  ];
+  return `<section class="command-hero block command-hero-rich" aria-labelledby="command-hero-heading">
+    <div class="command-hero-copy"><span class="command-kicker">Command center</span><h2 id="command-hero-heading">Launch your core workspaces.</h2><p class="command-hero-note">A clearer, faster control surface for work, agents, household planning and knowledge.</p></div>
+    <div class="command-hero-sidekick" aria-hidden="true"><div class="command-hero-orbit"><i></i><i></i><i></i><span>${REPOQL_ICON}</span></div></div>
+  </section>
+  <section class="command-overview block" aria-labelledby="command-focus-heading" id="command-live-overview">
+    <div class="command-heading"><h2 id="command-focus-heading">Operations overview</h2>
+      <span class="command-overview-actions"><span id="command-live-status" role="status" aria-live="polite">Checking live status…</span><button id="command-live-refresh" type="button">Refresh status</button></span></div>
+    <div class="command-overview-grid">${overview.map(([title,key,accent,link,description]) => `<a class="command-overview-card" data-accent="${esc(accent)}" href="${esc(link)}"><span class="command-overview-name">${esc(title)}</span><strong class="command-overview-value" id="command-live-${esc(key)}">…</strong><small>${esc(description)}</small></a>`).join('')}</div>
+  </section>
+  <section aria-labelledby="goto-heading">
+    <div class="command-heading"><h2 id="goto-heading">Primary workspaces</h2><span>Most-used surfaces first</span></div>
+    <div class="command-links command-links-priority command-links-visual">${destinations.map(([title,link,description,accent,kicker])=>`<a class="command-link command-workspace${featureCards.has(link)?' command-workspace-feature':''}" data-accent="${esc(accent)}" href="#${esc(link)}">
+      <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || REPOQL_ICON}</span>
+      <span class="command-card-content"><span class="command-card-kicker">${esc(kicker)}</span><strong>${esc(title)}</strong><span class="command-card-description">${esc(description)}</span><span class="command-card-cta">Open workspace <span aria-hidden="true">↗</span></span></span>
+      <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || ''}</span>
+    </a>`).join('')}</div>
+  </section>
+  <details class="command-more block" data-accent="office" open>
+    <summary><span>Reference documents</span><span class="muted small">Core reference material</span></summary>
+    <div class="command-more-grid">${referenceDocuments.map(([title,link])=>`<a class="command-mini-chip" href="#${esc(link)}">${esc(title)}</a>`).join('')}</div>
+  </details>
+  <details class="command-more block" data-accent="memory" open>
+    <summary><span>System knowledge</span><span class="muted small">Knowledge surfaces and sources</span></summary>
+    <div class="command-more-grid">${systemKnowledge.map(([title,link])=>`<a class="command-mini-chip" href="#${esc(link)}">${esc(title)}</a>`).join('')}</div>
+  </details>
+  <details class="command-more block" data-accent="attention" open>
+    <summary><span>Diagnostics</span></summary>
+    <div class="command-more-grid">${diagnosticsTools.map(([title,link])=>`<a class="command-mini-chip" href="#${esc(link)}">${esc(title)}</a>`).join('')}</div>
+  </details>`;
+}
 
-  await refresh();
-  schedule(() => refresh().catch(() => {}), 10000);
+async function viewDashboard() {
+  // Render immediately; operational counts are an optional read-only enhancement.
+  APP.innerHTML = pageHead('Command center', '') +
+    `<div id="dash" class="stack">${dashboardSnapshot()}</div>`;
+  HOST_LINE.textContent = 'RepoQL Dashboard';
+  const panel = document.getElementById('command-live-overview');
+  const refresh = document.getElementById('command-live-refresh');
+  const status = document.getElementById('command-live-status');
+  const epoch = state.routeEpoch;
+  let busy = false;
+  const update = (key, value) => {
+    const output = panel?.querySelector(`#command-live-${key}`);
+    if (output) output.textContent = value;
+  };
+  const loadOverview = async () => {
+    if (busy || !panel?.isConnected) return;
+    busy = true;
+    refresh.disabled = true;
+    status.textContent = 'Checking live status…';
+    const [kanzo, agents] = await Promise.allSettled([
+      (async () => {
+        await api('/api/embed/kanzo/handshake', {timeoutMs:6000});
+        return api('/embed/kanzo/api/board?project=all', {timeoutMs:8000});
+      })(),
+      api('/api/agentchat/presence', {timeoutMs:6000}),
+    ]);
+    if (epoch !== state.routeEpoch || !panel.isConnected) return;
+    const tasks = kanzo.status === 'fulfilled' && Array.isArray(kanzo.value?.tasks) ? kanzo.value.tasks : null;
+    for (const [key, stage] of [['ready','todo'],['doing','doing'],['review','review'],['backlog','backlog']]) {
+      update(key, tasks ? String(tasks.filter(task => task?.status === stage).length) : 'Unavailable');
+    }
+    const roster = agents.status === 'fulfilled' && agents.value?.available === true && Array.isArray(agents.value?.agents)
+      ? agents.value.agents : null;
+    update('agents', roster ? String(roster.filter(agent => agent?.status === 'working').length) : 'Unavailable');
+    status.textContent = tasks && roster ? 'Latest snapshot' : 'Some services unavailable';
+    refresh.disabled = false;
+    busy = false;
+  };
+  refresh.addEventListener('click', () => { void loadOverview(); });
+  void loadOverview();
 }
 
 // ------------------------------------------------------------ chart + graph
@@ -645,21 +868,21 @@ function renderChart(wrap, series, { bucketSeconds = 60, height = 230, compact =
   const ticks = compact ? [] : [0, 0.5, 1].map((ratio) => {
     const value = maxY * ratio;
     return `<line x1="${pad.left}" y1="${yAt(value)}" x2="${width - pad.right}" y2="${yAt(value)}" stroke="rgba(31,51,72,.65)" stroke-dasharray="2 4"/>
-      <text x="${pad.left - 6}" y="${yAt(value) + 3}" text-anchor="end" fill="#4d5c72" font-size="9" font-family="monospace">${value.toFixed(0)}</text>`;
+      <text x="${pad.left - 6}" y="${yAt(value) + 3}" text-anchor="end" fill="var(--muted)" font-size="9" font-family="monospace">${value.toFixed(0)}</text>`;
   }).join("");
 
   wrap.innerHTML = `
     <svg class="chart" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="RepoQL CPU usage — ${label}">
       <defs>
         <linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#26e6ff" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="#26e6ff" stop-opacity="0"/>
+          <stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0"/>
         </linearGradient>
       </defs>
       ${ticks}
       <path d="${area}" fill="url(#cpuFill)"/>
-      <path d="${line}" fill="none" stroke="#26e6ff" stroke-width="1.6" stroke-linejoin="round"/>
-      <circle cx="${xAt(points.length - 1)}" cy="${yAt(points[points.length - 1].avg)}" r="2.6" fill="#35ffa4"/>
+      <path d="${line}" fill="none" stroke="var(--cyan)" stroke-width="1.6" stroke-linejoin="round"/>
+      <circle cx="${xAt(points.length - 1)}" cy="${yAt(points[points.length - 1].avg)}" r="2.6" fill="var(--green)"/>
       <line id="hoverLine" x1="0" y1="${pad.top}" x2="0" y2="${pad.top + innerH}" stroke="rgba(38,230,255,.55)" stroke-dasharray="3 3" style="display:none"/>
     </svg>
     ${compact ? "" : `<div class="chart-legend">
@@ -1381,7 +1604,67 @@ async function viewDiagnostics(params) {
   const panel = document.getElementById("diagnostics-panel");
   if (tab === "errors") return mountErrors(panel, params);
   if (tab === "excluded") return mountExcluded(panel);
+  if (tab === "runtime") return mountRuntime(panel);
   return mountCpu(panel, params);
+}
+
+// Diagnostics is the only default location for technical runtime metadata.
+// Every status is sourced from an authenticated existing read API; a failed
+// probe is explicitly unavailable, never synthesized as healthy or zero.
+async function mountRuntime(panel) {
+  const owner = state.routeAbort?.signal;
+  panel.innerHTML = `<div class="block"><div class="block-title">Runtime & services</div>
+      <p class="muted small">Version, collector and authority details for troubleshooting. These probes do not attest to memory recall, completed agent work or Office rendering.</p>
+      <button class="btn" type="button" id="runtime-check">Refresh status</button>
+      <span class="muted small" id="runtime-checked" role="status" aria-live="polite"></span></div>
+      <div id="runtime-results" aria-live="polite"><div class="loading">Checking service status…</div></div>`;
+  const target = panel.querySelector('#runtime-results');
+  const button = panel.querySelector('#runtime-check');
+  const label = panel.querySelector('#runtime-checked');
+  const probes = [
+    ['Dashboard', '/api/health'],
+    ['Host status', '/api/status'],
+    ['Harness collector', '/api/harness/health'],
+    ['Run state authority', '/api/harness/rust'],
+    ['Office viewer', '/api/harness/office'],
+    ['Ghost observer', '/api/ghost/status'],
+  ];
+  let sequence = 0;
+  const render = async () => {
+    const epoch = ++sequence;
+    button.disabled = true;
+    label.textContent = 'Checking…';
+    const results = await Promise.allSettled(probes.map(([, url]) => api(url)));
+    if (owner?.aborted || epoch !== sequence || !target.isConnected) return;
+    target.innerHTML = `<div class="grid cols-3">${results.map((result, index) => {
+      const [name, url] = probes[index];
+      const ok = result.status === 'fulfilled';
+      const data = ok ? result.value : null;
+      const explicitFailure = data?.ok === false || data?.available === false || data?.enabled === false || data?.stale === true;
+      const stateText = !ok ? 'Unavailable' : explicitFailure ? 'Check required' : 'Responding';
+      const version = [data?.version, data?.runtime_version, data?.build_version, data?.build?.version]
+        .find(value => typeof value === 'string' && value.trim());
+      const metadata = [
+        version ? `<dt>Version</dt><dd>${esc(version)}</dd>` : '',
+        name === 'Harness collector' ? `<dt>Last ingest</dt><dd>${esc(relative(data?.last_ingest))}</dd>
+          <dt>Ingest errors</dt><dd>${data?.ingest_errors == null ? 'Unavailable' : esc(fmt(data.ingest_errors))}</dd>` : '',
+        name === 'Office viewer' ? `<dt>Viewer</dt><dd>${data?.available === true ? 'Available (health only)' : 'Unavailable'}</dd>` : '',
+        name === 'Ghost observer' ? `<dt>Observer</dt><dd>${esc(displayLabel(data?.state, 'Unknown'))}</dd>` : '',
+      ].join('');
+      return `<section class="block"><div class="block-title">${esc(name)}
+          <span class="tag ${!ok || explicitFailure ? 'amber' : 'green'}">${stateText}</span></div>
+          <dl class="kv"><dt>Endpoint</dt><dd class="mono">${esc(url)}</dd>${metadata}</dl>
+          ${!ok ? `<p class="muted small">${esc(result.reason?.message || 'Probe unavailable')}</p>` : ''}</section>`;
+    }).join('')}</div>
+      <details class="block runtime-details"><summary>Run authority and collector internals</summary>
+        ${rustAuthorityBlock(results[3].status === 'fulfilled' ? results[3].value : {available:false,error:'Status unavailable'})}
+        <p class="muted small"><a href="#/harness/events">View telemetry events</a> · <a href="#/harness/performance">Run performance</a> · <a href="#/architecture/orchestra">How orchestration works</a></p>
+      </details>`;
+    label.textContent = 'Last checked ' + new Date().toLocaleTimeString('en-GB');
+    button.disabled = false;
+  };
+  button.addEventListener('click', () => { render().catch(() => { button.disabled = false; label.textContent = 'Check failed'; }); });
+  await render();
 }
 
 async function mountCpu(panel, params) {
@@ -1811,9 +2094,10 @@ async function viewLinks(params, connections = false) {
   let collection = params.collection || "see_also";
   let query = params.q || "";
   let status = params.status || "";
+  let includeHelp = params.help === "1";
   let page = Number(params.page || 1);
   const graphHost = `<div id="graph" class="conn-graph-host"><div class="conn-loading"><div class="ug-loader"><i></i><i></i><i></i></div><span>Laying out stored relationships…</span></div></div>`;
-  APP.innerHTML = pageHead(connections ? "RepoQL Connections" : "Links & relationships", "Stored RepoQL relationships: see-also references, graph edges, composition and document links. These are not inferred dependencies.") +
+  APP.innerHTML = pageHead(connections ? "RepoQL Connections" : "Links & relationships", "Stored RepoQL relationships, deduplicated: mirrored concept copies collapse to one table row, reciprocal pairs collapse in the graph, and RepoQL help pages are hidden by default. These are not inferred dependencies.") +
     `${connections ? graphHost : ""}
      <div class="block-title conn-table-title">${connections ? "Relationship records" : ""}</div>
      <div class="toolbar">
@@ -1826,6 +2110,7 @@ async function viewLinks(params, connections = false) {
          <option value="">All statuses</option>
          ${["resolved", "unresolved", "broken", "invalid"].map((value) => `<option value="${value}" ${value === status ? "selected" : ""}>${value}</option>`).join("")}
        </select>
+       <label class="small muted" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="link-help" ${includeHelp ? "checked" : ""}> Include RepoQL help docs</label>
        <span class="small muted" id="link-total"></span>
      </div>
      <div id="link-table" class="table-wrap"><div class="loading">Loading relationships…</div></div>
@@ -1835,9 +2120,14 @@ async function viewLinks(params, connections = false) {
   const next = sequencer();
   const load = async () => {
     const isCurrent = next();
-    const data = await api(`/api/links?collection=${collection}&q=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}&page=${page}&page_size=${connections ? 25 : 50}`);
+    const data = await api(`/api/links?collection=${collection}&q=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}&include_help=${includeHelp ? "1" : "0"}&page=${page}&page_size=${connections ? 25 : 50}`);
     if (!isCurrent()) return;
-    document.getElementById("link-total").textContent = `${fmt(data.total)} relationships`;
+    const counts = data.counts || {};
+    const storedKey = collection === "see_also" ? "see_also_stored" : collection === "markdown" ? "markdown_stored" : collection === "refers_to" ? "refers_to_stored" : collection === "composition" ? "composition_stored" : null;
+    const stored = storedKey ? counts[storedKey] : null;
+    document.getElementById("link-total").textContent = stored && !query && !status && stored > data.total
+      ? `${fmt(data.total)} distinct · ${fmt(stored)} stored`
+      : `${fmt(data.total)} relationships`;
     const rows = data.rows.map((row) => {
       const source = row.source_name || row.source_uri;
       const target = row.target_name || row.target_uri || row.destination_uri;
@@ -1847,8 +2137,8 @@ async function viewLinks(params, connections = false) {
         <td class="mono small">${esc(row.type || "—")}</td>
         <td>${row.target_uri ? `<a class="mono small" href="${href("/knowledge/item", { uri: row.target_uri })}">${esc(target)}</a>` : `<span class="mono small">${esc(target)}</span>`}
           ${row.target_category ? `<div class="small">${categoryChip(row.target_category)}</div>` : ""}</td>
-        <td class="small">${esc(row.provenance || "—")}</td>
-        <td>${row.status ? pill(row.status) : row.resolved === false ? `<span class="pill amber">unresolved</span>` : `<span class="pill green">stored</span>`}</td>
+        <td class="small">${esc(row.provenance || "—")}${row.copies > 1 ? ` <span class="pill">${fmt(row.copies)} copies</span>` : ""}</td>
+        <td>${row.status ? pill(row.status) : row.resolved === false ? `<span class="pill amber">unresolved</span>` : `<span class="pill green">stored</span>`}${row.occurrences > 1 ? ` <span class="pill">×${fmt(row.occurrences)}</span>` : ""}</td>
       </tr>`;
     }).join("");
     document.getElementById("link-table").innerHTML = `<table class="data">
@@ -1861,7 +2151,6 @@ async function viewLinks(params, connections = false) {
       setParams({ page });
       load().catch((error) => toast("Links", error.message, "error"));
     }));
-    const counts = data.counts || {};
     document.getElementById("link-tabs").dataset.counts = JSON.stringify(counts);
   };
 
@@ -1899,6 +2188,12 @@ async function viewLinks(params, connections = false) {
     page = 1;
     setParams({ status, page: 1 });
     load().catch(() => {});
+  });
+  document.getElementById("link-help").addEventListener("change", (event) => {
+    includeHelp = event.target.checked;
+    page = 1;
+    setParams({ help: includeHelp ? "1" : "", page: 1 });
+    load().catch((error) => toast("Links", error.message, "error"));
   });
 
   await Promise.all([load(), loadGraph().catch(() => {})]);
@@ -1967,7 +2262,7 @@ async function viewConnectors() {
 
 const selectedFeatures = window.__SINGULARITY_VARIANT__?.features || null;
 function featureAllowed(path) {
-  if (!selectedFeatures) return true; // Legacy source/standalone test harness
+  if (!selectedFeatures) return true;
   if (path === "/ghost" || path.startsWith("/ghost/")) return selectedFeatures.ghost === true;
   if (path === "/office" || path.startsWith("/office/")) return selectedFeatures.office === true;
   if (path === "/kanban") return selectedFeatures.kanban === true;
@@ -1975,23 +2270,54 @@ function featureAllowed(path) {
   return true;
 }
 for (const link of document.querySelectorAll('[data-nav]')) {
-  if (!featureAllowed(link.dataset.nav)) link.hidden = true;
-  if (link.dataset.nav === '/native/status') link.hidden = !nativeInstall;
-  if (link.dataset.nav === '/unified/usage' && nativeInstall) link.textContent = guiUsageName()+' Usage';
+  if (!featureAllowed(link.dataset.nav) || (link.dataset.nav === '/native/status' && !nativeInstall)) {
+    link.hidden = true;
+    link.dataset.variantDisabled = '1';
+  }
+  if (link.dataset.nav === '/unified/usage' && nativeInstall) {
+    const label=link.querySelector('.nav-text');
+    if (label) label.textContent=guiUsageName() + ' Usage';
+    else link.textContent=guiUsageName() + ' Usage';
+  }
 }
+for (const link of document.querySelectorAll('[data-dock]')) {
+  if (!featureAllowed(link.dataset.dock)) link.hidden = true;
+}
+
 initNavigationUI();
-captureSecret();
+renderThemeSwitcher();
+applyTheme(storedTheme(), {persist:false});
+if (!window.__SINGULARITY_LOCAL_LOGIN__) captureSecret();
+else {
+  try { sessionStorage.removeItem(SECRET_KEY); } catch {}
+  state.token = null;
+  const signout = document.getElementById('account-signout');
+  if (signout) {
+    signout.hidden = false;
+    signout.addEventListener('click', async () => {
+      const response = await fetch('/api/account/logout', {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type':'application/json','X-Requested-With':'repoql-dashboard'},
+        body: '{}', cache: 'no-store'
+      }).catch(() => null);
+      if (response?.ok) location.replace('/');
+    });
+  }
+}
 // window.__RQDASH_ACCESS__ is set by the server when a Cloudflare Access JWT
 // vouched for this browser on the public hostname; no capability key is needed.
 if (!state.token && !window.__RQDASH_ACCESS__) {
   showSignpost("This tab holds no dashboard key.");
 } else {
   window.addEventListener("hashchange", route);
-  route();
+  // Defer the first render until this module has finished evaluating: views can
+  // use module constants declared further down (HARNESS_RANGES), and a direct
+  // deep link such as #/harness/performance would otherwise hit their TDZ.
+  queueMicrotask(route);
 }
 
 // ---------------------------------------------------------------- harness
-// Ticket 789: Harness Control Center. Everything here is rendered from the
+// Issue 789: Harness Control Center. Everything here is rendered from the
 // harness telemetry store (existing kit ledgers ingested by
 // harness_telemetry.py). No prompt, response, tool body or credential is
 // available to this UI; missing measurements are never invented.
@@ -2009,6 +2335,24 @@ function applyHarnessRefresh(seconds) {
   if (Number.isFinite(n) && n >= 5 && n <= 600) harnessRefreshMs = n * 1000;
 }
 function harnessInterval() { return Math.max(5000, harnessRefreshMs); }
+// A failed background poll cannot leave yesterday's values silently labelled
+// as current. Preserve the previous view for diagnosis, but label it stale.
+function harnessRefreshFailed(body) {
+  if (!body?.isConnected) return;
+  let banner = body.querySelector('#harness-refresh-warning');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'harness-refresh-warning';
+    banner.className = 'block accent-amber';
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+    body.prepend(banner);
+  }
+  banner.textContent = 'Telemetry refresh failed. Values below may be out of date; current activity is not verified.';
+  const stamp = document.getElementById('harness-updated');
+  if (stamp) stamp.textContent = 'Refresh unavailable · last successful snapshot shown';
+}
+
 
 // Telemetry stores no prompt-derived titles: label a run by its structural kind.
 function runLabel(run) {
@@ -2088,50 +2432,173 @@ async function viewHarnessOverview(params) {
   const next = sequencer();
   async function load() {
     const mine = next();
-    const [o, h, rust] = await Promise.all([
+    const [o, h] = await Promise.all([
       api(`/api/harness/overview?range=${encodeURIComponent(range)}`),
       api("/api/harness/health"),
-      api("/api/harness/rust").catch((error) => ({ available: false, error: String(error?.message ?? error) })),
     ]);
     if (!mine()) return;
     applyHarnessRefresh(h?.dashboard_refresh_seconds ?? o?.telemetry?.dashboard_refresh_seconds);
     const t = o.telemetry || h || {};
     const health = h || t;
-    const budgetPct = Number(health.budget_pct || 0);
-    body.innerHTML = `
-      <div class="grid cols-3">
-        ${metricBlock("Active runs", fmt(o.active_runs), "", "cyan", "runs currently in flight")}
-        ${metricBlock("Active agents", fmt(o.active_agents), "", "purple", "kit seats + live desktop sessions")}
-        ${metricBlock("Desktop sessions", fmt(o.desktop_sessions), "", "cyan", "live Freebuff Desktop sessions")}
-        ${metricBlock("Success rate", o.success_rate == null ? "—" : `${Math.round(o.success_rate * 100)}`, "%", "green", `${fmt(o.completed)} completed · ${fmt(o.failed)} failed`)}
-        ${metricBlock("Median completion", ms(o.median_ms), "", "", `average ${ms(o.avg_ms)}`)}
+    const budgetPct = health.budget_pct == null ? null : Number(health.budget_pct);
+    const budgetKnown = Number.isFinite(budgetPct) && budgetPct >= 0;
+    const errorsKnown = typeof health.ingest_errors === 'number';
+    const currentFailures = Array.isArray(o.alerts) ? o.alerts.length : null;
+    const tile = (title, value, url, description, accent) => `<a class="command-link" data-accent="${esc(accent)}" href="${href(url)}">
+      <strong>${esc(title)}: ${esc(value)}</strong><span>${esc(description)}</span></a>`;
+    body.innerHTML = `<section class="block"><div class="command-heading"><h2>What needs attention</h2>
+      <a href="#/diagnostics?tab=runtime">Runtime diagnostics</a></div>
+      <div class="command-links">
+        ${tile('Active runs', fmt(o.active_runs), '/harness/runs', 'Open execution history', 'harness')}
+        ${tile('Active agents', fmt(o.active_agents), '/harness/agents', 'See workers and sessions', 'agents')}
+        ${tile('Significant events', currentFailures === null ? 'Unavailable' : fmt(currentFailures), '/harness/events', 'Inspect warnings and failures', 'attention')}
+        ${tile('Run performance', o.success_rate == null ? 'Unavailable' : Math.round(o.success_rate * 100) + '% success', '/harness/performance', 'Completion, latency and retries', 'history')}
       </div>
-      ${rustAuthorityBlock(rust)}
-      <div class="block" style="margin-top:14px">
-        <div class="block-title">Telemetry health <span class="tag">${health.enabled ? "enabled" : "disabled"}</span></div>
-        <dl class="kv">
-          <dt>Collector last ingest</dt><dd class="${health.last_ingest ? "ok" : "err"}">${esc(relative(health.last_ingest))}</dd>
-          <dt>Storage</dt><dd>${bytes(health.storage_bytes)} / ${bytes(health.budget_bytes)} (${budgetPct}%)</dd>
-          <dt>Detail events retained</dt><dd>${fmt(health.events)} · oldest ${esc(relative(health.oldest_event))}</dd>
-          <dt>Retention</dt><dd>${esc(String(health.detail_days))} d detail · ${esc(String(health.aggregate_days))} d aggregates</dd>
-          <dt>Dropped / sampled out</dt><dd>${fmt(health.dropped_events)} / ${fmt(health.sampled_out)}</dd>
-          <dt>Ingest errors</dt><dd class="${health.ingest_errors ? "err" : "ok"}">${fmt(health.ingest_errors)}</dd>
-          <dt>Last error</dt><dd class="${health.last_error ? "err" : "ok"}">${esc(health.last_error || "none")}</dd>
-        </dl>
-        <div class="progress ${budgetPct > 90 ? "red" : budgetPct > 70 ? "purple" : "green"}"><span style="width:${Math.min(100, budgetPct)}%"></span></div>
-      </div>
-      <div class="block" style="margin-top:14px">
-        <div class="block-title">Recent significant events</div>
-        ${dataTable(["Time", "Category", "Event", "Detail", "Count"], o.alerts || [], (a) => `<tr>
-          <td class="mono">${esc(relative(a.ts))}</td><td>${esc(a.kind || a.category)}</td>
-          <td>${pill(a.severity || a.status)}</td><td class="wrap">${esc(a.detail || "")}</td>
-          <td class="mono">${a.occurrences > 1 ? fmt(a.occurrences) : ""}</td></tr>`, "No significant events in this range.")}
-      </div>`;
+      <p class="muted small">A zero is shown only when the source reports zero. Dashboard telemetry is not the orchestration run authority.</p>
+    </section>
+    ${currentFailures > 0 ? `<section class="block"><div class="block-title">Recent significant events</div>
+      ${dataTable(['Time','Category','Event','Detail','Count'],(o.alerts || []).slice(0,5),(a)=>`<tr>
+        <td class="mono">${esc(relative(a.ts))}</td><td>${esc(a.kind || a.category)}</td>
+        <td>${pill(a.severity || a.status)}</td><td class="wrap">${esc(a.detail || '')}</td>
+        <td class="mono">${a.occurrences > 1 ? fmt(a.occurrences) : ''}</td></tr>`)}</section>` : ''}
+    <details class="block runtime-details"><summary>Collector details</summary>
+      <p class="muted small">For troubleshooting only. The full authority journal and service versions are under <a href="#/diagnostics?tab=runtime">Runtime diagnostics</a>.</p>
+      <dl class="kv">
+        <dt>Collector last ingest</dt><dd>${esc(relative(health.last_ingest))}</dd>
+        <dt>Storage</dt><dd>${bytes(health.storage_bytes)} / ${bytes(health.budget_bytes)} (${budgetKnown ? budgetPct + '%' : 'Unavailable'})</dd>
+        <dt>Retention</dt><dd>${health.detail_days == null ? 'Unavailable' : esc(String(health.detail_days)) + ' d detail'} · ${health.aggregate_days == null ? 'Unavailable' : esc(String(health.aggregate_days)) + ' d aggregates'}</dd>
+        <dt>Ingest errors</dt><dd class="${errorsKnown && health.ingest_errors ? 'err' : ''}">${errorsKnown ? fmt(health.ingest_errors) : 'Unavailable'}</dd>
+        <dt>Last error</dt><dd>${esc(health.last_error || 'Not reported')}</dd>
+      </dl>
+    </details>`;
     const stamp = document.getElementById("harness-updated");
     if (stamp) stamp.textContent = `updated ${new Date().toLocaleTimeString("en-GB")}`;
   }
   await load();
-  schedule(() => load().catch(() => {}), harnessInterval());
+  schedule(() => load().catch(() => harnessRefreshFailed(body)), harnessInterval());
+}
+
+// ------------------------------------------------------------- liveness
+// /api/harness/agents classifies every run, seat and session as
+// fresh | stale | unknown | ended | inactive. Only fresh means active: silence
+// is not a heartbeat, an unknown row has no usable source update timestamp at
+// all, and neither may be rendered as activity.
+const LIVENESS_STATES = ["fresh", "stale", "unknown", "ended", "inactive"];
+const LIVENESS_UNKNOWN_NOTE = "no source update timestamp recorded";
+
+// Liveness of one row. `legacy` is what that payload meant before the backend
+// exposed liveness, so an older backend keeps its previous rendering instead of
+// being re-read as activity it never reported.
+function livenessState(row, legacy = null) {
+  const raw = row && typeof row.liveness === "string" ? row.liveness.trim().toLowerCase() : "";
+  if (LIVENESS_STATES.includes(raw)) return raw;
+  return LIVENESS_STATES.includes(legacy) ? legacy : null;
+}
+
+function livenessLabel(state) {
+  switch (state) {
+    case "fresh": return "live";
+    case "stale": return "not active · stale";
+    case "unknown": return "not active · timestamp unknown";
+    case "ended": return "ended";
+    case "inactive": return "inactive";
+    default: return "unknown";
+  }
+}
+
+// One honest sentence per non-fresh state; fresh rows say nothing extra.
+function livenessNote(row, state) {
+  if (state === "stale") {
+    // runs carry age_seconds, desktop sessions carry age_ms; both are the
+    // backend's own sample, so the note never estimates an age.
+    const raw = row ? (row.age_seconds ?? (row.age_ms == null ? null : Number(row.age_ms) / 1000)) : null;
+    const age = raw == null ? null : Number(raw);
+    return Number.isFinite(age) && age > 0 ? `no source update for ${ms(age * 1000)}` : "no update for 15+ min";
+  }
+  if (state === "unknown") return LIVENESS_UNKNOWN_NOTE;
+  if (state === "ended") return "terminal timestamp recorded";
+  if (state === "inactive") return "status does not claim to be active";
+  return "";
+}
+
+function livenessTone(state) {
+  return state === "fresh" ? "green" : state === "stale" ? "amber" : "";
+}
+
+function sessionRow(x) {
+  const state = livenessState(x, x.live ? "fresh" : "stale");
+  const label = state === "fresh" ? (x.state || "live") : livenessLabel(state);
+  const note = livenessNote(x, state);
+  return `<div class="harness-node">
+    <span class="node-dot"></span>
+    <div><strong>${esc(x.harness || "freebuff")}</strong>
+      <div class="muted small">${esc(x.model || "model not recorded")} · ${esc(x.agent_mode || "—")} · ${esc(x.execution_mode || "—")} · ${fmt(x.messages)} msgs</div>
+      <div class="muted small mono">${esc(String(x.session_id).slice(0, 8))}${x.last_turn_outcome ? " · last turn " + esc(x.last_turn_outcome) : ""}</div>
+      ${note ? `<div class="muted small">${esc(note)}</div>` : ""}</div>
+    <span class="pill ${livenessTone(state)}">${esc(label)}</span>
+    <span class="muted mono small">${esc(relative(x.last_activity))}</span>
+  </div>`;
+}
+
+function sessionsBlock(sessions) {
+  if (!sessions.length) return "";
+  return `<div class="block accent-cyan" style="margin-bottom:14px">
+    <div class="block-title">Freebuff Desktop <span class="tag">${sessions.length} session${sessions.length === 1 ? "" : "s"} · last 2 h</span></div>
+    <div class="harness-tree">
+      ${sessions.map(sessionRow).join("")}
+    </div>
+    <p class="muted small">Session metadata only — titles, prompts and message bodies are never read or stored.</p>
+  </div>`;
+}
+
+// Seat activity comes from the backend's `active` flag: a seat is active only
+// while its run is fresh and the seat itself has not finished. A payload from
+// before that flag keeps the old status pill exactly as it was.
+function seatPill(a) {
+  const status = String((a && a.status) || "assigned");
+  if (!a || typeof a.active !== "boolean") {
+    const tone = status === "error" ? "red" : status === "waiting" ? "amber" : "green";
+    return `<span class="pill ${tone}">${esc(status)}</span>`;
+  }
+  if (a.active) return `<span class="pill green">${esc(status)}</span>`;
+  let state = livenessState(a, "inactive");
+  // A fresh run whose seat already finished is an inactive seat, not an active one.
+  if (state === "fresh") state = "inactive";
+  const tone = state === "stale" ? "amber" : status === "error" ? "red" : "";
+  const detail = state === "unknown" ? "not active · timestamp unknown" : livenessLabel(state);
+  return `<span class="pill ${tone}">${esc(status)} · ${esc(detail)}</span>`;
+}
+
+function runBlock(r) {
+  const started = Date.parse(r.started_at || "");
+  const elapsed = Number.isNaN(started) ? null : Date.now() - started;
+  const agents = r.agents || [];
+  const state = livenessState(r, r.stale === true ? "stale" : "fresh");
+  const accent = state === "fresh" ? "accent-cyan" : state === "stale" ? "accent-amber" : "";
+  const tag = `${esc(r.mode || "mode?")} · ${esc(state === "fresh" ? "live" : livenessLabel(state))}`;
+  const note = livenessNote(r, state);
+  return `<div class="block ${accent}" style="margin-bottom:14px">
+    <div class="block-title">${esc(r.run_id)} <span class="tag">${tag}</span></div>
+    <div class="harness-title">${esc(r.title || runLabel(r))}</div>
+    <div class="toolbar" style="margin-top:10px">
+      ${state === "fresh" ? pill(r.state) : `<span class="pill">${esc(displayLabel(r.state, "state not reported"))}</span>`} ${pill("stage " + (r.stage || "—"))}
+      <span class="muted mono">elapsed ${ms(elapsed)} · updated ${esc(relative(r.updated_at))}${note ? " · " + esc(note) : ""}</span>
+    </div>
+    <div class="harness-tree">
+      <div class="harness-node coordinator"><span class="node-dot"></span>
+        <div><strong>coordinator</strong><div class="muted small">orchestrates · ${esc(r.roster || "default roster")}</div></div>
+        <span class="pill cyan">${esc(r.stage || "—")}</span></div>
+      ${agents.map((a) => `<div class="harness-node">
+        <span class="node-dot"></span>
+        <div><strong>${esc(a.agent)}</strong><div class="muted small">${esc(a.model || "model not recorded")} · ${esc(a.provider || "provider?")}</div></div>
+        ${seatPill(a)}
+        <span class="muted mono small">${ms(a.duration_ms)}</span></div>`).join("") || `<div class="muted small" style="padding-left:18px">no seats recorded yet</div>`}
+    </div>
+  </div>`;
+}
+
+function runsBlock(runs) {
+  return runs.map(runBlock).join("");
 }
 
 async function viewHarnessAgents() {
@@ -2151,47 +2618,10 @@ async function viewHarnessAgents() {
         Historical runs remain in Execution History; start a desktop chat or a kit run and this page updates within 60 s.</p></div>`;
       return;
     }
-    const sessionBlock = sessions.length ? `<div class="block accent-cyan" style="margin-bottom:14px">
-      <div class="block-title">Freebuff Desktop <span class="tag">${sessions.length} session${sessions.length === 1 ? "" : "s"} · last 2 h</span></div>
-      <div class="harness-tree">
-        ${sessions.map((x) => `<div class="harness-node">
-          <span class="node-dot"></span>
-          <div><strong>${esc(x.harness || "freebuff")}</strong>
-            <div class="muted small">${esc(x.model || "model not recorded")} · ${esc(x.agent_mode || "—")} · ${esc(x.execution_mode || "—")} · ${fmt(x.messages)} msgs</div>
-            <div class="muted small mono">${esc(String(x.session_id).slice(0, 8))}${x.last_turn_outcome ? " · last turn " + esc(x.last_turn_outcome) : ""}</div></div>
-          <span class="pill ${x.live ? "green" : "amber"}">${esc(x.live ? (x.state || "live") : "stale")}</span>
-          <span class="muted mono small">${esc(relative(x.last_activity))}</span>
-        </div>`).join("")}
-      </div>
-      <p class="muted small">Session metadata only — titles, prompts and message bodies are never read or stored.</p>
-    </div>` : "";
-    const runBlocks = runs.map((r) => {
-      const started = Date.parse(r.started_at || "");
-      const elapsed = Number.isNaN(started) ? null : Date.now() - started;
-      const agents = r.agents || [];
-      return `<div class="block ${r.stale ? "accent-amber" : "accent-cyan"}" style="margin-bottom:14px">
-        <div class="block-title">${esc(r.run_id)} <span class="tag">${esc(r.mode || "mode?")} · ${r.stale ? "STALE" : "live"}</span></div>
-        <div class="harness-title">${esc(r.title || runLabel(r))}</div>
-        <div class="toolbar" style="margin-top:10px">
-          ${pill(r.state)} ${pill("stage " + (r.stage || "—"))}
-          <span class="muted mono">elapsed ${ms(elapsed)} · updated ${esc(relative(r.updated_at))}${r.stale ? " · no update for 15+ min" : ""}</span>
-        </div>
-        <div class="harness-tree">
-          <div class="harness-node coordinator"><span class="node-dot"></span>
-            <div><strong>coordinator</strong><div class="muted small">orchestrates · ${esc(r.roster || "default roster")}</div></div>
-            <span class="pill cyan">${esc(r.stage || "—")}</span></div>
-          ${agents.map((a) => `<div class="harness-node">
-            <span class="node-dot"></span>
-            <div><strong>${esc(a.agent)}</strong><div class="muted small">${esc(a.model || "model not recorded")} · ${esc(a.provider || "provider?")}</div></div>
-            <span class="pill ${a.status === "error" ? "red" : a.status === "waiting" ? "amber" : "green"}">${esc(a.status)}</span>
-            <span class="muted mono small">${ms(a.duration_ms)}</span></div>`).join("") || `<div class="muted small" style="padding-left:18px">no seats recorded yet</div>`}
-        </div>
-      </div>`;
-    }).join("");
-    body.innerHTML = sessionBlock + runBlocks;
+    body.innerHTML = sessionsBlock(sessions) + runsBlock(runs);
   }
   await load();
-  schedule(() => load().catch(() => {}), 15000);
+  schedule(() => load().catch(() => harnessRefreshFailed(body)), 15000);
 }
 
 async function viewHarnessRuns(params) {
@@ -2332,14 +2762,66 @@ async function viewHarnessEvents(params) {
     <td>${esc(ev.agent || "—")}</td><td class="wrap">${esc(ev.detail || "")}</td><td class="mono">${ev.occurrences > 1 ? fmt(ev.occurrences) : ""}</td></tr>`, "No events match these filters.");
 }
 
+// Dashboard access (fleet#893 A2): the local dashboard signs in automatically on
+// this computer; password mode stays available as the explicit opt-in, and the
+// Setup health page (one row per integration, one Fix action) is one click away.
+async function renderDashboardAccess() {
+  const modeEl = document.getElementById("auth-mode");
+  const button = document.getElementById("auth-toggle");
+  const out = document.getElementById("auth-saved");
+  if (!modeEl || !button || !out) return;
+  let info;
+  try {
+    info = await api("/api/account/status");
+  } catch (e) {
+    modeEl.textContent = "unavailable";
+    out.textContent = e.message;
+    return;
+  }
+  const auto = info.mode !== "password";
+  modeEl.innerHTML = auto
+    ? `${pill("ok")} <span class="muted small">no password on this computer</span>`
+    : `${pill("warning")} <span class="muted small">${info.configured ? "owner account required" : "no owner account yet"}</span>`;
+  button.textContent = auto ? "Require a password" : "Sign in automatically";
+  button.dataset.mode = auto ? "password" : "auto-local";
+  button.disabled = false;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const result = await api("/api/account/mode", { method: "POST", body: { mode: button.dataset.mode } });
+      if (result.mode === "password") {
+        // The mode switch revoked this session: continue on the account page.
+        location.href = "/account.html";
+        return;
+      }
+      out.textContent = "Automatic local sign-in restored.";
+      toast("Dashboard access changed", "Automatic local sign-in");
+      await renderDashboardAccess();
+    } catch (e) {
+      out.textContent = e.message;
+      button.disabled = false;
+    }
+  });
+}
+
 async function viewHarnessSettings(params) {
   APP.innerHTML = pageHead("Nannies and Settings", "Effective state of fleet nannies plus the dashboard's own bounded telemetry controls.") +
     `<div id="harness-body"><div class="loading">Reading settings…</div></div>`;
   const body = document.getElementById("harness-body");
   const [n, s] = await Promise.all([api("/api/harness/nannies"), api("/api/harness/settings")]);
   const settings = n.settings || {};
+  const cg = n.catgpt || {};
   body.innerHTML = `
-    <div class="block"><div class="block-title">Telemetry controls</div>
+    <div class="block"><div class="block-title">Dashboard access</div>
+      <p class="muted small">This dashboard opens already signed in on this computer. Requiring a password switches it to the private owner-account flow; the way back is the same button.</p>
+      <div class="grid cols-2" style="margin-bottom:12px">
+        <div class="field"><span class="label">Mode</span><span class="value" id="auth-mode">reading…</span></div>
+        <div class="field"><span class="label">Integrations</span><span class="value"><a href="/setup">Open Setup health</a> <span class="muted small">one row per integration, one Fix action</span></span></div>
+      </div>
+      <button class="btn small" id="auth-toggle" disabled>Reading…</button>
+      <div id="auth-saved" class="muted small" style="margin-top:8px"></div>
+    </div>
+    <div class="block" style="margin-top:14px"><div class="block-title">Telemetry controls</div>
       <p class="muted small">These controls affect only this dashboard's telemetry. Review, lease, asset-safety and compliance gates stay with their authoritative systems and are not configurable here.</p>
       <div class="table-wrap"><table class="data"><thead><tr><th>Setting</th><th>Requested</th><th>Effective</th><th>Control</th></tr></thead><tbody>
         ${Object.values(settings).map((row) => `<tr>
@@ -2355,14 +2837,49 @@ async function viewHarnessSettings(params) {
         ${(s.audit || []).map((a) => `<tr><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.key)}</td><td class="mono">${esc(a.old_value || "")}</td><td class="mono">${esc(a.new_value || "")}</td><td>${esc(a.actor || "")}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No setting changes yet.</td></tr>`}
       </tbody></table></div>
     </div>
-    <div class="block" style="margin-top:14px"><div class="block-title">Nannies</div>
-      <p class="muted small">${esc(n.note)}</p>
-      <div class="table-wrap"><table class="data"><thead><tr><th>Nanny</th><th>Purpose</th><th>Configured</th><th>Effective</th><th>Last trigger</th><th>Source</th></tr></thead><tbody>
-        ${(n.nannies || []).map((x) => `<tr><td><strong>${esc(x.name)}</strong><div class="muted small">${esc(x.unit)}</div></td>
-          <td class="wrap">${esc(x.purpose)}</td><td>${pill(x.configured)}</td><td>${pill(x.effective)}</td>
-          <td class="mono small">${esc(x.last_trigger || "—")}</td><td class="mono small">${esc(x.source)}</td></tr>`).join("")}
+    <div class="block" style="margin-top:14px"><div class="block-title">CatGPT continuation watcher</div>
+      <p class="muted small">A detached host watcher that sends the continuation prompt into one ChatGPT thread after each completed turn. Changing the target while it is running requires Save &amp; restart.</p>
+      <div class="grid cols-2" style="margin-bottom:12px">
+        <div class="field"><span class="label">Status</span><span class="value">${cg.paused ? `<span class="pill amber">paused</span>` : pill(cg.running ? "running" : (cg.available ? "stopped" : "unavailable"))} ${cg.pid ? `<span class="mono small">pid ${esc(cg.pid)}</span>` : ""} <span class="muted small">${cg.paused ? "nudges disabled" : "nudges enabled"}</span></span></div>
+        <div class="field"><span class="label">Last action</span><span class="value mono">${esc(cg.action || "—")}</span></div>
+        <div class="field"><span class="label">Thread</span><span class="value">${esc(cg.thread_name || "—")}</span></div>
+        <div class="field"><span class="label">Conversation ID</span><span class="value mono">${cg.thread_id ? (cg.thread_url ? `<a href="${esc(cg.thread_url)}" target="_blank" rel="noopener">${esc(cg.thread_id)}</a>` : esc(cg.thread_id)) : "resolved from the name at start"}</span></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <label class="field" style="flex:1 1 260px"><span class="label">Thread name</span><input class="input" id="cg-thread-name" value="${esc(cg.thread_name || "")}" placeholder="Completed review package" ${cg.available ? "" : "disabled"}></label>
+        <label class="field" style="flex:1 1 320px"><span class="label">Conversation ID (optional if the name is unique)</span><input class="input" id="cg-thread-id" value="${esc(cg.thread_id || "")}" placeholder="Paste conversation ID" ${cg.available ? "" : "disabled"}></label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn small" data-cg-action="save" ${cg.available ? "" : "disabled"}>Save target</button>
+          ${cg.paused
+            ? `<button class="btn small primary" data-cg-action="resume" ${cg.available ? "" : "disabled"}>Resume nudges</button>`
+            : `<button class="btn small danger" data-cg-action="pause" ${cg.available ? "" : "disabled"}>Pause nudges</button>`}
+          ${!cg.paused ? `<button class="btn small primary" data-cg-action="${cg.running ? "restart" : "start"}" ${cg.available ? "" : "disabled"}>${cg.running ? "Save &amp; restart" : "Save &amp; start"}</button>` : ""}
+          ${cg.running ? `<button class="btn small danger" data-cg-action="stop">Stop</button>` : ""}
+        </div>
+      </div>
+      <p class="muted small">The name is resolved to an exact thread title when the conversation ID is blank. An ID, when present, wins. Save &amp; restart applies a new target without waiting for the next stop condition. Pausing writes <code>enabled=false</code>, stops the watcher, and makes a direct start refuse until resumed.</p>
+      ${cg.pending ? `<p class="muted small" style="color:var(--amber)">Pending send (${esc(cg.pending.status || "unknown")} at ${esc(cg.pending.at || "—")}). The next start verifies the conversation before sending anything. <button class="btn small" data-cg-action="clear-pending" ${cg.running ? "disabled" : ""}>Clear pending</button></p>` : ""}
+      ${cg.send_in_flight ? `<p class="muted small" style="color:var(--amber)">A send is in flight. Wait for the verification line before stopping or restarting; forcing a stop can leave an unverified prompt.</p>` : ""}
+      <div id="cg-out" class="muted small" style="margin-top:8px"></div>
+      <details style="margin-top:8px"><summary class="muted small">Last watcher log lines</summary><pre class="mono small" style="white-space:pre-wrap">${esc((cg.log_tail || []).join("\n") || "No log lines.")}</pre></details>
+    </div>
+    <div class="block" style="margin-top:14px"><div class="block-title">Systemd nannies</div>
+      <p class="muted small">Enable or disable the timer at boot and runtime. Start/stop changes only this run. Mandatory review, lease, asset and compliance gates are not configurable here.</p>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Nanny</th><th>Purpose</th><th>Configured</th><th>Effective</th><th>Last trigger</th><th>Control</th></tr></thead><tbody>
+        ${(n.nannies || []).map((x) => {
+          const enabled = String(x.configured || "").startsWith("enabled");
+          const active = x.effective === "active";
+          const confirmStop = x.safety_critical ? "1" : "0";
+          return `<tr><td><strong>${esc(x.name)}</strong><div class="muted small">${esc(x.unit)}</div></td>
+          <td class="wrap">${esc(x.purpose)}</td><td>${pill(enabled ? "ok" : x.configured)}</td><td>${pill(active ? "running" : x.effective)}</td>
+          <td class="mono small">${esc(x.last_trigger || "—")}</td><td class="nowrap">
+            <button class="btn small" data-nanny-unit="${esc(x.unit)}" data-nanny-action="${enabled ? "disable" : "enable"}" data-nanny-confirm="${enabled ? confirmStop : "0"}">${enabled ? "Disable" : "Enable"}</button>
+            <button class="btn small" data-nanny-unit="${esc(x.unit)}" data-nanny-action="${active ? "stop" : "start"}" data-nanny-confirm="${active ? confirmStop : "0"}">${active ? "Stop" : "Start"}</button>
+          </td></tr>`;
+        }).join("")}
       </tbody></table></div>
-      <p class="muted small">Nanny timers are read-only here (${esc("managed by systemd unit files")}); no dashboard control can bypass a mandatory gate.</p>
+      <div class="block-title" style="margin-top:16px">Recent nanny changes</div>
+      ${dataTable(["When", "Target", "Action", "Result", "Actor"], n.audit || [], (a) => `<tr><td class="mono">${esc(a.at || "")}</td><td class="mono">${esc(a.unit || "")}</td><td>${esc(a.action || "")}</td><td>${pill(a.ok ? "ok" : "failed")}</td><td>${esc(a.actor || "")}</td></tr>`, "No dashboard nanny changes yet.")}
       <div class="block-title" style="margin-top:16px">Last alerts</div>
       ${dataTable(["Nanny", "Severity", "When", "Detail"], n.last_alerts || [], (a) => `<tr><td>${esc(a.name)}</td><td>${pill(a.last_decision)}</td><td class="mono">${esc(relative(a.last_ts))}</td><td class="wrap">${esc(a.detail)}</td></tr>`, "No alerts recorded.")}
     </div>`;
@@ -2384,66 +2901,137 @@ async function viewHarnessSettings(params) {
     const input = document.querySelector(`[data-set="${b.dataset.save}"]`);
     save(b.dataset.save, input ? input.value : "");
   }));
+
+  document.querySelectorAll("[data-nanny-unit]").forEach((b) => b.addEventListener("click", async () => {
+    const unit = b.dataset.nannyUnit;
+    const action = b.dataset.nannyAction;
+    if (b.dataset.nannyConfirm === "1" && !confirm(`This is a safety guard. ${action === "disable" ? "Disable" : "Stop"} ${unit}?`)) return;
+    b.disabled = true;
+    try {
+      const r = await api("/api/harness/nannies", { method: "POST", body: { unit, action, confirm: b.dataset.nannyConfirm === "1" } });
+      toast(r.ok ? "Nanny updated" : "Nanny change failed", `${unit}: ${action} → ${r.after?.effective || r.error || "unknown"}`, r.ok ? "ok" : "error");
+      await viewHarnessSettings(params);
+    } catch (e) {
+      toast("Nanny change refused", e.message, "error");
+      b.disabled = false;
+    }
+  }));
+
+  const cgAction = async (action) => {
+    const name = document.getElementById("cg-thread-name")?.value.trim() || "";
+    const id = document.getElementById("cg-thread-id")?.value.trim() || "";
+    let force = false;
+    if ((action === "stop" || action === "restart" || action === "pause") && cg.send_in_flight) {
+      if (!confirm("A send is in flight. Stopping now can leave an unverified prompt. Continue?")) return;
+      force = true;
+    }
+    if (action === "pause" && !confirm("Pause nudges for this thread? The watcher stops and a direct start will be refused until you resume.")) return;
+    if (action === "clear-pending" && !confirm("Clear the pending send record? The next start will not re-verify it.")) return;
+    const out = document.getElementById("cg-out");
+    if (out) out.textContent = `${action} requested…`;
+    try {
+      const r = await api("/api/harness/nannies", { method: "POST", body: { unit: "catgpt-thread-watch", action, thread_name: name, thread_id: id, force } });
+      toast(r.ok ? "Watcher updated" : "Watcher action failed", `${action} → ${r.status?.state || r.error || "unknown"}`, r.ok ? "ok" : "error");
+      await viewHarnessSettings(params);
+    } catch (e) {
+      if (out) out.textContent = e.message;
+      toast("Watcher action refused", e.message, "error");
+    }
+  };
+  document.querySelectorAll("[data-cg-action]").forEach((b) => b.addEventListener("click", () => cgAction(b.dataset.cgAction)));
+  await renderDashboardAccess();
 }
 
 // Keep Office on the authenticated dashboard origin. A separate Office hostname
 // requires its own Cloudflare login even when the dashboard already works.
-async function viewKanban() {
-  APP.innerHTML = pageHead('Kanban Board', 'Kanzo tasks shared with your coding agents over MCP') +
-    `<section id="kanban-body"><div class="loading">Connecting to Kanzo…</div></section>`;
+// Fixed, same-origin iframe destinations only. Never trust a health endpoint to
+// turn an arbitrary URL into an authenticated navigation target.
+function validNativeEmbed(kind, value) {
+  if (kind === "kanzo") return value === "/embed/kanzo/";
+  return kind === "office" && value === "/embed/office/?embed=1";
+}
+
+function nativeViewerFailure(body, title, reason, retry) {
+  if (!body.isConnected) return;
+  body.innerHTML = `<div class="block accent-amber" role="alert"><div class="block-title">${esc(title)} <span class="tag amber">unavailable</span></div>
+    <p class="muted">${esc(reason)}</p><button id="native-viewer-retry" class="btn small">Try again</button></div>`;
+  body.querySelector('#native-viewer-retry')?.addEventListener('click', retry);
+}
+
+function nativeViewerFrameState(body, frameSelector, statusSelector) {
+  const frame = body.querySelector(frameSelector), status = body.querySelector(statusSelector);
+  if (!frame || !status) return;
+  // iframe load confirms only a navigation event. It cannot certify that the
+  // inner app authenticated or rendered successfully.
+  frame.addEventListener('load', () => {
+    if (frame.isConnected) status.textContent = 'Viewer loaded · check the workspace above';
+  });
+  frame.addEventListener('error', () => {
+    if (frame.isConnected) status.textContent = 'Viewer failed to load · use Try again';
+  });
+}
+
+async function viewKanban(params = {}) {
+  APP.innerHTML = pageHead('Kanban Board', '') +
+    `<section id="kanban-body" class="kn-shell"><div class="loading">Connecting to Kanzo…</div></section>`;
   const body = document.getElementById('kanban-body');
   try {
-    // The authenticated API issues a narrowly scoped, HttpOnly iframe cookie.
+    // The same secured, loopback-only Kanzo proxy used by the former iframe.
     await api('/api/embed/kanzo/handshake');
-  } catch (error) {
-    if (!body.isConnected) return;
-    body.innerHTML = `<div class="block accent-amber"><div class="block-title">Kanzo unavailable</div>
-      <p class="muted">The local Kanzo board is not running or cannot be reached. Confirm the Kanzo service is listening on 127.0.0.1:4242.</p>
-      <button id="kanban-retry" class="btn small">Retry</button></div>`;
-    document.getElementById('kanban-retry')?.addEventListener('click', viewKanban);
+  } catch {
+    nativeViewerFailure(body, 'Kanzo',
+      'The local Kanzo service could not authorize this session. Check the board service or dashboard login.', viewKanban);
     return;
   }
   if (!body.isConnected) return;
-  body.innerHTML = `<div class="block"><div class="block-title">Kanzo <span class="tag green">connected</span></div>
-    <iframe class="kanban-view-embed" title="Kanzo Kanban board" src="/embed/kanzo/"
-      referrerpolicy="no-referrer" loading="eager"></iframe>
-    <a class="native-panel-open" href="/embed/kanzo/" target="_blank" rel="noopener noreferrer">Open Kanzo in a separate tab</a></div>`;
+  const stop = mountNativeKanban(body, api, { initialTaskId: Number(params.task) });
+  state.routeAbort?.signal?.addEventListener('abort', stop, {once:true});
 }
 
 async function viewOffice() {
-  APP.innerHTML = pageHead("Claude Office view", "Live office scene via protected HTTPS, on or off your home network.") +
-    `<div id="office-body"><div class="loading">Probing office…</div></div>`;
-  const body = document.getElementById("office-body");
-  let st = { available: false };
-  try { st = await api("/api/harness/office"); } catch {}
-  if (st.available !== true) {
-    body.innerHTML = `<div class="block"><div class="block-title">Claude Office <span class="tag amber">unavailable</span></div>
-      <p class="muted">${esc(st.reason || "not reachable on local port 8001")}</p></div>`;
+  APP.innerHTML = pageHead('Office Viewer', 'Live office scene through the protected dashboard session.') +
+    `<section id="office-body"><div class="loading">Checking Office availability…</div></section>`;
+  const body = document.getElementById('office-body');
+  let st;
+  try { st = await api('/api/harness/office'); }
+  catch (error) {
+    nativeViewerFailure(body, 'Claude Office', 'The Office health check failed. No viewer session has been opened.', viewOffice);
+    return;
+  }
+  if (!body.isConnected) return;
+  if (st?.available !== true) {
+    nativeViewerFailure(body, 'Claude Office', st?.reason || 'Office is not reachable from the dashboard host.', viewOffice);
     return;
   }
   const frame_src = st.embed_url;
-  if (!frame_src) {
-    body.innerHTML = `<div class="block"><div class="block-title">Office <span class="tag amber">no launch URL</span></div>
-      <p class="muted">Configure the Office panel credential source on the dashboard service (see the Windows Office rollback guide).</p></div>`;
+  if (!validNativeEmbed('office', frame_src)) {
+    nativeViewerFailure(body, 'Claude Office',
+      'The same-origin Office launch URL is missing or invalid. Check CLAUDE_OFFICE_EMBED_URL.', viewOffice);
     return;
   }
-  await api('/api/embed/office/handshake');
+  try { await api('/api/embed/office/handshake'); }
+  catch (error) {
+    nativeViewerFailure(body, 'Claude Office', 'Office is reachable but the protected viewer session could not be established.', viewOffice);
+    return;
+  }
+  if (!body.isConnected) return;
   const frame = `<iframe class="office-view-embed" title="Claude Office live view" src="${esc(frame_src)}"
       allow="clipboard-write" referrerpolicy="no-referrer" loading="lazy"></iframe>`;
-  body.innerHTML = `
-    <div class="block">
-      <div class="block-title">Office <span class="tag green">live</span>
+  body.innerHTML = `<div class="block">
+      <div class="block-title">Office
         <span style="margin-left:auto"></span>
         <a class="btn small" href="${esc(frame_src)}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
       </div>
+      <p class="muted small" id="office-viewer-status" role="status" aria-live="polite">Loading the Office viewer…</p>
       ${frame}
-      <div class="muted small" style="margin-top:10px" id="office-note">
-        Uses this dashboard session through Cloudflare. No second Office login or local-network access is needed.
-        If the viewer fails to load, press Retry.
-        <button id="office-retry" class="btn small" style="margin-left:8px">Retry</button>
-      </div>
+      <details class="runtime-details"><summary>Viewer connection details</summary>
+        <p class="muted small" id="office-note">The viewer uses the authenticated dashboard session. No second Office login is required. Office service health and browser rendering remain separate checks.
+        <a href="#/diagnostics?tab=runtime">Open runtime diagnostics</a></p>
+      </details>
+      <button id="office-retry" class="btn small" type="button">Retry viewer</button>
     </div>`;
-  document.getElementById("office-retry")?.addEventListener("click", () => viewOffice());
+  nativeViewerFrameState(body, '.office-view-embed', '#office-viewer-status');
+  body.querySelector('#office-retry')?.addEventListener('click', viewOffice);
 }
 
 // Unified Rust data plane UI, inherits authenticated api() and existing routing.
@@ -2453,49 +3041,69 @@ async function viewOffice() {
 async function viewUnifiedGraph() {
   const NET_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="6" r="2.2"/><circle cx="18" cy="5" r="2.2"/><circle cx="12" cy="13" r="2.6"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="M6.8 7.2 10.3 11.4M16.3 6.6 13.6 11M7 17.9l3-3M14.5 14.6l3 2.4"/></svg>';
   const BRAIN_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2"/></svg>';
-  APP.innerHTML=`<section class="ug-hero">
-      <div class="ug-hero-copy"><span class="arch-eyebrow">Unified systems · Live</span><h1>Live memory graph</h1>
-        <p>RepoQL knowledge and Tencent MemoryCore records in one read-through network. Select any node or connection to inspect its real linked records; annotations change dashboard labels only, never the source.</p></div>
-      <div class="graph-stats ug-stats" id="ug-stats" aria-live="polite">
-        <div><span class="graph-stat-number">—</span><span>Nodes</span></div><div><span class="graph-stat-number">—</span><span>Connections</span></div><div><span class="graph-stat-number">—</span><span>Sources online</span></div></div>
-    </section>
+  APP.innerHTML=`<section class="ug-hero ug-hero-minimal"><h1>Live memory graph</h1></section>
     <div class="ug-toolbar graph-controls">
-      <div class="ug-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+      <div class="ug-toolbar-group ug-toolbar-primary"><div class="ug-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
         <input id="ug-search" class="input wide" type="search" placeholder="Find a topic, entity or relationship" aria-label="Search graph"></div>
-      <div class="ug-chips" role="group" aria-label="Sources">
-        <label class="graph-toggle ug-chip rq"><input type="checkbox" id="ug-repoql" checked><i></i>RepoQL</label>
-        <label class="graph-toggle ug-chip tx"><input type="checkbox" id="ug-tencent" checked><i></i>Tencent</label>
-        <label class="graph-toggle ug-chip mem"><input type="checkbox" id="ug-memories"><i></i>Memories</label>
-        <label class="graph-toggle ug-chip cross"><input type="checkbox" id="ug-cross" checked><i></i>Cross-system</label>
-      </div>
-      <div class="ug-viz" id="ug-mode" role="radiogroup" aria-label="Visualisation">
-        <button type="button" role="radio" class="ug-viz-btn" data-mode="network" aria-checked="false">${NET_ICON}<span>Network</span></button>
-        <button type="button" role="radio" class="ug-viz-btn" data-mode="neural" aria-checked="true">${BRAIN_ICON}<span>Brain</span></button>
-        <i class="ug-viz-glider" aria-hidden="true"></i>
-      </div>
-      <div class="ug-tools">
-        <label class="ug-limit"><span>Nodes</span><select class="select" id="ug-limit" aria-label="Max graph nodes"><option>250</option><option selected>500</option><option>1000</option><option>1500</option></select></label>
-        <div class="ug-zoom" role="group" aria-label="Zoom">
-          <button class="btn" id="ug-zoom-out" aria-label="Zoom out">−</button><button class="btn" id="ug-fit" aria-label="Fit network">Fit</button><button class="btn" id="ug-zoom-in" aria-label="Zoom in">+</button>
+        <div class="ug-chips" role="group" aria-label="Sources">
+          <label class="graph-toggle ug-chip rq"><input type="checkbox" id="ug-repoql" checked><i></i>RepoQL</label>
+          <label class="graph-toggle ug-chip tx"><input type="checkbox" id="ug-tencent" checked><i></i>Tencent</label>
+          <label class="graph-toggle ug-chip mem"><input type="checkbox" id="ug-memories" checked><i></i>Memories</label>
+          <label class="graph-toggle ug-chip cross"><input type="checkbox" id="ug-cross" checked><i></i>Cross-system</label>
+        </div></div>
+      <div class="ug-toolbar-group ug-toolbar-secondary"><label class="ug-clarity-label" for="ug-detail-level">Detail
+          <select id="ug-detail-level" class="select" aria-label="Graph detail level">
+            <option value="overview">Overview · key topics</option>
+            <option value="all" selected>Explore all loaded topics</option>
+          </select>
+        </label>
+        <label class="ug-clarity-label" for="ug-connections">Links
+          <select id="ug-connections" class="select" aria-label="Displayed connections">
+            <option value="focus">On selection</option>
+            <option value="all" selected>All visible links</option>
+          </select>
+        </label>
+        <div class="ug-viz" id="ug-mode" role="radiogroup" aria-label="Visualisation">
+          <button type="button" role="radio" class="ug-viz-btn" data-mode="network" aria-checked="false">${NET_ICON}<span>Network</span></button>
+          <button type="button" role="radio" class="ug-viz-btn" data-mode="neural" aria-checked="true">${BRAIN_ICON}<span>Brain</span></button>
+          <i class="ug-viz-glider" aria-hidden="true"></i>
         </div>
-        <button class="btn primary" id="ug-reload">↻ Refresh</button>
-      </div>
+        <div class="ug-tools">
+          <label class="ug-limit"><span>Nodes</span><select class="select" id="ug-limit" aria-label="Max graph nodes"><option>250</option><option selected>500</option><option>1000</option><option>1500</option></select></label>
+          <div class="ug-zoom" role="group" aria-label="Zoom">
+            <button class="btn" id="ug-zoom-out" aria-label="Zoom out">−</button><button class="btn" id="ug-fit" aria-label="Fit network">Fit</button><button class="btn" id="ug-zoom-in" aria-label="Zoom in">+</button>
+          </div>
+          <button class="btn primary" id="ug-reload">↻ Refresh</button>
+        </div></div>
     </div>
     <div class="unified-graph-layout">
-      <div class="graph-stage">
+      <div class="graph-stage ug-stage-shell">
+        <div class="graph-stage-heading ug-stage-heading"><div class="ug-stage-copy"><strong>Memory network</strong><span id="ug-stage-caption" class="visually-hidden"></span></div></div>
         <canvas id="ug-canvas" class="unified-graph-canvas" tabindex="0" role="img" aria-label="Interactive network. Select any node or link to inspect relationships. Drag to pan, pinch with two fingers or scroll to zoom."></canvas>
         <div class="ug-legend" aria-hidden="true"><span class="rq"><i></i>RepoQL</span><span class="tx"><i></i>Tencent</span><span class="mem"><i></i>Memories</span><span class="cross"><i></i>Cross-system link</span></div>
         <div class="ug-loading" id="ug-loading" role="status"><div class="ug-loader"><i></i><i></i><i></i></div><strong>Mapping knowledge network…</strong><span>Reading RepoQL and Tencent MemoryCore. A cold load can take around 10 seconds.</span></div>
-        <p class="graph-touch-help ug-help">Drag to pan · scroll or pinch to zoom · tap a node to inspect · Esc clears</p>
+
       </div>
-      <aside class="graph-side"><section class="block graph-details" id="ug-detail" aria-label="Relationship inspector"><div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Nothing selected</strong><span>Select a node or connection in the graph, or pick a topic below.</span></div></section>
-      <section class="block"><div class="block-title">Source health <span class="muted small" id="ug-info">Loading…</span></div><div id="ug-sources" class="graph-source-list muted">Checking…</div></section></aside>
+      <aside class="graph-side"><section class="block graph-details ug-inspector-card" id="ug-detail" aria-label="Relationship inspector"><div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a glowing topic to reveal its real relationships.</span></div></section>
+      <details class="block ug-source-disclosure"><summary class="block-title">Source diagnostics</summary><p class="muted small ug-source-update" id="ug-info">Loading…</p><div id="ug-sources" class="graph-source-list muted">Checking…</div></details>
+      </aside>
     </div>
-    <div class="block"><div class="block-title">Explore visible topics <span class="tag" id="ug-visible-count"></span></div><div class="unified-node-list" id="ug-results"></div></div>`;
+    <div class="block ug-topic-explorer"><div class="ug-topic-head"><div class="block-title">Explore visible topics <span class="tag" id="ug-visible-count"></span></div><p class="muted small" id="ug-projection-note">All data sources are enabled by default and the brain opens with a larger live sample. Switch back to Overview if you want a reduced projection.</p></div><div class="unified-node-list ug-topic-grid" id="ug-results"></div><button class="btn small" id="ug-show-topics" type="button" hidden>Show more topics</button></div>`;
   const el=id=>document.getElementById(id);
-  let raw={nodes:[],edges:[],sources:[]}, graph=raw, annotations={}, active=null, disposed=false, refreshing=false;
+  let raw={nodes:[],edges:[],sources:[]}, graph=raw, annotations={}, active=null, disposed=false, refreshing=false,showAllTopics=false;
   const sourceChecks=()=>['repoql','tencent','memories'].filter(k=>el('ug-'+k)?.checked);
   const alive=()=>!disposed&&Boolean(el('ug-canvas'));
+  const setText=(id,value)=>{const node=el(id); if(node) node.textContent=value;};
+  function refreshStageMeta(filtered=null){
+    const mode=el('ug-mode')?.dataset.active==='neural'?'Brain mode':'Network mode';
+    const detail=el('ug-detail-level')?.value==='all'?'all loaded topics':'overview';
+    const links=el('ug-connections')?.value==='all'?'all visible links':'focus links';
+    setText('ug-stage-caption', `${mode} · ${links} · ${detail} · ${el('ug-limit')?.value||'500'} node sample`);
+    if(filtered){
+      const sourceCount=sourceChecks().length;
+      setText('ug-stage-source-pill', `${sourceCount} source${sourceCount===1?'':'s'} selected`);
+    }
+  }
   const edgeKey=e=>'edge:'+String(e.id||`${e.source}|${e.type||'link'}|${e.target}`);
   function annotated(data){return {...data,
     nodes:(data.nodes||[]).map(n=>({...n,display_label:annotations[n.id]?.display_label||n.label,annotation_notes:annotations[n.id]?.notes||''})),
@@ -2509,7 +3117,7 @@ async function viewUnifiedGraph() {
     renderInspector(node,edge);
   }});
   function renderInspector(node,edge){const area=el('ug-detail');if(!area)return;
-    if(!node&&!edge){area.innerHTML='<div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Nothing selected</strong><span>Select a node or connection in the graph, or pick a topic below.</span></div>';return;}
+    if(!node&&!edge){area.innerHTML='<div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a glowing topic to reveal its actual links. The brain image is illustrative; source records and relationships remain authoritative.</span></div>';return;}
     const item=node||edge,key=node?node.id:edgeKey(edge),notes=annotations[key]||{},label=notes.display_label||'',
       caption=node?(node.display_label||node.label):(edge.display_label||edge.type||'Relationship');
     const connections=node?relationshipDetails(viewer.getVisible(),node.id):[];
@@ -2551,11 +3159,22 @@ async function viewUnifiedGraph() {
     el('ug-delete').addEventListener('click',()=>mutate(true));
   }
   function applyFilters(fit=false){if(!alive())return;
-    viewer.filter({sources:sourceChecks(),cross:el('ug-cross').checked,query:el('ug-search').value});
+    viewer.filter({sources:sourceChecks(),cross:el('ug-cross').checked,query:el('ug-search').value,
+      detail:el('ug-detail-level').value,connections:el('ug-connections').value});
     const filtered=viewer.getVisible();if(fit)viewer.fit();
-    el('ug-visible-count').textContent=`${fmt(filtered.nodes.length)} topics shown`;
+    refreshStageMeta(filtered);
+    el('ug-visible-count').textContent=filtered.omitted
+      ?`${fmt(filtered.nodes.length)} of ${fmt(filtered.totalVisibleBeforeProjection)} topics shown`
+      :`${fmt(filtered.nodes.length)} loaded topics shown`;
+    el('ug-projection-note').textContent=filtered.omitted
+      ?`Overview shows ${fmt(filtered.nodes.length)} high-connectivity source records, selected deterministically across sources. ${fmt(filtered.omitted)} loaded records are hidden from this view, not deleted. Search or choose Explore all loaded topics to inspect them.`
+      :`Showing all matching records from the currently loaded sample. Node limit controls how many records the API fetches; a healthy source does not imply complete index coverage.`;
     const ranked=[...filtered.nodes].sort((a,b)=>Number(b.degree||0)-Number(a.degree||0));
-    el('ug-results').innerHTML=ranked.slice(0,90).map(n=>`<button class="btn small graph-result" data-node="${esc(n.id)}"><span class="result-dot ${n.source_system==='tencent'?'tx':n.source_system==='memories'?'mem':'rq'}"></span>${esc(n.display_label||n.label)}</button>`).join('')||'<span class="muted small">No matching topics. Adjust search or filters.</span>';
+    const searching=Boolean(el('ug-search').value.trim());
+    const visibleCount=searching||showAllTopics?Math.min(90,ranked.length):Math.min(12,ranked.length);
+    el('ug-results').innerHTML=ranked.slice(0,visibleCount).map(n=>`<button class="btn small graph-result" data-node="${esc(n.id)}"><span class="result-dot ${n.source_system==='tencent'?'tx':n.source_system==='memories'?'mem':'rq'}"></span>${esc(n.display_label||n.label)}</button>`).join('')||'<span class="muted small">No matching topics. Adjust search or filters.</span>';
+    const more=el('ug-show-topics');more.hidden=searching||ranked.length<=12;
+    more.textContent=showAllTopics?'Show fewer topics':`Show more topics (${fmt(ranked.length-12)} more)`;
     el('ug-results').querySelectorAll('[data-node]').forEach(b=>b.addEventListener('click',()=>viewer.focus(b.dataset.node)));
   }
   const loading=(on,msg)=>{const box=el('ug-loading');if(!box)return;box.classList.toggle('show',on);box.classList.toggle('error',Boolean(msg));
@@ -2570,16 +3189,21 @@ async function viewUnifiedGraph() {
       if(!alive())return;if(data?.available===false)throw new Error(data.error||'Unified graph unavailable');
       annotations=meta.annotations||{};raw=data;graph=annotated(raw);viewer.update(graph);applyFilters(true);
       el('ug-info').textContent=`Updated ${relative(data.retrieved_at)}${data.truncated?' · sampled graph':''}`;
-      el('ug-stats').innerHTML=`<div><span class="graph-stat-number">${fmt(data.nodes?.length)}</span><span>Nodes</span></div>
-        <div><span class="graph-stat-number">${fmt(data.edges?.length)}</span><span>Connections</span></div>
-        <div><span class="graph-stat-number">${fmt((data.sources||[]).filter(s=>s.available).length)} / ${fmt((data.sources||[]).length)}</span><span>Sources online</span></div>`;
       el('ug-sources').innerHTML=(data.sources||[]).map(s=>`<div class="graph-source-row"><span>${esc(s.name)}</span>${pill(s.available?'online':'unavailable')}</div>${!s.available?`<p class="muted small">${esc(s.error||'No response from source')}</p>`:''}`).join('')||'No source information';
       if(active){if(active.kind==='node')viewer.focus(active.id);else viewer.focusEdge(active.id.replace(/^edge:/,''));}
       loading(false);
-    }catch(error){if(alive()&&!raw.nodes?.length)loading(true,error.message||'Unified graph unavailable');throw error;}
+    }catch(error){if(alive()){
+      // A failed refresh must never leave the previous source graph appearing live.
+      raw={nodes:[],edges:[],sources:[]};graph=raw;active=null;
+      viewer.update(raw);renderInspector(null,null);applyFilters(false);
+      el('ug-info').textContent='Graph unavailable · no current source data';
+      el('ug-sources').textContent='Local graph sources could not be verified.';
+      loading(true,error.message||'Unified graph unavailable');
+    }throw error;}
     finally{refreshing=false;if(alive()){el('ug-reload').disabled=false;if(loadPending){loadPending=false;load().catch(e=>{if(alive())toast('Graph',e.message,'error')});}}}
   }
-  for(const id of ['ug-repoql','ug-tencent','ug-cross'])el(id).addEventListener('change',()=>applyFilters(true));
+  for(const id of ['ug-repoql','ug-tencent','ug-cross','ug-detail-level','ug-connections'])el(id).addEventListener('change',()=>applyFilters(true));
+  el('ug-show-topics').addEventListener('click',()=>{showAllTopics=!showAllTopics;applyFilters(false)});
   el('ug-search').addEventListener('input',()=>applyFilters(true));
   el('ug-limit').addEventListener('change',()=>load().catch(e=>{if(alive())toast('Graph',e.message,'error')}));
   // Memories are fetched only while their option is on (thousands of linkless files): a toggle refetches.
@@ -2588,7 +3212,7 @@ async function viewUnifiedGraph() {
   el('ug-fit').addEventListener('click',()=>viewer.fit());
   el('ug-zoom-in').addEventListener('click',()=>viewer.zoomBy(1.3));
   el('ug-zoom-out').addEventListener('click',()=>viewer.zoomBy(1/1.3));
-  const chooseMode=(mode)=>{setModeUI(mode);viewer.setMode(mode);try{localStorage.setItem('repoql.graph.mode.v2',mode)}catch{}};
+  const chooseMode=(mode)=>{setModeUI(mode);viewer.setMode(mode);refreshStageMeta();try{localStorage.setItem('repoql.graph.mode.v2',mode)}catch{}};
   el('ug-mode').addEventListener('click',e=>{const b=e.target.closest('button[data-mode]');if(b)chooseMode(b.dataset.mode)});
   el('ug-mode').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();
     const next=el('ug-mode').dataset.active==='neural'?'network':'neural';chooseMode(next);el('ug-mode').querySelector(`[data-mode="${next}"]`)?.focus();});
@@ -2600,7 +3224,7 @@ async function viewUnifiedGraph() {
 // URLs come only from authenticated server configuration (never query parameters).
 async function viewNativePanel(kind) {
   const tencent = kind === 'tencent';
-  const name = tencent ? 'Tencent Control Panel' : 'RepoQL Control Panel';
+  const name = tencent ? 'Tencent Dashboard' : 'RepoQL Dashboard';
   APP.innerHTML = pageHead(name, 'Original application embedded without modifying its controls or credentials.') +
     `<section id="native-panel-host" class="native-panel-shell"><div class="loading">Loading native panel configuration…</div></section>`;
   const host = document.getElementById('native-panel-host');
@@ -2686,7 +3310,7 @@ function renderOpenChamberCoverage(payload, selectedDays = 90) {
   return `<p class="small">All OpenChamber assistant calls, including direct sessions. Independent coverage view, not added to Orchestra or Freebuff sums because overlapping calls are not independently identifiable.</p>
     <div class="grid cols-3">
       ${metricBlock('OpenChamber calls',fmt(total.calls),'',"cyan",`${fmt(total.missing_token_calls)} without exact primary receipts`)}
-      ${metricBlock('Measured tokens',fmt(total.tokens),'',"purple",`${fmt(total.measured_calls)} measured calls; five OpenChamber components`)}
+      ${metricBlock('Measured tokens',fmt(total.tokens),'',"purple",total.tokens == null ? `${fmt(total.measured_calls)} measured calls; token coverage unknown` : `${fmt(total.measured_calls)} measured calls; five OpenChamber components`)}
       ${metricBlock('Unmeasured calls',fmt(total.missing_token_calls),'',"",'No provider token receipt; excluded from measured tokens')}
     </div><p class="muted small">Snapshot ${esc(payload.captured_at)} · selected ${esc(selectedDays)} days · ${esc(payload.timezone)} · all-provider direct session view (90-day retained source).</p>
     ${dataTable(['Provider','Calls','With tokens','Total tokens','Unmeasured'],rows,([name,r])=>`<tr><td>${esc(displayLabel(name, 'Unattributed'))}</td><td>${fmt(r.calls)}</td><td>${fmt(r.measured_calls)}</td><td>${fmt(r.tokens)}</td><td>${fmt(r.missing_token_calls)}</td></tr>`,'No sources measured')}`;
@@ -2850,81 +3474,518 @@ async function viewUnifiedUsage() {
 // -------------------------------------------------------------- test hook
 // Regression-test surface for the pure helpers (node/bun). Importing this
 // module only ever runs the bootstrap above; no view, fetch or timer starts.
-export const __editorTestSurface = {rowsOf, contentOf, createDiscoveryGuard, applyHarnessRefresh, harnessInterval,
-  displayLabel, pill, statusPill, categoryChip, metricBlock,
+export const __editorTestSurface = {validNativeEmbed, rowsOf, contentOf, createDiscoveryGuard, applyHarnessRefresh, harnessInterval,
+  displayLabel, pill, statusPill, categoryChip, metricBlock, dashboardSnapshot, miniatureBrainGraph, fmt, renderOpenChamberCoverage,
+  LIVENESS_STATES, livenessState, livenessLabel, livenessNote, sessionRow, sessionsBlock, seatPill, runBlock, runsBlock,
+  diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS, architectureProbeState,
+  debounceForRoute, sequencer, themeCatalog, themeModeOf, sanitizeThemeChoice, applyTheme,
+  agentChatParticipants, agentChatThreads, agentChatTimeline, agentChatTime,
+  get refreshMs(){return harnessRefreshMs;},
   get nativeUsageGui(){return nativeInstall ? guiUsageName() : null;},
-  get cpuScale(){return {cores:CPU_QUOTA_CORES,label:CPU_QUOTA_LABEL};},
-  diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS,
-  debounceForRoute, sequencer,
-  get refreshMs(){return harnessRefreshMs;}};
+  get cpuScale(){return {cores:CPU_QUOTA_CORES,label:CPU_QUOTA_LABEL};}};
 
 
-// Read-only Agent Chat monitor. The durable agentchat inboxes remain the source
-// of truth; this view never acknowledges mail or sends a message for an agent.
+// Conversation grouping is presentation only. No local-user identity or mailbox
+// ownership is inferred from the durable delivery envelopes.
+function agentChatParticipants(message) {
+  const names = [message?.from, ...(message?.recipients || []),
+    ...(message?.sessions || []).map(s => `session:${s}`)]
+    .filter(value => typeof value === 'string' && value.trim())
+    .map(value => value.trim());
+  return [...new Set(names)].sort();
+}
+
+function agentChatThreads(messages) {
+  const threads = new Map();
+  for (const message of messages) {
+    const members = agentChatParticipants(message);
+    if (!members.length) continue;
+    const key = JSON.stringify(members);
+    let thread = threads.get(key);
+    if (!thread) {
+      thread = { key, title: members.map(member => member.startsWith('session:') ? `Session ${member.slice(-6)}` : member).join(' · '), members, messages: [], latest: message };
+      threads.set(key, thread);
+    }
+    thread.messages.push(message);
+    if (Number(message.id) > Number(thread.latest.id)) thread.latest = message;
+  }
+  return [...threads.values()].sort((a, b) => Number(b.latest.id) - Number(a.latest.id));
+}
+
+// Source envelopes are displayed in a single chronological stream without
+// inferring identities, task ownership, or private delivery acknowledgements.
+function agentChatTimeline(messages, term = '') {
+  const query = String(term || '').trim().toLowerCase();
+  return messages.filter(m => !query || [m.from, m.text, m.from_session,
+    m.origin, ...(m.recipients || []), ...(m.sessions || [])]
+    .some(value => String(value || '').toLowerCase().includes(query)))
+    .sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+function agentChatTime(value) {
+  const timestamp = Date.parse(value || '');
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : '';
+}
+
+// Self-reported Lounge message format. Role identity and task ownership stay
+// authoritative only in Agent Chat / Kanzo. Never interpret this as a claim.
+function parseLoungeAnnouncement(m) {
+  const message = String(m?.text || '');
+  const match = /^LOUNGE (JOIN|UPDATE|EXIT) \| alias=([a-zA-Z][a-zA-Z0-9_-]{1,23})(?: \| task=(none|[a-z0-9_-]{1,60}#[1-9][0-9]{0,9}))?(?: \| work=([^\r\n]{1,180}))?\s*$/.exec(message);
+  if (!match || typeof m?.from !== 'string') return null;
+  return {role:m.from, kind:match[1], alias:match[2], task:match[3] || null,
+    work:(match[4] || '').trim(), id:Number(m.id), at:Date.parse(m.created_at || '') || 0};
+}
+function loungeAnnouncements(records) {
+  const latest = new Map();
+  for (const m of records) {
+    const note=parseLoungeAnnouncement(m);
+    if (!note) continue;
+    const prior=latest.get(note.role);
+    if (!prior || note.id > prior.id) latest.set(note.role,note);
+  }
+  return latest;
+}
+
+// Kanzo's /api/changes is a change token, NOT a historical event log. Use the
+// existing authenticated read-only Kanzo proxy for current tasks. Only describe
+// a stage transition when two actual board snapshots prove it occurred.
+function kanzoTaskActivity(board, before = null, now = Date.now()) {
+  if (!Array.isArray(board?.tasks)) return [];
+  const older = before && Array.isArray(before.tasks)
+    ? new Map(before.tasks.map(t => [Number(t.id), t])) : null;
+  return board.tasks.flatMap(task => {
+    const id = Number(task?.id);
+    if (!Number.isSafeInteger(id) || id < 1 || !/^[a-z0-9_-]{1,60}$/.test(String(task.project || '')))
+      return [];
+    const timestamp = Date.parse(task.updated_at || '');
+    const old = older?.get(id);
+    const observed = Boolean(old && old.status !== task.status);
+    const changed = Boolean(old && (old.updated_at !== task.updated_at || observed || old.title !== task.title));
+    if (older && !changed) return [];
+    // Initial view is a projection of recent records, never invented history.
+    if (!older && (!Number.isFinite(timestamp) || timestamp > now + 60000 || now-timestamp > 7*86400000)) return [];
+    return [{kind:'kanzo', key:`kanzo:${task.project}#${id}:${task.updated_at}:${task.status}`,
+      task:`${task.project}#${id}`, id, project:task.project, title:String(task.title || '').slice(0,400),
+      status:String(task.status || '').slice(0,25), from:observed ? String(old.status || '').slice(0,25) : null,
+      at:observed ? now : (Number.isFinite(timestamp) ? timestamp : now), observed}];
+  }).sort((a,b)=>b.at-a.at).slice(0,16);
+}
+function loungeDateVisible(timestamp, range, now=Date.now()) {
+  if (range === 'all') return true;
+  if (!Number.isFinite(timestamp)) return true; // unknown timestamps must not disappear
+  if (range === '7d') return timestamp >= now - 7*86400000;
+  if (range === 'today') {
+    const nzDay = value => new Intl.DateTimeFormat('en-CA', {timeZone:'Pacific/Auckland', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date(value));
+    return nzDay(timestamp) === nzDay(now);
+  }
+  return true;
+}
+
+// Messenger-style, read-only viewer. The durable agentchat inboxes remain the
+// source of truth. This view never acknowledges mail or sends for an agent.
 async function viewAgentChat() {
-  APP.innerHTML = pageHead('Agent Chat', 'Inter-agent messages from durable role and session inboxes. Monitoring does not mark messages read.') + `
-    <div class="toolbar agentchat-controls">
-      <input class="input" id="ac-filter" aria-label="Filter agent identity" placeholder="Filter agent or session" autocomplete="off" />
-      <button class="btn small" type="button" id="ac-pause">Pause feed</button>
-      <span class="muted small" id="ac-status">Connecting…</span>
-    </div>
-    <div id="ac-stream" class="agentchat-stream" role="feed" aria-label="Agent chat messages"></div>`;
+  APP.innerHTML = pageHead('Agent Lounge', '') + `
+    <section class="messenger-shell messenger-mode-feed" id="ac-shell" aria-label="Agent Lounge">
+      <header class="messenger-toolbar" aria-label="Agent Lounge controls">
+        <div class="messenger-brand"><span class="messenger-brand-mark" aria-hidden="true">✦</span>
+          <div><strong>Agent Lounge</strong><span id="ac-mode-description"></span></div></div>
+        <div class="messenger-modes" role="group" aria-label="Message layout">
+          <button type="button" id="ac-mode-feed" aria-pressed="true">Live Feed</button>
+          <button type="button" id="ac-mode-threads" aria-pressed="false">Conversations</button>
+        </div>
+        <label class="messenger-search messenger-global-search"><span class="visually-hidden">Search Agent Lounge messages and Kanzo activity</span>
+          <input id="ac-filter" type="search" placeholder="Search Lounge" autocomplete="off" /></label>
+        <label class="lounge-date-picker"><span class="visually-hidden">Message date range</span>
+          <select id="ac-range" aria-label="Lounge date range"><option value="all">All dates</option><option value="today">Today</option><option value="7d">Last 7 days</option></select></label>
+        <div class="messenger-toolbar-status"><span id="ac-status" role="status" aria-live="polite">Connecting…</span>
+          <button class="messenger-pause" type="button" id="ac-pause">Pause updates</button></div>
+      </header>
+      <details class="lounge-presence" id="ac-presence">
+        <summary><span><span class="lounge-pulse" aria-hidden="true"></span> Agents on duty</span>
+          <span id="ac-presence-summary">Checking presence…</span></summary>
+        <div id="ac-presence-list" class="lounge-roster" role="list" aria-label="Current agent activity"></div>
+        <p class="lounge-presence-note">Online status uses recent Agent Chat activity. Aliases and task descriptions are agent announcements, not proof of a Kanzo claim.</p>
+      </details>
+      <aside class="messenger-listpane" aria-label="Conversation list">
+        <div class="messenger-listhead"><h2>Conversations</h2></div>
+        <div id="ac-conversations" class="messenger-conversations" aria-label="Conversations"></div>
+      </aside>
+      <section class="messenger-thread" aria-label="Agent messages">
+        <header class="messenger-threadhead">
+          <button id="ac-back" type="button" class="messenger-back" aria-label="Back to conversations">‹</button>
+          <span id="ac-thread-avatar" class="messenger-avatar" aria-hidden="true">AL</span>
+          <div class="messenger-thread-title"><h2 id="ac-thread-name">Live Feed</h2>
+            <span id="ac-thread-description"></span></div>
+          <button id="ac-clear-agent" type="button" class="messenger-thread-action" hidden>Clear focus</button>
+          <span class="messenger-live-marker" aria-hidden="true"></span>
+        </header>
+        <div id="ac-stream" class="messenger-messages" role="log" aria-label="Agent Lounge messages" aria-live="off"></div>
+        <button type="button" id="ac-latest" class="messenger-latest" hidden>↓ New messages</button>
+      </section>
+    </section>`;
+  const shell = document.getElementById('ac-shell');
+  const presenceDetails = document.getElementById('ac-presence');
+  const presenceSummary = document.getElementById('ac-presence-summary');
+  const presenceList = document.getElementById('ac-presence-list');
+  presenceDetails.open = !window.matchMedia?.('(max-width:760px)').matches;
+
+  const conversations = document.getElementById('ac-conversations');
   const stream = document.getElementById('ac-stream');
   const status = document.getElementById('ac-status');
   const filter = document.getElementById('ac-filter');
+  const dateRange = document.getElementById('ac-range');
   const pauseButton = document.getElementById('ac-pause');
+  const feedButton = document.getElementById('ac-mode-feed');
+  const threadsButton = document.getElementById('ac-mode-threads');
+  const latestButton = document.getElementById('ac-latest');
+  const threadName = document.getElementById('ac-thread-name');
+  const threadDescription = document.getElementById('ac-thread-description');
+  const threadAvatar = document.getElementById('ac-thread-avatar');
+  const clearAgentButton = document.getElementById('ac-clear-agent');
+  let mode = 'feed';
+  try { if (localStorage.getItem('repoql.agentlounge.mode') === 'threads') mode = 'threads'; } catch {}
   let cursor = 0;
   let paused = false;
   let pending = false;
+  let selected = null;
+  let mobileOpen = false;
   const known = new Set();
   const records = [];
-  const mark = (m) => `#${esc(m.id)} · ${esc(m.origin || 'agent')} · ${esc(m.created_at || '')}`;
-  const label = (m) => [...(m.recipients || []).map(r => '@' + r),
-                        ...(m.sessions || []).map(s => 'session:' + s)].join(', ');
-  const render = () => {
-    const term = filter.value.toLowerCase().trim();
-    const visible = records.filter(m => !term ||
-      [m.from,m.from_session,label(m),m.text].join(' ').toLowerCase().includes(term));
-    stream.innerHTML = visible.length ? visible.map(m => `<article class="agentchat-message">
-      <div class="agentchat-meta"><strong>${esc(m.from)}</strong>
-        ${m.from_session ? `<span class="agentchat-session">${esc(m.from_session)}</span>` : ''}
-        <span class="agentchat-arrow">→</span> <span>${esc(displayLabel(label(m)))}</span>
-        <time class="agentchat-stamp">${mark(m)}</time></div>
-      <div class="agentchat-body">${esc(m.text)}</div></article>`).join('')
-      : '<div class="block muted">No Agent Chat messages match this view.</div>';
+  let kanzoBoard = null;
+  let kanzoChange = '';
+  let kanzoActivity = [];
+  let kanzoAvailable = false;
+  let kanzoPollAt = 0;
+  let kanzoPending = false;
+  let kanzoHandshakeDone = false;
+  const expandedMessages = new Set();
+  let presence = null;
+  let lastPresencePoll = 0;
+  let lastRosterKey = '';
+  let selectedAgent = '';
+  const renderPresence = () => {
+    if (!presenceList.isConnected) return;
+    const agents = Array.isArray(presence?.agents) ? presence.agents : [];
+    const current = agents.filter(a => a && ['working','idle'].includes(a.status));
+    const working = current.filter(a => a.status === 'working').length;
+    presenceSummary.textContent = presence?.available ? `${working} working · ${current.length-working} recently seen` : 'Presence unavailable';
+    const announcement = loungeAnnouncements(records);
+    const rows = current.sort((a,b) => (a.status === 'working' ? -1 : 1) - (b.status === 'working' ? -1 : 1) || a.role.localeCompare(b.role));
+    const signature = JSON.stringify([selectedAgent, ...rows.map(a => [a.role,a.status,announcement.get(a.role)?.id])]);
+    if (signature === lastRosterKey) return;
+    lastRosterKey = signature;
+    if (!rows.length) {
+      presenceList.innerHTML = '<p class="lounge-roster-empty">No agents currently reporting activity.</p>';
+      return;
+    }
+    presenceList.innerHTML = rows.map(a => {
+      const note = announcement.get(a.role);
+      const recent = note && note.kind !== 'EXIT' && note.at > 0 && Date.now()-note.at < 12*3600*1000;
+      const task = recent && note.task && note.task !== 'none' ? note.task : null;
+      const parts=task?.match(/^([a-z0-9_-]{1,60})#([1-9][0-9]{0,9})$/);
+      const taskLink=parts ? `<a class="lounge-task-link" href="#/kanban?task=${encodeURIComponent(parts[2])}" title="Open reported task in Kanzo board">${esc(task)}</a>` : '';
+      return `<div class="lounge-person${selectedAgent===a.role?' selected':''}" role="listitem" data-agent-role="${esc(a.role)}">
+        <span class="lounge-person-avatar" aria-hidden="true">${esc(initials(a.role))}</span>
+        <div class="lounge-person-body"><button type="button" class="lounge-agent-select" data-select-agent="${esc(a.role)}" aria-pressed="${String(selectedAgent===a.role)}" aria-label="${selectedAgent===a.role?'Show all agents':'Focus on agent'} ${esc(recent ? note.alias : a.role)}"><strong>${esc(recent ? note.alias : a.role)}</strong></button>
+          <span><button type="button" class="lounge-copy-role" data-copy-role="${esc(a.role)}" title="Copy Agent Chat address">@${esc(a.role)}</button> · ${a.status==='working'?'Working':'Recently seen'}</span>
+          ${recent&&note.work?`<small title="Self-reported task">${esc(note.work)}</small>`:''}
+          ${taskLink}</div><span class="lounge-online-dot ${a.status}" aria-label="${a.status}"></span></div>`;
+    }).join('');
   };
+  presenceList.addEventListener('click', async event => {
+    const button=event.target.closest?.('button[data-copy-role]');
+    if(button){
+      const role=button.dataset.copyRole;
+      if(!/^[a-z0-9_-]{1,32}$/.test(role)) return;
+      try {
+        await navigator.clipboard.writeText('@'+role);
+        const prior=button.textContent;button.textContent='Copied';
+        setTimeout(()=>{if(button.isConnected)button.textContent=prior;},1500);
+      } catch { button.title='Copy is not available in this browser'; }
+      return;
+    }
+    const selectButton=event.target.closest?.('button[data-select-agent]');
+    if (!selectButton || mode !== 'feed') return;
+    const role=selectButton.dataset.selectAgent || '';
+    selectedAgent = selectedAgent === role ? '' : role;
+    renderPresence();
+    render({force:true});
+    [...presenceList.querySelectorAll('button[data-select-agent]')].find(b => b.dataset.selectAgent === role)?.focus({preventScroll:true});
+  });
+  const loadPresence = async () => {
+    if (!presenceList.isConnected) return;
+    try {
+      const response = await api('/api/agentchat/presence');
+      if (!presenceList.isConnected) return;
+      presence = response;
+    } catch { presence = {available:false,agents:[]}; }
+    lastRosterKey = '';
+    renderPresence();
+  };
+  let displayedThread = null;
+  let displayedMessages = '';
+  let renderedFeed = false;
+  let unreadCount = 0;
+  const updateUnread = () => {
+    latestButton.hidden = unreadCount === 0;
+    latestButton.textContent = unreadCount ? `↓ ${unreadCount} new message${unreadCount===1?'':'s'} · Jump to latest` : '↓ New messages';
+  };
+  const initials = (name) => (name || 'AL').trim().slice(0, 2).toUpperCase();
+  const tone = (name) => [...String(name || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % 5;
+  const targetLabel = m => [...(m.recipients || []), ...(m.sessions || []).map(s => `session:${s}`)].join(', ');
+  const renderKanzo = event => {
+    const statusText = event.observed ? `Moved ${event.from || 'previous stage'} → ${event.status}` : `Current stage: ${event.status}`;
+    return `<article class="messenger-kanzo" aria-label="Kanzo task activity">
+      <span class="messenger-kanzo-icon" aria-hidden="true">▤</span><div>
+        <span class="messenger-kanzo-label">KANZO · ${event.observed ? 'Observed change' : 'Recent task update'}</span>
+        <strong>${esc(event.title)}</strong>
+        <span>${esc(statusText)}</span>
+        <div><a class="lounge-task-link" href="#/kanban?task=${event.id}" aria-label="Open Kanzo task ${esc(event.task)}">${esc(event.task)}</a>
+        <time title="${esc(new Date(event.at).toISOString())}">${esc(agentChatTime(new Date(event.at).toISOString()))}</time></div>
+      </div></article>`;
+  };
+  const renderMessage = (m, alternate = false, continued = false) => {
+    const to = targetLabel(m);
+    const sender = m.from || 'Unknown sender';
+    const announcement = parseLoungeAnnouncement(m);
+    if (announcement) {
+      const activity = announcement.kind === 'JOIN' ? 'joined the Lounge' : announcement.kind === 'EXIT' ? 'finished their task' : 'updated their work';
+      const task = announcement.task?.match(/^([a-z0-9_-]{1,60})#([1-9][0-9]{0,9})$/);
+      const destination = task ? `<a href="#/kanban?task=${encodeURIComponent(task[2])}" class="lounge-task-link">${esc(announcement.task)}</a>` : '';
+      return `<article class="messenger-announcement" aria-label="Agent work announcement">
+        <span class="messenger-announcement-icon" aria-hidden="true">✦</span>
+        <div><strong>${esc(announcement.alias)}</strong> <span>${activity}</span> <small>· @${esc(sender)}</small>
+          ${announcement.work ? `<p>${esc(announcement.work)}</p>` : ''}${destination ? `<div>${destination}</div>` : ''}
+          <time>${esc(agentChatTime(m.created_at) || `#${m.id}`)}</time></div>
+        </article>`;
+    }
+    const long = String(m.text || '').length > 320 || String(m.text || '').split('\n').length > 8;
+    const open = mode === 'feed' || expandedMessages.has(Number(m.id));
+    return `<article class="messenger-message messenger-agent-tone-${tone(sender)} ${alternate ? 'messenger-message-alt' : ''}${continued ? ' messenger-message-continued' : ''}">
+        <span class="messenger-avatar messenger-avatar-small" aria-hidden="true">${esc(initials(sender))}</span>
+        <div class="messenger-message-content"><div class="messenger-sender">${esc(sender)}</div>
+          <div class="messenger-bubble ${long && !open ? 'messenger-bubble-collapsed' : ''}">${esc(m.text || '')}</div>
+          ${long && mode !== 'feed' ? `<button type="button" class="messenger-expand" data-expand-message="${Number(m.id)}" aria-expanded="${open}">${open ? 'Show less' : 'Read full message'}</button>` : ''}
+          <div class="messenger-message-meta">${esc(agentChatTime(m.created_at) || `#${m.id}`)}${to ? ` · To ${esc(to)}` : ''}</div>
+        </div></article>`;
+  };
+  // A single seven-day initial snapshot plus verified changes observed while
+  // Lounge is open. This does not attribute task changes to an agent.
+  const loadKanzo = async () => {
+    if (kanzoPending || !stream.isConnected || paused) return;
+    kanzoPending = true;
+    try {
+      if (!kanzoHandshakeDone) {
+        await api('/api/embed/kanzo/handshake', {timeoutMs:7000});
+        kanzoHandshakeDone = true;
+      }
+      const changes = await api('/embed/kanzo/api/changes', {timeoutMs:7000});
+      if (!stream.isConnected || typeof changes?.changes !== 'string') return;
+      if (kanzoBoard && kanzoChange === changes.changes) {kanzoAvailable = true;return;}
+      const next = await api('/embed/kanzo/api/board?project=all', {timeoutMs:10000});
+      if (!stream.isConnected || !Array.isArray(next?.tasks)) return;
+      const additions = kanzoTaskActivity(next, kanzoBoard);
+      const events = new Map(kanzoActivity.map(item => [item.task, item]));
+      for (const item of additions) events.set(item.task,item);
+      kanzoActivity = [...events.values()].sort((a,b)=>b.at-a.at).slice(0,30);
+      kanzoBoard = next;
+      kanzoChange = changes.changes;
+      kanzoAvailable = true;
+      if (mode === 'feed') render({newMessages:additions.length>0});
+    } catch { kanzoAvailable = false;kanzoHandshakeDone = false; }
+    finally {
+      kanzoPending = false;
+      if (stream.isConnected && mode === 'feed' && !selectedAgent) threadDescription.textContent = kanzoAvailable ? 'Kanzo linked' : 'Kanzo unavailable';
+    }
+  };
+  const isNearBottom = () => stream.scrollHeight - stream.scrollTop - stream.clientHeight < 100;
+  const render = ({ force = false, newMessages = false, newCount = 0 } = {}) => {
+    const feedMode = mode === 'feed';
+    shell.classList.toggle('messenger-mode-feed', feedMode);
+    shell.classList.toggle('messenger-mode-threads', !feedMode);
+    feedButton.setAttribute('aria-pressed', String(feedMode));
+    threadsButton.setAttribute('aria-pressed', String(!feedMode));
+    document.getElementById('ac-mode-description').textContent = ''; // No duplicate description below title
+    filter.placeholder = feedMode ? 'Search agent messages' : 'Search conversations';
+    const threads = agentChatThreads(records);
+    if (!threads.some(t => t.key === selected)) selected = threads[0]?.key || null;
+    const term = filter.value.toLowerCase().trim();
+    if (!feedMode) {
+      const visible = threads.filter(t => !term || t.title.toLowerCase().includes(term) || t.messages.some(m =>
+        [m.text, m.from_session, m.origin, ...(m.recipients || []), ...(m.sessions || [])].join(' ').toLowerCase().includes(term)));
+      const listScroll = conversations.scrollTop;
+      const focusedThread = document.activeElement?.closest?.('button[data-thread]')?.dataset.thread;
+      const listKey = `${visible.map(t => `${t.key}:${t.latest.id}`).join('|')}:${selected}`;
+      if (force || conversations.dataset.renderKey !== listKey) {
+        conversations.innerHTML = visible.length ? visible.map(t => `
+          <button class="messenger-conversation ${t.key === selected ? 'selected' : ''}" type="button"
+            data-thread="${esc(t.key)}" aria-pressed="${t.key === selected}">
+            <span class="messenger-avatar" aria-hidden="true">${esc(initials(t.title))}</span>
+            <span class="messenger-conversation-info"><strong>${esc(t.title)}</strong>
+              <span class="messenger-preview">${esc(t.latest.from)}: ${esc(t.latest.text || 'Message')}</span></span>
+            <span class="messenger-conversation-time">${esc(agentChatTime(t.latest.created_at))}</span>
+          </button>`).join('') : '<p class="messenger-empty-list">No conversations match your search.</p>';
+        conversations.dataset.renderKey = listKey;
+        conversations.scrollTop = listScroll;
+        if (focusedThread && !mobileOpen) {
+          const focused = [...conversations.querySelectorAll('button[data-thread]')].find(button => button.dataset.thread === focusedThread);
+          focused?.focus({preventScroll:true});
+        }
+      }
+    }
+    const thread = threads.find(t => t.key === selected);
+    shell.classList.toggle('messenger-open', !feedMode && mobileOpen && !!thread);
+    const activeAnnouncement = selectedAgent ? loungeAnnouncements(records).get(selectedAgent) : null;
+    threadName.textContent = feedMode ? (selectedAgent ? (activeAnnouncement?.alias || selectedAgent) : 'Live Feed') : (thread?.title || 'Select a chat');
+    threadDescription.textContent = feedMode ? (selectedAgent ? `Focused on @${selectedAgent}` : (kanzoAvailable ? 'Kanzo linked' : 'Kanzo unavailable')) : '';
+    threadAvatar.textContent = feedMode ? initials(selectedAgent ? (activeAnnouncement?.alias || selectedAgent) : 'AL') : initials(thread?.title);
+    clearAgentButton.hidden = !(feedMode && selectedAgent);
+    clearAgentButton.textContent = selectedAgent ? `Clear focus · @${selectedAgent}` : 'Clear focus';
+    const previousScroll = stream.scrollTop;
+    const nearBottom = isNearBottom();
+    const range = dateRange.value;
+    const agentMatches = m => !selectedAgent || agentChatParticipants(m).includes(selectedAgent) || String(m?.from || '') === selectedAgent;
+    const chatMessages = (feedMode ? agentChatTimeline(records, term).filter(agentMatches)
+      : thread ? [...thread.messages].sort((a,b) => Number(a.id) - Number(b.id)) : [])
+      .filter(m => loungeDateVisible(Date.parse(m.created_at || ''), range));
+    const events = feedMode && !selectedAgent ? kanzoActivity.filter(item =>
+      loungeDateVisible(item.at, range) && (!term || [item.title,item.task,item.status].some(s => s.toLowerCase().includes(term)))) : [];
+    const messages = [...chatMessages, ...events].sort((a,b) => {
+      const time = x => x.kind==='kanzo' ? x.at : (Date.parse(x.created_at || '') || 0);
+      return time(a)-time(b) || Number(a.id||0)-Number(b.id||0);
+    });
+    const viewKey = feedMode ? `feed:${term}:${range}:${selectedAgent}` : `thread:${selected}:${range}`;
+    const signature = messages.map(m => m.kind === 'kanzo' ? m.key : `chat:${m.id}`).join('|') + ':expanded:' + [...expandedMessages].sort().join(',');
+    if (!force && renderedFeed && viewKey === displayedThread && signature === displayedMessages) return;
+    renderedFeed = true;
+    const changedView = viewKey !== displayedThread;
+    if (changedView || nearBottom) unreadCount = 0;
+    else if (newCount > 0 && feedMode) unreadCount += newCount;
+    displayedThread = viewKey;
+    displayedMessages = signature;
+    if (messages.length) {
+      let lastDate = '';
+      let previous = null;
+      stream.innerHTML = messages.map(m => {
+        const date = m.kind === 'kanzo' ? m.at : Date.parse(m.created_at || '');
+        const label = Number.isFinite(date) ? new Date(date).toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'}) : '';
+        const divider = label && label !== lastDate ? `<div class="messenger-date-divider" role="separator">${esc(label)}</div>` : '';
+        if (label) lastDate = label;
+        const announcement = m.kind !== 'kanzo' && parseLoungeAnnouncement(m);
+        const continued = !divider && !announcement && previous && previous.kind !== 'kanzo'
+          && previous.from === m.from && targetLabel(previous) === targetLabel(m)
+          && Number.isFinite(date) && Number.isFinite(Date.parse(previous.created_at || ''))
+          && date >= Date.parse(previous.created_at) && date - Date.parse(previous.created_at) <= 5 * 60 * 1000;
+        previous = (m.kind === 'kanzo' || announcement) ? null : m;
+        const alternate = !feedMode && thread && m.from !== thread.members[0];
+        return divider + (m.kind === 'kanzo' ? renderKanzo(m) : renderMessage(m, alternate, !!continued));
+      }).join('');
+    } else stream.innerHTML = `<p class="messenger-empty-thread">${feedMode
+      ? (term ? 'No messages match your search.' : 'No recent messages yet.')
+      : 'Select a conversation to see its messages.'}</p>`;
+    if (changedView || nearBottom) stream.scrollTop = stream.scrollHeight;
+    else stream.scrollTop = previousScroll;
+    updateUnread();
+  };
+  const changeMode = next => {
+    if (next === mode) return;
+    mode = next;
+    mobileOpen = false;
+    try { localStorage.setItem('repoql.agentlounge.mode', mode); } catch {}
+    render({force:true});
+    if (mode === 'feed') {
+      stream.scrollTop = stream.scrollHeight;
+      kanzoPollAt = Date.now();
+      void loadKanzo();
+    }
+  };
+  feedButton.addEventListener('click', () => changeMode('feed'));
+  threadsButton.addEventListener('click', () => changeMode('threads'));
+  conversations.addEventListener('click', event => {
+    const button = event.target.closest('button[data-thread]');
+    if (!button) return;
+    selected = button.dataset.thread;
+    mobileOpen = true;
+    render({force:true});
+    stream.scrollTop = stream.scrollHeight;
+    if (window.matchMedia?.('(max-width:760px)').matches) document.getElementById('ac-back').focus({preventScroll:true});
+  });
+  document.getElementById('ac-back').addEventListener('click', () => {
+    mobileOpen = false;
+    shell.classList.remove('messenger-open');
+    filter.focus();
+  });
+  latestButton.addEventListener('click', () => { stream.scrollTop = stream.scrollHeight;unreadCount = 0;updateUnread(); });
+  stream.addEventListener('scroll', () => { if (isNearBottom()) { unreadCount = 0; updateUnread(); } }, {passive:true});
   const load = async () => {
     if (pending || paused || !document.getElementById('ac-stream')) return;
     pending = true;
     try {
       const response = await api('/api/agentchat/feed?' + new URLSearchParams({ after: String(cursor), limit: '100' }));
       if (!document.getElementById('ac-stream')) return;
-      if (!response.available) {
-        status.textContent = response.reason || 'Agent Chat unavailable';
-        return;
-      }
+      if (!response.available) { status.textContent = response.reason || 'Agent Chat unavailable'; return; }
+      let newMessages = false;
+      let newlyVisible = 0;
+      const term = filter.value.toLowerCase().trim();
       for (const m of response.messages || []) {
         if (known.has(m.id)) continue;
+        newMessages = true;
+        if (renderedFeed && mode === 'feed' && loungeDateVisible(Date.parse(m.created_at || ''), dateRange.value)
+          && (!selectedAgent || agentChatParticipants(m).includes(selectedAgent))
+          && (!term || [m.from,m.text,m.from_session,m.origin,...(m.recipients||[]),...(m.sessions||[])]
+            .some(value => String(value || '').toLowerCase().includes(term)))) newlyVisible++;
         known.add(m.id);
         records.unshift(m);
       }
       while (records.length > 180) known.delete(records.pop().id);
       cursor = Math.max(cursor, Number(response.last_id) || 0);
-      status.textContent = `${records.length} recent messages · live updates every 2s`;
-      render();
-      // A burst larger than one page is drained on subsequent fetches.
-      if (response.has_more) status.textContent += ' · catching up';
-    } catch (error) {
-      if (error.status !== -1) status.textContent = 'Feed error: ' + error.message;
-    } finally { pending = false; }
+      status.textContent = response.has_more ? 'Loading updates…' : 'Live updates';
+      if (newMessages || !renderedFeed) render({newMessages,newCount:newlyVisible});
+      if (newMessages) renderPresence();
+      if (Date.now()-lastPresencePoll > 55000) {
+        lastPresencePoll=Date.now();
+        void loadPresence();
+      }
+    } catch (error) { if (error.status !== -1) status.textContent = 'Feed error: ' + error.message; }
+    finally {
+      pending = false;
+      if (mode === 'feed' && Date.now()-kanzoPollAt > 25000) {
+        kanzoPollAt=Date.now();
+        void loadKanzo();
+      }
+    }
   };
-  filter.addEventListener('input', render);
+  stream.addEventListener('click', event => {
+    const button = event.target.closest?.('button[data-expand-message]');
+    if (!button) return;
+    const id=Number(button.dataset.expandMessage);
+    if (!Number.isSafeInteger(id)) return;
+    if (expandedMessages.has(id)) expandedMessages.delete(id); else expandedMessages.add(id);
+    const previousTop = button.getBoundingClientRect().top;
+    render({force:true});
+    const replacement = stream.querySelector(`button[data-expand-message="${id}"]`);
+    if (replacement) {
+      stream.scrollTop += replacement.getBoundingClientRect().top - previousTop;
+      replacement.focus({preventScroll:true});
+    }
+  });
+  filter.addEventListener('input', () => render({force:true}));
+  dateRange.addEventListener('change', () => render({force:true}));
   pauseButton.addEventListener('click', () => {
     paused = !paused;
-    pauseButton.textContent = paused ? 'Resume feed' : 'Pause feed';
+    pauseButton.textContent = paused ? 'Resume updates' : 'Pause updates';
     if (!paused) load();
-    else status.textContent = 'Paused';
+    else status.textContent = 'Updates paused';
+  });
+  clearAgentButton.addEventListener('click', () => {
+    selectedAgent = '';
+    renderPresence();
+    render({force:true});
   });
   await load();
+  if (!renderedFeed) render({force:true});
   schedule(load, 2000);
 }

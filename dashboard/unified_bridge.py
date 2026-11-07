@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 import http.client
 import os
+import sys
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -35,10 +37,19 @@ _graph_cache = {}          # key -> (stored_at, payload)
 _graph_lock = threading.Lock()
 _graph_key_locks = {}
 _graph_refreshing = set()
+# A localhost port can be rebound to a new source between requests. Even when
+# the binary path is unchanged, the owning PID change invalidates cached graph
+# provenance. In particular, never carry old tunneled graph results across a
+# native Windows gateway cutover.
+_gateway_identity = None
+_graph_epoch = 0
+_gateway_identity_lock = threading.Lock()
 
 
 def _graph_cache_clear():
+    global _graph_epoch
     with _graph_lock:
+        _graph_epoch += 1
         _graph_cache.clear(); _graph_key_locks.clear(); _graph_refreshing.clear()
 
 
@@ -51,14 +62,19 @@ def _partial(payload):
                if isinstance(s, dict))
 
 
-def _store(key, payload):
+def _store(key, payload, epoch=None):
     with _graph_lock:
+        # An in-flight read from a previous process/source must never refill
+        # the cache after the native gateway identity changes.
+        if epoch is not None and epoch != _graph_epoch:
+            return False
         _graph_cache[key] = (_now(), payload)
         while len(_graph_cache) > GRAPH_CACHE_MAX:
             old = min(_graph_cache, key=lambda k: _graph_cache[k][0])
             _graph_cache.pop(old)
             if old not in _graph_refreshing:
                 _graph_key_locks.pop(old, None)
+        return True
 
 
 def _tagged(payload, state, age):
@@ -69,22 +85,24 @@ def _tagged(payload, state, age):
     return out
 
 
-def _refresh(key, method, path, params, body):
+def _refresh(key, method, path, params, body, epoch):
     try:
         payload = _fetch_upstream(method, path, params, body)
         if _cacheable(payload):
-            _store(key, payload)
+            _store(key, payload, epoch)
     except Exception as exc:  # keep the previous good entry; never kill the server
         print(f'unified graph background refresh failed: {type(exc).__name__}', flush=True)
     finally:
         with _graph_lock:
-            _graph_refreshing.discard(key)
+            if epoch == _graph_epoch:
+                _graph_refreshing.discard(key)
 
 
 def _cached_graph(method, path, params, body):
     key = tuple(sorted((params or {}).items()))
     with _graph_lock:
         hit = _graph_cache.get(key)
+        epoch = _graph_epoch
         key_lock = _graph_key_locks.setdefault(key, threading.Lock())
     if hit:
         age = _now() - hit[0]
@@ -93,13 +111,15 @@ def _cached_graph(method, path, params, body):
             return _tagged(hit[1], 'fresh', age)
         # A partial source failure must not be served stale for 15 minutes.
         # After the short burst-coalescing TTL, synchronously retry the source.
-        if not partial and age < GRAPH_STALE_S:
+        # Windows native graphs must fail closed after their fresh TTL rather
+        # than displaying a prior result while an upstream refresh is failing.
+        if not partial and age < GRAPH_STALE_S and os.environ.get('SINGULARITY_WINDOWS_NATIVE') != '1':
             with _graph_lock:
                 start = key not in _graph_refreshing
                 if start:
                     _graph_refreshing.add(key)
             if start:
-                threading.Thread(target=_refresh, args=(key, method, path, params, body), daemon=True).start()
+                threading.Thread(target=_refresh, args=(key, method, path, params, body, epoch), daemon=True).start()
             return _tagged(hit[1], 'stale', age)
     with key_lock:  # identical concurrent misses share one upstream call
         with _graph_lock:
@@ -108,14 +128,96 @@ def _cached_graph(method, path, params, body):
         if hit and _now() - hit[0] < ttl:
             return _tagged(hit[1], 'fresh', _now() - hit[0])
         payload = _fetch_upstream(method, path, params, body)
+        with _graph_lock:
+            same_source = epoch == _graph_epoch
+        if not same_source:
+            return {'available': False, 'error': 'unified_gateway_changed_during_graph_read'}
         if _cacheable(payload):
-            _store(key, payload)
+            _store(key, payload, epoch)
         return _tagged(payload, 'miss', 0)
+
+
+def _native_gateway_owner():
+    """Require the native Windows listener to be the actual local gateway.
+
+    Loopback-only connection security is not source locality: ssh.exe -L
+    produces a loopback listener backed by dockerhost. In native Windows mode
+    validate the owning executable before reading/sending the bearer token.
+    No negative result may be cached as successful, and no remote fallback exists.
+    """
+    if os.environ.get('SINGULARITY_WINDOWS_NATIVE') != '1' or sys.platform != 'win32':
+        return True
+    try:
+        host, port = _fixed_loopback_base()
+    except (ValueError, PermissionError):
+        return False
+    # Windows gateway contract binds a direct IPv4 loopback listener, not a
+    # shim on a different port which could itself forward to another host.
+    if host != '127.0.0.1':
+        return False
+    expected = os.environ.get('SINGULARITY_WINDOWS_GATEWAY_EXE', 'unified-repoql-control.exe').strip()
+    if not expected or '\r' in expected or '\n' in expected:
+        return False
+    # A path, when configured, pins the exact executable as well as the name.
+    name = Path(expected).name.casefold()
+    if name not in ('unified-repoql-control.exe',):
+        return False
+    command = (
+        '$ErrorActionPreference = "Stop"; '
+        f'$listeners = @(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort {port} -State Listen -ErrorAction Stop); '
+        'if ($listeners.Count -ne 1) { exit 2 }; '
+        '$p = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listeners[0].OwningProcess); '
+        'if ($null -eq $p) { exit 3 }; '
+        '[Console]::Out.WriteLine($p.ProcessId); '
+        '[Console]::Out.WriteLine($p.Name); '
+        '[Console]::Out.WriteLine($p.ExecutablePath)'
+    )
+    try:
+        result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive',
+                                 '-Command', command], capture_output=True,
+                                text=True, timeout=9, check=False,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    lines=result.stdout.splitlines()
+    if len(lines) < 3:
+        return False
+    try:
+        pid = int(lines[0].strip())
+    except ValueError:
+        return False
+    if pid <= 0 or lines[1].strip().casefold() != name:
+        return False
+    actual = lines[2].strip()
+    if not actual:
+        return False
+    actual_norm = os.path.normcase(os.path.abspath(actual))
+    if os.path.isabs(expected) and actual_norm != os.path.normcase(os.path.abspath(expected)):
+        return False
+    identity = (port, pid, actual_norm)
+    global _gateway_identity
+    with _gateway_identity_lock:
+        if identity != _gateway_identity:
+            _graph_cache_clear()
+            _gateway_identity = identity
+    return True
+
+
+def _native_origin_failure():
+    if _native_gateway_owner():
+        return None
+    _graph_cache_clear()
+    return {'available': False, 'error': 'windows_local_unified_gateway_unverified'}
 
 
 def forward_unified(method, path, params=None, body=None):
     if (method, path) not in ROUTES:
         raise FileNotFoundError('unknown unified route')
+    local_error = _native_origin_failure()
+    if local_error is not None:
+        return local_error
     if (method, path) == ('GET', '/api/unified/graph'):
         return _cached_graph(method, path, params, body)
     payload = _fetch_upstream(method, path, params, body)
@@ -150,6 +252,9 @@ def _fixed_loopback_base():
 def _fetch_upstream(method, path, params=None, body=None):
     # Reject invalid origins before opening any connection or reading a key.
     host, port = _fixed_loopback_base()
+    local_error = _native_origin_failure()
+    if local_error is not None:
+        return local_error
     try:
         secret = SECRET_FILE.read_text(encoding='utf-8').strip()
     except OSError:

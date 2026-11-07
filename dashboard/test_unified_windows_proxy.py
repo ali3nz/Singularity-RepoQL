@@ -117,6 +117,15 @@ class ProxyTests(unittest.TestCase):
             self.assertEqual(result['error'], 'unified_gateway_not_configured')
         self.assertEqual(_Target.requests, [])
 
+    def test_windows_graph_does_not_serve_stale_data_when_upstream_unavailable(self):
+        with patch.dict('os.environ', {'SINGULARITY_WINDOWS_NATIVE': '1'}), \
+             patch.object(bridge, '_now', return_value=100), \
+             patch.object(bridge, '_fetch_upstream', return_value={'available': False, 'error': 'local_source_offline'}) as fetch:
+            bridge._graph_cache[()] = (0, {'available': True, 'nodes': [{'id': 'previous-source'}]})
+            result = bridge.forward_unified('GET', '/api/unified/graph')
+            self.assertEqual(result, {'available': False, 'error': 'local_source_offline', '_cache': {'state': 'miss', 'age_s': 0}})
+            fetch.assert_called_once()
+
     def test_graph_cache_caches_good_response_not_failure(self):
         _Target.behavior = 'fail'
         a = bridge.forward_unified('GET', '/api/unified/graph')

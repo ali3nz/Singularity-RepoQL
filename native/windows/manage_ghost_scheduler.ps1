@@ -127,7 +127,7 @@ function Get-OwnedReceipt([bool]$AllowConfigMissing=$false,[bool]$AllowClientCon
   if ($receipt.schema -ne $taskSchema -or $receipt.taskName -cne $taskName -or $receipt.ownerSid -cne $ownerSid -or
       $receipt.taskPath -cne $taskPath -or $receipt.pythonExe -notmatch '^[A-Za-z]:\\' -or
       $receipt.hostScript -notmatch '^[A-Za-z]:\\' -or $receipt.configPath -cne $configPath -or
-      $receipt.arguments -notmatch '^-B ".*" --config ".*"$' -or $receipt.port -lt 1024 -or $receipt.port -gt 65535 -or
+      $receipt.arguments -notmatch '^(-B ".*" --config ".*"|-B ".*silent_python_host\.py" --log ".*" -- ".*" --config ".*")$' -or $receipt.port -lt 1024 -or $receipt.port -gt 65535 -or
       $receipt.configSha256 -notmatch '^[0-9a-f]{64}$' -or $receipt.draftStateDirectory -notmatch '^[A-Za-z]:\\' -or
       $receipt.clientConfigPath -cne $clientConfigPath -or $receipt.clientConfigSha256 -notmatch '^[0-9a-f]{64}$' -or
       $receipt.workspace -notmatch '^[A-Za-z]:\\' -or $receipt.sandbox -notin @('read-only','workspace-write') -or
@@ -152,7 +152,7 @@ function Assert-TaskOwned($task,$receipt) {
   $actions=@($task.Actions); $triggers=@($task.Triggers)
   $principalSid=Convert-PrincipalSid ([string]$task.Principal.UserId)
   if ([string]$task.TaskPath -cne $taskPath -or $actions.Count -ne 1 -or
-      [string]$actions[0].Execute -ine [string]$receipt.pythonExe -or
+      [string]$actions[0].Execute -ine $(if ($receipt.PSObject.Properties.Name -contains 'taskExe') { [string]$receipt.taskExe } else { [string]$receipt.pythonExe }) -or
       [string]$actions[0].Arguments -cne [string]$receipt.arguments -or
       [string]$actions[0].WorkingDirectory -ine [string]$receipt.workingDirectory -or
       $principalSid -cne $ownerSid -or
@@ -376,10 +376,12 @@ if ($Mode -eq 'Register') {
     $configHash=([BitConverter]::ToString($sha.ComputeHash($configBytes))).Replace('-','').ToLowerInvariant()
     $clientConfigHash=([BitConverter]::ToString($sha.ComputeHash($clientConfigBytes))).Replace('-','').ToLowerInvariant()
   } finally { $sha.Dispose() }
-  $arguments='-B "'+$HostScript+'" --config "'+$configPath+'"'
+  $pythonw=Assert-LocalPath (Join-Path (Split-Path -Parent $PythonExe) 'pythonw.exe') 'GHOST_PYTHONW' $true $false
+  $silentHost=Assert-LocalPath (Join-Path (Split-Path -Parent $HostScript) 'silent_python_host.py') 'GHOST_SILENT_HOST' $true $false
+  $arguments='-B "'+$silentHost+'" --log "'+(Join-Path $privateRoot 'ghost-runtime.log')+'" -- "'+$HostScript+'" --config "'+$configPath+'"' 
   $principalUser=$identity.Name
   $receiptObject=[ordered]@{schema=$taskSchema;taskName=$taskName;taskPath=$taskPath;ownerSid=$ownerSid;
-    pythonExe=$PythonExe;runnerExe=$RunnerExe;hostScript=$HostScript;configPath=$configPath;arguments=$arguments;
+    pythonExe=$PythonExe;taskExe=$pythonw;runnerExe=$RunnerExe;hostScript=$HostScript;configPath=$configPath;arguments=$arguments;
     workingDirectory=(Split-Path -Parent $HostScript);port=$Port;configSha256=$configHash;clientConfigPath=$clientConfigPath;
     clientConfigSha256=$clientConfigHash;stateDirectory=$stateDirectory;
     draftStateDirectory=$DraftStateDirectory;workspace=$Workspace;sandbox=$Sandbox;runTimeoutSeconds=$RunTimeoutSeconds;installRoot=$installRoot}
@@ -394,10 +396,10 @@ if ($Mode -eq 'Register') {
   Assert-PrivateAcl $configPath
   Assert-PrivateAcl $clientConfigPath
   Set-PrivateFileAcl $receiptPath
-  $action=New-ScheduledTaskAction -Execute $PythonExe -Argument $arguments -WorkingDirectory (Split-Path -Parent $HostScript)
+  $action=New-ScheduledTaskAction -Execute $pythonw -Argument $arguments -WorkingDirectory (Split-Path -Parent $HostScript)
   $trigger=New-ScheduledTaskTrigger -AtLogOn -User $principalUser
   $principal=New-ScheduledTaskPrincipal -UserId $ownerSid -LogonType Interactive -RunLevel Limited
-  $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
+  $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
   Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskSchema -ErrorAction Stop | Out-Null
   $after=@(Get-TaskCandidates)
   if ($after.Count -ne 1) { throw 'GHOST_TASK_REGISTRATION_UNVERIFIED' }

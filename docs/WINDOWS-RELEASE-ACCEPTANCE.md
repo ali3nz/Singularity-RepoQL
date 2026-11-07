@@ -34,3 +34,21 @@ The following remain outside this acceptance:
 - The private-inventory disclosure scan, complete shipped-image review, exact-commit CI, and other gates required before creating a release tag under [Release gate](RELEASE.md).
 
 Historical milestone documents retain their own checkpoint results and unresolved items. Use [Native Windows installation](NATIVE-WINDOWS-INSTALLATION.md) for the complete-package procedure and [Document ingestion](DOC-INGESTION.md) for ledger and retrieval semantics. Do not interpret a source push as passing the tagged-release gate.
+## Fleet861 release-candidate isolation (2026-11-05)
+
+A release candidate is installed beside the live product, so package identity and runtime roots are acceptance criteria, not cleanup afterwards. `installer/Test-RCIsolation.ps1` is the read-only pre-install gate: it installs nothing, stops nothing, and exits `0` only when isolation is demonstrated.
+
+| element | production package | Fleet861 RC package |
+| --- | --- | --- |
+| MSI UpgradeCode | `A4059181-F59A-4C8D-B098-E26C9111B74E` | `7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61` |
+| MSI ProductCode | build-assigned | pinned `3C9A51E7-8B24-4D6F-A0C5-6D7E9B1F4A28` |
+| Install directory | `<ProgramFiles>\Singularity RepoQL` (per-machine) | `%LOCALAPPDATA%\Singularity\Fleet861RC` (per-user, no elevation; `C:\Users\Ben\AppData\Local\Singularity\Fleet861RC`) |
+| Bundle UpgradeCode | `E83EDB61-178B-4CD3-92F0-9C97E6D6292F` | `B1D6E4A9-3F58-47C2-8E90-2A5C7B3D4186` |
+| State root | `%LOCALAPPDATA%\Singularity\WindowsNative` | `%LOCALAPPDATA%\Singularity\Fleet861RC\state` |
+| Dashboard port | `18100` (gateway `18101`, tunnel `18128`) | `18200` |
+
+The RC payload is files only. `installer/Configure-Singularity.ps1` is deliberately **not** the RC launch target: it writes to the live `%LOCALAPPDATA%\Singularity\WindowsNative\memory` tree and targets port `18100`, so invoking it from a candidate install would mutate the running product. `SingularityRepoQLRCBundle.wxs` launches the read-only `Readiness.ps1` instead. Any RC runtime that needs its own state and port must take them from validated local configuration, not from the production wizard.
+
+Measured on Windows host `ALI3NZ` at `2026-11-05T12:08:43Z`, against the approved per-user root `%LOCALAPPDATA%\Singularity\Fleet861RC` and before any MSI was installed: **18 of 18 isolation checks passed, exit code 0**, covering distinct MSI/Bundle identities, distinct install-directory name, `perUser` scope with the install root under `%LOCALAPPDATA%` and not under `<ProgramFiles>`, a disjoint and absent RC state root, a read-only readiness launch target, a free port `18200` outside the production ports, no Fleet861 ARP entry, and all seven production scheduled tasks still present. The receipt is `installer/RC-ISOLATION-RECEIPT.json` when `-ReceiptPath` is supplied.
+
+Also measured in this lane: the dashboard contract suite ran **189 tests, 1 skip, exit code 0** on the Linux build host, and on the Windows host **189 tests with 5 failures and 13 errors** after the fix below. The remaining Windows failures are test-harness gaps on that host, not passing checks: `zoneinfo` has no `tzdata` (0 available time zones, so the Ghost NZ-time cases cannot resolve), SQLite handles held by the App outlive `TemporaryDirectory` cleanup on Windows, one assertion compares `D:\State` with the literal `D:/State`, and the variant/usage cases expect upstream data while `SINGULARITY_WINDOWS_NATIVE=1` correctly fails closed with `windows_local_unified_gateway_unverified` when no verified gateway executable is configured. `dashboard/harness_rust.py` was fixed: `_default_token_file()` no longer calls `Path.home()` unguarded, which raised `RuntimeError` on Windows when `USERPROFILE` was absent and aborted `App` construction, taking the four real-listener auth and panel-boundary tests with it. Those four now pass on Windows, including unauthenticated `401` for every embed handshake, cross-audience cookie rejection, and refusal to expose the Kanzo MCP through the panel proxy.

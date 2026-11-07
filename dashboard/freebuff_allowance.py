@@ -56,6 +56,7 @@ def _read() -> dict[str, Any]:
         result = subprocess.run(
             ["node", "--input-type=module", "-e", script],
             capture_output=True, text=True, timeout=TIMEOUT_SECONDS, env=child_env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return _unavailable(f"{type(exc).__name__}: {exc}")

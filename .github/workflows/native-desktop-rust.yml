@@ -4,6 +4,18 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - 'AGENTS.md'
+      - 'adapters/claude-code/singularity-workflow.md'
+      - 'adapters/claude-code/memory-hook.mjs'
+      - 'adapters/claude-code/memory-hook.test.mjs'
+      - 'dashboard/static/app.js'
+      - 'dashboard/static/app.css'
+      - 'dashboard/static/index.html'
+      - 'dashboard/static/kanban_native.js'
+      - 'dashboard/tests/browser_kanban_stage_readback_smoke.py'
+      - 'dashboard/tests/dashboard_command_center_test.mjs'
+      - 'connectors/kanzo/sql/imported_tasks.sql'
+      - 'connectors/kanzo/SOURCE-SHA256'
       - 'native/desktop-bridge/**'
       - 'native/windows/**'
       - 'scripts/setup-agent-profiles.mjs'
@@ -45,6 +57,18 @@ on:
       - '.github/workflows/native-desktop-rust.yml'
   push:
     paths:
+      - 'AGENTS.md'
+      - 'adapters/claude-code/singularity-workflow.md'
+      - 'adapters/claude-code/memory-hook.mjs'
+      - 'adapters/claude-code/memory-hook.test.mjs'
+      - 'dashboard/static/app.js'
+      - 'dashboard/static/app.css'
+      - 'dashboard/static/index.html'
+      - 'dashboard/static/kanban_native.js'
+      - 'dashboard/tests/browser_kanban_stage_readback_smoke.py'
+      - 'dashboard/tests/dashboard_command_center_test.mjs'
+      - 'connectors/kanzo/sql/imported_tasks.sql'
+      - 'connectors/kanzo/SOURCE-SHA256'
       - 'native/desktop-bridge/**'
       - 'native/windows/**'
       - 'scripts/setup-agent-profiles.mjs'
@@ -98,6 +122,41 @@ jobs:
         run: python -m unittest discover -s native/windows -p test_rust_lock_release_gate.py -q
       - name: Require committed and reviewable Cargo.lock files for both Windows Rust crates
         run: python native/windows/check_rust_lock_provenance.py
+  test-windows-unified-gateway:
+    name: Source-backed local Rust graph gateway (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Windows gateway ownership and memory policy contracts
+        run: python -m unittest discover -s native/windows -p test_windows_memory_gateway_source.py -q
+      - name: Verify installed Claude workflow rule refresh ownership and interrupted-update recovery
+        run: node --test native/windows/refresh_installed_claude_rules.test.mjs
+      - name: Verify graph owner PID transition invalidates cached data
+        run: python -m unittest discover -s dashboard -p test_windows_gateway_locality.py -q
+      - name: Check Windows dashboard gateway token pairing and Kanzo indexed view source
+        run: |
+          python -m unittest discover -s native/windows -p test_unified_gateway_dashboard_pairing.py -q
+          python -m unittest discover -s native/windows -p test_kanzo_imported_view_source.py -q
+      - name: Build and test vendored Rust gateway with locked dependencies
+        run: cargo test --manifest-path native/windows/unified-gateway-rust/Cargo.toml --all-targets --locked
+      - name: Produce release binary on Windows
+        if: runner.os == 'Windows'
+        run: cargo build --manifest-path native/windows/unified-gateway-rust/Cargo.toml --release --locked
+      - name: Confirm Windows Kanzo audit binary is included in the locked build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $auditor = 'native/windows/unified-gateway-rust/target/release/kanzo_board_audit.exe'
+          if (-not (Test-Path -LiteralPath $auditor)) { throw 'KANZO_RUST_AUDITOR_MISSING' }
+          '{"statuses":["todo","doing","done"],"projects":[],"done_hidden":3,"tasks":[{"id":1,"status":"doing"}]}' | & $auditor --stdin
+          if ($LASTEXITCODE -ne 0) { throw 'KANZO_RUST_AUDITOR_FAILED' }
+      - name: Verify all reviewed Windows Rust lockfiles
+        run: python native/windows/check_rust_lock_provenance.py
+
   test-desktop-bridge:
     name: Test native MCP bridge (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -176,6 +235,10 @@ jobs:
         run: |
           node --test native/windows/configure_project_mcp.test.mjs native/windows/configure_claude_code_windows.test.mjs
           python -m unittest discover -s native/windows -p test_project_mcp_package.py
+      - name: Test newer Command Center frontend and hooked memory scope
+        run: |
+          node --test dashboard/tests/dashboard_command_center_test.mjs
+          node --test adapters/claude-code/memory-hook.test.mjs
       - name: Test Ghost calendar draft model and schedule-control HTTP wiring
         run: |
           node --test dashboard/static/ghost/schedule_model.test.mjs

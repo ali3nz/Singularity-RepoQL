@@ -175,10 +175,12 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   & $PythonExe $compat '--rql' $RepoqlExe | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'DASHBOARD_REPOQL_VERSION_OR_CONTRACT_REFUSED' }
   $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name
-  $arguments='-B "'+$entry+'" --source-root "'+$StagedSource+'" --rql-exe "'+$RepoqlExe+'" --workspace "'+$Workspace+'" --state-dir "'+$state+'" --port '+$Port+' --variant '+$Variant
+  $pythonw=Assert-Path (Join-Path (Split-Path -Parent $PythonExe) 'pythonw.exe') 'DASHBOARD_PYTHONW'
+  $silentHost=Assert-Path (Join-Path $StagedSource 'native/windows/silent_python_host.py') 'DASHBOARD_SILENT_HOST'
+  $arguments='-B "'+$silentHost+'" --log "'+(Join-Path $state 'dashboard-runtime.log')+'" -- "'+$entry+'" --source-root "' +$StagedSource+'" --rql-exe "'+$RepoqlExe+'" --workspace "'+$Workspace+'" --state-dir "'+$state+'" --port '+$Port+' --variant '+$Variant
   if ($Variant -in @(2,4)) { $arguments+=' --native-bridge-exe "'+$NativeBridgeExe+'" --ghost-control-config "'+$GhostControlConfig+'"' }
   $arguments+=' --mode serve'
-  foreach ($value in @($entry,$StagedSource,$RepoqlExe,$Workspace,$state,$NativeBridgeExe,$GhostControlConfig)) {
+  foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state,$NativeBridgeExe,$GhostControlConfig)) {
     if ($value.Contains('"') -or $value.Contains([char]10) -or $value.Contains([char]13)) {
       throw 'DASHBOARD_ARGUMENTS_INVALID'
     }
@@ -193,13 +195,13 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
       $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($sid,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))
     }
     Set-Acl -LiteralPath $state -AclObject $acl
-    $action=New-ScheduledTaskAction -Execute $PythonExe -Argument $arguments -WorkingDirectory $Workspace
+    $action=New-ScheduledTaskAction -Execute $pythonw -Argument $arguments -WorkingDirectory $Workspace
     $trigger=New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-    $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew
+    $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     # Write the ownership receipt BEFORE registration. On interruption, an
     # orphaned receipt/task blocks further changes for manual reconciliation.
-    $receipt=[ordered]@{schema=$receiptSchema;option=$Variant;variant=$Variant;taskName=$taskName;pythonExe=$PythonExe;arguments=$arguments;
+    $receipt=[ordered]@{schema=$receiptSchema;option=$Variant;variant=$Variant;taskName=$taskName;pythonExe=$pythonw;arguments=$arguments;
       workspace=$Workspace;userId=$user;nativeBridgeExe=$NativeBridgeExe;ghostControlConfig=$GhostControlConfig}
     $receipt | ConvertTo-Json -Compress | Set-Content -LiteralPath $receiptFile -Encoding UTF8 -NoNewline
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null

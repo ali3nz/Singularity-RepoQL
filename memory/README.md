@@ -82,3 +82,25 @@ alias `memory-core`.
 - Restart policy: the upstream scripts create containers without a restart
   policy; add `docker update --restart unless-stopped <container>` if you want
   automatic recovery after a host reboot.
+## RC-owned local stack (Windows)
+
+`memory/rc_stack.py` provisions the vendor stack for a fresh, throwaway
+location without touching an existing install:
+
+- `build_config()` writes `state/`, `logs/` and `secrets/` under one absolute
+  RC root; the vendor build directories (`Runtime\build\MemoryCore`,
+  `Runtime\build\MemoryPanel`) are launch inputs only and are never written.
+- `start` / `status` / `stop` drive `scripts/native-memory-supervisor.mjs`, so
+  process ownership is verified rather than assumed. `healthy()` requires
+  `code == RUNNING` and every process `health == ok` plus
+  `ownership == verified`.
+- `probe()` writes one scoped conversation, recalls it, deletes it by session
+  and message id, and then re-searches; it fails if any marker survives, so a
+  test leaves no record behind.
+- `cleanup()` removes only a directory literally named `state` under the RC
+  root, and refuses anything else.
+
+This is also the provisioning path behind Setup health's Tencent row
+(`native/windows/provision/provisioner.py`), and the scope probe used by the
+Windows acceptance evidence. Ports are explicit; nothing here reads a
+production stack config, production port or existing credential.

@@ -61,7 +61,7 @@ class ShortcutBehaviour(unittest.TestCase):
             self.assertNotEqual(self.mode("Remove", desk, assets)[0], 0)
             self.assertEqual(link.read_bytes(), b"not ours")
 
-    def test_launcher_builds_key_link_without_printing(self):
+    def test_launcher_opens_local_signin_without_exposing_key(self):
         # Stub Start-Process so no browser opens; capture the target it would open.
         with tempfile.TemporaryDirectory() as t:
             state = os.path.join(t, "state"); os.makedirs(state)
@@ -73,7 +73,7 @@ class ShortcutBehaviour(unittest.TestCase):
             rc, out, err = self.run_ps([probe])
             self.assertEqual(rc, 0, err)
             self.assertEqual(out, "")
-            self.assertEqual(Path(t, "out.txt").read_text(), "http://127.0.0.1:18333/#k=" + "A" * 40)
+            self.assertEqual(Path(t, "out.txt").read_text(), "http://127.0.0.1:18333/")
             os.remove(os.path.join(state, "token"))
             self.run_ps([probe])
             self.assertEqual(Path(t, "out.txt").read_text(), "http://127.0.0.1:18333/")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -136,6 +137,7 @@ def refresh_native_login_path(*, force: bool = False, login_file: str | None = N
                 [str(binary), "dashboard", "--url"], cwd=str(cwd), stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 timeout=15, check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 env={**os.environ, "BROWSER": "echo", "CI": "1"},
             )
         except (OSError, subprocess.TimeoutExpired, UnicodeError):
@@ -174,6 +176,72 @@ def refresh_native_login_path(*, force: bool = False, login_file: str | None = N
             # launch request; never disclose the token in an exception string.
             return None
         return parse_native_login(issued)
+
+
+# The host mints its Control Panel listener on a dynamic port and records the
+# origin beside the secret in <workspace>/.repoql/cache/dashboard-bind.json.
+# 41005 is only the origin a host happens to use when nothing else holds it: on
+# a machine with more than one workspace (production and this candidate), a
+# hard-coded port proxies another workspace's panel or nothing at all.
+PANEL_ORIGIN_ENV = 'SINGULARITY_REPOQL_PANEL_ORIGIN'
+DEFAULT_PANEL_ORIGIN = ('127.0.0.1', 41005)
+_BIND_RECORD = ('.repoql', 'cache', 'dashboard-bind.json')
+
+
+def _loopback_origin(raw: object) -> tuple[str, int] | None:
+    """Accept only a bare http loopback origin; never a capability or a path."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        url = urlsplit(raw.strip())
+        if url.scheme != 'http' or url.username or url.password:
+            return None
+        if url.hostname not in ('localhost', '127.0.0.1', '::1'):
+            return None
+        if url.path not in ('', '/') or url.query or url.fragment:
+            return None
+        port = url.port
+    except (ValueError, TypeError):
+        return None
+    if port is None or not 1 <= port <= 65535:
+        return None
+    return (url.hostname, port)
+
+
+def dashboard_bind_record(workspace: str | None = None) -> Path | None:
+    raw = (workspace or os.environ.get('REPOQL_NATIVE_WORKSPACE')
+           or os.environ.get('SINGULARITY_WORKSPACE') or '').strip()
+    if not raw:
+        return None
+    root = Path(raw)
+    if not root.is_absolute() or not root.is_dir():
+        return None
+    return root.joinpath(*_BIND_RECORD)
+
+
+def panel_origin(workspace: str | None = None) -> tuple[str, int] | None:
+    """Live Control Panel (host, port) for this workspace, or None.
+
+    An explicit SINGULARITY_REPOQL_PANEL_ORIGIN wins, otherwise the host's own
+    bind record is read. The record's secret never leaves this function: only
+    the origin is returned, so no capability can reach the proxy or a log.
+    """
+    override = os.environ.get(PANEL_ORIGIN_ENV, '').strip()
+    if override:
+        return _loopback_origin(override)
+    path = dashboard_bind_record(workspace)
+    if path is None:
+        return None
+    try:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 4096:
+            return None
+        record = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError, UnicodeError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    return _loopback_origin(record.get('url'))
 
 
 def native_repoql_config(embed_url: str | None) -> dict:
