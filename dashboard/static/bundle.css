@@ -7980,3 +7980,8 @@ html[data-theme="charcoal"] .page-head>div:first-child{min-width:0}
 .ac-bulk-bar { position: sticky; top: 0; z-index: 5; background: var(--bg, #0d0d10); padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); display: flex; flex-direction: column; gap: 6px; }
 .ac-bulk-bar .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
+/* OpenMausBot workspace tile: artwork on every width, like the other primary tiles. */
+html[data-theme] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] .command-card-illustration {
+  background: linear-gradient(90deg, rgba(20,20,24,.9) 0%, rgba(20,20,24,.35) 55%, transparent 100%), url('/assets/mobile/bots-pro.svg') right center / cover no-repeat !important;
+}
+

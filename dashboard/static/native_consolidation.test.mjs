@@ -30,7 +30,7 @@ for (let variant of [1,2,3,4]) {
 delete window.__SINGULARITY_VARIANT__;
 const {__editorTestSurface:legacy}=await import('./app.js?consolidation-legacy');
 assert.match(legacy.dashboardSnapshot(),/href="#\/ghost"/);
-assert.doesNotMatch(legacy.dashboardSnapshot(),/href="#\/openmausbot"/);
+assert.match(legacy.dashboardSnapshot(),/href="#\/openmausbot"/);
 // Both views are still implemented; navigation is the only change.
 const app=readFileSync(new URL('./app.js',import.meta.url),'utf8');
 assert.match(app,/viewGhostOperations\(\{insideOpenMausBot:true\}\)/);
