@@ -87,6 +87,50 @@ def _native_ghost_environment(source_root: Path, state_dir: Path,
     }
 
 
+def _native_office_environment(source_root: Path, state_dir: Path) -> dict[str, str]:
+    # Current installs keep Office beside Dashboard. Older installs placed it
+    # below WindowsNative, so retain that layout only when no current receipt exists.
+    dashboard_root = state_dir.parent if state_dir.name == 'Option4' else state_dir
+    office_root = dashboard_root.parent / 'Office'
+    receipt_path = office_root / 'office-install.json'
+    try:
+        _assert_no_reparse(receipt_path)
+        if not receipt_path.is_file():
+            office_root = source_root.parent.parent / 'office'
+            receipt_path = office_root / 'office-install.json'
+        config_path = office_root / 'service' / 'service.json'
+        _assert_no_reparse(receipt_path)
+        _assert_no_reparse(config_path)
+        receipt = json.loads(receipt_path.read_text(encoding='utf-8-sig'))
+        config = json.loads(config_path.read_text(encoding='utf-8-sig'))
+        port = config['port']
+        if (receipt['schema'] != 'singularity-windows-office/v1'
+                or Path(receipt['installRoot']) != office_root
+                or type(port) is not int or not 1024 <= port <= 65535
+                or type(receipt['port']) is not int or receipt['port'] != port):
+            return {}
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+        return {}
+    env = {
+        'CLAUDE_OFFICE_HEALTH_HOST': '127.0.0.1',
+        'CLAUDE_OFFICE_HEALTH_PORT': str(port),
+        'SINGULARITY_OFFICE_HOST': '127.0.0.1',
+        'SINGULARITY_OFFICE_PORT': str(port),
+    }
+    if not any(os.environ.get(name, '').strip() for name in (
+            'SINGULARITY_OFFICE_NATIVE_AUTH_MODE', 'SINGULARITY_OFFICE_PANEL_KEY_FILE',
+            'SINGULARITY_OFFICE_EMBED_URL', 'CLAUDE_OFFICE_EMBED_URL')):
+        keys_path = office_root / 'state' / 'keys.json'
+        try:
+            _assert_no_reparse(keys_path)
+            if keys_path.is_file():
+                env.update(SINGULARITY_OFFICE_NATIVE_AUTH_MODE='service_keys',
+                           SINGULARITY_OFFICE_PANEL_KEY_FILE=str(keys_path))
+        except (OSError, ValueError):
+            pass
+    return env
+
+
 def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, port: int, *, variant=2, windows=True,
                 native_bridge_exe: Path | None = None, ghost_control_config: Path | None = None):
     paths=(source_root,rql,workspace,state_dir)
@@ -111,6 +155,8 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         'SINGULARITY_RQL_BIN':str(rql),
         'SINGULARITY_RQL_EXE':str(rql),
         'SINGULARITY_STATE_DIR':str(state_dir),
+        'REPOQL_NATIVE_EMBED_URL':'/embed/repoql',
+        'REPOQL_NATIVE_WORKSPACE':str(workspace),
         'SINGULARITY_BIND':'127.0.0.1',
         'SINGULARITY_ALLOW_PEERS':'127.0.0.1/32,::1/128',
         'SINGULARITY_PORT':str(port),
@@ -124,15 +170,15 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
     # The native MemoryCore provisioning process creates this existing owner
     # identity. Do not mint a parallel dashboard key or copy a secret into the UI.
     # The path is derived from the staged user-owned runtime, not user input.
+    owner_file = source_root.parent.parent / 'memory' / 'state' / 'secrets' / 'admin-user-key'
+    _assert_no_reparse(owner_file)
+    if owner_file.is_file():
+        env['SINGULARITY_TENCENT_OWNER_KEY_FILE'] = str(owner_file)
+    # MemoryPanel uses the native loopback port for every Windows variant.
+    env.update(SINGULARITY_TENCENT_HOST='127.0.0.1', SINGULARITY_TENCENT_PORT='18126',
+               TENCENT_PANEL_BASE='http://127.0.0.1:18126')
     if variant in (2, 4):
-        owner_file = state_dir.parent / 'WindowsNative' / 'memory' / 'state' / 'secrets' / 'admin-user-key'
-        _assert_no_reparse(owner_file)
-        if owner_file.is_file():
-            env['SINGULARITY_TENCENT_OWNER_KEY_FILE'] = str(owner_file)
-        # MemoryPanel listens on 18126 in the Windows-native stack, not the
-        # Dockerhost's historical 8125. Proxy authentication stays same-origin.
-        env['SINGULARITY_TENCENT_HOST'] = '127.0.0.1'
-        env['SINGULARITY_TENCENT_PORT'] = '18126'
+        env.update(_native_office_environment(source_root, state_dir))
     if variant in (2,4):
         env.update(_native_ghost_environment(source_root,state_dir,native_bridge_exe,ghost_control_config,windows=windows))
     elif native_bridge_exe is not None or ghost_control_config is not None:

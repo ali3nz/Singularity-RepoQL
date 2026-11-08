@@ -110,3 +110,13 @@ readiness endpoint's non-secret status, and compare with the last known-good
 Linux/production embedding. Reverting *only* `SINGULARITY_OFFICE_NATIVE_AUTH_MODE`
 changes credential sourcing and does not modify the running Office service.
 Do not disable downstream authentication as a workaround.
+
+### Locally provisioned native Office
+
+When the native dashboard launcher finds an Office install receipt and matching
+loopback service configuration, it uses the recorded Office port. For an
+installation with no explicit Office credential source, the launcher reads the
+API key from the Office installer's private service file. The ingest key stays
+with Office. An explicit authentication mode, key file or existing embed URL takes
+precedence. Set SINGULARITY_OFFICE_NATIVE_AUTH_MODE=legacy_url to select the
+existing token URL explicitly.

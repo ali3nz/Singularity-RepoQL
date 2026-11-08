@@ -57,12 +57,16 @@ def backend_key(kind):
     if kind == 'office':
         if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
             mode = os.environ.get('SINGULARITY_OFFICE_NATIVE_AUTH_MODE', 'legacy_url').strip()
-            if mode == 'key_file':
-                # Optional alternative. Installer must enforce owner/service-only ACLs.
+            if mode in ('key_file', 'service_keys'):
+                # The installers restrict these files to the owner/service.
                 key_file = os.environ.get('SINGULARITY_OFFICE_PANEL_KEY_FILE', '').strip()
                 if not key_file:
                     raise PermissionError('panel credential unavailable')
-                key = Path(key_file).read_text(encoding='utf-8').strip()
+                try:
+                    raw = Path(key_file).read_text(encoding='utf-8-sig')
+                    key = json.loads(raw)['apiKey'] if mode == 'service_keys' else raw.strip()
+                except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+                    raise PermissionError('panel credential unavailable') from None
             elif mode == 'legacy_url':
                 # Production-compatible default. Token stays server-side.
                 # The token is extracted server-side; never redirect the
@@ -81,7 +85,7 @@ def backend_key(kind):
         if not key_file:
             raise PermissionError('panel credential unavailable')
         key = Path(key_file).read_text().strip()
-    if not key or len(key) > 4096 or '\r' in key or '\n' in key:
+    if not isinstance(key, str) or not key or len(key) > 4096 or '\r' in key or '\n' in key:
         raise PermissionError('panel credential unavailable')
     return key
 

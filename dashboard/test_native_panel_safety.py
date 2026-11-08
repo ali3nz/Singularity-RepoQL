@@ -16,7 +16,6 @@ class NativePanelSafety(unittest.TestCase):
         with patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_KANZO_PORT':'66000'}):
             with self.assertRaisesRegex(ValueError,'port'): _upstream('kanzo', 4242)
 
-if __name__ == '__main__':unittest.main()
 
 class NativeOfficeAuthentication(unittest.TestCase):
     def test_windows_office_refuses_untrusted_http_token_url(self):
@@ -37,3 +36,29 @@ class NativeOfficeAuthentication(unittest.TestCase):
             file = Path(d)/'key.txt';file.write_text('a-private-test-key\n')
             with patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_OFFICE_PANEL_KEY_FILE':str(file), 'SINGULARITY_OFFICE_NATIVE_AUTH_MODE':'key_file'}):
                 self.assertEqual(backend_key('office'),'a-private-test-key')
+
+    def test_windows_office_reads_only_the_api_key_from_service_keys(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from native_panel_proxy import backend_key
+
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'keys.json'
+            with patch.dict(os.environ, {
+                'SINGULARITY_WINDOWS_NATIVE': '1',
+                'SINGULARITY_OFFICE_PANEL_KEY_FILE': str(file),
+                'SINGULARITY_OFFICE_NATIVE_AUTH_MODE': 'service_keys',
+            }):
+                file.write_text(json.dumps({'apiKey': 'api-fixture', 'ingestKey': 'ingest-fixture'}),
+                                encoding='utf-8-sig')
+                self.assertEqual(backend_key('office'), 'api-fixture')
+                for data in ('{}', '[]', '{"apiKey": 42}', json.dumps({'apiKey': 'bad\nkey'}),
+                             'invalid json'):
+                    file.write_text(data, encoding='utf-8')
+                    with self.subTest(data=data), self.assertRaises(PermissionError):
+                        backend_key('office')
+
+
+if __name__ == '__main__':
+    unittest.main()
