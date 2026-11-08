@@ -11,9 +11,9 @@ const root = 'C:\\Users\\Example\\AppData\\Local\\Singularity\\current\\source';
 const exe = 'C:\\Program Files\\nodejs\\node.exe';
 const script = fileURLToPath(new URL('./plan_claude_code_windows.mjs',import.meta.url));
 
-test('Option 2 includes 17 roles, 4 native exec-form hooks and all optional feature flags',()=>{
+test('Option 2 includes 15 roles, 4 native exec-form hooks and all optional feature flags',()=>{
   const p=buildPlan({variant:2,repoRoot:root,nodeExe:exe});
-  assert.equal(p.agentDefinitions.length,17);
+  assert.equal(p.agentDefinitions.length,15);
   assert.deepEqual(p.managedHooks.map(h=>h.event),['SubagentStart','SubagentStop','SessionStart','Stop']);
   assert.ok(p.managedHooks.every(h=>h.command===exe && h.args.length===2 && h.args[0].startsWith(root)));
   assert.equal(p.officeIncludedByVariant,true);
@@ -59,7 +59,7 @@ test('CLI emits no existing secret and never writes settings',()=>{
     writeFileSync(settings,existing);
     const run=spawnSync(process.execPath,[script,'--variant','2','--repo-root',root,'--node-exe',exe,'--existing-settings',settings],{encoding:'utf8',timeout:3000});
     assert.equal(run.status,0,run.stderr);
-    assert.equal(JSON.parse(run.stdout).agentDefinitions.length,17);
+    assert.equal(JSON.parse(run.stdout).agentDefinitions.length,15);
     assert.ok(!run.stdout.includes('VERY_PRIVATE_TEST_SECRET'));
     assert.equal(readFileSync(settings,'utf8'),existing);
     const bad=spawnSync(process.execPath,[script,'--variant','3','--repo-root',root,'--node-exe',exe],{encoding:'utf8',timeout:3000});

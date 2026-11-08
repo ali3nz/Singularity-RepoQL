@@ -46,3 +46,74 @@ A direct `apply` is only needed when the Option 2 configurator did not include t
 ## Acceptance before public release
 
 Record actual Windows results: private token ACL, clean installation and login, local-only listeners, one existing and one new bot reading shared rules, foreign-file conflict refusal, Claude Code `list_bots` + send/wait roundtrip, a denied unsafe action in each supported engine, a real Kanzo claim/readback/review, the correct Tencent role, restart/reboot recovery, and upgrade/rollback that preserves unrelated user settings. The native WiX MSI/Burn build and actual Windows installation remain untested from the offsite packaging environment.
+
+## Windows RC headless integration (source candidate, not yet installed)
+
+The Windows RC also includes a **product-owned OpenMausBot headless runtime** under
+`%LOCALAPPDATA%\Singularity\Fleet861RC`, launched through the existing
+`Fleet893-RC-OpenMausBot` logon task. That path was previously missed by Option 2,
+which checked only for the desktop `.exe` and a paired token. The updated Option 2
+MCP configurator now supports the **official** headless `cli.js mcp` command:
+
+- Verify the RC-owned `state\omb\instance.json` matches the exact product
+  payload, data directory, task and running PID. Never select an arbitrary
+  listener or a CLI from `PATH`.
+- Register a `stdio` MCP command using the pinned local Node executable,
+  the product-owned `cli.js`, and the verified local `OMB_PORT`. No desktop
+  executable or session token is required for the headless server running
+  with the vendor's local-owner trust mode.
+- Reuse `.singularity-native-mcp-receipt.json`, conflict refusal, revision
+  checks and exact rollback; do not register a second RepoQL MCP server.
+- Install the existing ancestor rules into the headless server's *actual*
+  data directory using `install_shared_rules.mjs apply --data-dir ...`,
+  refusing foreign or modified files. Test that the chosen engine actually
+  reads the rules before claiming hook/gate parity.
+- If the verified RC-owned headless instance is absent, the previous paired
+  desktop OpenMausBot integration remains supported. If an instance manifest
+  is present but ownership fails, refuse rather than silently fall back.
+
+This is not an authentication or isolation proof. Local owner trust is specific
+ to the vendor's headless mode, not to a system-wide trusted Windows identity;
+run a cross-user negative authorization check before a multi-user release.
+A configured MCP entry is not a working model interaction.
+
+### Declarative Singularity Maintainer registration
+
+`native/windows/openmausbot/provision_maintainer.mjs` is the additional
+source-only integration helper. It uses the vendor's documented `team apply`
+file format. Plan mode reads the RC instance without changing bots. Apply mode
+requires `--apply`, creates one bot named **Singularity Maintainer** in its own
+non-pruning team, uses the existing OpenMausBot default model, and independently
+reads the bot back via the vendor CLI. It preserves existing teams and bots.
+
+Example from a verified Windows Git source checkout:
+
+```powershell
+$root = (Get-Location).Path
+$rc = Join-Path $env:LOCALAPPDATA 'Singularity/Fleet861RC'
+node .\native\windows\openmausbot\provision_maintainer.mjs --source $root --rc-root $rc
+node .\native\windows\openmausbot\provision_maintainer.mjs --source $root --rc-root $rc --apply
+```
+
+`--apply` uses the installed server's existing model configuration, snapshots
+`bots --json` before and after (the applied team, `cwd`, `approval` and
+`computer` must match the plan and unrelated bots must survive), then creates
+the bot's own bounded routine through the vendor MCP `trigger` tool and reads it
+back with `trigger_info`. The response reports `scheduleVerified:true` only when
+that readback lists the routine enabled with a future run; otherwise the reason
+is returned and the command exits non-zero. `--verify-schedule` repeats just the
+readback.
+
+Verified vendor contract used here (installed bundle plus `headless.py`):
+`team apply` for the bot, `node cli.js mcp` for `list_bots`/`send_bot_message`
+(stable `send_id`) and `trigger`/`trigger_info` for the routine. No OS scheduler,
+no second routine store and no global `newBotDefaults` mutation is used.
+
+Repair reporting is deliberately split: the Markdown report and the JSON result
+carry `onDiskVerified:true` together with `loadedIntoActiveTurn:false`,
+`gateEnforcementVerified:false`, `reloadRequired:true` and the exact operator
+action. Reload or restart the running bot before treating repaired rules as live;
+a health endpoint or an on-disk digest alone does not prove the live turn uses
+them. Onsite acceptance still requires one real bot execution, a verified
+repair, a Markdown report and an acknowledged OMB chat message; a source template
+or a successful `team apply` by itself is not proof of an autonomous maintainer.

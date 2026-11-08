@@ -15,7 +15,7 @@ Legacy Windows users following this page run Linux Claude Code and RepoQL in WSL
 
 | Piece | Where | What it does |
 |---|---|---|
-| 17 agent definitions | `~/.claude/agents/` (user) or `<project>/.claude/agents/` (project) | eight delegation targets + nine main-session agents (below) |
+| 15 agent definitions | `~/.claude/agents/` (user) or `<project>/.claude/agents/` (project) | six delegation targets + nine main-session agents (below) |
 | `SubagentStart` / `SubagentStop` hooks | `~/.claude/settings.json` (merged — never replacing your settings; a timestamped backup is written first) | hook the agents into the memory loop |
 | MemoryCore profiles | your Singularity installation's memory stack | the agents' persistent identities |
 | `singularity-repoql` MCP server | Claude Code user-level MCP config | RepoQL code intelligence (when `rql` is installed) |
@@ -25,7 +25,7 @@ the Singularity checkout so **uninstall removes only these pieces**.
 
 ## Agent roster
 
-All seventeen portable non-pentest roles are installed, in two surfaces.
+Fifteen selected non-pentest roles are installed, in two surfaces.
 
 **Delegation targets** — Claude Code spawns these through the Agent tool, and each
 one reuses the role's MemoryCore identity (`team_id` / `user_id` / `agent_id`).
@@ -35,14 +35,12 @@ Claude Code twin **share the same profile** — no duplicate identity is created
 
 | Claude Code agent | MemoryCore `agent_id` | Role |
 |---|---|---|
-| `singularity-code-reviewer` | `code-reviewer` | implementation critic; read-only checks; BLOCKING/NON-BLOCKING/APPROVE verdicts; RepoQL concept capture when connected |
-| `singularity-quality-fixer` | `quality-fixer` | staged-file fixer; edits only inside its staged context dir; no shell |
+| `singularity-code-reviewer` | `code-reviewer` | implementation critic; read-only checks; BLOCKING/NON-BLOCKING/APPROVE verdicts; no automatic concept writes |
 | `singularity-researcher-web` | `researcher-web` | evidence-driven web research with cited sources |
 | `singularity-thinker` | `thinker` | deep reasoning/diagnosis; reason and recommend only |
 | `singularity-explore` | `explore` | fast read-only codebase exploration |
 | `singularity-general` | `general` | full-surface execution worker |
 | `singularity-board` | `board` | Board of Advisors (8 seats, ruling with per-seat positions and dissent) |
-| `singularity-fleet-reviewer` | `fleet-reviewer` | read-only architecture planning and review; no shell, no edits |
 
 **Main-session agents** — launched as the session agent with
 `claude --agent singularity-<role>`. They carry the role's authority, so they are
@@ -259,7 +257,7 @@ node scripts/install-claude-code.mjs status
 
 Then in a live Claude Code session:
 
-1. run `/agents` — all seventeen `singularity-*` agents should be listed
+1. run `/agents` — all fifteen `singularity-*` agents should be listed
    (eight delegation targets, nine main-session agents);
 2. invoke `singularity-code-reviewer` on a small synthetic change and let it
    finish — the Panel should then show `claude-code-code-reviewer-*` sessions
@@ -284,7 +282,7 @@ injection and verification (steps 2–3) shows which path is active in your vers
 node scripts/install-claude-code.mjs uninstall            # same --scope/--project-dir as install
 ```
 
-Removes: the seventeen agent files it installed, exactly its hook handlers and env
+Removes: the fifteen agent files it installed, exactly its hook handlers and env
 keys from settings (a timestamped backup is written first), and — only if this
 install recorded it — the `singularity-repoql` MCP server. It never removes
 unrelated user agents, hooks or MCP servers. Profiles, the ledger and all

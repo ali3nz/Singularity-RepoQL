@@ -6,7 +6,7 @@
  */
 import {existsSync,lstatSync,readFileSync,writeFileSync,mkdirSync,openSync,closeSync,fsyncSync,renameSync,unlinkSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash,createHmac,randomBytes,randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {ensureMainMemoryIntegration,detectProviderConflicts} from '../../adapters/claude-code/main-memory.mjs';
 
@@ -61,9 +61,15 @@ export function planParentProxy({home,configFile}){
  const merged=ensureMainMemoryIntegration(settings,{baseUrl:cfg.baseUrl,token:cfg.token,model:cfg.model,replaceProvider:false});
  if(merged.mode==='refused-conflict')reject('FOREIGN_PROVIDER_CONFLICT_REFUSED');
  const after=serialize(merged.settings);
+ // Bind the credential value this helper installs, without storing or printing
+ // it. A salted HMAC lets the consumer prove the token on disk is still the one
+ // written here; a replaced or placeholder token fails closed instead of being
+ // trusted because the proxy URL happens to survive.
+ const credentialSalt=randomBytes(16).toString('hex');
+ const credentialBinding=createHmac('sha256',Buffer.from(credentialSalt,'hex')).update(cfg.token).digest('hex');
  return {paths:p,before,after,beforeSha:before?hash(before):null,afterSha:hash(after),
    changed:before===null||!before.equals(after),endpointConfigured:true,
-   liveProviderVerified:false};
+   credentialSalt,credentialBinding,liveProviderVerified:false};
 }
 export function applyParentProxy({home,configFile,apply=false,windowsHost=process.platform==='win32'}){
  if(!windowsHost||!apply)reject('NATIVE_WINDOWS_AND_EXPLICIT_APPLY_REQUIRED');
@@ -76,7 +82,8 @@ export function applyParentProxy({home,configFile,apply=false,windowsHost=proces
    if(backup)writeNew(backup,p.before);
    const tmp=p.paths.settings+'.singularity-parent-new-'+randomUUID();
    const receipt={schema:SCHEMA,state:'APPLIED',settings:p.paths.settings,backup,
-     beforeSha:p.beforeSha,afterSha:p.afterSha,pendingTmp:tmp};
+     beforeSha:p.beforeSha,afterSha:p.afterSha,pendingTmp:tmp,
+     credentialSalt:p.credentialSalt,credentialBinding:p.credentialBinding};
    // Journal the exact owned secret-bearing temporary file BEFORE writing it.
    // Otherwise an interruption leaves credentials in an orphaned file that
    // receipt-owned rollback cannot safely identify or clean.
@@ -140,7 +147,9 @@ export function verifyParentProxy({home}){
  const journal=objectFrom(p.receipt);
  if(journal.schema!==SCHEMA||journal.state!=='APPLIED'||journal.settings!==p.settings||
     !/^[a-f0-9]{64}$/.test(journal.afterSha)||
-    (journal.beforeSha!==null&&!/^[a-f0-9]{64}$/.test(journal.beforeSha)))
+    (journal.beforeSha!==null&&!/^[a-f0-9]{64}$/.test(journal.beforeSha))||
+    (journal.credentialBinding!==undefined&&
+      !(/^[a-f0-9]{32}$/.test(journal.credentialSalt||'')&&/^[a-f0-9]{64}$/.test(journal.credentialBinding))))
     reject('PARENT_PROXY_RECEIPT_INVALID');
  const pending=checkPending(journal,p.settings);
  checkRestoreTemp(journal,p.settings);

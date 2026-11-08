@@ -10,11 +10,14 @@ import {
   existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync, renameSync,
   rmSync, rmdirSync, readdirSync, openSync, closeSync, fsyncSync, copyFileSync, constants,
 } from 'node:fs';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { join, dirname, basename, resolve, relative, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENT_MAP } from '../../adapters/claude-code/agent-map.mjs';
 import { ensureMemoryIntegration, removeMemoryIntegration, hookOwnership, PARENT_HOOK_EVENTS } from '../../adapters/claude-code/settings-merge.mjs';
+// fleet#993: the supported Configure flow reaches the parent-session memory proxy
+// through the existing, already-tested adapters helper — no new provider logic.
+import { ensureMainMemoryIntegration, removeMainMemoryIntegration, detectProviderConflicts, isMainMemoryOwnConfig, resolveMainProxyUrl } from '../../adapters/claude-code/main-memory.mjs';
 import { localWindowsPath } from './plan_claude_code_windows.mjs';
 
 const HASH = b => createHash('sha256').update(b).digest('hex');
@@ -72,6 +75,30 @@ export const CLAUDE_SKILLS = Object.freeze([
   'mcp-builder', 'retro', 'statusline-builder',
 ]);
 const skillsFor = (variant) => CLAUDE_SKILLS.filter(x => variant === 2 || x !== 'claude-office-visual');
+
+// Parent-proxy routing keys we may write. Rollback only ever removes a key whose
+// current value is still the one we wrote, so a user's later edit survives.
+export const MAIN_MEMORY_PROXY_ENV = Object.freeze(['ANTHROPIC_BASE_URL','ANTHROPIC_AUTH_TOKEN','ANTHROPIC_MODEL']);
+// Provenance contract with the dedicated credential helper
+// (native/windows/configure_parent_memory_proxy.mjs). Never a credential.
+export const PARENT_PROXY_RECEIPT = '.singularity-parent-memory-proxy-receipt.json';
+export const PARENT_PROXY_RECEIPT_SCHEMA = 'singularity-option2-parent-proxy/v1';
+function mainMemoryEnvDelta(before, after) {
+  const prev = (before && typeof before.env === 'object') ? before.env : {};
+  const next = (after && typeof after.env === 'object') ? after.env : {};
+  const written = {}, previous = {};
+  for (const k of MAIN_MEMORY_PROXY_ENV) {
+    // The parent-session credential is never written by Configure, so it is
+    // never journalled either: a receipt must not carry a secret.
+    if (k === 'ANTHROPIC_AUTH_TOKEN') continue;
+    if (next[k] === undefined || next[k] === prev[k]) continue;
+    written[k] = next[k];
+    // Absent stays absent. JSON null would make rollback WRITE a null value
+    // instead of removing the key it created.
+    if (prev[k] !== undefined) previous[k] = prev[k];
+  }
+  return { written, previous };
+}
 // Option 2 event forwarding complements, but never replaces, the memory and
 // documentation hooks. Office credentials remain only in the referenced file.
 export const OFFICE_EVENTS = Object.freeze({
@@ -339,7 +366,7 @@ function verifyRoot(source, variant) {
 
 /** Exported for isolated filesystem tests. The command-line apply/rollback paths
  * additionally require process.platform === win32; tests never write user's settings. */
-export function prepareConfiguration({source, home, nodeExe, memoryConfig, officeConfig, variant}) {
+export function prepareConfiguration({source, home, nodeExe, memoryConfig, officeConfig, variant, parentMemoryProxy, mainProxyUrl: mainProxyUrlOption = null, mainProxyModel = null}) {
   if (variant !== 1 && variant !== 2) fail('CLAUDE_VARIANT_1_OR_2_ONLY');
   // An arbitrary .exe path would turn a Claude hook into an unrelated process
   // launcher. Match the read-only planner and require the actual Node basename.
@@ -394,6 +421,115 @@ export function prepareConfiguration({source, home, nodeExe, memoryConfig, offic
   }
   const merge = ensureMemoryIntegration(settings, {scriptPath,env,platform:'win32',nodePath:nodeExe,parentConversation:true});
   if(variant===2)addOfficeHooks(merge.settings,officeScript,nodeExe);
+  // fleet#993 (Beta B2): parent-session memory routing is part of the supported
+  // Configure flow, not only the separate installer plan. Default-on for the
+  // Claude Code Complete variant (2); `parentMemoryProxy:false` is the explicit
+  // opt-out. A foreign provider configuration is REFUSED, never rewritten: the
+  // shared helper returns 'refused-conflict' and `merge.settings` stays as-is.
+  const parentProxyEnabled = parentMemoryProxy ?? (variant === 2);
+  const mainProxyUrl = parentProxyEnabled
+    ? String(mainProxyUrlOption || resolveMainProxyUrl({ env: process.env })).replace(/\/$/, '')
+    : null;
+  let parentProxy = {
+    enabled: Boolean(parentProxyEnabled), configured: false, verified: false,
+    liveMemoryRecallVerified: false, mode: 'disabled', reasons: [], baseUrl: mainProxyUrl,
+    alreadyOwned: false, envWritten: {}, prevEnv: {}, provenanceBasis: null, provenanceFailure: null,
+  };
+  if (parentProxyEnabled) {
+    const alreadyOwned = isMainMemoryOwnConfig(merge.settings, mainProxyUrl);
+    const conflicts = detectProviderConflicts(merge.settings, { baseUrl: mainProxyUrl });
+    // A token that exists is not a token that authenticates OUR proxy, and a
+    // surviving proxy URL does not make an arbitrary token ours: a placeholder or
+    // replaced credential must fail closed even while the route looks healthy.
+    const existingEnv = (merge.settings && typeof merge.settings.env === 'object' && merge.settings.env) ? merge.settings.env : {};
+    const existingToken = typeof existingEnv.ANTHROPIC_AUTH_TOKEN === 'string' && existingEnv.ANTHROPIC_AUTH_TOKEN.trim().length > 0;
+    let proxyReceipt = null;
+    try { proxyReceipt = JSON.parse(readFileSync(join(claude, PARENT_PROXY_RECEIPT), 'utf8')); } catch { proxyReceipt = null; }
+    // Ownership proofs, strongest first. "Some token exists" is never one:
+    //  a) credential binding — the helper's APPLIED receipt carries a salted
+    //     HMAC-SHA256 of the exact token it installed (never the token itself), so
+    //     the token on disk is provably the helper's. This is the only proof that
+    //     survives later settings writes, and it is bound to the credential value
+    //     rather than to a file digest, so a replaced token fails closed.
+    //  b) legacy exact digest — receipts written before the binding existed cannot
+    //     prove which token is on disk. Such a receipt is trusted only while the
+    //     settings file is byte-identical to the helper's write, and the weaker
+    //     basis is reported so a reviewer can tell the two apart. Once settings
+    //     drift, an unbound receipt fails closed instead of authorising anything.
+    const receiptNamesThisSettings = Boolean(
+      proxyReceipt && typeof proxyReceipt === 'object' &&
+      proxyReceipt.schema === PARENT_PROXY_RECEIPT_SCHEMA && proxyReceipt.state === 'APPLIED' &&
+      proxyReceipt.settings === settingsPath &&
+      typeof proxyReceipt.afterSha === 'string' && /^[0-9a-f]{64}$/.test(proxyReceipt.afterSha)
+    );
+    const receiptSalt = receiptNamesThisSettings && typeof proxyReceipt.credentialSalt === 'string' ? proxyReceipt.credentialSalt : '';
+    const receiptBinding = receiptNamesThisSettings && typeof proxyReceipt.credentialBinding === 'string' ? proxyReceipt.credentialBinding : '';
+    const receiptHasBinding = /^[0-9a-f]{32}$/.test(receiptSalt) && /^[0-9a-f]{64}$/.test(receiptBinding);
+    const credentialBindingMatches = Boolean(
+      receiptHasBinding && existingToken &&
+      timingSafeEqual(
+        createHmac('sha256', Buffer.from(receiptSalt, 'hex'))
+          .update(existingEnv.ANTHROPIC_AUTH_TOKEN, 'utf8').digest(),
+        Buffer.from(receiptBinding, 'hex'))
+    );
+    const legacyDigestProvenance = Boolean(
+      receiptNamesThisSettings && !receiptHasBinding &&
+      proxyReceipt.afterSha === fileHash(settingsPath)
+    );
+    const authProvenanceVerified = Boolean(
+      existingToken && receiptNamesThisSettings && (credentialBindingMatches || legacyDigestProvenance)
+    );
+    const provenanceBasis = !authProvenanceVerified ? null
+      : (credentialBindingMatches ? 'credential-binding' : 'legacy-receipt-exact-digest');
+    // Actionable, secret-free reason for the refusal. Each names what is missing
+    // so the operator knows whether to run the helper or drop a foreign token.
+    const provenanceFailure = authProvenanceVerified ? null
+      : (!receiptNamesThisSettings ? 'PARENT_PROXY_RECEIPT_ABSENT'
+        : (receiptHasBinding ? 'PARENT_PROXY_CREDENTIAL_BINDING_MISMATCH'
+          : 'PARENT_PROXY_RECEIPT_UNBOUND_AND_SETTINGS_DRIFTED'));
+    let parentProxyRefusedMissingAuth = false;
+    if (!authProvenanceVerified && conflicts.length === 0) {
+      // Fail closed and mutate nothing: provider routing is not written without a
+      // credential whose proxy ownership is established.
+      parentProxy = {
+        enabled: true, configured: false, verified: false,
+        liveMemoryRecallVerified: false, mode: 'refused-auth-provenance',
+        reasons: ['PARENT_PROXY_AUTH_PROVENANCE_REQUIRED', provenanceFailure],
+        action: provenanceFailure === 'PARENT_PROXY_RECEIPT_ABSENT'
+          ? 'Run the supported credential step first: configure_parent_memory_proxy.mjs --apply with its private config file (it owns the parent-proxy token and records a credential binding), then re-run Configure. No settings were changed and no credential was read.'
+          : 'The ANTHROPIC_AUTH_TOKEN on disk is not the credential the supported helper installed for this proxy (it was replaced, is a placeholder, or the receipt predates the credential binding and settings have since changed). Re-run configure_parent_memory_proxy.mjs --apply with its private config file, then re-run Configure. No settings were changed and no credential was read.',
+        baseUrl: mainProxyUrl, alreadyOwned,
+        authPresent: existingToken, authProvenanceVerified: false,
+        provenanceBasis: null, provenanceFailure,
+        envWritten: {}, prevEnv: {},
+      };
+      parentProxyRefusedMissingAuth = true;
+    }
+    const applied = parentProxyRefusedMissingAuth ? null : ensureMainMemoryIntegration(merge.settings, {
+      baseUrl: mainProxyUrl,
+      // A parent-session credential is never written, validated or journalled
+      // here: that belongs to the scoped probe and the user's own secret store.
+      token: null,
+      model: mainProxyModel,
+    });
+    const delta = !applied || applied.mode === 'refused-conflict' ? {written:{},previous:{}} : mainMemoryEnvDelta(merge.settings, applied.settings);
+    if (applied) parentProxy = {
+      enabled: true,
+      configured: applied.mode !== 'refused-conflict',
+      verified: false, // only a scoped live probe may upgrade this; config alone cannot
+      liveMemoryRecallVerified: false,
+      mode: applied.mode,
+      reasons: (applied.mode === 'refused-conflict' ? applied.reasons : conflicts).map(String),
+      baseUrl: mainProxyUrl,
+      alreadyOwned,
+      // Presence and provenance only; the credential value is never returned,
+      // logged or journalled, and neither are the receipt's salt or binding.
+      authPresent: existingToken, authProvenanceVerified: true, provenanceBasis,
+      envWritten: delta.written,
+      prevEnv: delta.previous,
+    };
+    if (applied && parentProxy.configured) merge.settings = applied.settings;
+  }
   const repoqlPluginOwned=requestRepoqlPlugin(merge.settings);
   const originalSettingsHash = fileHash(settingsPath);
   const agentWrites = [];
@@ -436,7 +572,7 @@ export function prepareConfiguration({source, home, nodeExe, memoryConfig, offic
   return {schema:1,source,home,claude,settingsPath,agentsDir,rulesDir,skillsDir,receiptPath,
     scriptPath,env,originalSettingsHash,nextSettingsHash:HASH(next),nextSettings:next,
     agentWrites,ruleWrites,skillWrites,newEnv:Object.fromEntries(Object.entries(env).filter(([k])=>!(k in (settings.env || {})))),
-    changedSettings:originalSettingsHash!==HASH(next),repoqlPluginOwned,variant,officeScript,officeConfig};
+    changedSettings:originalSettingsHash!==HASH(next),repoqlPluginOwned,parentProxy,variant,officeScript,officeConfig};
 }
 
 /** Mutates only the selected .claude settings and absent agent definitions.
@@ -465,6 +601,8 @@ export function applyConfiguration(config) {
       skills:p.skillWrites.filter(a=>a.create).map(a=>({path:a.target,sha256:a.sha256})),
       // store only installation-controlled keys/paths; no settings or secrets
       env:p.newEnv,repoqlPluginOwned:p.repoqlPluginOwned,scriptPath:p.scriptPath,nodeExe:config.nodeExe,memoryConfig:config.memoryConfig,
+      // ownership record only: the proxy token is never journalled or logged
+      ...(p.parentProxy?.configured ? {parentMemory:{baseUrl:p.parentProxy.baseUrl,envWritten:p.parentProxy.envWritten,prevEnv:p.parentProxy.prevEnv}} : {}),
       ...(p.variant===2?{officeScript:p.officeScript,officeConfig:p.officeConfig}:{}),
     };
     // Journal ownership FIRST. A crash while copying backup or writing the
@@ -499,7 +637,15 @@ export function applyConfiguration(config) {
         newlyCreatedAgents:journal.agents.length,settingsChanged:p.changedSettings,
         fullProductInstalled:false,officeRuntimeInstalled:false,ghostRuntimeInstalled:false,
         repoqlPluginRequested:true,repoqlPluginSkillsVerified:false,repoqlVersionPinned:'1.7.18',
-        officeEventHooksConfigured:p.variant===2,officeEventHooksVerified:false};
+        officeEventHooksConfigured:p.variant===2,officeEventHooksVerified:false,
+        parentProxyConfigured:Boolean(p.parentProxy?.configured),parentProxyVerified:false,
+        parentProxyMode:p.parentProxy?.mode ?? 'disabled',parentProxyRefused:p.parentProxy?.mode==='refused-conflict',
+        parentProxyAuthPresent:p.parentProxy?.authPresent === true,
+        parentProxyAuthProvenanceVerified:p.parentProxy?.authProvenanceVerified === true,
+        parentProxyAuthProvenanceBasis:p.parentProxy?.provenanceBasis ?? null,
+        parentProxyAuthRequired:p.parentProxy?.mode==='refused-auth-provenance',
+        parentProxyAction:p.parentProxy?.action ?? null,
+        parentProxyReasons:[...(p.parentProxy?.reasons ?? [])],liveMemoryRecallVerified:false};
     } catch(e) {
       // Preserve journal and backup for safe explicit recovery if interrupted.
       throw new Error('CONFIGURATION_PARTIAL_RECOVERY_REQUIRED: '+e.message);
@@ -535,6 +681,13 @@ export function rollbackConfiguration({home}) {
     for (const a of j.agents) {
       if (typeof a.path!=='string' || dirname(a.path)!==agentsDir || !/^singularity-[a-z-]+\.md$/.test(basename(a.path)) ||
           !/^[0-9a-f]{64}$/.test(a.sha256)) fail('JOURNAL_AGENT_INVALID');
+    }
+    if(j.parentMemory!==undefined){
+      const pm=j.parentMemory;
+      if(!pm || typeof pm!=='object' || !pm.envWritten || typeof pm.envWritten!=='object' || Array.isArray(pm.envWritten) ||
+         Object.keys(pm.envWritten).some(k=>!MAIN_MEMORY_PROXY_ENV.includes(k)) ||
+         (pm.prevEnv!==undefined && (!pm.prevEnv || typeof pm.prevEnv!=='object' || Array.isArray(pm.prevEnv))))
+        fail('JOURNAL_PARENT_MEMORY_INVALID');
     }
     if(j.repoqlPluginOwned!==undefined && (!j.repoqlPluginOwned ||
         typeof j.repoqlPluginOwned.marketplaceCreated!=='boolean' ||
@@ -605,8 +758,20 @@ export function rollbackConfiguration({home}) {
       const removed=removeMemoryIntegration(settings,{scriptPath:j.scriptPath,env:j.env});
       const officeClean=j.variant===2 && j.officeScript
         ? removeOfficeHooks(removed.settings,j.officeScript,j.nodeExe,j.env?.OFFICE_CONFIG) : removed.settings;
-      const cleaned=removeOwnedRepoqlPlugin(officeClean,j.repoqlPluginOwned);
-      if (removed.changed || !sameConfig(cleaned,settings)) {
+      // fleet#993: strip parent-proxy env only where the value is still ours.
+      const proxyClean=j.parentMemory
+        ? removeMainMemoryIntegration(officeClean,{mainMemory:{envWritten:j.parentMemory.envWritten}},j.parentMemory.prevEnv||{})
+        : {settings:officeClean,changedKeys:[]};
+      const cleaned=removeOwnedRepoqlPlugin(proxyClean.settings,j.repoqlPluginOwned);
+      // A map emptied by our own removals must not survive as `env: {}` when the
+      // pre-install settings had no env object (or an empty one).
+      if(cleaned.env && typeof cleaned.env==='object' && !Array.isArray(cleaned.env) &&
+         Object.keys(cleaned.env).length===0){
+        const pre=j.backup ? readObject(j.backup) : null;
+        const preEnv=pre && typeof pre.env==='object' && !Array.isArray(pre.env) ? pre.env : null;
+        if(!preEnv || Object.keys(preEnv).length===0) delete cleaned.env;
+      }
+      if (removed.changed || proxyClean.changedKeys.length || !sameConfig(cleaned,settings)) {
         const bytes=json(cleaned),afterSha=HASH(bytes);
         if(ownedMerge){
           if(ownedMerge.data.beforeSha!==current||ownedMerge.data.afterSha!==afterSha)
@@ -813,7 +978,7 @@ export function verifyConfiguration({home}) {
     if(expected===null||actual!==expected)issues.push('SKILL_DEFINITION_DRIFT');
   }
   const repoqlAssets=inspectRepoqlSkillAssets({home});
-  return {configured:issues.length===0,variant:j.variant,agentsExpected:17,skillsExpected:skillsFor(j.variant).length,hookEventsExpected:expectedHookEvents(j.variant),
+  return {configured:issues.length===0,variant:j.variant,agentsExpected:NAMES.length,skillsExpected:skillsFor(j.variant).length,hookEventsExpected:expectedHookEvents(j.variant),
     issues:[...new Set(issues)],runtimeVerified:false,officeRuntimeVerified:false,ghostRuntimeVerified:false,
     repoqlPluginRequested:j.repoqlPluginOwned!==undefined,officeEventHooksConfigured:j.variant===2 && !issues.some(x=>x.startsWith('OFFICE_')),
     officeEventHooksVerified:false,repoqlPluginSkillAssets:repoqlAssets,

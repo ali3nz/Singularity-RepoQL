@@ -75,7 +75,12 @@ export function initNavigationUI() {
   let opened = false;
   const currentPath = () => (location.hash.replace(/^#/, '').split('?')[0] || '/');
   const navPaths = links.map(link => link.dataset.nav);
-  const sectionFor = (path) => links.find(link => link.dataset.nav === navPathFor(path, navPaths)) || null;
+  const sectionFor = (path) => {
+    const native = Boolean(window.__SINGULARITY_VARIANT__?.variant);
+    const target = native && (path === '/ghost' || path.startsWith('/ghost/'))
+      ? '/openmausbot' : navPathFor(path, navPaths);
+    return links.find(link => link.dataset.nav === target && !link.hidden) || null;
+  };
 
   function setOpened(shouldOpen, restoreFocus = false) {
     opened = mobile.matches && Boolean(shouldOpen);

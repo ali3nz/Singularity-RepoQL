@@ -48,7 +48,7 @@ Use specialists when they materially improve correctness:
 
 - `singularity-thinker` when the mechanism is still unclear after a first look, when several explanations survive, or when a high-consequence decision needs independent reasoning;
 - `singularity-researcher-web` when current external facts or official documentation decide the answer;
-- `singularity-code-reviewer` (or `singularity-fleet-reviewer` for read-only architecture review) after a significant change and before declaring completion.
+- `singularity-code-reviewer` after a significant change and before declaring completion.
 
 A subagent starts with none of this conversation: put the complete context, paths and acceptance criteria in its prompt. Do not delegate trivial changes.
 

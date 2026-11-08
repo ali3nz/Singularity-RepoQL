@@ -34,13 +34,11 @@
 export const AGENT_MAP = Object.freeze({
   // --- delegation targets (mode: subagent) ----------------------------------
   "singularity-code-reviewer": { surface: "subagent", memoryAgentId: "code-reviewer", sourceDef: "openchamber/agents/code-reviewer.md" },
-  "singularity-quality-fixer": { surface: "subagent", memoryAgentId: "quality-fixer", sourceDef: "openchamber/agents/quality-fixer.md" },
   "singularity-researcher-web": { surface: "subagent", memoryAgentId: "researcher-web", sourceDef: "openchamber/agents/researcher-web.md" },
   "singularity-thinker": { surface: "subagent", memoryAgentId: "thinker", sourceDef: "openchamber/agents/thinker.md" },
   "singularity-explore": { surface: "subagent", memoryAgentId: "explore", sourceDef: "openchamber/agents/explore.md" },
   "singularity-general": { surface: "subagent", memoryAgentId: "general", sourceDef: "openchamber/agents/general.md" },
   "singularity-board": { surface: "subagent", memoryAgentId: "board", sourceDef: "openchamber/agents/board.md" },
-  "singularity-fleet-reviewer": { surface: "subagent", memoryAgentId: "fleet-reviewer", sourceDef: "openchamber/agents/fleet-reviewer.md" },
 
   // --- main-session surfaces (mode: primary) --------------------------------
   "singularity-orchestrator": { surface: "main", memoryAgentId: null, sourceDef: "openchamber/agents/orchestrator.md" },

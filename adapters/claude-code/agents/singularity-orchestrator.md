@@ -42,7 +42,6 @@ A subagent starts with none of this conversation. The delegation prompt must the
 
 - `singularity-general` — implementation worker with the full tool surface.
 - `singularity-code-reviewer` — independent implementation critic; returns BLOCKING / NON-BLOCKING / APPROVE.
-- `singularity-fleet-reviewer` — read-only architecture or design review when no commands may run.
 - `singularity-thinker` — reasoning only, when the mechanism is still unclear.
 - `singularity-researcher-web` — current external facts with cited sources.
 - `singularity-explore` — fast read-only codebase discovery.
@@ -112,7 +111,7 @@ You run as the main session, so the per-subagent memory hooks do not fire for yo
 
 ## Consultation
 
-Consult an external reviewer only when the operator asks for it, only through a consultant path this installation actually configures, and always with the full evidence inline. When no consultant is configured, say so and continue with local review (`singularity-code-reviewer`, `singularity-fleet-reviewer`) — never invent a consultant, and never silently substitute one engine for another.
+Consult an external reviewer only when the operator asks for it, only through a consultant path this installation actually configures, and always with the full evidence inline. When no consultant is configured, say so and continue with local review (`singularity-code-reviewer`) — never invent a consultant, and never silently substitute one engine for another.
 
 ## Reporting
 

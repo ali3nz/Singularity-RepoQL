@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Claude Code Complete (Option 2) delegated MemoryCore profile acceptance.
- * Explicit identity map binds the eight delegated roles to EXISTING shared
+ * Explicit identity map binds every delegated role (currently six) to EXISTING shared
  * identities. Never seed Ghost or nine main-session roles here.
  *
  * plan    : local, read-only identity/parent-route inspection, no network.
- * verify  : authenticated LIVE readbacks for all eight roles; no writes.
+ * verify  : authenticated LIVE readbacks for every delegated role; no writes.
  * seed    : explicit Windows --apply; idempotent seeding and live verification.
  *
  * A successful profile receipt says NOTHING about parent-session capture,
@@ -27,9 +27,16 @@ export const MAIN_ROLES=Object.freeze(Object.entries(AGENT_MAP)
   .filter(([,item])=>item.surface==='main').map(([name])=>name).sort());
 function reject(message){throw new Error(message)}
 
-/** Validate the entire mapped delegated namespace BEFORE any network calls. */
-export function validateDelegatedMap(map){
+/** Validate the entire mapped delegated namespace BEFORE any network calls.
+ *  `parent` is optional; when the parent session's own identity is known, a
+ *  delegated role may not reuse it — parent and subagent capture must stay
+ *  separate namespaces, or a subagent's writes would land in the parent's
+ *  memory and "independent recall" could never be demonstrated. */
+export function validateDelegatedMap(map,parent=null){
   if(!map || typeof map!=='object'||Array.isArray(map))reject('IDENTITY_MAP_REQUIRED');
+  if(parent!==null && (typeof parent!=='object'||Array.isArray(parent)||
+    !['team_id','user_id','agent_id'].every(field=>typeof parent[field]==='string')))
+    reject('PARENT_IDENTITY_INVALID');
   const seen=new Set();
   for(const name of DELEGATED_ROLES){
     const id=map[name];
@@ -41,6 +48,9 @@ export function validateDelegatedMap(map){
       id[field].length>=1 && id[field].length<=128))reject('DELEGATED_IDENTITY_MISSING_OR_INVALID');
     if(id.team_id.toLowerCase()==='ghost-companion'||id.agent_id.toLowerCase()==='ghost')
       reject('GHOST_MEMORY_SCOPE_FORBIDDEN');
+    if(parent && [id.team_id,id.user_id,id.agent_id].join('\u0000')===
+      [parent.team_id,parent.user_id,parent.agent_id].join('\u0000'))
+      reject('DELEGATED_IDENTITY_REUSES_PARENT');
     const key=JSON.stringify([id.team_id,id.user_id,id.agent_id]);
     if(seen.has(key))reject('DELEGATED_IDENTITY_COLLISION');
     seen.add(key);
@@ -89,7 +99,7 @@ export async function assessDelegatedProfiles({mode='plan',map,cfg,agentsDir,led
   receipt.results=out.results.map(({name,status})=>({role:name,status}));
   receipt.profileReadbacksVerified=out.failed===0 && mode==='verify' &&
     receipt.results.every(x=>x.status==='verified');
-  // Seed succeeds only when live search independently corroborates all eight.
+  // Seed succeeds only when live search independently corroborates every delegated role.
   if(mode==='seed' && out.failed===0){
     const verify=await provisionAgentProfiles({agentsDir,ledgerPath,agentNames:DELEGATED_ROLES,
       identityMap:map,verifyOnly:true,cfg,env,fetchImpl,now});
@@ -129,7 +139,7 @@ async function main(argv){
     ledgerPath:args['--ledger']||join(ROOT,'data','agent-profiles','ledger.json'),
     proxyUrl:args['--proxy-url']||resolveMainProxyUrl(),apply:!!args['--apply']});
   process.stdout.write(JSON.stringify(result,null,2)+'\n');
-  // A successful plan or eight-role verification can exit zero without
+  // A successful plan or delegated-role verification can exit zero without
   // claiming parent memory, Ghost, RepoQL or product release acceptance.
   return mode==='plan' || result.profileReadbacksVerified ? 0 : 1;
 }

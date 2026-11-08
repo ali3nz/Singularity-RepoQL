@@ -13,10 +13,11 @@ export function inventory({home,workspace,verifyClaude=verifyConfiguration,inspe
   if(!home||!workspace||typeof home!=='string'||typeof workspace!=='string'||
     !isAbsolute(home)||!isAbsolute(workspace))throw Error('ABSOLUTE_HOME_AND_WORKSPACE_REQUIRED');
   const receipt={schema:'singularity-option2-static-installed-inventory/v1',option:2,
-    claudeConfiguration:{ownedConfigurationVerified:false,agentsExpected:17,skillsExpected:10,
+    claudeConfiguration:{ownedConfigurationVerified:false,agentsExpected:15,skillsExpected:10,
       ownedHooksExpected:11,issues:[]},
     officialRepoqlPlugin:{assetsPresent:false,expectedSkills:17,presentSkills:0,issues:[]},
     kanzoProjectMcp:{ownedRegistrationVerified:false,issues:[]},
+    openMausBotProjectMcp:{ownedRegistrationVerified:false,issues:[]},
     staticInstallationComplete:false,nativeClaudeGuiLoadedVerified:false,
     repoqlPluginToolsInvoked:false,tencentMemoryPersistenceVerified:false,
     officeGhostRuntimeVerified:false,releaseReady:false};
@@ -24,7 +25,7 @@ export function inventory({home,workspace,verifyClaude=verifyConfiguration,inspe
     const c=verifyClaude({home});
     receipt.claudeConfiguration.issues=issueCodes(c?.issues);
     receipt.claudeConfiguration.ownedConfigurationVerified=c?.configured===true && c?.variant===2 &&
-      c?.agentsExpected===17&&c?.skillsExpected===10&&c?.hookEventsExpected===13;
+      c?.agentsExpected===15&&c?.skillsExpected===10&&c?.hookEventsExpected===13;
     if(!receipt.claudeConfiguration.ownedConfigurationVerified && !receipt.claudeConfiguration.issues.length)
       receipt.claudeConfiguration.issues.push('CLAUDE_CONFIG_INCOMPLETE');
   }catch{receipt.claudeConfiguration.issues.push('CLAUDE_CONFIG_VERIFICATION_FAILED')}
@@ -38,13 +39,23 @@ export function inventory({home,workspace,verifyClaude=verifyConfiguration,inspe
   }catch{receipt.officialRepoqlPlugin.issues.push('REPOQL_PLUGIN_ASSET_INSPECTION_FAILED')}
   try{
     const m=verifyMcp({variant:2,workspace});
+    // Stricter than the name: this means "kanzo registered AND nothing foreign
+    // registered". It gates staticInstallationComplete below, so do not loosen it
+    // into a bare includes('kanzo') check.
     receipt.kanzoProjectMcp.ownedRegistrationVerified=m?.installedConfigVerified===true &&m?.variant===2&&
-      Array.isArray(m.registered)&&m.registered.length===1&&m.registered[0]==='kanzo';
+      Array.isArray(m.registered)&&m.registered.includes('kanzo')&&
+      m.registered.every(name=>['kanzo','openmausbot'].includes(name));
     if(!receipt.kanzoProjectMcp.ownedRegistrationVerified)
       receipt.kanzoProjectMcp.issues.push('KANZO_REGISTRATION_INCOMPLETE');
-  }catch{receipt.kanzoProjectMcp.issues.push('KANZO_REGISTRATION_VERIFICATION_FAILED')}
+    receipt.openMausBotProjectMcp.ownedRegistrationVerified=m?.installedConfigVerified===true &&
+      m?.variant===2 && Array.isArray(m.registered) && m.registered.includes('openmausbot');
+    if(!receipt.openMausBotProjectMcp.ownedRegistrationVerified)
+      receipt.openMausBotProjectMcp.issues.push('OPENMAUSBOT_REGISTRATION_INCOMPLETE');
+  }catch{receipt.kanzoProjectMcp.issues.push('KANZO_REGISTRATION_VERIFICATION_FAILED');
+    receipt.openMausBotProjectMcp.issues.push('OPENMAUSBOT_REGISTRATION_VERIFICATION_FAILED')}
   receipt.staticInstallationComplete=receipt.claudeConfiguration.ownedConfigurationVerified &&
-    receipt.officialRepoqlPlugin.assetsPresent&&receipt.kanzoProjectMcp.ownedRegistrationVerified;
+    receipt.officialRepoqlPlugin.assetsPresent&&receipt.kanzoProjectMcp.ownedRegistrationVerified &&
+    receipt.openMausBotProjectMcp.ownedRegistrationVerified;
   return receipt;
 }
 function parse(argv){let home,workspace,output,strict=false;const seen=new Set();

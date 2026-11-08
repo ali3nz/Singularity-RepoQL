@@ -13,7 +13,7 @@ Two directories are in scope:
 | --- | --- | --- |
 | `openchamber/agents/` | `<config-dir>/agents/` | 17 agent definitions (9 primary, 8 subagent) |
 | `openchamber/skills/` | `<config-dir>/skills/` | 10 skills, one directory each with a `SKILL.md` |
-| `adapters/claude-code/agents/` | `~/.claude/agents/` | 17 `singularity-*` definitions — every portable role, see below |
+| `adapters/claude-code/agents/` | `~/.claude/agents/` | 15 `singularity-*` definitions — every portable role, see below |
 
 ## Agent roster
 
@@ -126,9 +126,9 @@ RepoQL plugin skills, which are not bundled.
 
 ## Claude Code adapter
 
-`adapters/claude-code/agents/` ships all **17 portable roles** as `singularity-*`
+`adapters/claude-code/agents/` ships the **15 selected Claude Code roles** as `singularity-*`
 definitions, mapped to their memory identities in
-`adapters/claude-code/agent-map.mjs`. Eight delegation targets map a `subagent`-mode
+`adapters/claude-code/agent-map.mjs`. Six delegation targets map a `subagent`-mode
 role; nine main-session surfaces map a `primary`-mode role, declare
 `claude --agent <name>` as their launch form, and refuse session authority when
 reached through the Agent tool.

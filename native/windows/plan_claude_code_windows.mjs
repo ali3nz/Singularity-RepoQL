@@ -56,7 +56,7 @@ export function buildPlan({ variant, repoRoot, nodeExe, existingSettings = {} })
     completeInstaller:'native/windows/configure_claude_code_windows.mjs',
     officeIncludedByVariant:variant===2, ghostIncludedByVariant:variant===2,
     unverified:[
-      'Existing settings and 17 agent definitions have not been installed',
+      'Existing settings and 15 agent definitions have not been installed',
       'This preview does not include Office handlers, skills or RepoQL plugin settings; use the Complete native installer plan',
       'Native Claude Desktop Code-tab hook and MCP acceptance remains untested',
       'Tencent memory.json and live capture/new-session recall are not provisioned or verified',

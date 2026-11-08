@@ -62,11 +62,6 @@ test("read/write boundaries are preserved per agent", () => {
   const toolsFor = (file) => parseFrontmatter(readFileSync(join(HERE, "agents", file), "utf8")).tools || "";
   // reviewer: read-only during the review (no Edit/Write)
   assert.equal(/Edit|Write/.test(toolsFor("singularity-code-reviewer.md")), false);
-  // fleet-reviewer: read-only and command-free by contract
-  assert.equal(/Edit|Write|Bash/.test(toolsFor("singularity-fleet-reviewer.md")), false);
-  // quality-fixer: file-scoped fixer, no shell at all
-  assert.equal(/Bash/.test(toolsFor("singularity-quality-fixer.md")), false);
-  assert.ok(law(readFileSync(join(HERE, "agents", "singularity-quality-fixer.md")), "ONLY inside your current working directory"));
   // explorer and researcher are read-only
   for (const f of ["singularity-explore.md", "singularity-researcher-web.md"]) {
     assert.equal(/Edit|Write|Bash/.test(toolsFor(f)), false, f);
@@ -98,12 +93,6 @@ test("board keeps the eight seats and the ruling output blocks", () => {
   for (const block of ["RULING", "PANEL POSITIONS", "DISSENTS", "ACTIONS"]) assert.ok(text.includes(block), block);
 });
 
-test("quality-fixer keeps its staged-file JSON reply contract", () => {
-  const text = readFileSync(join(HERE, "agents", "singularity-quality-fixer.md"), "utf8");
-  assert.ok(text.includes("REQUEST.md"));
-  assert.ok(text.includes("JSON"));
-});
-
 test("identity map: every delegation target maps to one unique MemoryCore identity; main surfaces map to none", () => {
   const ids = Object.values(AGENT_MAP).map((e) => e.memoryAgentId).filter((x) => x !== null);
   assert.equal(new Set(ids).size, ids.length, "no two claude agents share one memory identity");
@@ -120,7 +109,8 @@ test("identity map: every delegation target maps to one unique MemoryCore identi
 
 test("resolveSingularityAgent accepts only delegation targets with a singularity-* name", () => {
   assert.equal(resolveSingularityAgent("singularity-thinker")?.memoryAgentId, "thinker");
-  assert.equal(resolveSingularityAgent("singularity-fleet-reviewer")?.memoryAgentId, "fleet-reviewer");
+  assert.equal(resolveSingularityAgent("singularity-fleet-reviewer"), null);
+  assert.equal(resolveSingularityAgent("singularity-quality-fixer"), null);
   assert.equal(resolveSingularityAgent("singularity-super"), null, "main-session surfaces have no subagent identity");
   assert.equal(resolveSingularityAgent("singularity-ghost"), null);
   assert.equal(resolveSingularityAgent("Explore"), null, "built-in subagents are never captured/recalled");
@@ -147,7 +137,15 @@ test("surface mirrors the source definition's mode for every mapped agent", () =
   }
   const mainRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "main").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
   const subRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "subagent").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
-  assert.deepEqual(subRoles, openchamberFilesByMode("subagent"), "every subagent-mode role is a delegation target");
+  // Claude's roster is a documented subset of OpenChamber's: these two roles are
+  // intentionally not delegated from a Claude session. Pin both directions — the
+  // exclusion must stay meaningful, so the upstream roles must still exist.
+  const CLAUDE_EXCLUDED_SUBAGENTS = Object.freeze(["quality-fixer", "fleet-reviewer"]);
+  for (const excluded of CLAUDE_EXCLUDED_SUBAGENTS) {
+    assert.equal(openchamberFilesByMode("subagent").includes(excluded), true,
+      `${excluded} must still exist upstream, or the Claude exclusion is vacuous`);
+  }
+  assert.deepEqual(subRoles, openchamberFilesByMode("subagent").filter(n => !CLAUDE_EXCLUDED_SUBAGENTS.includes(n)), "every subagent-mode role is a delegation target");
   assert.deepEqual(mainRoles, openchamberFilesByMode("primary"),
     "every portable primary-mode role is a main-session surface");
 });
@@ -167,9 +165,9 @@ test("standalone ships as a main-session surface, not as a delegation twin", () 
   assert.ok(AGENT_FILES.includes("singularity-standalone.md"));
 });
 
-test("roster scope: all portable non-pentest roles, and nothing else", () => {
-  assert.equal(Object.keys(AGENT_MAP).length, 17);
-  assert.equal(AGENT_FILES.length, 17);
+test("roster scope: selected Claude Code roles only, excluding fleet and quality specialist", () => {
+  assert.equal(Object.keys(AGENT_MAP).length, 15);
+  assert.equal(AGENT_FILES.length, 15);
   for (const name of [...AGENT_FILES, ...Object.keys(AGENT_MAP)]) {
     assert.doesNotMatch(name, /pentest|redamon/i, `${name}: pentest roles are out of scope`);
   }

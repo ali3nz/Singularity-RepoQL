@@ -22,10 +22,13 @@ const remote=(calls,seeded=new Set())=>async (url,init)=>{
  seeded.add(body.agent_id);
  return new Response(JSON.stringify({code:0,data:{accepted_ids:['one']}}));
 };
-test('roster is eight delegated and nine excluded main roles',()=>{
- assert.equal(DELEGATED_ROLES.length,8);assert.equal(MAIN_ROLES.length,9);
+test('roster is six delegated and nine excluded main roles',()=>{
+ assert.equal(DELEGATED_ROLES.length,6);assert.equal(MAIN_ROLES.length,9);
  assert.equal(validateDelegatedMap(map()).identityMapValidated,true);
  assert.ok(!DELEGATED_ROLES.includes('ghost'));
+ // V4 removed these two subagents; their memory identities must not come back.
+ assert.ok(!DELEGATED_ROLES.includes('fleet-reviewer'));
+ assert.ok(!DELEGATED_ROLES.includes('quality-fixer'));
 });
 test('refuses missing, colliding, or Ghost identities before contact',()=>{
  const x=map();delete x.board;assert.throws(()=>validateDelegatedMap(x),/MISSING/);
@@ -42,7 +45,7 @@ test('verify is read-only: missing charter fails and creates no ledger',async()=
  const f=fixture(),calls=[];
  const result=await assessDelegatedProfiles({mode:'verify',map:map(),cfg,settings,...f,fetchImpl:remote(calls)});
  assert.equal(result.profileReadbacksVerified,false);
- assert.equal(result.results.length,8);assert.ok(result.results.every(x=>x.status==='failed'));
+ assert.equal(result.results.length,DELEGATED_ROLES.length);assert.ok(result.results.every(x=>x.status==='failed'));
  assert.ok(calls.every(c=>c.url.endsWith('/search')));
  assert.throws(()=>readFileSync(f.ledgerPath));
 });
@@ -52,18 +55,18 @@ test('seed requires explicit native Windows apply and loopback core',async()=>{
  await assert.rejects(assessDelegatedProfiles({...x,platform:'win32',apply:false}),/WINDOWS_EXPLICIT_APPLY_REQUIRED/);
  await assert.rejects(assessDelegatedProfiles({...x,cfg:{...cfg,baseUrl:'https://memory.example.com'},platform:'win32',apply:true}),/NON_LOOPBACK/);
 });
-test('seed all eight, independently read back, never write Ghost or main roles, safe rerun',async()=>{
+test('seed every delegated role, independently read back, never write Ghost or main roles, safe rerun',async()=>{
  const f=fixture(),calls=[],seeded=new Set(),fetchImpl=remote(calls,seeded);
  const props={mode:'seed',map:map(),cfg,settings,...f,platform:'win32',apply:true,fetchImpl};
  const first=await assessDelegatedProfiles(props);
  assert.equal(first.profileReadbacksVerified,true);
  assert.equal(first.releaseReady,false);
- assert.equal(first.results.length,8);
- assert.equal(calls.filter(x=>x.url.endsWith('/add')).length,8);
+ assert.equal(first.results.length,DELEGATED_ROLES.length);
+ assert.equal(calls.filter(x=>x.url.endsWith('/add')).length,DELEGATED_ROLES.length);
  assert.ok(calls.every(x=>DELEGATED_ROLES.includes(x.body.agent_id)));
  const second=await assessDelegatedProfiles(props);
  assert.equal(second.profileReadbacksVerified,true);
- assert.equal(calls.filter(x=>x.url.endsWith('/add')).length,8);
+ assert.equal(calls.filter(x=>x.url.endsWith('/add')).length,DELEGATED_ROLES.length);
  assert.doesNotMatch(JSON.stringify(first),/secret-NOT-IN-REPORT|operator-test/);
 });
 test('seed receipt cannot pass without post-seed live readback',async()=>{
@@ -78,4 +81,13 @@ test('seed receipt cannot pass without post-seed live readback',async()=>{
  const r=await assessDelegatedProfiles({mode:'seed',map:map(),cfg,settings,...f,platform:'win32',apply:true,fetchImpl:flaky});
  assert.equal(r.profileReadbacksVerified,false);
  assert.ok(r.issues.includes('POST_SEED_READBACK_INCOMPLETE'));
+});
+
+test('a delegated identity may not reuse the parent session identity',()=>{
+ const parent={team_id:'shared-team',user_id:'operator-test',agent_id:'claude-code-main'};
+ assert.equal(validateDelegatedMap(map(),parent).identityMapValidated,true);
+ const reused=map();reused.board={...parent};
+ assert.throws(()=>validateDelegatedMap(reused,parent),/DELEGATED_IDENTITY_REUSES_PARENT/);
+ const other=map();other.thinker={team_id:'shared-team',user_id:'operator-test',agent_id:'thinker'};
+ assert.equal(validateDelegatedMap(other,parent).identityMapValidated,true);
 });

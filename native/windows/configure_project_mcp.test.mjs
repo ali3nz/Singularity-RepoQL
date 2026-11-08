@@ -150,3 +150,38 @@ test('changed rollback restore temporary file is not removed or used',()=>{
   assert.equal(existsSync(r.restoreTmp),true);
  }finally{rmSync(d,{recursive:true,force:true})}
 });
+
+test('Option 2 supports the product-owned headless OpenMausBot CLI without desktop pairing',()=>{
+ const cli=join(tmpdir(),'singularity-owned-omb','cli.js');
+ const p=buildMcpPlan(fixtureOpts({variant:2,workspace:root,rqlExe:rql,kanzoExe:kanzo,
+   ombCli:cli,ombPort:18211,nodeExe:join(tmpdir(),'node.exe')}));
+ assert.deepEqual(p.registered,['kanzo','openmausbot']);
+ assert.deepEqual(p.configuration.mcpServers.openmausbot,{
+   type:'stdio',command:join(tmpdir(),'node.exe'),args:[cli,'mcp'],env:{OMB_PORT:'18211'},
+ });
+ assert.equal(JSON.stringify(p).includes('OPENMAUSBOT_TOKEN'),false);
+ assert.equal(p.configuration.mcpServers.repoql,undefined);
+ assert.throws(()=>buildMcpPlan(fixtureOpts({variant:2,workspace:root,rqlExe:rql,kanzoExe:kanzo,
+   ombCli:cli,ombPort:18211,nodeExe:join(tmpdir(),'node.exe'),ombExe:'C:\\Programs\\OpenMausBot.exe'})),/OPENMAUSBOT_AMBIGUOUS_RUNTIME/);
+ for(const port of [0,1023,65535,99999,18211.5])assert.throws(()=>buildMcpPlan(fixtureOpts({variant:2,workspace:root,rqlExe:rql,kanzoExe:kanzo,
+   ombCli:cli,ombPort:port,nodeExe:join(tmpdir(),'node.exe')})),/OPENMAUSBOT_HEADLESS_PORT_INVALID/);
+});
+
+test('Headless OpenMausBot config preserves foreign entries and rolls back from an owned receipt',()=>{
+ const d=mkdtempSync(join(tmpdir(),'singularity-headless-mcp-')),ws=join(d,'workspace'),bin=join(d,'bin');
+ mkdirSync(ws);mkdirSync(bin);
+ const a=join(bin,'rql.exe'),b=join(bin,'kanzo.exe'),node=join(bin,'node.exe'),cli=join(bin,'cli.js');
+ for(const f of [a,b,node,cli])writeFileSync(f,'fixture');
+ const file=join(ws,'.mcp.json');const original=JSON.stringify({mcpServers:{foreign:{command:'other'}}});writeFileSync(file,original);
+ try{
+   const opts=fixtureOpts({variant:2,workspace:ws,rqlExe:a,kanzoExe:b,ombCli:cli,ombPort:18211,nodeExe:node});
+   assert.equal(applyProjectMcp(opts).applied,true);
+   const r=verifyProjectMcp({variant:2,workspace:ws});
+   assert.ok(r.registered.includes('openmausbot'));
+   const receipt=JSON.parse(readFileSync(join(ws,'.singularity-native-mcp-receipt.json'),'utf8'));
+   assert.equal(receipt.ombMode,'headless');assert.equal(receipt.ombPort,18211);
+   assert.deepEqual(JSON.parse(readFileSync(file,'utf8')).mcpServers.foreign,{command:'other'});
+   assert.equal(rollbackProjectMcp({workspace:ws}).rolledBack,true);
+   assert.equal(readFileSync(file,'utf8'),original);
+ }finally{rmSync(d,{recursive:true,force:true})}
+});

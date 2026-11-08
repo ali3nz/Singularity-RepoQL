@@ -29,6 +29,11 @@ test('applies exact owned settings and restores previous unmodified bytes',()=>{
  assert.equal(now.env.USER_VALUE,'kept');
  assert.equal(now.hooks.Stop[0].hooks[0].command,'unchanged');
  assert.doesNotMatch(JSON.stringify(applied),/secret-operator-token-123/);
+ // The receipt binds the credential it wrote without storing or printing it.
+ const receipt=JSON.parse(readFileSync(join(p.home,'.claude','.singularity-parent-memory-proxy-receipt.json'),'utf8'));
+ assert.match(receipt.credentialSalt,/^[a-f0-9]{32}$/);
+ assert.match(receipt.credentialBinding,/^[a-f0-9]{64}$/);
+ assert.doesNotMatch(JSON.stringify(receipt),/secret-operator-token-123/);
  assert.equal(rollbackParentProxy({home:p.home,apply:true,windowsHost:true}).rolledBack,true);
  assert.deepEqual(readFileSync(join(p.home,'.claude','settings.json')),original);
 });

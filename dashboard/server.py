@@ -2,9 +2,10 @@
 """RepoQL management dashboard — HTTP server.
 
 A management front door over the configured RepoQL host.
-Read paths only ever ask RepoQL; writes are limited to the operations RepoQL
-itself supports (import, import removal, reindex) and to mount-local
-`.repoqlignore` exclusions, which is RepoQL's own exclusion mechanism.
+RepoQL data reads come from the configured host. Writes to RepoQL are limited
+to supported imports, reindexing and mount-local exclusions. The native Windows
+Agents Control additionally edits only the installed Singularity Claude Code
+agent definitions through revision-checked, atomic local file operations.
 
 Design rules this file keeps:
 - no second knowledge store: counts and rows come from the graph itself;
@@ -1669,6 +1670,18 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET":
             if path == "/api/features":
                 return variant_features()
+            if path == "/api/claude/agents":
+                from claude_agents_control import list_agents
+                return list_agents()
+            if path == "/api/claude/agents/detail":
+                from claude_agents_control import agent_detail
+                return agent_detail(params.get("name", ""))
+            if path == "/api/claude/policy":
+                from claude_agents_control import policy_inventory
+                return policy_inventory()
+            if path == "/api/claude/mcps":
+                from claude_agents_control import mcp_inventory
+                return mcp_inventory()
             if path == "/api/openmausbot/overview":
                 from native_openmausbot import overview
                 return overview(app.config.state_dir)
@@ -1763,6 +1776,12 @@ class Handler(BaseHTTPRequestHandler):
             raise FileNotFoundError(f"no such endpoint: {path}")
         # mutations
         body = self.read_body()
+        if path == "/api/claude/agents/save":
+            from claude_agents_control import save_agent
+            return self.mutation("Claude Code agent definition", lambda: save_agent(body))
+        if path == "/api/claude/agents/restore":
+            from claude_agents_control import restore_agent
+            return self.mutation("Claude Code agent restore", lambda: restore_agent(body))
         if path == "/api/graph/annotations":
             from graph_annotations import save_annotation
             return self.mutation("graph annotation",lambda:save_annotation(body))

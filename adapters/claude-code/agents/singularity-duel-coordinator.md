@@ -35,7 +35,7 @@ The shipped run register (`node scripts/orch-run status|health|list|verify`) is 
 Spawn each worker with the Agent tool, naming the seat in the brief:
 
 - implementation workers: `singularity-general`, one per disjoint area;
-- review: `singularity-code-reviewer` (or `singularity-fleet-reviewer` for a read-only pass).
+- review: `singularity-code-reviewer`.
 
 A subagent starts fresh. Put the seat id, its file boundary, the plan slice it owns, the validation commands and the report format in the prompt. The reviewer gets the requirement, the diff and the validation output inline.
 

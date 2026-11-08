@@ -282,8 +282,7 @@ function showSignpost(message) {
       <div class="card">
         <h1>Fresh dashboard link required</h1>
         <p>${esc(message || "This tab holds no valid dashboard key.")}</p>
-        <p>On dockerhost, run <code>repoql-dashboard link</code> and open the printed link
-        (the key travels in the URL fragment and is stored only for this tab).</p>
+        <p>${nativeInstall ? 'Open the Singularity Dashboard shortcut for an authenticated local session.' : 'On dockerhost, run <code>repoql-dashboard link</code> and open the printed link. The key remains in the browser tab.'}</p>
       </div>
     </div>`;
   setConn("error", "locked");
@@ -437,7 +436,7 @@ async function route() {
   // One visual identity per workspace. Presentation only: no change to
   // routing, MCP authority, task ownership or API calls.
   APP.dataset.workspace = path === '/kanban' ? 'work'
-    : path.startsWith('/ghost') ? 'ghost'
+    : path.startsWith('/ghost') || (nativeInstall && path === '/openmausbot' && params.tab === 'ghost') ? 'ghost'
     : path === '/agentchat' ? 'chat'
     : path === '/unified/graph' || path.startsWith('/architecture/memory') || path.startsWith('/knowledge/') ? 'memory'
     : path === '/office' ? 'office'
@@ -449,18 +448,29 @@ async function route() {
     APP.innerHTML = '<div class="empty">This component is not included in the selected Singularity installation option.</div>';
     return;
   }
-  markNav(path === '/ghost/planner' ? '/ghost' : path);
+  markNav(nativeInstall && path.startsWith('/ghost') ? '/openmausbot' : path === '/ghost/planner' ? '/ghost' : path);
   if (state.routeEpoch > 1) window.scrollTo(0, 0);
   try {
     if (path === "/ghost/planner" && nativeInstall) {
       APP.innerHTML = pageHead('Ghost planner', 'Not part of the verified native Windows source.') +
-        '<p class="empty">The household planner is not installed on this Windows product. Ghost Operations remains available in supported installation options.</p>';
+        '<p class="empty">The household planner is not installed on this Windows product. Use the Ghost controls under OpenMausBot in supported options.</p>';
       return;
     }
     if (path === "/ghost/planner") return await viewGhostPlanner();
-    if (path === "/ghost") return await viewGhostOperations();
+    if (path === "/ghost") {
+      // Preserve old bookmarks while showing one Windows OpenMausBot workspace.
+      if (nativeInstall) {
+        const canonical = replaceRoute(href('/openmausbot', {tab:'ghost'}));
+        return await viewOpenMausBotWindows(canonical.params);
+      }
+      return await viewGhostOperations();
+    }
     if (path === "/unified/graph") return await viewUnifiedGraph();
-    if (path === "/openmausbot") return await viewOpenMausBotWindows();
+    if (path === "/openmausbot") return await viewOpenMausBotWindows(params);
+    if (path === "/claude/agents" && nativeInstall) {
+      const mod = await import('./claude_agents_control.js');
+      return await mod.mountClaudeAgentsControl(APP, api);
+    }
     if (path === "/unified/tencent") return await viewTencentNative();
     if (path === "/unified/tencent-advanced") return await viewTencentNative();
     if (path === "/repoql/control") return await viewRepoqlNative();
@@ -519,14 +529,35 @@ async function route() {
   }
 }
 
-async function viewOpenMausBotWindows() {
-  APP.innerHTML = pageHead('OpenMausBot', 'Windows-local agent inventory. No remote Dockerhost dependency or background model calls.') +
+// This consolidates only existing Windows views. It does not import the Linux
+// OpenMausBot operations API or claim Ghost's jobs are an OMB bot execution.
+function windowsOmbIncludesGhost() {
+  // Fail closed: an unknown install variant must not advertise the Ghost tab.
+  return selectedFeatures?.ghost === true;
+}
+function windowsOmbTabStrip(active) {
+  return tabStrip([
+    {id:'bots', label:'Local bots', href:() => href('/openmausbot')},
+    ...(windowsOmbIncludesGhost() ? [{id:'ghost', label:'Ghost controls', href:() => href('/openmausbot', {tab:'ghost'})}] : []),
+  ], active, 'OpenMausBot workspace');
+}
+async function viewOpenMausBotWindows(params = {}) {
+  if (nativeInstall && params.tab === 'ghost') {
+    if (!windowsOmbIncludesGhost()) {
+      APP.innerHTML = pageHead('OpenMausBot', 'Windows-local agent workspace') + windowsOmbTabStrip('bots') +
+        '<p class="empty">Ghost is not included in this installation option.</p>';
+      return;
+    }
+    return await viewGhostOperations({insideOpenMausBot:true});
+  }
+  APP.innerHTML = pageHead('OpenMausBot', 'Windows-local bot inventory and companion controls. No Dockerhost dependency.') +
+    (nativeInstall ? windowsOmbTabStrip('bots') : '') +
     '<section class="block" id="windows-omb-status">Checking the local OpenMausBot service…</section>';
   const report = await api('/api/openmausbot/overview', {timeoutMs: 8000});
   const holder = document.getElementById('windows-omb-status');
   if (!holder) return;
   if (!report.available) {
-    holder.innerHTML = `<h2>OpenMausBot is not connected</h2><p class="muted small">Local service: ${esc(report.reason || 'not configured')}. Install and pair a Windows-local OpenMausBot instance before enabling this optional integration. No external host was contacted.</p>`;
+    holder.innerHTML = `<h2>OpenMausBot is not connected</h2><p class="muted small">Local service: ${esc(report.reason || 'not configured')}. Install and pair the required Windows-local OpenMausBot instance before using its bot functions. No external host was contacted.</p>`;
     return;
   }
   const rows = (report.bots || []).map(bot => `<tr><td>${esc(bot.name)}</td><td class="mono">${esc(bot.id)}</td><td>${esc(bot.working ? 'Working' : 'Idle')}</td><td class="muted">Registration, Tencent, Duo and Kanzo not verified</td></tr>`).join('');
@@ -534,9 +565,11 @@ async function viewOpenMausBotWindows() {
   <div class="table-wrap"><table class="data"><thead><tr><th>Bot</th><th>Identity</th><th>Runtime</th><th>External integrations</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No bots in this workspace.</td></tr>'}</tbody></table></div>`;
 }
 
-async function viewGhostOperations() {
+async function viewGhostOperations({insideOpenMausBot=false} = {}) {
   const epoch=state.routeEpoch;
-  APP.innerHTML = pageHead('Ghost Protocol','') +
+  APP.innerHTML = (insideOpenMausBot
+      ? pageHead('OpenMausBot', 'Windows-local bot inventory and Ghost companion controls.') + windowsOmbTabStrip('ghost')
+      : pageHead('Ghost Protocol','')) +
     '<section id="ghost-integrated" aria-label="Ghost Protocol"><div class="loading">Loading Ghost controls…</div></section>';
   const heading = APP.querySelector('.page-head h1');
   heading.tabIndex = -1;
@@ -700,15 +733,19 @@ function miniatureBrainGraph() {
 function dashboardSnapshot() {
   const destinations = [
     ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','DELIVERY'],
-    ['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','HOUSEHOLD & SCHEDULE'],
+    ...(nativeInstall
+      ? [['OpenMausBot','/openmausbot','View local bots and Ghost companion controls when installed.','ghost','BOTS & COMPANION']]
+      : [['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','HOUSEHOLD & SCHEDULE']]),
     ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','AGENT ACTIVITY'],
     ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','KNOWLEDGE'],
     ['Office Viewer','/office','Open the live protected office scene.','office','WORKSPACE'],
+    ...(nativeInstall ? [['Agents Control','/claude/agents','Manage your installed Claude Code agents and MCP inventory.','chat','AGENT SETTINGS']] : []),
   ];
   const REPOQL_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".55" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg>`;
   const BRAIN_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>`;
   const iconBadges = {
     '/kanban': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="5.5" height="15" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="10.2" y="8" width="5.5" height="11.5" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="16.9" y="6" width="3.6" height="13.5" rx="1.6" stroke="currentColor" stroke-width="1.6"/></svg>`,
+    '/openmausbot': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="13" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor"/><path d="M12 7V4" stroke="currentColor" stroke-width="1.5"/></svg>`,
     '/ghost': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 18.5V9a4.5 4.5 0 1 1 9 0v9l-2.2-1.5-2.3 1.5-2.3-1.5-2.2 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10.2" r="1" fill="currentColor"/><circle cx="14" cy="10.2" r="1" fill="currentColor"/></svg>`,
     '/agentchat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H11l-4 3v-3.2A3.5 3.5 0 0 1 5 11.5v-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8.7h6M9 11.3h3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
     '/office': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="11" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M9 19.5h6M12 15.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
@@ -739,7 +776,7 @@ function dashboardSnapshot() {
   const referenceDocuments = [
     ['RepoQL Cheat Sheet','/repoql/cheat-sheet'],
     ['Memory Architecture','/architecture/memory'],
-    ['Orchestration Architecture','/architecture/orchestra'],
+    ...(!nativeInstall ? [['Orchestration Architecture','/architecture/orchestra']] : []),
   ];
   const systemKnowledge = [
     ['RepoQL Dashboard','/repoql/control'],
@@ -752,9 +789,11 @@ function dashboardSnapshot() {
   const diagnosticsTools = [
     ['AI Usage','/unified/usage'],
     ['Diagnostics','/diagnostics'],
-    ['Harness Control Center','/harness'],
-    ['Live Agents','/harness/agents'],
-    ['Execution History','/harness/runs'],
+    ...(!nativeInstall ? [
+      ['Harness Control Center','/harness'],
+      ['Live Agents','/harness/agents'],
+      ['Execution History','/harness/runs'],
+    ] : []),
   ];
   if (typeof nativeInstall !== 'undefined' && nativeInstall) diagnosticsTools.push(['Windows Integration Status','/native/status']);
   // Values are filled only after successful authenticated, read-only responses.
@@ -2262,6 +2301,8 @@ async function viewConnectors() {
 
 const selectedFeatures = window.__SINGULARITY_VARIANT__?.features || null;
 function featureAllowed(path) {
+  if (nativeInstall && (path === "/architecture/orchestra" || path === "/harness" || path.startsWith("/harness/"))) return false;
+  if (path === "/claude/agents") return nativeInstall;
   if (!selectedFeatures) return true;
   if (path === "/ghost" || path.startsWith("/ghost/")) return selectedFeatures.ghost === true;
   if (path === "/office" || path.startsWith("/office/")) return selectedFeatures.office === true;
@@ -2270,7 +2311,7 @@ function featureAllowed(path) {
   return true;
 }
 for (const link of document.querySelectorAll('[data-nav]')) {
-  if (!featureAllowed(link.dataset.nav) || (link.dataset.nav === '/native/status' && !nativeInstall)) {
+  if (!featureAllowed(link.dataset.nav) || (nativeInstall && link.dataset.nav === '/ghost') || (link.dataset.nav === '/native/status' && !nativeInstall)) {
     link.hidden = true;
     link.dataset.variantDisabled = '1';
   }
@@ -2281,6 +2322,14 @@ for (const link of document.querySelectorAll('[data-nav]')) {
   }
 }
 for (const link of document.querySelectorAll('[data-dock]')) {
+  if (nativeInstall && link.dataset.dock === '/ghost') {
+    // Keep the mobile shortcut but point it at the one local bot workspace.
+    link.dataset.dock = '/openmausbot';
+    link.href = '#/openmausbot';
+    link.setAttribute('aria-label','OpenMausBot');
+    const label = link.querySelector('span');
+    if (label) label.textContent = 'Bots';
+  }
   if (!featureAllowed(link.dataset.dock)) link.hidden = true;
 }
 
@@ -3478,6 +3527,7 @@ export const __editorTestSurface = {validNativeEmbed, rowsOf, contentOf, createD
   displayLabel, pill, statusPill, categoryChip, metricBlock, dashboardSnapshot, miniatureBrainGraph, fmt, renderOpenChamberCoverage,
   LIVENESS_STATES, livenessState, livenessLabel, livenessNote, sessionRow, sessionsBlock, seatPill, runBlock, runsBlock,
   diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS, architectureProbeState,
+  windowsOmbIncludesGhost, windowsOmbTabStrip, featureAllowed,
   debounceForRoute, sequencer, themeCatalog, themeModeOf, sanitizeThemeChoice, applyTheme,
   agentChatParticipants, agentChatThreads, agentChatTimeline, agentChatTime,
   get refreshMs(){return harnessRefreshMs;},

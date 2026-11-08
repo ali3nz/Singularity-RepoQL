@@ -4,7 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,symli
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {createHash,createHmac} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {AGENT_MAP} from '../../adapters/claude-code/agent-map.mjs';
 import {prepareConfiguration,applyConfiguration,rollbackConfiguration,verifyConfiguration,CLAUDE_SKILLS,renderClaudeSkill,REPOQL_CLAUDE_PLUGIN,REPOQL_PLUGIN_SKILLS,inspectRepoqlSkillAssets,resolveNodeExe,assertPortableNodePath} from './configure_claude_code_windows.mjs';
@@ -50,13 +50,13 @@ function fixture(variant=2) {
 function writeSettings(f,value){mkdirSync(f.claude,{recursive:true});writeFileSync(join(f.claude,'settings.json'),JSON.stringify(value,null,2)+'\n');}
 function getSettings(f){return JSON.parse(readFileSync(join(f.claude,'settings.json'),'utf8'));}
 
-test('complete Claude option writes four native hooks and 17 agents; reconfiguration requires explicit rollback',()=>{
+test('complete Claude option writes four native hooks and 15 agents; reconfiguration requires explicit rollback',()=>{
   const f=fixture();try {
     const p=prepareConfiguration(f.config);
-    assert.equal(p.agentWrites.filter(x=>x.create).length,17);
+    assert.equal(p.agentWrites.filter(x=>x.create).length,15);
     const a=applyConfiguration(f.config);
     assert.equal(a.state,'CONFIGURED_UNVERIFIED');
-    assert.equal(a.agentDefinitions,17);assert.equal(a.newlyCreatedAgents,17);
+    assert.equal(a.agentDefinitions,15);assert.equal(a.newlyCreatedAgents,15);
     assert.equal(a.skillsInstalled,10);
     for(const name of CLAUDE_SKILLS)assert.equal(existsSync(join(f.claude,'skills',name,'SKILL.md')),true);
     assert.equal(a.workflowRuleInstalled,true);
@@ -844,4 +844,277 @@ test('verification detects missing parent conversation capture hooks',()=>{
   status=verifyConfiguration({home:f.home});
   assert.ok(status.issues.includes('HOOK_SESSIONEND_DRIFT'));
  }finally{f.cleanup()}
+});
+
+// fleet#993 parent-memory-proxy suite: the parent-session memory routing is part
+// of the supported Configure flow, so its default, opt-out, refusal, idempotence
+// and rollback ownership each need to be exercised against the real settings.
+const PROXY_URL='http://127.0.0.1:8096/claude-code/default';
+const JOURNAL='.singularity-native-claude-journal.json';
+const PROXY_RECEIPT_FILE='.singularity-parent-memory-proxy-receipt.json';
+function readJournal(f){return JSON.parse(readFileSync(join(f.claude,JOURNAL),'utf8'));}
+// Mirrors configure_parent_memory_proxy.mjs: salted HMAC-SHA256(salt, token) in the
+// APPLIED receipt, so a consumer can prove the token on disk is still the one the
+// helper installed without either side storing or logging it.
+function bindingFor(salt,token){return createHmac('sha256',Buffer.from(salt,'hex')).update(token,'utf8').digest('hex');}
+function writeProxyReceipt(f,token,{bind=true,salt='ab'.repeat(16),settingsPath=join(f.claude,'settings.json'),afterSha=null}={}){
+  const rec={schema:'singularity-option2-parent-proxy/v1',state:'APPLIED',settings:settingsPath,
+    afterSha:afterSha ?? createHash('sha256').update(readFileSync(join(f.claude,'settings.json'))).digest('hex')};
+  if(bind){rec.credentialSalt=salt;rec.credentialBinding=bindingFor(salt,token);}
+  writeFileSync(join(f.claude,PROXY_RECEIPT_FILE),JSON.stringify(rec));
+  return rec;
+}
+
+test('variant 2 refuses the parent proxy without credential provenance and mutates nothing',()=>{
+  const f=fixture();try{
+    // An unrelated provider credential must never be reinterpreted as proxy auth.
+    writeSettings(f,{env:{ANTHROPIC_AUTH_TOKEN:'unrelated-provider-token'}});
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.enabled,true);
+    assert.equal(p.parentProxy.configured,false);
+    assert.equal(p.parentProxy.mode,'refused-auth-provenance');
+    assert.equal(p.parentProxy.authPresent,true);
+    assert.equal(p.parentProxy.authProvenanceVerified,false);
+    assert.match(p.parentProxy.reasons.join(' '),/PARENT_PROXY_AUTH_PROVENANCE_REQUIRED/);
+    assert.match(p.parentProxy.action,/configure_parent_memory_proxy\.mjs/);
+    assert.deepEqual(p.parentProxy.envWritten,{});
+    const a=applyConfiguration(f.config);
+    assert.equal(a.parentProxyConfigured,false);
+    assert.equal(a.parentProxyAuthRequired,true);
+    assert.equal(a.parentProxyVerified,false);
+    const settings=getSettings(f);
+    assert.equal(settings.env.ANTHROPIC_BASE_URL,undefined);
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN,'unrelated-provider-token');
+    assert.equal(readJournal(f).parentMemory,undefined);
+  }finally{f.cleanup();}
+});
+
+test('helper-owned credential provenance is adopted without writing a credential',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-owned-token',ANTHROPIC_MODEL:'helper-model'}});
+    writeProxyReceipt(f,'helper-owned-token');
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.configured,true);
+    assert.equal(p.parentProxy.mode,'verified-existing');
+    assert.equal(p.parentProxy.alreadyOwned,true);
+    assert.equal(p.parentProxy.authPresent,true);
+    assert.equal(p.parentProxy.authProvenanceVerified,true);
+    assert.equal(p.parentProxy.provenanceBasis,'credential-binding');
+    assert.deepEqual(p.parentProxy.envWritten,{});
+    const a=applyConfiguration(f.config);
+    assert.equal(a.parentProxyConfigured,true);
+    assert.equal(a.parentProxyAuthProvenanceVerified,true);
+    assert.equal(a.parentProxyAuthRequired,false);
+    assert.equal(a.parentProxyVerified,false);
+    assert.equal(a.liveMemoryRecallVerified,false);
+    const settings=getSettings(f);
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN,'helper-owned-token');
+    assert.equal(settings.env.ANTHROPIC_BASE_URL,PROXY_URL);
+    // The credential value never reaches the journal.
+    assert.equal(JSON.stringify(readJournal(f)).includes('helper-owned-token'),false);
+  }finally{f.cleanup();}
+});
+
+test('explicit parent-memory-proxy opt-out leaves provider routing untouched',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{KEEP:'yes'}});
+    const config={...f.config,parentMemoryProxy:false};
+    const p=prepareConfiguration(config);
+    assert.equal(p.parentProxy.enabled,false);
+    assert.equal(p.parentProxy.configured,false);
+    assert.deepEqual(p.parentProxy.envWritten,{});
+    const a=applyConfiguration(config);
+    assert.equal(a.parentProxyConfigured,false);
+    assert.equal(getSettings(f).env.ANTHROPIC_BASE_URL,undefined);
+    assert.equal(readJournal(f).parentMemory,undefined);
+  }finally{f.cleanup();}
+});
+
+test('a foreign provider configuration is refused without rewriting it',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:'https://api.anthropic.com',ANTHROPIC_API_KEY:'user-owned-key'}});
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.configured,false);
+    assert.equal(p.parentProxy.mode,'refused-conflict');
+    assert.match(p.parentProxy.reasons.join(' '),/another endpoint/);
+    const a=applyConfiguration(f.config);
+    assert.equal(a.parentProxyConfigured,false);
+    assert.equal(a.parentProxyRefused,true);
+    const settings=getSettings(f);
+    assert.equal(settings.env.ANTHROPIC_BASE_URL,'https://api.anthropic.com');
+    assert.equal(settings.env.ANTHROPIC_API_KEY,'user-owned-key');
+    assert.equal(readJournal(f).parentMemory,undefined);
+  }finally{f.cleanup();}
+});
+
+test('repeating Configure against a helper-owned parent proxy is idempotent',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-owned-token'}});
+    writeProxyReceipt(f,'helper-owned-token');
+    const p1=prepareConfiguration(f.config);
+    assert.equal(p1.parentProxy.alreadyOwned,true);
+    assert.equal(p1.parentProxy.mode,'verified-existing');
+    assert.equal(p1.parentProxy.authProvenanceVerified,true);
+    assert.deepEqual(p1.parentProxy.envWritten,{});
+    const p2=prepareConfiguration(f.config);
+    assert.equal(p2.nextSettingsHash,p1.nextSettingsHash);
+    assert.deepEqual(p2.parentProxy,p1.parentProxy);
+  }finally{f.cleanup();}
+});
+
+test('settings written after the helper ran do not invalidate the adopted proxy credential',()=>{
+  // Any later settings write - Configure's own hooks, the operator's editor, a
+  // Claude Code update - changes the file the helper's receipt digest describes.
+  // The credential is still the helper's and still routes to our proxy, so the
+  // next Configure must accept it instead of demanding a credential it already has.
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-owned-token'}});
+    writeProxyReceipt(f,'helper-owned-token');
+    // An unrelated component writes settings afterwards.
+    const drifted=getSettings(f);
+    drifted.hooks={...(drifted.hooks||{}),Stop:[{hooks:[{type:'command',command:'node',args:['other-tool.mjs']}]}]};
+    writeSettings(f,drifted);
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.mode,'verified-existing');
+    assert.equal(p.parentProxy.configured,true);
+    assert.equal(p.parentProxy.authProvenanceVerified,true);
+    assert.equal(p.parentProxy.provenanceBasis,'credential-binding');
+    assert.equal(p.parentProxy.authPresent,true);
+    const a=applyConfiguration(f.config);
+    assert.equal(a.parentProxyConfigured,true);
+    assert.equal(a.parentProxyAuthRequired,false);
+    const settings=getSettings(f);
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN,'helper-owned-token');
+    assert.equal(settings.env.ANTHROPIC_BASE_URL,PROXY_URL);
+  }finally{f.cleanup();}
+});
+
+test('a receipt that does not name this settings file still refuses without provenance',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-owned-token'}});
+    const salt='ab'.repeat(16);
+    writeFileSync(join(f.claude,PROXY_RECEIPT_FILE),JSON.stringify({
+      schema:'singularity-option2-parent-proxy/v1',state:'APPLIED',
+      settings:join(f.home,'somewhere-else','settings.json'),
+      afterSha:'0'.repeat(64),credentialSalt:salt,
+      credentialBinding:bindingFor(salt,'helper-owned-token')}));
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.mode,'refused-auth-provenance');
+    assert.equal(p.parentProxy.authProvenanceVerified,false);
+    assert.match(p.parentProxy.reasons.join(' '),/PARENT_PROXY_RECEIPT_ABSENT/);
+    assert.deepEqual(p.parentProxy.envWritten,{});
+  }finally{f.cleanup();}
+});
+
+test('a replaced token with an otherwise genuine helper receipt is refused, not adopted',()=>{
+  // The proxy URL, model and helper receipt all survive; only the credential was
+  // swapped for a placeholder or another provider's token. Assuming "the route is
+  // ours, so the token must be ours" is exactly what the binding forbids.
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-installed-token',ANTHROPIC_MODEL:'helper-model'}});
+    writeProxyReceipt(f,'helper-installed-token');
+    const replaced=getSettings(f);
+    replaced.env.ANTHROPIC_AUTH_TOKEN='sk-placeholder-not-the-helper-token';
+    writeSettings(f,replaced);
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.mode,'refused-auth-provenance');
+    assert.equal(p.parentProxy.configured,false);
+    assert.equal(p.parentProxy.authPresent,true);
+    assert.equal(p.parentProxy.authProvenanceVerified,false);
+    assert.equal(p.parentProxy.provenanceBasis,null);
+    assert.match(p.parentProxy.reasons.join(' '),/PARENT_PROXY_CREDENTIAL_BINDING_MISMATCH/);
+    assert.match(p.parentProxy.action,/configure_parent_memory_proxy\.mjs/);
+    assert.deepEqual(p.parentProxy.envWritten,{});
+    const a=applyConfiguration(f.config);
+    assert.equal(a.parentProxyConfigured,false);
+    assert.equal(a.parentProxyAuthProvenanceVerified,false);
+    assert.equal(a.parentProxyAuthProvenanceBasis,null);
+    assert.equal(a.parentProxyAuthRequired,true);
+    assert.equal(a.parentProxyVerified,false);
+    // Routing and the operator's replaced token are left exactly as found.
+    const s=getSettings(f);
+    assert.equal(s.env.ANTHROPIC_AUTH_TOKEN,'sk-placeholder-not-the-helper-token');
+    assert.equal(s.env.ANTHROPIC_BASE_URL,PROXY_URL);
+    assert.equal(s.env.ANTHROPIC_MODEL,'helper-model');
+    assert.equal(readJournal(f).parentMemory,undefined);
+    // Neither the token, the salt nor the binding reaches the report or the journal.
+    const written=JSON.stringify(a)+JSON.stringify(readJournal(f));
+    assert.equal(written.includes('sk-placeholder-not-the-helper-token'),false);
+    assert.equal(written.includes('helper-installed-token'),false);
+    assert.equal(written.includes(bindingFor('ab'.repeat(16),'helper-installed-token')),false);
+  }finally{f.cleanup();}
+});
+
+test('hook-only settings edits still adopt the bound credential on the next Configure',()=>{
+  // Configure itself, Claude Code and the operator write hooks after the helper
+  // ran. Those edits leave the credential untouched, so they must not turn the
+  // operator's own installed token into a refusal.
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-owned-token'}});
+    writeProxyReceipt(f,'helper-owned-token');
+    const drift=getSettings(f);
+    drift.hooks={...(drift.hooks||{}),Stop:[{hooks:[{type:'command',command:'node',args:['after-configure.mjs']}]}]};
+    writeSettings(f,drift);
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.mode,'verified-existing');
+    assert.equal(p.parentProxy.configured,true);
+    assert.equal(p.parentProxy.authProvenanceVerified,true);
+    assert.equal(p.parentProxy.provenanceBasis,'credential-binding');
+    assert.deepEqual(p.parentProxy.envWritten,{});
+    const a=applyConfiguration(f.config);
+    assert.equal(a.parentProxyConfigured,true);
+    assert.equal(a.parentProxyAuthRequired,false);
+    assert.equal(a.parentProxyAuthProvenanceBasis,'credential-binding');
+    const s=getSettings(f);
+    assert.equal(s.env.ANTHROPIC_AUTH_TOKEN,'helper-owned-token');
+    assert.equal(s.env.ANTHROPIC_BASE_URL,PROXY_URL);
+  }finally{f.cleanup();}
+});
+
+test('an unbound legacy receipt is trusted only while settings are byte-identical',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{ANTHROPIC_BASE_URL:PROXY_URL,ANTHROPIC_AUTH_TOKEN:'helper-owned-token'}});
+    writeProxyReceipt(f,'helper-owned-token',{bind:false});
+    const p=prepareConfiguration(f.config);
+    assert.equal(p.parentProxy.mode,'verified-existing');
+    assert.equal(p.parentProxy.authProvenanceVerified,true);
+    // The weaker basis is reported, never presented as a binding.
+    assert.equal(p.parentProxy.provenanceBasis,'legacy-receipt-exact-digest');
+    const drift=getSettings(f);
+    drift.hooks={...(drift.hooks||{}),Stop:[{hooks:[{type:'command',command:'node',args:['other.mjs']}]}]};
+    writeSettings(f,drift);
+    const q=prepareConfiguration(f.config);
+    assert.equal(q.parentProxy.mode,'refused-auth-provenance');
+    assert.equal(q.parentProxy.authProvenanceVerified,false);
+    assert.equal(q.parentProxy.provenanceBasis,null);
+    assert.match(q.parentProxy.reasons.join(' '),/PARENT_PROXY_RECEIPT_UNBOUND_AND_SETTINGS_DRIFTED/);
+  }finally{f.cleanup();}
+});
+
+test('rollback removes only the parent-proxy keys Configure wrote and preserves later user edits',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{KEEP:'yes'}});
+    applyConfiguration(f.config);
+    const edited=getSettings(f);
+    edited.userNewSetting='post-install';
+    edited.env.ANTHROPIC_BASE_URL='https://api.anthropic.com';
+    writeSettings(f,edited);
+    const r=rollbackConfiguration(f.config);
+    assert.equal(r.state,'CLAUDE_CONFIGURATION_ROLLED_BACK');
+    const s=getSettings(f);
+    assert.equal(s.userNewSetting,'post-install');
+    assert.equal(s.env.ANTHROPIC_BASE_URL,'https://api.anthropic.com');
+    assert.equal(s.env.KEEP,'yes');
+    assert.equal(s.env.SINGULARITY_REPO_ROOT,undefined);
+  }finally{f.cleanup();}
+});
+
+test('rollback removes an unedited proxy key and restores the pre-install env exactly',()=>{
+  const f=fixture();try{
+    writeSettings(f,{env:{KEEP:'yes'}});
+    applyConfiguration(f.config);
+    const r=rollbackConfiguration(f.config);
+    assert.equal(r.state,'CLAUDE_CONFIGURATION_ROLLED_BACK');
+    assert.deepEqual(getSettings(f),{env:{KEEP:'yes'}});
+  }finally{f.cleanup();}
 });

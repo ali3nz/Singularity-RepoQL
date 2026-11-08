@@ -30,7 +30,7 @@ The pair only works if the two halves stay separate. You implement. The reviewer
 In Claude Code the reviewer is a subagent, so it starts with none of your context:
 
 - Deliver the complete question or evidence pack in one prompt: requirements, file excerpts, diffs, command output, error text and acceptance criteria must all travel in the text.
-- Use `singularity-code-reviewer` for implementation review, or `singularity-fleet-reviewer` when the review must stay read-only and run no commands. Say which one answered.
+- Use `singularity-code-reviewer` for independent, read-only implementation review. Report its actual verdict.
 - A failed or unavailable review is reported plainly. Never substitute another reviewer, never answer in the reviewer's place, and never treat "no answer" as approval.
 - While waiting you may continue read-only investigation; do not implement the substantive change before the reviewer's planning input.
 

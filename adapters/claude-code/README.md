@@ -5,7 +5,7 @@ Two independent pieces live here:
 1. **Office visualizer adapter** (below): hook-based metadata events for the
    Claude Office visualizer.
 2. **Native agent integration** ([`docs/CLAUDE-CODE-SETUP.md`](../../docs/CLAUDE-CODE-SETUP.md)):
-   the seventeen `singularity-*` agent definitions in `agents/` (eight delegation targets and nine main-session agents), the
+   the fifteen selected `singularity-*` agent definitions in `agents/` (six delegation targets and nine main-session agents), the
    SubagentStart (recall) / SubagentStop (lesson capture) MemoryCore hooks in
    `memory-hook.mjs`, the documentation hooks in `doc-hook.mjs` (SessionStart
    guidance + Stop documentation-closure check with automatic MemoryCore

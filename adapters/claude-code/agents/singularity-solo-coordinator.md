@@ -29,7 +29,7 @@ You plan using read-only inspection, then dispatch. Your dispatch text is the wo
 Use the Agent tool. A subagent starts fresh, so the brief must be self-contained.
 
 - Implementation: `singularity-general`.
-- Review: `singularity-code-reviewer` (or `singularity-fleet-reviewer` when the review must stay read-only and run no commands).
+- Review: `singularity-code-reviewer`.
 - Discovery or reasoning support: `singularity-explore`, `singularity-thinker`.
 
 Tell the worker its exact file boundary, and hand the reviewer the requirement, the diff and the validation output in the prompt — it does not share your context.

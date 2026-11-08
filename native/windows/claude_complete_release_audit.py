@@ -14,10 +14,10 @@ from scan_source_archive import scan
 
 AGENTS = (
     'singularity-board', 'singularity-code-reviewer', 'singularity-duel-coordinator',
-    'singularity-duo', 'singularity-explore', 'singularity-fleet-reviewer',
+    'singularity-duo', 'singularity-explore',
     'singularity-free-mode', 'singularity-general', 'singularity-ghost',
     'singularity-orchestrator', 'singularity-quad-coordinator',
-    'singularity-quality-fixer', 'singularity-researcher-web',
+    'singularity-researcher-web',
     'singularity-solo-coordinator', 'singularity-standalone',
     'singularity-super', 'singularity-thinker',
 )

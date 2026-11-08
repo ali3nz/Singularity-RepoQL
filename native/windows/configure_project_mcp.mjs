@@ -6,7 +6,7 @@
  * This is MCP registration only; binaries must be installed independently.
  */
 import { existsSync, readFileSync, lstatSync, mkdirSync, openSync, closeSync, writeFileSync, fsyncSync, renameSync, unlinkSync } from 'node:fs';
-import { join, dirname, resolve, win32 } from 'node:path';
+import { join, dirname, resolve, win32, isAbsolute } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -56,13 +56,21 @@ function fileHash(p) {
 function readConfig(p){if(!existsSync(p))return {};const x=JSON.parse(readFileSync(p,'utf8'));if(!x||typeof x!=='object'||Array.isArray(x))err('INVALID_CONFIG_OBJECT');return x;}
 function atomic(p,b){const tmp=`${p}.pending-${randomUUID()}`;const fd=openSync(tmp,'wx',0o600);try{writeFileSync(fd,b);fsyncSync(fd)}finally{closeSync(fd)}try{renameSync(tmp,p)}catch(e){if(existsSync(tmp))unlinkSync(tmp);throw e}}
 function binary(p,name,allowFixture=false){if(!allowFixture)localWindowsPath(p,name);if(win32.basename(p).toLowerCase()!==name+'.exe')err('INVALID_EXECUTABLE_NAME');return p;}
-export function buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe=null,nodeExe=null,existing={},allowFixture=false}) {
+export function buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe=null,ombCli=null,ombPort=18211,nodeExe=null,existing={},allowFixture=false}) {
   if(![1,2,3,4].includes(variant))err('INVALID_VARIANT');
   if(!allowFixture || process.platform==='win32')localWindowsPath(workspace,'workspace');
   const rql=binary(rqlExe,'rql',allowFixture && process.platform!=='win32'),kanzo=binary(kanzoExe,'kanzo',allowFixture && process.platform!=='win32');
-  if(Boolean(ombExe)!==Boolean(nodeExe))err('OPENMAUSBOT_REQUIRES_BOTH_EXECUTABLES');
-  if(ombExe && variant!==2)err('OPENMAUSBOT_CLAUDE_CODE_OPTION2_ONLY');
-  if(ombExe){binary(ombExe,'openmausbot',allowFixture && process.platform!=='win32');binary(nodeExe,'node',allowFixture && process.platform!=='win32');}
+  if(ombExe && ombCli)err('OPENMAUSBOT_AMBIGUOUS_RUNTIME');
+  const hasOmb=Boolean(ombExe||ombCli);
+  if(ombExe && !nodeExe)err('OPENMAUSBOT_REQUIRES_BOTH_EXECUTABLES');
+  if(ombCli && !nodeExe)err('OPENMAUSBOT_NODE_REQUIRED');
+  if(hasOmb && variant!==2)err('OPENMAUSBOT_CLAUDE_CODE_OPTION2_ONLY');
+  if(hasOmb)binary(nodeExe,'node',allowFixture && process.platform!=='win32');
+  if(ombExe)binary(ombExe,'openmausbot',allowFixture && process.platform!=='win32');
+  if(ombCli){
+    if(!isAbsolute(ombCli)||win32.basename(ombCli).toLowerCase()!=='cli.js')err('OPENMAUSBOT_HEADLESS_CLI_INVALID');
+    if(!Number.isInteger(ombPort)||ombPort<1024||ombPort>65534)err('OPENMAUSBOT_HEADLESS_PORT_INVALID');
+  }
   if(!existing||typeof existing!=='object'||Array.isArray(existing))err('INVALID_EXISTING');
   const claude=variant<3;
   // Project MCP clients execute local stdio programs without using shell/PATH.
@@ -71,7 +79,9 @@ export function buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe=null,node
   const entries=claude ? {
     ...(variant===2?{}:{repoql:{type:'stdio',command:rql,args:['mcp']}}),
     kanzo:{type:'stdio',command:kanzo,args:['mcp']},
-    ...(ombExe?{openmausbot:{type:'stdio',command:nodeExe,
+    ...(ombCli?{openmausbot:{type:'stdio',command:nodeExe,
+      args:[ombCli,'mcp'],env:{OMB_PORT:String(ombPort)}}}:
+      ombExe?{openmausbot:{type:'stdio',command:nodeExe,
       args:[fileURLToPath(new URL('./openmausbot/claude_mcp_launcher.mjs',import.meta.url))],
       env:{SINGULARITY_OMB_EXE:ombExe,SINGULARITY_OMB_PORT:'8799'}}}:{}),
   } : {
@@ -85,7 +95,7 @@ export function buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe=null,node
   // claim plugin-only routing. Refuse, leaving the existing file untouched.
   if(variant===2 && Object.hasOwn(serverMap,'repoql'))err('REPOQL_PLUGIN_PROJECT_MCP_OVERLAP');
   // Never replace an existing managed server, even if its name collides.
-  const names=[...projectServers(variant),...(ombExe?['openmausbot']:[])];
+  const names=[...projectServers(variant),...(hasOmb?['openmausbot']:[])];
   for(const n of names)if(Object.hasOwn(serverMap,n) && JSON.stringify(serverMap[n])!==JSON.stringify(entries[n]))err('FOREIGN_MCP_CONFLICT_'+n);
   const next=structuredClone(existing);
   if(claude)next.mcpServers={...serverMap,...entries};
@@ -98,21 +108,21 @@ export function buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe=null,node
       : ['native-rql-exe','native-kanzo-exe','rql-connector-smoke','kanzo-mcp-tool-smoke','gui-approval-and-discovery'],
     runtimeVerified:false};
 }
-export function prepareProjectMcp({variant,workspace,rqlExe,kanzoExe,ombExe=null,nodeExe=null,allowFixture=false}) {
+export function prepareProjectMcp({variant,workspace,rqlExe,kanzoExe,ombExe=null,ombCli=null,ombPort=18211,nodeExe=null,allowFixture=false}) {
   // Testable on an isolated filesystem; CLI --apply requires real Windows.
   const file=join(workspace,variant<=2?'.mcp.json':'opencode.json');
   const receipt=join(workspace,jname);
   plainPath(file);plainPath(receipt);plainPath(workspace);
   if(!existsSync(workspace)||!lstatSync(workspace).isDirectory())err('WORKSPACE_MISSING');
   if(existsSync(receipt))err('OUTSTANDING_MCP_RECEIPT');
-  const binaries=[rqlExe,kanzoExe,...(ombExe?[ombExe,nodeExe]:[])];
+  const binaries=[rqlExe,kanzoExe,...(ombExe?[ombExe,nodeExe]:[]),...(ombCli?[ombCli,nodeExe]:[])];
   for(const p of binaries){plainPath(p);if(!existsSync(p)||!lstatSync(p).isFile())err('MCP_BINARY_NOT_INSTALLED');}
   // Fixture mode (source-package tests/extracted-module contracts) uses placeholder
   // binaries that cannot execute; the release pin is checked by the CLI apply path.
   if(!allowFixture)verifyInstalledRepoql(rqlExe);
   if(variant>2 && existsSync(join(workspace,'opencode.jsonc')))err('EXISTING_OPENCODE_JSONC_REQUIRES_MANUAL_MERGE');
   const before=fileHash(file);
-  const plan=buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe,nodeExe,existing:readConfig(file),allowFixture:allowFixture||process.platform!=='win32'});
+  const plan=buildMcpPlan({variant,workspace,rqlExe,kanzoExe,ombExe,ombCli,ombPort,nodeExe,existing:readConfig(file),allowFixture:allowFixture||process.platform!=='win32'});
   return {...plan,file,receipt,before,after:digest(encode(plan.configuration))};
 }
 export function applyProjectMcp(opts){
@@ -127,7 +137,9 @@ export function applyProjectMcp(opts){
     // foreign MCP config or credentials.
     const pendingTmp=`${p.file}.pending-${randomUUID()}`;
     const receipt={schema:'singularity-native-mcp-rollback/v1',variant:p.variant,
-      file:p.file,backup,before:p.before,after:p.after,pendingTmp,registered:p.registered};
+      file:p.file,backup,before:p.before,after:p.after,pendingTmp,registered:p.registered,
+      ombMode:opts.ombCli?'headless':opts.ombExe?'desktop':null,
+      ...(opts.ombCli?{ombPort:opts.ombPort??18211}: {})};
     atomic(p.receipt,encode(receipt));
     const pendingFd=openSync(pendingTmp,'wx',0o600);
     try{writeFileSync(pendingFd,encode(p.configuration));fsyncSync(pendingFd)}finally{closeSync(pendingFd)}
@@ -237,11 +249,16 @@ export function verifyProjectMcp({variant,workspace}) {
   const registered=Array.isArray(r.registered)?r.registered:['kanzo'];
   if(registered.includes('openmausbot')) {
     const entry=config.mcpServers.openmausbot;
-    if(entry?.type!=='stdio'||!Array.isArray(entry.args)||entry.args.length!==1||
+    if(entry?.type!=='stdio'||!Array.isArray(entry.args)||
+       Object.hasOwn(entry.env??{},'OPENMAUSBOT_TOKEN'))err('OPENMAUSBOT_MCP_OWNERSHIP_DRIFT');
+    if(r.ombMode==='headless'){
+      if(entry.args.length!==2||win32.basename(entry.args[0]).toLowerCase()!=='cli.js'||
+         entry.args[1]!=='mcp'||entry.env?.OMB_PORT!==String(r.ombPort)||
+         Object.keys(entry.env).length!==1)err('OPENMAUSBOT_HEADLESS_MCP_OWNERSHIP_DRIFT');
+    }else if(entry.args.length!==1||
        !entry.args[0].replaceAll('\\','/').endsWith('/openmausbot/claude_mcp_launcher.mjs')||
        typeof entry.env?.SINGULARITY_OMB_EXE!=='string'||
-       entry.env?.SINGULARITY_OMB_PORT!=='8799'||
-       Object.hasOwn(entry.env,'OPENMAUSBOT_TOKEN'))err('OPENMAUSBOT_MCP_OWNERSHIP_DRIFT');
+       entry.env?.SINGULARITY_OMB_PORT!=='8799')err('OPENMAUSBOT_MCP_OWNERSHIP_DRIFT');
   }
   if(r.before){
     if(!r.backup||dirname(r.backup)!==dirname(file)||
@@ -256,10 +273,11 @@ function main(argv){
   const vals={};let command='plan';
   for(let i=0;i<argv.length;i++){
     if(['--apply','--rollback','--verify'].includes(argv[i])) {command=argv[i].slice(2);continue;}
-    const key=argv[i].replace(/^--/,'');if(!['variant','workspace','rql-exe','kanzo-exe','omb-exe','node-exe'].includes(key)||i+1>=argv.length)err('USAGE');vals[key]=argv[++i];
+    const key=argv[i].replace(/^--/,'');if(!['variant','workspace','rql-exe','kanzo-exe','omb-exe','omb-cli','omb-port','node-exe'].includes(key)||i+1>=argv.length)err('USAGE');vals[key]=argv[++i];
   }
   if(!['plan','verify'].includes(command)&&process.platform!=='win32')err('WINDOWS_ONLY_MUTATION');
-  const opts={variant:Number(vals.variant),workspace:vals.workspace,rqlExe:vals['rql-exe'],kanzoExe:vals['kanzo-exe'],ombExe:vals['omb-exe'],nodeExe:vals['node-exe']};
+  const opts={variant:Number(vals.variant),workspace:vals.workspace,rqlExe:vals['rql-exe'],kanzoExe:vals['kanzo-exe'],
+    ombExe:vals['omb-exe'],ombCli:vals['omb-cli'],ombPort:vals['omb-port']?Number(vals['omb-port']):18211,nodeExe:vals['node-exe']};
   if(command==='plan') {
     // A real Windows preview validates installed binaries and *actual* existing
     // project config but must never print foreign settings or possible secrets.

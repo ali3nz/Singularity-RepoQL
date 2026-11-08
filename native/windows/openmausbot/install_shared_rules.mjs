@@ -59,12 +59,14 @@ export function rollbackRules(opts={},fixture=false){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))try {
   const args=process.argv.slice(2);const mode=args.shift()??'plan';
-  if(args.length)fail('USAGE');
-  const p=planRules();let o;
+  const opts={};
+  if(args.length===2&&args[0]==='--data-dir')opts.dataDir=args[1];
+  else if(args.length)fail('USAGE');
+  const p=planRules(opts);let o;
   if(mode==='plan')o={mode:'READ_ONLY',state:p.state,sha256:p.sha256,gateEnforcementVerified:false};
-  else if(mode==='apply')o=installRules();
-  else if(mode==='verify')o=verifyRules();
-  else if(mode==='rollback')o=rollbackRules();
+  else if(mode==='apply')o=installRules(opts);
+  else if(mode==='verify')o=verifyRules(opts);
+  else if(mode==='rollback')o=rollbackRules(opts);
   else fail('USAGE');
   process.stdout.write(JSON.stringify(o)+'\n');
 }catch(e){process.stderr.write('OMB_RULES_REFUSED: '+e.message+'\n');process.exitCode=2}

@@ -70,13 +70,11 @@ export const DEFAULT_INSTANCE_ID = 'default';
 export const DEFAULT_AGENTS = Object.freeze([
   'claude-code-main',
   'code-reviewer',
-  'quality-fixer',
   'researcher-web',
   'thinker',
   'explore',
   'general',
   'board',
-  'fleet-reviewer',
 ]);
 
 const ADMIN_KEY_FILE = join('state', 'secrets', 'admin-user-key');

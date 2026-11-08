@@ -14,6 +14,8 @@ class OpenMausBotSourcePackage(unittest.TestCase):
                 for name in ('native/windows/openmausbot/AGENTS.md',
                              'native/windows/openmausbot/install_shared_rules.mjs',
                              'native/windows/openmausbot/claude_mcp_launcher.mjs',
+                             'native/windows/openmausbot/provision_maintainer.mjs',
+                             'native/windows/openmausbot/provision_maintainer.test.mjs',
                              'native/windows/openmausbot/omb_integration.test.mjs',
                              'docs/WINDOWS-OPENMAUSBOT-CLAUDE-INTEGRATION.md'):
                     self.assertIn(name,names)
