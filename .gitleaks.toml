@@ -1,0 +1,14 @@
+# Singularity-RepoQL is public: nothing secret may be committed.
+# These paths hold intentionally fake credentials used to test redaction and auth flows
+# (reviewed 2026-11-08: dummy values such as hunter2secret, a-private-phrase-1234, sk-live-0123456789abcdefXYZ).
+title = "Singularity-RepoQL"
+[extend]
+useDefault = true
+[allowlist]
+description = "reviewed test fixtures with fake credentials"
+paths = [
+  '''connectors/kanzo/tools/build_suite\.py''',
+  '''connectors/kanzo/tools/pin\.py''',
+  '''dashboard/test_auth_modes\.py''',
+  '''connectors/memorycore/fixtures/.*''',
+]
