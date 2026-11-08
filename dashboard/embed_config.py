@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
 # A native application must be published under HTTPS or a pre-existing same-origin
@@ -41,9 +42,11 @@ def panel_config() -> dict:
     config["repoql"] = native_repoql_config(config["repoql"]["url"])
     # Only advertise the Tencent panel when a credential source is configured;
     # the proxy cannot authenticate without one and a blank embed would fake readiness.
-    tencent_ready = bool(os.environ.get("SINGULARITY_TENCENT_OWNER_KEY_FILE")
-                         or os.environ.get("TENCENT_OWNER_KEY_FILE")
-                         or os.environ.get("TENCENT_PANEL_EMBED_URL"))
+    configured_key = (os.environ.get("SINGULARITY_TENCENT_OWNER_KEY_FILE")
+                      or os.environ.get("TENCENT_OWNER_KEY_FILE") or "").strip()
+    # An embed URL alone never grants a Tencent identity; missing key files
+    # must not turn the navigation green on a fresh Windows installation.
+    tencent_ready = bool(configured_key and Path(configured_key).is_file())
     config['tencent'] = {'url': '/embed/tencent/' if tencent_ready else None,
                          'configured': tencent_ready,
                          'automatic_login': tencent_ready}

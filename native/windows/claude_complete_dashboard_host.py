@@ -121,6 +121,18 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         'UNIFIED_SERVICE_BASE':'http://127.0.0.1:18101',
         'UNIFIED_GATEWAY_TOKEN_FILE':str(state_dir / 'unified-gateway.token'),
     }
+    # The native MemoryCore provisioning process creates this existing owner
+    # identity. Do not mint a parallel dashboard key or copy a secret into the UI.
+    # The path is derived from the staged user-owned runtime, not user input.
+    if variant in (2, 4):
+        owner_file = state_dir.parent / 'WindowsNative' / 'memory' / 'state' / 'secrets' / 'admin-user-key'
+        _assert_no_reparse(owner_file)
+        if owner_file.is_file():
+            env['SINGULARITY_TENCENT_OWNER_KEY_FILE'] = str(owner_file)
+        # MemoryPanel listens on 18126 in the Windows-native stack, not the
+        # Dockerhost's historical 8125. Proxy authentication stays same-origin.
+        env['SINGULARITY_TENCENT_HOST'] = '127.0.0.1'
+        env['SINGULARITY_TENCENT_PORT'] = '18126'
     if variant in (2,4):
         env.update(_native_ghost_environment(source_root,state_dir,native_bridge_exe,ghost_control_config,windows=windows))
     elif native_bridge_exe is not None or ghost_control_config is not None:

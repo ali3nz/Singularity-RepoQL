@@ -34,7 +34,7 @@ def _upstream(kind, default_port):
     return (host, port)
 
 
-UPSTREAM = {'tencent': _upstream('tencent', 8125), 'office': _upstream('office', 8001),
+UPSTREAM = {'tencent': _upstream('tencent', 18126 if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1' else 8125), 'office': _upstream('office', 8001),
             'kanzo': _upstream('kanzo', 4242)}
 MAX_BODY = 8 * 1024 * 1024
 
@@ -97,6 +97,14 @@ def handshake(handler, kind):
             backend_key(kind)  # fail before issuing a cookie if configuration is absent
         except (OSError, PermissionError):
             handler.send_json(503, {'error': kind + '_panel_unconfigured'})
+            return
+    if kind == 'tencent':
+        # A present key file is not proof that the owner is valid. Verify the
+        # genuine local identity before granting a browser navigation cookie.
+        try:
+            tencent_session()
+        except (OSError, ValueError, PermissionError, json.JSONDecodeError):
+            handler.send_json(503, {'error': 'tencent_owner_session_unavailable'})
             return
     if kind == 'kanzo':
         # Kanzo has no built-in user authentication. Prove it is the expected
@@ -193,7 +201,9 @@ def tencent_session():
         if response.status != 200 or len(raw) > 1024 * 1024:
             raise PermissionError('Tencent verification failed')
         data = json.loads(raw)
-        verified = data.get('data') or {}
+        if not isinstance(data, dict) or not isinstance(data.get('data'), dict):
+            raise PermissionError('Tencent verification response invalid')
+        verified = data['data']
         if data.get('code') != 0 or verified.get('valid') is not True or not isinstance(verified.get('user'), dict):
             raise PermissionError('Tencent credential invalid')
         user = {k: v for k, v in verified['user'].items()
