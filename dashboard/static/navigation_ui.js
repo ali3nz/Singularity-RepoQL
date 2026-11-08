@@ -8,6 +8,9 @@
 //   /repositories, /repositories/view -> Indexing (Repositories is a tab there)
 //   /cpu, /errors, /excluded -> Diagnostics (tabs of one page)
 const NAV_ALIASES = {
+  // Bot Operations retired (fleet#832): the view redirects, so a stale link must
+  // mark the surviving OpenMausBot entry.
+  "/bots": "/openmausbot",
   "/cpu": "/diagnostics",
   "/errors": "/diagnostics",
   "/excluded": "/diagnostics",
@@ -15,6 +18,8 @@ const NAV_ALIASES = {
   "/repositories/view": "/indexing",
   "/knowledge/connections": "/links",
   "/harness/run": "/harness/runs",
+  "/reference/agents": "/agents-control",
+  "/openmausbot/fleet": "/agents-control",
   "/harness/usage": "/unified/usage",
   "/knowledge/principle": "/knowledge/all",
   "/knowledge/principles": "/knowledge/all",
@@ -71,6 +76,7 @@ export function initNavigationUI() {
 
   const mobile = window.matchMedia('(max-width: 940px)');
   const links = [...sidebar.querySelectorAll('[data-nav]')];
+  const dockLinks = [...document.querySelectorAll('[data-dock]')];
   const groups = [...sidebar.querySelectorAll('.nav-section')];
   let opened = false;
   const currentPath = () => (location.hash.replace(/^#/, '').split('?')[0] || '/');
@@ -112,6 +118,7 @@ export function initNavigationUI() {
       });
       group.hidden = !showGroup;
     }
+    if (term && matches) sidebar.querySelector('#nav-more')?.setAttribute('open', '');
     feedback.textContent = term ? `${matches} navigation item${matches === 1 ? '' : 's'} found` : '';
   }
 
@@ -119,6 +126,11 @@ export function initNavigationUI() {
     const path = currentPath();
     const target = sectionFor(path);
     if (pageTitle) pageTitle.textContent = target?.textContent.trim() || 'RepoQL Dashboard';
+    if (target?.closest('#nav-more')) sidebar.querySelector('#nav-more')?.setAttribute('open', '');
+    dockLinks.forEach(link => {
+      if (link.dataset.dock === navPathFor(path, dockLinks.map(item => item.dataset.dock))) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
     links.forEach(link => {
       if (link === target) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');

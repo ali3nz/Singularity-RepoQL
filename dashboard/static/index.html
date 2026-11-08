@@ -1,12 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="charcoal" data-theme-mode="dark">
 <head>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
+<script>
+/* Apply a saved explicit theme before styles load. Charcoal is the fallback. */
+try {
+  const saved = localStorage.getItem(window.matchMedia('(max-width:760px)').matches ? 'repoql.dashboard.theme.phone' : 'repoql.dashboard.theme');
+  const themes = ['charcoal', 'neon', 'neon-violet', 'neon-emerald',
+                  'light-paper', 'light-sky', 'light-sand', 'light-mint'];
+  if (themes.includes(saved)) {
+    document.documentElement.dataset.theme = saved;
+    document.documentElement.dataset.themeMode = saved.startsWith('light-') ? 'light' : 'dark';
+  }
+} catch {}
+</script>
 <title>RepoQL Control</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23060910'/%3E%3Cg transform='translate%284 4%29 scale%281%29' fill='none' stroke='%2326e6ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z' opacity='.55'/%3E%3Cpath d='M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2'/%3E%3Ccircle cx='12' cy='7.3' r='1.9' fill='%2326e6ff'/%3E%3Ccircle cx='7.6' cy='15' r='1.9' fill='%2326e6ff'/%3E%3Ccircle cx='16.4' cy='15' r='1.9' fill='%2326e6ff'/%3E%3Ccircle cx='12' cy='12' r='1.1' fill='%2326e6ff'/%3E%3C/g%3E%3C/svg%3E">
-<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/bundle.css?v=bd-20261108m">
 </head>
 <body>
 <a class="skip-link" href="#app">Skip to main content</a>
@@ -42,13 +55,13 @@
       <a class="nav-link" href="#/agentchat" data-nav="/agentchat"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H11l-4 3v-3.2A3.5 3.5 0 0 1 5 11.5v-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8.7h6M9 11.3h3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>Agent Lounge</a>
       <a class="nav-link" href="#/office" data-nav="/office"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="11" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M9 19.5h6M12 15.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>Office Viewer</a>
       <a class="nav-link" href="#/unified/graph" data-nav="/unified/graph"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg></span>Memory Graph</a>
-      <details class="nav-more" id="nav-reference" open>
+      <details class="nav-more" id="nav-reference">
         <summary>Reference documents</summary>
         <a class="nav-link" href="#/repoql/cheat-sheet" data-nav="/repoql/cheat-sheet"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 5h10M7 9h10M7 13h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="4" y="3.5" width="16" height="17" rx="2.4" stroke="currentColor" stroke-width="1.6"/></svg></span>RepoQL Cheat Sheet</a>
         <a class="nav-link" href="#/architecture/memory" data-nav="/architecture/memory"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4 4.5 7.5 12 11l7.5-3.5L12 4Zm-7.5 8L12 15.5 19.5 12M4.5 16.5 12 20l7.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Memory Architecture</a>
         <a class="nav-link" href="#/architecture/orchestra" data-nav="/architecture/orchestra"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.8" y="5" width="5" height="5" rx="1.4" stroke="currentColor" stroke-width="1.5"/><rect x="15.2" y="5" width="5" height="5" rx="1.4" stroke="currentColor" stroke-width="1.5"/><rect x="9.5" y="14" width="5" height="5" rx="1.4" stroke="currentColor" stroke-width="1.5"/><path d="M8.8 7.5h6.4M12 10.2V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Orchestration Architecture</a>
       </details>
-      <details class="nav-more" id="nav-knowledge" open>
+      <details class="nav-more" id="nav-knowledge">
         <summary>System knowledge</summary>
         <a class="nav-link" href="#/repoql/control" data-nav="/repoql/control"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".55" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></span>RepoQL Dashboard</a>
         <a class="nav-link" href="#/unified/tencent" data-nav="/unified/tencent"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg></span>Tencent Dashboard</a>
@@ -57,16 +70,12 @@
         <a class="nav-link" href="#/knowledge/connectors" data-nav="/knowledge/connectors"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M8 3v5m8-5v5M5 8h14v4a7 7 0 0 1-14 0zM12 19v2"/></svg></span>Connectors</a>
         <a class="nav-link" href="#/indexing" data-nav="/indexing"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/></svg></span>Indexing and Sources</a>
       </details>
-      <details class="nav-more" id="nav-more" open>
+      <details class="nav-more" id="nav-more">
         <summary>Diagnostics</summary>
         <a class="nav-link" href="#/unified/usage" data-nav="/unified/usage"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 18.5V12M12 18.5V7M19 18.5v-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="5" cy="10.2" r="1.4" fill="currentColor"/><circle cx="12" cy="5.2" r="1.4" fill="currentColor"/><circle cx="19" cy="12.2" r="1.4" fill="currentColor"/></svg></span>AI Usage</a>
         <a class="nav-link" href="#/diagnostics" data-nav="/diagnostics"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M3 12h4l2.5-5 4.5 10 2.5-5H21"/></svg></span>Diagnostics</a>
+        <a class="nav-link" href="#/agents-control" data-nav="/agents-control"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M4 7h8M16 7h4M4 17h4M12 17h8"/><circle cx="14" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>Agents Control</a>
         <a class="nav-link" href="#/harness" data-nav="/harness"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 3 3 8v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg></span>Harness Control Center</a>
-        <a class="nav-link" href="#/harness/agents" data-nav="/harness/agents"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5v1"/></svg></span>Live Agents</a>
-        <a class="nav-link" href="#/harness/runs" data-nav="/harness/runs"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg></span>Execution History</a>
-        <a class="nav-link" href="#/harness/performance" data-nav="/harness/performance"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M3 19h18M6 15l4-5 4 3 4-7M18 6h-4m4 0v4"/></svg></span>Run Performance</a>
-        <a class="nav-link" href="#/harness/events" data-nav="/harness/events"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span>Events</a>
-        <a class="nav-link" href="#/harness/settings" data-nav="/harness/settings"><span class="nav-icon" aria-hidden="true"><svg focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="12" r="3"/><path d="m10 3-.5 2.5-2 1-2.3-1L3 8.5l2 1.8v3.4L3 15.5l2.2 3 2.3-1 2 1L10 21h4l.5-2.5 2-1 2.3 1 2.2-3-2-1.8v-3.4l2-1.8-2.2-3-2.3 1-2-1L14 3z"/></svg></span>Harness Settings</a>
       </details>
     </nav>
 
@@ -87,12 +96,15 @@
 <nav class="mobile-dock" id="mobile-dock" aria-label="Quick workspaces">
   <a href="#/" data-dock="/" aria-label="Command center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 3l9 7v10H3zM9 20v-7h6v7"/></svg><span>Home</span></a>
   <a href="#/kanban" data-dock="/kanban" aria-label="Kanban Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="7" width="5" height="13" rx="1"/><rect x="17" y="5" width="4" height="15" rx="1"/></svg><span>Board</span></a>
-  <a href="#/ghost" data-dock="/ghost" aria-label="Ghost Protocol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V9a7 7 0 0 1 14 0v11l-4-3-3 3-3-3-4 3Z"/><path d="M9 10h.01M15 10h.01"/></svg><span>Ghost</span></a>
+  <a href="#/openmausbot" data-dock="/openmausbot" aria-label="Bot operations"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V5M9 13h.01M15 13h.01M9.5 16.5h5"/><circle cx="12" cy="4" r="1"/></svg><span>Bots</span></a>
   <a href="#/agentchat" data-dock="/agentchat" aria-label="Agent Lounge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v12H9l-6 4z"/><path d="M7 9h10M7 12h6"/></svg><span>Lounge</span></a>
   <a href="#/unified/graph" data-dock="/unified/graph" aria-label="Memory Graph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="12" cy="19" r="2"/><path d="m6.5 10.5 4-4m3 0 4 4m0 3-4 4m-3 0-4-4"/></svg><span>Memory</span></a>
+  <button type="button" id="dock-more" aria-label="More pages"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></button>
 </nav>
 
 <div class="toasts" id="toasts"></div>
-<script type="module" src="/app.js"></script>
+<script type="module" src="/app.js?v=ar-20261108e"></script>
+<script defer src="/polish.js?v=rq-20261105-1"></script>
+<script defer src="/ux_pack.js?v=ux-20261108d"></script>
 </body>
 </html>

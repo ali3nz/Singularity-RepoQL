@@ -720,7 +720,7 @@ button, a, select, input { -webkit-tap-highlight-color: rgba(38,230,255,.13); }
 .connector-card[data-active="false"] .connector-state-pill{color:#d9c18c;border-color:#706045;background:rgba(112,96,69,.12)}
 .connector-card h3{margin:5px 0 0;font-size:16px}
 .connector-card p{flex:1;line-height:1.5;margin:0}
-.connector-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:#83a5c7;font:10px var(--mono);padding-top:10px;border-top:1px solid #20334d}
+.connector-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:#83a5c7;font:10px var(--mono);overflow-wrap:anywhere;padding-top:10px;border-top:1px solid #20334d}
 .connector-reference{margin-top:18px}
 .connector-guide-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:14px 0}
 .connector-guide-grid>div{border:1px solid #1c3853;background:rgba(7,19,35,.62);border-radius:10px;padding:13px}
@@ -3567,3 +3567,724 @@ html[data-theme-mode="light"] .messenger-mode-feed .messenger-message-meta {colo
 html[data-theme-mode="light"] .nav-section .nav-link .nav-icon {
   background: color-mix(in srgb, var(--nav-accent) 11%, transparent);
 }
+
+
+/* 2026-11-01 user-scoped color, space and neural UX improvements. */
+.main[data-workspace] {
+  background:radial-gradient(70% 23% at 8% 0%,color-mix(in srgb,var(--page-accent,var(--cyan)) 12%,transparent),transparent 95%),
+    radial-gradient(56% 22% at 95% 0%,rgba(153,86,255,.09),transparent 96%);
+}
+.main[data-workspace] > .page-head h1 {color:var(--text);overflow-wrap:normal;word-break:normal;}
+.main[data-workspace] > .page-head {border-bottom:1px solid color-mix(in srgb,var(--page-accent,var(--cyan)) 30%,transparent);}
+/* The title should get the width before decorative art, especially on iPhone. */
+.command-hero-rich .command-hero-copy {position:relative;z-index:2;min-width:0;}
+.command-hero-rich .command-hero-copy h2 {font-size:clamp(23px,3vw,37px);line-height:1.24;overflow-wrap:normal;word-break:normal;max-width:none;color:#eafaff;}
+.command-overview-grid {grid-template-columns:repeat(4,minmax(0,1fr));}
+@media(max-width:760px){
+  .command-hero-rich {display:block;min-height:0;padding:17px 15px;}
+  .command-hero-rich .command-hero-sidekick {display:none;}
+  .command-hero-rich .command-hero-copy h2 {font-size:clamp(23px,6vw,32px);max-width:100%;}
+  .command-overview-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+/* Direct entrance to the preserved Ghost operations console. */
+.ghost-operations-tile {
+  display:flex;align-items:center;gap:15px;min-height:108px;padding:16px 20px;margin-bottom:16px;
+  color:#fff;text-decoration:none;border:1px solid rgba(213,111,255,.62);border-radius:20px;
+  background:radial-gradient(180px 100px at 85% 0%,rgba(238,75,220,.3),transparent 90%),
+    linear-gradient(115deg,#21134e 0%,#122d60 46%,#471c71 100%);
+  box-shadow:0 8px 32px rgba(86,31,170,.22),inset 0 1px 0 rgba(230,202,255,.12);
+}
+.ghost-operations-tile:hover,.ghost-operations-tile:focus-visible {border-color:#efbcff;box-shadow:0 0 0 2px rgba(230,142,255,.17),0 16px 32px rgba(86,31,170,.27);}
+.ghost-operations-tile-icon {display:grid;place-items:center;flex:none;width:68px;height:68px;color:#e0a6ff;filter:drop-shadow(0 0 11px rgba(218,130,255,.65));}
+.ghost-operations-tile-icon svg {width:100%;height:100%;}
+.ghost-operations-tile-copy {display:grid;gap:5px;min-width:0;flex:1;}
+.ghost-operations-tile-copy strong {font-size:clamp(18px,2.5vw,25px);font-weight:800;}
+.ghost-operations-tile-copy > span {font-size:12px;color:#d6dafd;line-height:1.3;}
+.ghost-operations-tile-arrow {display:grid;place-items:center;width:39px;height:39px;border-radius:50%;font-size:25px;background:rgba(208,156,255,.17);border:1px solid rgba(220,183,255,.52);}
+/* One live feed, collapsed filter controls and more room for mobile messages. */
+.messenger-shell .messenger-listpane[hidden] {display:none!important;}
+.lounge-filters {min-width:0;flex:1;max-width:610px;position:relative;}
+.lounge-filters > summary {cursor:pointer;list-style:none;display:flex;align-items:center;gap:9px;border-radius:12px;border:1px solid rgba(75,211,242,.37);padding:9px 12px;font-weight:700;color:#bfefff;background:linear-gradient(110deg,rgba(16,65,83,.72),rgba(42,24,90,.65));}
+.lounge-filters > summary::-webkit-details-marker {display:none;}
+.lounge-filters > summary::before {content:'⚙';font-size:17px;color:#64ebff;}
+.lounge-filters > summary::after {content:'⌄';margin-left:auto;font-size:19px;}
+.lounge-filters[open] > summary::after {content:'⌃';}
+.lounge-filter-fields {display:flex;gap:10px;flex-wrap:wrap;padding:10px 0 2px;}
+.lounge-filter-fields .messenger-global-search {flex:2;min-width:180px;}
+.lounge-filter-fields .lounge-date-picker {flex:1;min-width:132px;}
+.lounge-live-status {font-size:11px;font-weight:700;color:#81e9db;}
+.messenger-mode-feed .messenger-threadhead {min-height:46px;padding:6px 12px;}
+.messenger-mode-feed .messenger-messages {gap:9px;padding:10px 10px 16px;}
+.messenger-mode-feed .messenger-message {border-radius:14px;align-self:stretch;max-width:100%;padding:7px 8px;background:linear-gradient(105deg,rgba(46,26,94,.34),rgba(23,45,87,.32));border:1px solid rgba(129,99,243,.25);}
+.messenger-mode-feed .messenger-message:nth-of-type(3n) {background:linear-gradient(105deg,rgba(15,64,110,.35),rgba(28,38,104,.32));border-color:rgba(59,165,255,.3);}
+.messenger-mode-feed .messenger-bubble {background:linear-gradient(135deg,#222b59,#30204f);border-color:rgba(184,138,255,.30);padding:9px 12px;line-height:1.45;box-shadow:none;}
+.messenger-mode-feed .messenger-sender {color:#e2c4ff;font-weight:800;}
+.messenger-mode-feed .messenger-kanzo {align-self:stretch;max-width:100%;border:1px solid rgba(53,232,199,.54);border-left:4px solid #37ebd1;background:linear-gradient(110deg,rgba(6,75,72,.83),rgba(10,33,69,.86));box-shadow:none;}
+.messenger-mode-feed .messenger-kanzo[data-stage="doing"] {border-left-color:#4ca9ff;background:linear-gradient(110deg,rgba(14,47,96,.85),rgba(27,28,83,.85));}
+.messenger-mode-feed .messenger-kanzo[data-stage="review"] {border-left-color:#bb85ff;background:linear-gradient(110deg,rgba(64,28,93,.85),rgba(27,28,83,.86));}
+.messenger-mode-feed .messenger-kanzo[data-stage="done"] {border-left-color:#3affad;}
+.messenger-mode-feed .messenger-announcement {align-self:stretch;max-width:100%;border:1px solid rgba(246,191,95,.36);background:linear-gradient(115deg,rgba(79,50,24,.68),rgba(40,32,67,.7));}
+@media(max-width:760px){
+  .main:has(.messenger-shell) {padding-top:4px;}
+  .main:has(.messenger-shell) > .page-head {margin-bottom:5px;padding-bottom:8px;}
+  .messenger-mode-feed .messenger-toolbar {padding:6px 8px;gap:6px;}
+  .lounge-live-status {font-size:10px;white-space:nowrap;}
+  .messenger-mode-feed .lounge-presence {min-height:41px;}
+  .messenger-mode-feed .lounge-presence summary {padding:8px 10px;}
+  .messenger-mode-feed .messenger-threadhead {min-height:42px;padding:6px 9px;}
+  .messenger-mode-feed .messenger-thread-title h2 {font-size:15px;}
+  .messenger-mode-feed .messenger-thread-title span {font-size:10px;}
+  .messenger-mode-feed .messenger-bubble {padding:8px 10px;font-size:13.5px;}
+  .messenger-mode-feed .messenger-messages {gap:7px;padding:8px 8px 16px;}
+  .messenger-mode-feed .messenger-kanzo {padding:8px 10px;}
+  .lounge-filter-fields {display:grid;grid-template-columns:1fr;}
+}
+
+/* Operator correction 2026-11-01: the feed uses the full workspace width.
+   Presence is a horizontal strip on desktop, matching the phone layout, so the
+   previous 190px active-agent rail never leaves an empty column beside messages. */
+@media (min-width:761px) {
+  .messenger-mode-feed {grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);}
+  .messenger-mode-feed .lounge-presence {grid-column:1;grid-row:2;display:flex;flex-direction:column;border-right:0;border-bottom:1px solid rgba(83,193,225,.20);}
+  .messenger-mode-feed .lounge-presence summary {display:flex;}
+  .messenger-mode-feed .lounge-roster {flex:0 0 auto;flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:6px 16px 10px;gap:8px;}
+  .messenger-mode-feed .lounge-person {min-width:190px;max-width:290px;}
+  .messenger-mode-feed .lounge-person-body small,.messenger-mode-feed .lounge-task-link {display:block;}
+  .messenger-mode-feed .messenger-thread {grid-column:1;grid-row:3;width:100%;}
+}
+
+/* UX refresh: Agent Lounge follows a restrained messaging-app visual language.
+   Kanzo notices remain small, orange and secondary to actual conversations. */
+.main:has(.messenger-shell){--page-accent:#6ba4ff}
+.messenger-shell{--ms-accent:#407de2;--ms-divider:rgba(128,152,182,.19);background:#0e1624;border-color:rgba(130,157,189,.24);box-shadow:none}
+.messenger-toolbar{grid-template-columns:auto minmax(140px,1fr) auto;gap:12px;padding:10px 14px;background:#121d2c;border-color:rgba(130,157,189,.22)}
+.messenger-modes{background:#0d1725;border:1px solid rgba(121,148,181,.23);padding:3px;border-radius:11px}
+.messenger-modes button{font-size:12px;min-height:34px;padding:7px 12px}
+.messenger-modes button[aria-pressed=true]{background:#263d5e;color:#e8f2ff;border-color:#4d739f;box-shadow:none}
+.lounge-filters{max-width:none}
+.lounge-filters>summary{padding:7px 12px;min-height:36px;font-size:12px;background:#17263a;color:#c7d7e9;border-color:#344d69}
+.lounge-filters>summary::before{color:#94aed0}
+.lounge-live-status{font-size:11px;color:#a5bad1}
+.lounge-presence{background:#101b29;border-color:rgba(130,157,189,.20)}
+.lounge-presence summary{min-height:35px;padding:7px 14px;font-size:11px;color:#bdd0e5}
+.lounge-presence summary span:last-child{font-size:10px;color:#9fb4ca}
+.lounge-pulse{width:6px;height:6px;box-shadow:none}
+.lounge-roster{padding:5px 12px 9px;gap:6px}
+.lounge-person{min-width:180px;max-width:255px;padding:7px 9px;border-radius:10px;background:#172438;border-color:#2a3d54;box-shadow:none}
+.lounge-person-avatar{width:28px;height:28px;border-radius:50%;background:#34517c;font-size:10px}
+.lounge-person-body strong{font-size:12px}
+.lounge-person-body small{font-size:10px;line-height:1.25}
+.lounge-presence-note{padding:0 12px 8px;font-size:10px}
+.messenger-listpane{background:#121c2a}
+.messenger-listhead{padding:12px 14px 8px}
+.messenger-listhead h2{font-size:18px}
+.messenger-conversation{min-height:70px;padding:9px 11px;gap:9px;border-radius:11px;align-items:center}
+.messenger-conversation-info strong{font-size:13px;display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.messenger-conversation-info .messenger-preview{font-size:11.5px;line-height:1.3;-webkit-line-clamp:1;white-space:nowrap}
+.messenger-conversation.selected{background:#243852;border:0;box-shadow:none}
+.messenger-conversation:hover{background:#213147}
+.messenger-conversation-time{font-size:10px;color:#94a9c2}
+.messenger-thread{background:#0c1420}
+.messenger-threadhead{background:#141f30;min-height:61px;border-color:#283b52;padding:10px 16px}
+.messenger-messages{gap:11px;padding:16px 16px 20px}
+.messenger-message{max-width:90%}
+.messenger-bubble,.messenger-mode-feed .messenger-bubble{background:#25354b;border:0;box-shadow:none;line-height:1.48;font-size:13px;padding:10px 13px}
+.messenger-message-alt .messenger-bubble{background:#306fd4;color:#fff;border:0;box-shadow:none}
+.messenger-message-meta{font-size:10px;color:#8fa6bf}
+.messenger-date-divider{border:0;background:#172538;color:#a5b9cf;padding:4px 13px;font-size:10px}
+.messenger-kanzo{align-self:center;display:flex;gap:8px;max-width:min(96%,700px);width:100%;padding:8px 11px;border-radius:10px;border:1px solid rgba(241,168,76,.38);border-left:3px solid #f0a54e;background:rgba(133,78,24,.13);box-shadow:none}
+.messenger-kanzo-icon{width:22px;height:22px;border-radius:7px;background:rgba(246,162,60,.18);color:#ffc16e;font-size:14px}
+.messenger-kanzo>div{gap:3px}
+.messenger-kanzo-label{color:#f8b45e;font-size:9px;letter-spacing:.04em}
+.messenger-kanzo strong{font-size:11.5px;line-height:1.35;color:#f1e8db;display:block;max-width:90ch}
+.messenger-kanzo div>span:not(.messenger-kanzo-label),.messenger-kanzo time{font-size:10px;color:#cdb69c}
+.messenger-kanzo div>div{gap:8px}
+.messenger-kanzo .lounge-task-link{color:#ffc16e;min-height:0;padding:0 1px;font-size:10px}
+.messenger-announcement{box-shadow:none}
+.messenger-avatar{box-shadow:none}
+html[data-theme-mode=light] .messenger-shell{background:#f5f7fb;border-color:#cbd7e5}
+html[data-theme-mode=light] .messenger-toolbar,html[data-theme-mode=light] .messenger-threadhead{background:#edf2f8;border-color:#cbd7e5}
+html[data-theme-mode=light] .messenger-listpane{background:#f5f8fc}
+html[data-theme-mode=light] .messenger-thread{background:#fff}
+html[data-theme-mode=light] .messenger-conversation.selected{background:#d8e9fb}
+html[data-theme-mode=light] .messenger-bubble,html[data-theme-mode=light] .messenger-mode-feed .messenger-bubble{background:#e7eef7;color:#1c3550}
+html[data-theme-mode=light] .messenger-message-alt .messenger-bubble{background:#2c71d9;color:#fff}
+html[data-theme-mode=light] .messenger-kanzo{background:#fff4e6;border-color:#e9b879;border-left-color:#d6892e}
+html[data-theme-mode=light] .messenger-kanzo-label,html[data-theme-mode=light] .messenger-kanzo .lounge-task-link{color:#95520c}
+html[data-theme-mode=light] .messenger-kanzo strong{color:#4d3418}
+html[data-theme-mode=light] .messenger-kanzo div>span:not(.messenger-kanzo-label),html[data-theme-mode=light] .messenger-kanzo time{color:#77583c}
+@media(max-width:760px){
+  .messenger-toolbar{grid-template-columns:minmax(0,1fr) auto;gap:7px;padding:8px 10px}
+  .messenger-modes{grid-column:1/-1;display:flex;width:100%}
+  .messenger-modes button{flex:1;min-height:39px}
+  .lounge-filters{grid-column:1}
+  .lounge-live-status{grid-column:2}
+  .messenger-listhead{padding:11px 13px 5px}
+  .messenger-conversation{min-height:67px;padding:8px 9px}
+  .messenger-messages{padding:12px 10px 18px}
+  .messenger-kanzo{padding:7px 9px;max-width:100%}
+}
+
+/* Sitewide page identities: intentional colour without giant saturated panels.
+   All source data, semantics and routing remain unchanged. */
+.main[data-page-identity=bot]{--page-accent:#55cdbd}
+.main[data-page-identity=work]{--page-accent:#6bcfa0}
+.main[data-page-identity=ghost]{--page-accent:#a18afd}
+.main[data-page-identity=lounge]{--page-accent:#6e9bdf}
+.main[data-page-identity=office]{--page-accent:#f0bb70}
+.main[data-page-identity=memory],.main[data-page-identity=concepts]{--page-accent:#ad8ff1}
+.main[data-page-identity=reference]{--page-accent:#7e9ff3}
+.main[data-page-identity=orchestra]{--page-accent:#e18ebd}
+.main[data-page-identity=tencent]{--page-accent:#ae90f8}
+.main[data-page-identity=links],.main[data-page-identity=connectors]{--page-accent:#65cbbf}
+.main[data-page-identity=indexing]{--page-accent:#8dcf8b}
+.main[data-page-identity=usage]{--page-accent:#e4b979}
+.main[data-page-identity=diagnostics]{--page-accent:#e0ab73}
+.main[data-page-identity=harness]{--page-accent:#69b7df}
+.main[data-page-identity=agents]{--page-accent:#75d7b7}
+.main[data-page-identity=runs]{--page-accent:#e7b977}
+.main[data-page-identity=events]{--page-accent:#bc9bf3}
+.main[data-page-identity=settings]{--page-accent:#8db4da}
+.main[data-page-identity=repoql]{--page-accent:#78aaff}
+.main[data-page-identity]:not([data-page-identity=lounge])>.page-head:after{background:var(--page-accent)}
+.main[data-page-identity]:not([data-page-identity=lounge])>.page-head h1{color:var(--text);text-shadow:0 0 24px color-mix(in srgb,var(--page-accent) 17%,transparent)}
+.main[data-page-identity]:not([data-page-identity=lounge])>.block{border-top-color:color-mix(in srgb,var(--page-accent) 33%,var(--line))}
+.main[data-page-identity] .page-tab[aria-current=page]{border-color:color-mix(in srgb,var(--page-accent) 54%,var(--line))}
+.nav-section .nav-link[data-nav="/bots"]{--nav-accent:#55cdbd}
+.nav-section .nav-link[data-nav="/kanban"]{--nav-accent:#70d6a0}
+.nav-section .nav-link[data-nav="/agentchat"]{--nav-accent:#6a9ee2}
+.nav-section .nav-link[data-nav="/ghost"]{--nav-accent:#b092fb}
+.nav-section .nav-link[data-nav="/office"]{--nav-accent:#eebc75}
+.nav-section .nav-link[data-nav="/unified/graph"],.nav-section .nav-link[data-nav="/architecture/memory"],.nav-section .nav-link[data-nav="/knowledge/all"],.nav-section .nav-link[data-nav="/unified/tencent"]{--nav-accent:#af93f1}
+.nav-section .nav-link[data-nav="/architecture/orchestra"]{--nav-accent:#e58dc6}
+.nav-section .nav-link[data-nav="/repoql/cheat-sheet"],.nav-section .nav-link[data-nav="/repoql/control"],.nav-section .nav-link[data-nav="/"]{--nav-accent:#7daaff}
+.nav-section .nav-link[data-nav="/links"],.nav-section .nav-link[data-nav="/knowledge/connectors"]{--nav-accent:#68d0c7}
+.nav-section .nav-link[data-nav="/indexing"]{--nav-accent:#9bd58d}
+.nav-section .nav-link[data-nav="/unified/usage"],.nav-section .nav-link[data-nav="/harness/runs"]{--nav-accent:#e7b975}
+.nav-section .nav-link[data-nav="/diagnostics"]{--nav-accent:#ed9e83}
+.nav-section .nav-link[data-nav="/harness"],.nav-section .nav-link[data-nav="/harness/performance"]{--nav-accent:#81b9f3}
+.nav-section .nav-link[data-nav="/harness/agents"]{--nav-accent:#85d9af}
+.nav-section .nav-link[data-nav="/harness/events"]{--nav-accent:#bca0ec}
+.nav-section .nav-link[data-nav="/harness/settings"]{--nav-accent:#91b4d9}
+.nav-section .nav-link .nav-icon{background:color-mix(in srgb,var(--nav-accent) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--nav-accent) 17%,var(--line));color:var(--nav-accent);border-radius:8px}
+.nav-section .nav-link.active .nav-icon,.nav-section .nav-link:hover .nav-icon{background:color-mix(in srgb,var(--nav-accent) 21%,var(--surface));border-color:color-mix(in srgb,var(--nav-accent) 39%,var(--line));box-shadow:none}
+@media(prefers-reduced-motion:reduce){.messenger-conversation,.nav-section .nav-link{transition:none}}
+
+/* Final Lounge density override: remove legacy full-row neon activity cards. */
+.messenger-mode-feed .messenger-message,
+.messenger-mode-feed .messenger-message:nth-of-type(3n){
+  align-self:flex-start;max-width:min(88%,790px);width:auto;padding:0;
+  background:transparent;border:0;border-radius:0;box-shadow:none;
+}
+.messenger-mode-feed .messenger-bubble,
+.messenger-mode-feed .messenger-message-continued .messenger-bubble{
+  padding:10px 13px;font-size:13px;line-height:1.48;
+  background:#26374d;border:0;box-shadow:none;border-radius:17px 17px 17px 6px;
+}
+.messenger-mode-feed .messenger-sender{color:#aabfd6;font-size:11px;font-weight:650}
+.messenger-mode-feed .messenger-message-meta{font-size:10px;color:#8fa6bc}
+.messenger-mode-feed .messenger-kanzo,
+.messenger-mode-feed .messenger-kanzo[data-stage=doing],
+.messenger-mode-feed .messenger-kanzo[data-stage=review],
+.messenger-mode-feed .messenger-kanzo[data-stage=done]{
+  align-self:center;max-width:min(95%,690px);width:100%;border:1px solid rgba(240,164,78,.35);
+  border-left:3px solid #f0a54e;border-radius:10px;padding:8px 11px;
+  background:rgba(137,82,27,.13);box-shadow:none;
+}
+.messenger-mode-feed .messenger-announcement{align-self:center;max-width:min(94%,690px);padding:8px 10px;background:rgba(99,74,52,.09);border:1px solid rgba(174,144,107,.21)}
+html[data-theme-mode=light] .messenger-mode-feed .messenger-bubble{background:#e8eef6;color:#20354d}
+html[data-theme-mode=light] .messenger-mode-feed .messenger-kanzo{background:#fff3e2;border-color:#e7b978;border-left-color:#d6892e}
+@media(max-width:760px){
+  .messenger-mode-feed .messenger-message{max-width:95%}
+  .messenger-mode-feed .messenger-kanzo{max-width:100%;padding:7px 9px}
+}
+/* Light-theme conversation contrast, including selected rows and thread headings. */
+html[data-theme-mode=light] .messenger-listhead h2,
+html[data-theme-mode=light] .messenger-conversation-info strong,
+html[data-theme-mode=light] .messenger-thread-title h2,
+html[data-theme-mode=light] .messenger-threadhead h2{color:#18314c}
+html[data-theme-mode=light] .messenger-conversation-info .messenger-preview,
+html[data-theme-mode=light] .messenger-conversation-time,
+html[data-theme-mode=light] .messenger-thread-title span,
+html[data-theme-mode=light] .messenger-message-meta,
+html[data-theme-mode=light] .lounge-live-status{color:#536d89}
+html[data-theme-mode=light] .messenger-sender,
+html[data-theme-mode=light] .messenger-mode-feed .messenger-sender{color:#355d88}
+html[data-theme-mode=light] .messenger-message-meta{color:#637c95}
+
+/* v22: visible Messenger-style chat search; advanced feed filters remain secondary. */
+.messenger-chat-search{margin:0 12px 9px}
+.messenger-chat-search input{background:#202d3d;border:1px solid #344c67;color:#eaf3ff}
+html[data-theme-mode=light] .messenger-chat-search input{background:#e5edf7;border-color:#bfcfe0;color:#18314c}
+html[data-theme-mode=light] .messenger-chat-search input::placeholder{color:#5b728d}
+@media(max-width:760px){.messenger-chat-search{margin:3px 12px 10px}}
+
+/* v31: carry each page's existing identity into actual content, not only the
+   navigation icon and heading. No route logic, status semantics or data changes.
+   Bot Operations and Messenger Lounge retain their deliberately separate art. */
+.main[data-page-identity] {
+  --page-secondary: #78b5dd;
+  --page-label: color-mix(in srgb, var(--page-accent) 77%, var(--text));
+}
+.main[data-page-identity=repoql] { --page-secondary: #ab91f2; }
+.main[data-page-identity=work] { --page-secondary: #7db3df; }
+.main[data-page-identity=ghost] { --page-secondary: #f0a6cf; }
+.main[data-page-identity=office] { --page-secondary: #85c5b2; }
+.main[data-page-identity=memory],
+.main[data-page-identity=concepts] { --page-secondary: #68c7c2; }
+.main[data-page-identity=reference] { --page-secondary: #9d89e8; }
+.main[data-page-identity=orchestra] { --page-secondary: #7bb4e8; }
+.main[data-page-identity=tencent] { --page-secondary: #73cec7; }
+.main[data-page-identity=links],
+.main[data-page-identity=connectors] { --page-secondary: #b8a0ed; }
+.main[data-page-identity=indexing] { --page-secondary: #7eaee2; }
+.main[data-page-identity=usage] { --page-secondary: #86baf1; }
+.main[data-page-identity=diagnostics] { --page-secondary: #8aaee4; }
+.main[data-page-identity=harness] { --page-secondary: #8bd4be; }
+.main[data-page-identity=agents] { --page-secondary: #8faeec; }
+.main[data-page-identity=runs] { --page-secondary: #9ab1e7; }
+.main[data-page-identity=events] { --page-secondary: #78cbba; }
+.main[data-page-identity=settings] { --page-secondary: #b6a2ef; }
+/* Performance has a dedicated route even though it shares Harness data. */
+.main[data-page-route="/harness/performance"] { --page-accent: #e0b874; --page-secondary: #87b8dd; }
+.main[data-page-route="/repoql/cheat-sheet"] { --page-accent: #73b4ec; }
+.main[data-page-route="/architecture/memory"] { --page-accent: #b191ed; }
+.main[data-page-route="/unified/graph"] { --page-accent: #9c8ef0; }
+
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge]) > .page-head {
+  padding: 13px 16px 18px;
+  border-inline-start: 3px solid var(--page-accent);
+  border-bottom-color: color-mix(in srgb, var(--page-accent) 30%, var(--line));
+  border-radius: 13px;
+  background: linear-gradient(95deg,
+    color-mix(in srgb, var(--page-accent) 12%, var(--surface)) 0%,
+    color-mix(in srgb, var(--page-accent) 3%, var(--surface)) 51%,
+    transparent 95%);
+}
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge]) > .page-head::after {
+  width: min(270px, 90%);
+  background: linear-gradient(90deg, var(--page-accent), transparent);
+}
+/* Keep explicit error/warning/success panels and Command Center custom cards
+   in charge of their own meaning. Generic content gets the page identity. */
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge]):not([data-page-route="/"])
+  .block:not(.accent-red):not(.accent-amber):not(.accent-green):not(.accent-purple):not(.accent-blue) {
+  border-inline-start: 3px solid var(--block-accent, var(--page-accent));
+  border-top-color: color-mix(in srgb, var(--block-accent, var(--page-accent)) 23%, var(--line));
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--block-accent, var(--page-accent)) 7%, var(--surface)),
+    var(--surface) 64%);
+}
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge])
+  :is(.grid,.stack) > .block:nth-child(3n+2):not([class*="accent-"]) {
+  --block-accent: var(--page-secondary);
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .block-title {
+  color: var(--page-label);
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .metric:not(.cyan):not(.blue):not(.purple):not(.green):not(.amber):not(.red) .value {
+  color: var(--page-label);
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .table-wrap {
+  border-top: 2px solid color-mix(in srgb, var(--page-accent) 56%, var(--line));
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .table-wrap table.data th {
+  color: var(--page-label);
+  background: color-mix(in srgb, var(--page-accent) 7%, var(--surface));
+  border-bottom-color: color-mix(in srgb, var(--page-accent) 26%, var(--line));
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .table-wrap table.data tbody tr:hover {
+  background: color-mix(in srgb, var(--page-accent) 8%, var(--surface));
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .empty:not(.accent-red):not(.accent-amber) {
+  border: 1px dashed color-mix(in srgb, var(--page-accent) 31%, var(--line));
+  background: color-mix(in srgb, var(--page-accent) 5%, var(--surface));
+  border-radius: 12px;
+}
+.main[data-page-identity]:not([data-page-identity=lounge]):not([data-page-identity=bot])
+  .page-tab[aria-current="page"] {
+  background: color-mix(in srgb, var(--page-accent) 17%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--page-accent) 51%, var(--line));
+  color: var(--text);
+}
+/* Every dock destination gets an identifiable colour; do not imply a status. */
+.mobile-dock a[data-dock="/"] { --dock-accent: #78aaff; }
+.mobile-dock a[data-dock="/kanban"] { --dock-accent: #7cca91; }
+.mobile-dock a[data-dock="/ghost"] { --dock-accent: #b28cf3; }
+.mobile-dock a[data-dock="/agentchat"] { --dock-accent: #7aa9ea; }
+.mobile-dock a[data-dock="/unified/graph"] { --dock-accent: #b191ed; }
+@media (max-width: 940px) {
+  .mobile-dock a[data-dock] svg { stroke: var(--dock-accent); }
+  .mobile-dock a[data-dock][aria-current="page"] {
+    color: var(--text);
+    border-top: 2px solid var(--dock-accent);
+    background: color-mix(in srgb, var(--dock-accent) 13%, var(--surface));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dock-accent) 20%, transparent);
+  }
+}
+html[data-theme-mode="light"] .main[data-page-identity],
+html[data-theme^="light-"] .main[data-page-identity] {
+  --page-label: color-mix(in srgb, var(--page-accent) 32%, var(--text));
+}
+html[data-theme-mode="light"] .main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge]) > .page-head,
+html[data-theme^="light-"] .main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge]) > .page-head {
+  background: linear-gradient(95deg,
+    color-mix(in srgb, var(--page-accent) 9%, white),
+    color-mix(in srgb, var(--page-accent) 2%, white) 65%, transparent);
+}
+
+/* v32: page colour is a content language, not a sidebar-only decoration.
+   Keep real status colour semantics and the independently styled bot/lounge UI. */
+.main[data-page-identity] {
+  --page-tertiary: color-mix(in srgb, var(--page-secondary) 48%, var(--page-accent));
+}
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge])
+  :is(.grid,.stack) > .block:nth-child(3n+3):not([class*="accent-"]) {
+  --block-accent: var(--page-tertiary);
+}
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge])
+  .page-tab[aria-current="page"] {
+  box-shadow: inset 0 -2px 0 var(--page-accent);
+}
+.main[data-page-identity]:not([data-page-identity=bot]):not([data-page-identity=lounge])
+  .btn.primary:not(.danger) {
+  border-color: color-mix(in srgb, var(--page-accent) 56%, var(--line));
+  background: color-mix(in srgb, var(--page-accent) 14%, var(--surface));
+}
+
+/* The real Cheat Sheet is rendered from cs-* components rather than generic
+   .block cards. Give its eight sections distinct but repeatable content tones. */
+.main[data-page-route="/repoql/cheat-sheet"] {
+  --guide-cyan: #62cdeb;
+  --guide-purple: #ae91eb;
+  --guide-green: #79cfa8;
+  --guide-amber: #e4b976;
+  --guide-blue: #7caef4;
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-hero {
+  border-color: color-mix(in srgb, var(--guide-cyan) 42%, var(--line));
+  background: radial-gradient(80% 120% at 6% 0%, color-mix(in srgb, var(--guide-cyan) 18%, transparent), transparent 75%),
+              radial-gradient(60% 90% at 98% 95%, color-mix(in srgb, var(--guide-purple) 15%, transparent), transparent 80%),
+              var(--surface);
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-jump button {
+  --jump-tone: var(--guide-cyan);
+  background: color-mix(in srgb, var(--jump-tone) 12%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--jump-tone) 36%, var(--line));
+  color: color-mix(in srgb, var(--jump-tone) 38%, var(--text));
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-jump button:nth-child(4n+2) { --jump-tone: var(--guide-purple); }
+.main[data-page-route="/repoql/cheat-sheet"] .cs-jump button:nth-child(4n+3) { --jump-tone: var(--guide-green); }
+.main[data-page-route="/repoql/cheat-sheet"] .cs-jump button:nth-child(4n) { --jump-tone: var(--guide-amber); }
+.main[data-page-route="/repoql/cheat-sheet"] .cheat-section { --section-tone: var(--guide-cyan); }
+.main[data-page-route="/repoql/cheat-sheet"] #cs-start,
+.main[data-page-route="/repoql/cheat-sheet"] #cs-concepts { --section-tone: var(--guide-purple); }
+.main[data-page-route="/repoql/cheat-sheet"] #cs-loop,
+.main[data-page-route="/repoql/cheat-sheet"] #cs-skills { --section-tone: var(--guide-green); }
+.main[data-page-route="/repoql/cheat-sheet"] #cs-fleet,
+.main[data-page-route="/repoql/cheat-sheet"] #cs-addressing { --section-tone: var(--guide-amber); }
+.main[data-page-route="/repoql/cheat-sheet"] #cs-tools { --section-tone: var(--guide-blue); }
+.main[data-page-route="/repoql/cheat-sheet"] .cheat-section > h2,
+.main[data-page-route="/repoql/cheat-sheet"] .cs-skills-head h2 {
+  color: color-mix(in srgb, var(--section-tone) 42%, var(--text));
+  border-bottom: 1px solid color-mix(in srgb, var(--section-tone) 27%, var(--line));
+  padding-bottom: 10px;
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cheat-section > h2::before,
+.main[data-page-route="/repoql/cheat-sheet"] .cs-skills-head h2::before {
+  content: "";
+  flex: 0 0 12px; width:12px;height:12px;border-radius:4px;
+  background:var(--section-tone);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--section-tone) 15%, transparent);
+}
+.main[data-page-route="/repoql/cheat-sheet"]
+  :is(.cs-quickstart,.cs-glossary,.cs-decisions,.cs-prompts,.cs-loop,.cs-fleet,.cs-tools,.cs-skills,.cs-address) > :is(article,.block) {
+  --card-tone:var(--section-tone);
+  border:1px solid color-mix(in srgb,var(--card-tone) 37%,var(--line));
+  border-inline-start:3px solid color-mix(in srgb,var(--card-tone) 82%,var(--line));
+  background:linear-gradient(145deg,color-mix(in srgb,var(--card-tone) 16%,var(--surface)),var(--surface) 74%);
+}
+.main[data-page-route="/repoql/cheat-sheet"]
+  :is(.cs-quickstart,.cs-glossary,.cs-decisions,.cs-prompts,.cs-loop,.cs-fleet,.cs-tools,.cs-skills,.cs-address) > :is(article,.block):nth-child(3n+2) {
+  --card-tone:var(--page-secondary);
+}
+.main[data-page-route="/repoql/cheat-sheet"]
+  :is(.cs-quickstart,.cs-glossary,.cs-decisions,.cs-prompts,.cs-loop,.cs-fleet,.cs-tools,.cs-skills,.cs-address) > :is(article,.block):nth-child(3n+3) {
+  --card-tone:var(--guide-green);
+}
+.main[data-page-route="/repoql/cheat-sheet"]
+  :is(.cs-step,.cs-tool,.cs-skill,.cs-fleet article,.cs-quickstart article,.cs-glossary article) h3 {
+  color:color-mix(in srgb,var(--card-tone) 43%,var(--text));
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-step-head span {
+  background:color-mix(in srgb,var(--card-tone) 35%,var(--surface-raised));
+  color:var(--text);
+  box-shadow:none;
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-step-head code,
+.main[data-page-route="/repoql/cheat-sheet"] .cs-tool-head code {
+  color:color-mix(in srgb,var(--card-tone) 62%,var(--text));
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-health {
+  padding:12px;
+  border-left:3px solid var(--section-tone);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--section-tone) 9%,var(--surface));
+}
+.main[data-page-route="/repoql/cheat-sheet"] .cs-concept-intro {
+  border-inline-start:3px solid var(--section-tone);
+  background:linear-gradient(130deg,color-mix(in srgb,var(--section-tone) 13%,var(--surface)),var(--surface));
+}
+/* Category colours remain meaningful as their own source-defined --tone. */
+.main[data-page-route="/repoql/cheat-sheet"] .kg-guide-columns article,
+.main[data-page-route="/repoql/cheat-sheet"] .kg-category-links a {
+  border-top:2px solid color-mix(in srgb,var(--guide-purple) 52%,var(--line));
+  background:color-mix(in srgb,var(--guide-purple) 7%,var(--surface-raised));
+}
+
+/* Architecture pages use their real diagrams, not generic placeholder blocks.
+   Colour highlights individual concepts and paths; it never reports health. */
+.main[data-page-route^="/architecture/"] .arch-hero {
+  border-color:color-mix(in srgb,var(--page-accent) 38%,var(--line));
+  background:radial-gradient(90% 120% at 5% 0%,color-mix(in srgb,var(--page-accent) 17%,transparent),transparent 76%),
+             radial-gradient(70% 130% at 100% 100%,color-mix(in srgb,var(--page-secondary) 12%,transparent),transparent 78%),
+             var(--surface);
+}
+.main[data-page-route^="/architecture/"] .arch-stat {
+  --stat-tone:var(--page-accent);
+  border-left:3px solid var(--stat-tone);
+  background:color-mix(in srgb,var(--stat-tone) 12%,var(--surface-raised));
+}
+.main[data-page-route^="/architecture/"] .arch-stat:nth-child(even) { --stat-tone:var(--page-secondary); }
+.main[data-page-route^="/architecture/"] .arch-tab[aria-selected="true"] {
+  border:1px solid color-mix(in srgb,var(--page-accent) 58%,var(--line));
+  background:color-mix(in srgb,var(--page-accent) 19%,var(--surface-raised));
+  color:var(--text);
+  box-shadow:inset 0 -2px 0 var(--page-accent);
+}
+.main[data-page-route^="/architecture/"] .arch-board {
+  background:radial-gradient(75% 95% at 10% 0%,color-mix(in srgb,var(--page-accent) 10%,transparent),transparent),
+             radial-gradient(70% 90% at 95% 85%,color-mix(in srgb,var(--page-secondary) 9%,transparent),transparent),
+             var(--surface);
+}
+.main[data-page-route^="/architecture/"] .arch-node {
+  border-color:color-mix(in srgb,var(--tone) 40%,var(--line));
+  background:linear-gradient(125deg,color-mix(in srgb,var(--tone) 15%,var(--surface-raised)),var(--surface-raised) 78%);
+}
+.main[data-page-route^="/architecture/"] .arch-node.active {
+  border-color:var(--tone);
+  background:linear-gradient(125deg,color-mix(in srgb,var(--tone) 25%,var(--surface-raised)),var(--surface-raised) 85%);
+}
+.main[data-page-route^="/architecture/"] .arch-callout {
+  border-color:color-mix(in srgb,var(--tone) 45%,var(--line));
+  background:linear-gradient(115deg,color-mix(in srgb,var(--tone) 15%,var(--surface)),var(--surface) 85%);
+}
+.main[data-page-route^="/architecture/"] .arch-insp {
+  border-color:color-mix(in srgb,var(--tone) 48%,var(--line));
+  background:linear-gradient(110deg,color-mix(in srgb,var(--tone) 12%,var(--surface)),var(--surface) 84%);
+}
+.main[data-page-route^="/architecture/"] .arch-guide {
+  border-color:color-mix(in srgb,var(--page-accent) 38%,var(--line));
+  background:linear-gradient(130deg,color-mix(in srgb,var(--page-accent) 11%,var(--surface)),var(--surface) 80%);
+}
+.main[data-page-route^="/architecture/"] .arch-guide-grid article,
+.main[data-page-route^="/architecture/"] .arch-steps li {
+  --guide-tone:var(--page-accent);
+  border-top:3px solid var(--guide-tone);
+  background:color-mix(in srgb,var(--guide-tone) 13%,var(--surface-raised));
+}
+.main[data-page-route^="/architecture/"] .arch-guide-grid article:nth-child(3n+2),
+.main[data-page-route^="/architecture/"] .arch-steps li:nth-child(3n+2) { --guide-tone:var(--page-secondary); }
+.main[data-page-route^="/architecture/"] .arch-guide-grid article:nth-child(3n+3),
+.main[data-page-route^="/architecture/"] .arch-steps li:nth-child(3n+3) { --guide-tone:#77cbaa; }
+.main[data-page-route^="/architecture/"] .arch-guide-grid h3,
+.main[data-page-route^="/architecture/"] .arch-steps strong {
+  color:color-mix(in srgb,var(--guide-tone) 45%,var(--text));
+}
+.main[data-page-route^="/architecture/"] .arch-guide-links a {
+  border-color:color-mix(in srgb,var(--page-secondary) 38%,var(--line));
+  background:color-mix(in srgb,var(--page-secondary) 12%,var(--surface-raised));
+  color:color-mix(in srgb,var(--page-secondary) 42%,var(--text));
+}
+.main[data-page-route="/architecture/memory"] .memory-brain {
+  border-color:color-mix(in srgb,var(--page-accent) 40%,var(--line));
+  background:radial-gradient(70% 75% at 15% 20%,color-mix(in srgb,var(--page-accent) 13%,transparent),transparent 80%),
+             radial-gradient(70% 80% at 80% 70%,color-mix(in srgb,var(--page-secondary) 10%,transparent),transparent 80%),
+             var(--surface);
+}
+.main[data-page-route="/architecture/memory"] .memory-brain-node { --node-tone:#a89bed; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.capture { --node-tone:#b08de7; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.memorycore { --node-tone:#c097ef; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.concepts { --node-tone:#7fcfa4; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.index { --node-tone:#6bcbe0; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.gates { --node-tone:#e3b97b; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.recall { --node-tone:#8facf2; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node.output { --node-tone:#78c7b8; }
+.main[data-page-route="/architecture/memory"] .memory-brain-node {
+  border:1px solid color-mix(in srgb,var(--node-tone) 49%,var(--line));
+  border-left:4px solid var(--node-tone);
+  background:linear-gradient(125deg,color-mix(in srgb,var(--node-tone) 19%,var(--surface-raised)),var(--surface-raised) 83%);
+}
+.main[data-page-route="/architecture/memory"] .memory-brain-node .label {
+  color:color-mix(in srgb,var(--node-tone) 49%,var(--text));
+}
+.main[data-page-route="/architecture/memory"] .memory-brain-path {
+  --path-tone:var(--page-accent);
+  border-top:3px solid var(--path-tone);
+  background:color-mix(in srgb,var(--path-tone) 10%,var(--surface-raised));
+}
+.main[data-page-route="/architecture/memory"] .memory-brain-path:nth-child(2) { --path-tone:#e3b97b; }
+.main[data-page-route="/architecture/memory"] .memory-brain-path:nth-child(3) { --path-tone:#78c7b8; }
+.main[data-page-route="/architecture/memory"] .memory-brain-path strong {
+  color:color-mix(in srgb,var(--path-tone) 42%,var(--text));
+}
+.main[data-page-route="/architecture/memory"] .memory-brain-anatomy { opacity:.88; }
+.main[data-page-route="/architecture/memory"] .memory-brain-half { stroke-opacity:.35; }
+.main[data-page-route="/architecture/memory"] .memory-brain-folds { stroke-opacity:.32; }
+/* Preserve section readability when light mode uses a white surface. */
+html[data-theme-mode="light"] .main[data-page-route="/repoql/cheat-sheet"]
+  :is(.cs-quickstart,.cs-glossary,.cs-decisions,.cs-prompts,.cs-loop,.cs-fleet,.cs-tools,.cs-skills,.cs-address) > :is(article,.block),
+html[data-theme-mode="light"] .main[data-page-route="/architecture/memory"] .memory-brain-node {
+  background:linear-gradient(145deg,color-mix(in srgb,var(--card-tone,var(--node-tone,var(--page-accent))) 9%,white),white 82%);
+}
+
+/* v33: colour within actual secondary route controls, not merely their shell.
+   The palette is presentation only: danger, warning and success still use the
+   existing semantic classes. Keep bot and Agent Lounge ownership of styling. */
+.main[data-page-identity]:not([data-page-identity="bot"]):not([data-page-identity="lounge"])
+  > .toolbar,
+.main[data-page-identity]:not([data-page-identity="bot"]):not([data-page-identity="lounge"])
+  > .connector-toolbar {
+  border-inline-start:3px solid color-mix(in srgb,var(--page-accent) 75%,var(--line));
+  border-radius:11px;
+  padding:9px 11px;
+  background:linear-gradient(110deg,color-mix(in srgb,var(--page-accent) 7%,var(--surface)),var(--surface) 85%);
+}
+.main[data-page-identity]:not([data-page-identity="bot"]):not([data-page-identity="lounge"])
+  .seg button.active {
+  color:var(--text);
+  border-color:color-mix(in srgb,var(--page-accent) 47%,var(--line));
+  background:color-mix(in srgb,var(--page-accent) 14%,var(--surface-raised));
+  box-shadow:inset 0 -2px 0 var(--page-accent);
+}
+.main[data-page-route="/links"] .conn-table-title,
+.main[data-page-route="/harness/runs"] .empty,
+.main[data-page-route="/harness/events"] .empty {
+  border-inline-start:3px solid var(--page-accent);
+  background:color-mix(in srgb,var(--page-accent) 6%,var(--surface));
+  border-radius:10px;
+  padding:12px;
+}
+.main[data-page-route="/unified/usage"] .usage-stat {
+  --usage-card-tone:var(--page-accent);
+  border-inline-start:3px solid var(--usage-card-tone);
+  background:linear-gradient(125deg,color-mix(in srgb,var(--usage-card-tone) 9%,var(--surface)),var(--surface) 80%);
+}
+.main[data-page-route="/unified/usage"] .usage-stat:nth-child(2) {--usage-card-tone:var(--page-secondary);}
+.main[data-page-route="/unified/usage"] .usage-stat:nth-child(3) {--usage-card-tone:var(--page-tertiary);}
+html[data-theme-mode="light"] .main[data-page-route="/unified/usage"] .usage-stat .unified-metric {
+  color:var(--text);
+}
+.main[data-page-route="/knowledge/connectors"] .connector-guide-grid > :nth-child(3n+2) {
+  --guide-tone:var(--page-secondary);
+}
+.main[data-page-route="/knowledge/connectors"] .connector-guide-grid > :nth-child(3n+3) {
+  --guide-tone:var(--page-tertiary);
+}
+.main[data-page-route="/knowledge/connectors"] .connector-guide-grid > * {
+  border-top:2px solid color-mix(in srgb,var(--guide-tone,var(--page-accent)) 56%,var(--line));
+  background:color-mix(in srgb,var(--guide-tone,var(--page-accent)) 6%,var(--surface));
+}
+
+
+/* v34: an even six-tile Command Center on desktop and tablet.
+   Preserve the six existing links and their semantic colour accents. */
+@media (min-width:761px) {
+  #dash .command-links-priority {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-auto-rows:minmax(168px,auto);
+    align-items:stretch;
+  }
+  #dash .command-links-priority > .command-workspace {
+    grid-column:auto !important;
+    grid-row:auto !important;
+    min-height:168px;
+    height:100%;
+    width:100%;
+  }
+  #dash .command-links-priority > .command-workspace .command-card-content {
+    min-width:0;
+  }
+}
+
+/* ================================================================ memory graph, phones (2026-11-04)
+   Phones and touch tablets render the same 2D canvas as desktop; the old WebGL
+   brain is gone. A selected node opens the inspector as a sheet instead of an
+   off-screen card, and every graph control reaches a 44px touch target. */
+#ug-graph-stats { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.ug-sheet { display:none; }
+@media (max-width:768px), (hover:none) and (pointer:coarse) {
+  .ug-viz-btn { min-height:44px; }
+  .ug-zoom .btn { min-height:44px; min-width:46px; }
+  .ug-tools .btn, .ug-tools .select, .ug-limit .select, .ug-toolbar .select { min-height:44px; }
+  /* The phone mockup sheet sets .main[data-workspace] > * to position:relative, so the
+     sheet's own selector carries the workspace scope to stay above the dock. */
+  .main[data-workspace] > .ug-sheet:not([hidden]) { display:block; position:fixed; inset:0; z-index:140; }
+  .ug-sheet-scrim { position:absolute; inset:0; width:100%; height:100%; border:0; padding:0; background:rgba(2,6,12,.62); backdrop-filter:blur(2px); }
+  .ug-sheet-panel { position:absolute; left:0; right:0; bottom:0; display:flex; flex-direction:column; max-height:72dvh; margin-bottom:env(safe-area-inset-bottom,0px); background:var(--panel,#0d1520); border-top:1px solid var(--line,rgba(110,200,255,.22)); border-radius:16px 16px 0 0; box-shadow:0 -10px 30px rgba(0,0,0,.45); }
+  .ug-sheet-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 8px 8px 16px; border-bottom:1px solid var(--line,rgba(110,200,255,.16)); }
+  .ug-sheet-head strong { font-size:13px; font-weight:500; color:var(--text,#e9f4fb); }
+  .ug-sheet-x { width:44px; height:44px; border-radius:10px; border:1px solid var(--line,rgba(110,200,255,.2)); background:var(--surface-raised,rgba(10,18,30,.9)); color:var(--text,#dcefff); font-size:15px; line-height:1; }
+  .ug-sheet-body { overflow:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:0 8px 12px; }
+  .ug-sheet-body .ug-inspector-card { border:0; background:transparent; box-shadow:none; padding-left:8px; padding-right:8px; }
+  body.ug-sheet-open { overflow:hidden; }
+}
+
+/* ================================================================ unslop: memory graph (method: "unslop" by Damir Sokolovsky, CC BY 4.0)
+   Applied signs: gradient card and gradient headline, radial washes, glow
+   shadows, pill soup, uppercase tracked field labels. Surfaces become one
+   charcoal ramp with hairlines; the accent stays on what the graph encodes. */
+.ug-hero { background:var(--panel,#0f0f10); border:1px solid var(--line,#2d2d31); border-radius:14px; }
+.ug-hero::after { display:none; }
+.ug-hero h1 { background:none; -webkit-background-clip:border-box; background-clip:border-box; color:var(--text,#f1f1f3); font-weight:500; letter-spacing:0; }
+.ug-stats.graph-stats > div { background:var(--surface,#171719); border:1px solid var(--line,#2d2d31); border-radius:10px; }
+.ug-stats .graph-stat-number { font-weight:500; font-variant-numeric:tabular-nums; }
+.ug-stats > div > span:last-child { text-transform:none; letter-spacing:0; font:400 12px/1.3 var(--sans); color:#a1a1a6; }
+.ug-hero-badges span { min-height:28px; border-radius:6px; background:var(--surface-raised,#242426); border:1px solid var(--line,#2d2d31); color:var(--text,#f1f1f3); font:500 11.5px/1 var(--sans); letter-spacing:0; box-shadow:none; }
+.ug-hero-panel { background:var(--surface,#171719); border:1px solid var(--line,#2d2d31); border-radius:12px; box-shadow:none; }
+.ug-hero-points li::before { background:#5c6672; box-shadow:none; }
+.ug-clarity-label, .ug-limit { text-transform:none; letter-spacing:0; font:500 12px/1 var(--sans); color:#9aa3ad; }
+.ug-toolbar.graph-controls { background:var(--panel,#0f0f10); border:1px solid var(--line,#2d2d31); border-radius:12px; }
+.graph-toggle.ug-chip { border-radius:8px; border-color:var(--line,#2d2d31); background:var(--surface,#171719); }
+.graph-toggle.ug-chip:has(input:checked) { box-shadow:none; }
+.graph-toggle.ug-chip:has(input:checked) i { box-shadow:none; }
+.ug-viz { border-radius:10px; background:var(--surface,#171719); border-color:var(--line,#2d2d31); box-shadow:none; }
+.ug-viz-glider, .ug-viz[data-active="neural"] .ug-viz-glider { background:var(--surface-raised,#242426); box-shadow:none; }
+.ug-viz-btn[aria-checked="true"] { color:var(--text,#f1f1f3); }
+.ug-zoom { border-color:var(--line,#2d2d31); border-radius:9px; }
+.ug-zoom .btn { background:var(--surface,#171719); }
+.ug-topic-grid .graph-result { border-radius:8px; border-color:var(--line,#2d2d31); background:var(--surface,#171719); box-shadow:none; }
+.ug-topic-grid .graph-result:hover, .ug-topic-grid .graph-result:focus-visible { transform:none; box-shadow:none; border-color:#5a6066; }
+.ug-inspector-card, .ug-topic-explorer, .ug-source-disclosure, .ug-reading-guide { background:var(--panel,#0f0f10); border-color:var(--line,#2d2d31); }
+.ug-stage-heading { background:rgba(15,15,16,.94); border-bottom-color:var(--line,#2d2d31); }
+.ug-stage-badges span { border-radius:6px; text-transform:none; letter-spacing:0; font:500 11px/1 var(--sans); background:var(--surface-raised,#242426); border-color:var(--line,#2d2d31); }
+.ug-legend i { box-shadow:none; }
+.ug-legend { border-radius:8px; border-color:var(--line,#2d2d31); background:rgba(15,15,16,.9); }
+.ug-empty-orb { display:none; }
+.ug-loader i { filter:none; }
+
+/* Ghost schedule page: slim link to Operations instead of a hero card (2026-11-05) */
+a.ghost-operations-tile{min-height:0!important;padding:10px 14px!important;gap:12px!important;border-radius:12px!important;box-shadow:none!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.12)!important;margin:0 0 14px!important;}
+a.ghost-operations-tile:hover,a.ghost-operations-tile:focus-visible{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.28)!important;box-shadow:none!important;}
+a.ghost-operations-tile .ghost-operations-tile-icon{width:30px!important;height:30px!important;filter:none!important;}
+a.ghost-operations-tile .ghost-operations-tile-copy{display:flex!important;align-items:baseline;gap:10px;flex-wrap:wrap;}
+a.ghost-operations-tile .ghost-operations-tile-copy strong{font-size:15px!important;font-weight:650!important;}
+a.ghost-operations-tile .ghost-operations-tile-copy>span{font-size:13px!important;color:#9fb3c7!important;}
+a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height:28px!important;font-size:16px!important;}

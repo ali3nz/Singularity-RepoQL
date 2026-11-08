@@ -1640,6 +1640,10 @@ class Handler(BaseHTTPRequestHandler):
             ".mjs": "application/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8",
             ".svg": "image/svg+xml",
+            ".webp": "image/webp",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
             ".json": "application/json",
         }.get(target.suffix, "application/octet-stream")
         body = target.read_bytes()

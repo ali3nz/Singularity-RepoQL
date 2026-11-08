@@ -104,3 +104,18 @@ Full SHA-256 of the exported file, with the source hash it was derived from.
 See `THIRD-PARTY-NOTICES.md`: Kanzo is an unmodified AGPL-3.0-only separate
 process (not redistributed), and the RepoQL runtime, Tencent panel, Claude
 Office and Ghost are external services, not bundled here.
+
+## Design refresh — 2026-11-08
+
+The static surface was refreshed from the live dashboard's current design (charcoal theme, themed CSS
+bundle, phone layout, illustrated workspace cards, command-center health strip, memory-graph and
+navigation updates). It was a three-way merge against the original export base, so every
+portability and native-install change in `static/app.js`, `static/index.html` and
+`static/navigation_ui.js` was kept: variant gating, the Windows-local OpenMausBot and Ghost views,
+Claude Agents Control, local login and the native usage labels.
+
+Fleet-only pages (shared bot operations, fleet Agents Control, Agent Roles, bot retirement redirects)
+ship as code but are disabled by `featureAllowed` because they need operations APIs this product does
+not include. No server-side module changed except image content types (`.webp`, `.png`, `.jpg`) in
+`server.py`. `static/bundle.css` is generated: run `python3 tools/build_css.py` after editing any file
+listed in `static/bundle.sources`.

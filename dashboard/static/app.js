@@ -1,10 +1,15 @@
-import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js';
+import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261105-graph';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
+import {openAvatarPicker, agentAvatar} from './agent_avatars.js';
 import {mountGhost} from './ghost/dashboard.js';
+import {viewOpenMausBot} from './openmausbot_panel.js';
+import {viewOpenMausOps} from './openmausbot_ops.js';
 import {mountNativeKanban} from './kanban_native.js';
 import {initNavigationUI, navPathFor} from './navigation_ui.js';
 import {renderRepoqlCheatSheet, bindRepoqlCheatSheet} from './repoql_cheatsheet.js';
 import {renderMemoryArchitecturePage, bindMemoryArchitecturePage, renderOrchestraWorkflowPage, bindOrchestraWorkflowPage} from './workflow_graphs.js';
+import {renderAgentReferencePage, bindAgentReferencePage} from './agent_reference.js';
+import {viewAgentsControl as viewAgentsControlPage, bindAgentsControl} from './agents_control_view.js';
 // RepoQL Control — dark neon block management UI.
 // Vanilla ES module: no build step, no framework, no extra dependency.
 
@@ -15,13 +20,14 @@ const CONN = document.getElementById("conn");
 const CONN_LABEL = document.getElementById("connLabel");
 const HOST_LINE = document.getElementById("hostLine");
 const THEME_SLOT = document.getElementById("theme-switcher-slot");
-const THEME_KEY = "repoql.dashboard.theme";
+const THEME_KEY = window.matchMedia && window.matchMedia("(max-width:760px)").matches ? "repoql.dashboard.theme.phone" : "repoql.dashboard.theme";
 const THEME_LAST_DARK_KEY = "repoql.dashboard.theme.dark";
 const THEME_LAST_LIGHT_KEY = "repoql.dashboard.theme.light";
 
 // A theme chooses the atmosphere, not the meaning of colours. Data roles remain
 // distinguishable within every theme, including the two neon alternatives.
 const THEME_CATALOG = [
+  { id: "charcoal", label: "Charcoal", mode: "dark", note: "Grok-inspired near-black surfaces, soft charcoal cards and purposeful colours across every workspace.", swatches: ["#242426", "#65a9ef", "#a684e7", "#65c6a5", "#e7b874"] },
   { id: "neon", label: "Neon Grid", mode: "dark", note: "Graphite command deck with spectrum neon accents and distinct workspace colours.", swatches: ["#3ee7ff", "#b8ff4a", "#ff5fa8", "#5ca8ff", "#b47cff"] },
   { id: "neon-violet", label: "Neon Violet", mode: "dark", note: "Violet atmosphere with independent lime, coral, blue and teal workspace accents.", swatches: ["#76e9ff", "#c6ff63", "#ff79ba", "#72b6ff", "#cf96ff"] },
   { id: "neon-emerald", label: "Neon Emerald", mode: "dark", note: "Emerald atmosphere with bright blue, violet, pink and gold workspace accents.", swatches: ["#58e7e9", "#bfff63", "#ff74ae", "#72c0ff", "#b998ff"] },
@@ -82,7 +88,7 @@ function renderThemeSwitcher() {
   const options = (items) => items.map(t => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join('');
   THEME_SLOT.innerHTML = `<section class="theme-panel compact" aria-label="Dashboard appearance">
     <label class="theme-select-wrap compact" for="theme-select">Theme
-      <select id="theme-select" class="select compact"><optgroup label="Dark neon">${options(groups.dark)}</optgroup><optgroup label="Light">${options(groups.light)}</optgroup></select>
+      <select id="theme-select" class="select compact"><optgroup label="Dark themes">${options(groups.dark)}</optgroup><optgroup label="Light">${options(groups.light)}</optgroup></select>
     </label>
   </section>`;
   document.getElementById('theme-select')?.addEventListener('change', e => applyTheme(e.target.value));
@@ -327,6 +333,15 @@ function markNav(path) {
   const target = navPathFor(path, links.map(link => link.dataset.nav));
   const active = links.find(link => link.dataset.nav === target) || null;
   links.forEach(link => link.classList.toggle('active', link === active));
+  const mobileTitle=document.getElementById('mobile-page-title');
+  if (mobileTitle) {
+    const names={'/':'Command Center','/kanban':'Kanban Board','/openmausbot':'Bot operations',
+      '/agentchat':'Agent Lounge','/unified/graph':'Memory Graph','/office':'Office Viewer'};
+    mobileTitle.textContent=names[target] || active?.textContent.trim() || 'RepoQL';
+  }
+  // Canonical sidebar destination is also the visual route identity. Detail
+  // URLs keep their owner's colours without a parallel colour routing table.
+  APP.dataset.pageRoute = target;
 }
 
 // Guards views against out-of-order responses: a slow older request must never
@@ -433,10 +448,12 @@ async function route() {
   state.cleanup = null;
   clearTimers();
   const { path, params } = parseRoute();
+  document.documentElement.dataset.route = path === '/openmausbot/chat' ? 'openmausbot' : '';
   // One visual identity per workspace. Presentation only: no change to
   // routing, MCP authority, task ownership or API calls.
   APP.dataset.workspace = path === '/kanban' ? 'work'
-    : path.startsWith('/ghost') || (nativeInstall && path === '/openmausbot' && params.tab === 'ghost') ? 'ghost'
+    : path.startsWith('/bots') || path.startsWith('/openmausbot') ? 'chat'
+    : path.startsWith('/ghost') ? 'ghost'
     : path === '/agentchat' ? 'chat'
     : path === '/unified/graph' || path.startsWith('/architecture/memory') || path.startsWith('/knowledge/') ? 'memory'
     : path === '/office' ? 'office'
@@ -444,26 +461,85 @@ async function route() {
     : path.startsWith('/harness') ? 'harness'
     : path.startsWith('/diagnostics') || path.startsWith('/unified/usage') ? 'attention'
     : 'repoql';
+  // Presentation only. Nested pages receive the right accent without changing
+  // the existing route handlers or the owning coordinator/data source.
+  APP.dataset.pageIdentity = path.startsWith('/bots') ? 'bot'
+    : path === '/kanban' ? 'work'
+    : path.startsWith('/ghost') ? 'ghost'
+    : path === '/agentchat' ? 'lounge'
+    : path === '/office' ? 'office'
+    : path === '/architecture/orchestra' ? 'orchestra'
+    : path === '/reference/agents' ? 'reference'
+    : path.startsWith('/architecture/') || path === '/unified/graph' ? 'memory'
+    : path.startsWith('/repoql/cheat-sheet') ? 'reference'
+    : path.startsWith('/knowledge/all') || path.startsWith('/knowledge/item') ? 'concepts'
+    : path.startsWith('/knowledge/connectors') ? 'connectors'
+    : path === '/links' || path.startsWith('/knowledge/connections') ? 'links'
+    : path.startsWith('/unified/tencent') ? 'tencent'
+    : path === '/indexing' || path.startsWith('/repositories') ? 'indexing'
+    : path === '/unified/usage' ? 'usage'
+    : path.startsWith('/diagnostics') || ['/cpu','/errors','/excluded'].includes(path) ? 'diagnostics'
+    : path.startsWith('/harness/settings') ? 'settings'
+    : path.startsWith('/harness/agents') ? 'agents'
+    : path.startsWith('/harness/runs') || path.startsWith('/harness/run') ? 'runs'
+    : path.startsWith('/harness/events') ? 'events'
+    : path.startsWith('/harness') ? 'harness'
+    : 'repoql';
   if (!featureAllowed(path)) {
     APP.innerHTML = '<div class="empty">This component is not included in the selected Singularity installation option.</div>';
     return;
   }
-  markNav(nativeInstall && path.startsWith('/ghost') ? '/openmausbot' : path === '/ghost/planner' ? '/ghost' : path);
+  markNav(path.startsWith('/bots/') ? '/bots' : path.startsWith('/ghost') ? '/openmausbot' : path.startsWith('/openmausbot/') && path !== '/openmausbot/fleet' ? '/openmausbot' : path);
   if (state.routeEpoch > 1) window.scrollTo(0, 0);
   try {
-    if (path === "/ghost/planner" && nativeInstall) {
-      APP.innerHTML = pageHead('Ghost planner', 'Not part of the verified native Windows source.') +
-        '<p class="empty">The household planner is not installed on this Windows product. Use the Ghost controls under OpenMausBot in supported options.</p>';
-      return;
-    }
-    if (path === "/ghost/planner") return await viewGhostPlanner();
-    if (path === "/ghost") {
-      // Preserve old bookmarks while showing one Windows OpenMausBot workspace.
-      if (nativeInstall) {
+    // Singularity install: OpenMausBot and Ghost are the local inventory and companion
+    // controls the product ships, not the Linux fleet operations API.
+    if (path === "/openmausbot" || path === "/ghost" || path === "/ghost/planner") {
+      if (path === "/ghost/planner") {
+        if (!nativeInstall) return await viewGhostPlanner();
+        APP.innerHTML = pageHead('Ghost planner', 'Not part of the verified native Windows source.') +
+          '<p class="empty">The household planner is not installed on this Windows product. Use the Ghost controls under OpenMausBot in supported options.</p>';
+        return;
+      }
+      if (path === "/ghost") {
+        if (!nativeInstall) return await viewGhostOperations();
         const canonical = replaceRoute(href('/openmausbot', {tab:'ghost'}));
         return await viewOpenMausBotWindows(canonical.params);
       }
-      return await viewGhostOperations();
+      return await viewOpenMausBotWindows(params);
+    }
+    // Shared bot operations (Now / Calendar / Needs attention / Run history).
+    // The embedded native workspace (chat and routine management) moved to /openmausbot/chat.
+    if (["/openmausbot", "/openmausbot/calendar", "/openmausbot/attention", "/openmausbot/history"].includes(path)) {
+      return await viewOpenMausOps({
+        app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
+        tab: path.split("/")[2] || "now", params, setCleanup: (fn) => { state.cleanup = fn; },
+      });
+    }
+    if (path === "/openmausbot/chat") return await viewOpenMausBot({
+      app: APP, api, pageHead, esc, toast, current: () => epoch === state.routeEpoch,
+    });
+    if (path === "/openmausbot/fleet") return await viewOpenMausBot({
+      app: APP, api, pageHead, esc, toast, current: () => epoch === state.routeEpoch, mode: 'fleet',
+    });
+    if (path === "/bots" || path.startsWith("/bots/")) {
+      // Bot Operations retired (fleet#832): the one surviving behaviour is the
+      // redirect. replaceState keeps a single history entry, like the other
+      // consolidated routes.
+      const canonical = replaceRoute(href("/openmausbot"));
+      return await viewOpenMausBot({
+        app: APP, api, pageHead, esc, toast, current: () => epoch === state.routeEpoch,
+        params: canonical.params,
+      });
+    }
+    // Ghost is a bot inside the shared operations view now. Old bookmarks land on
+    // the Ghost-filtered view. The standalone Ghost console and planner are retired.
+    if (path === "/ghost" || path.startsWith("/ghost/")) {
+      const canonical = replaceRoute(href("/openmausbot", {bot: "ghost"}));
+      return await viewOpenMausOps({
+        app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
+        tab: "now", params: canonical.params, setCleanup: (fn) => { state.cleanup = fn; },
+      });
     }
     if (path === "/unified/graph") return await viewUnifiedGraph();
     if (path === "/openmausbot") return await viewOpenMausBotWindows(params);
@@ -476,6 +552,7 @@ async function route() {
     if (path === "/repoql/control") return await viewRepoqlNative();
     if (path === "/architecture/memory") { APP.innerHTML = renderMemoryArchitecturePage(); architectureRuntimeChecks(); const binding = bindMemoryArchitecturePage(); state.cleanup = () => binding?.dispose(); return; }
     if (path === "/architecture/orchestra") { APP.innerHTML = renderOrchestraWorkflowPage(); architectureRuntimeChecks(); const binding = bindOrchestraWorkflowPage(); state.cleanup = () => binding?.dispose(); return; }
+    if (path === "/reference/agents") { APP.innerHTML = groupTabs() + renderAgentReferencePage(); bindAgentReferencePage(); return; }
     if (path === "/repoql/cheat-sheet") { APP.innerHTML = renderRepoqlCheatSheet(); return bindRepoqlCheatSheet(); }
     if (path === "/knowledge/connectors") return await viewConnectors();
     if (path === "/knowledge/connections") return await viewLinks({...params, collection: params.collection || "see_also"}, true);
@@ -493,6 +570,7 @@ async function route() {
     }
     if (path === "/indexing") return await viewIndexing(params);
     if (path === "/diagnostics") return await viewDiagnostics(params);
+    if (path === "/agents-control") return await viewAgentsControl();
     if (path === "/cpu" || path === "/errors" || path === "/excluded") {
       // Retired standalone routes: CPU & Performance, Errors and Excluded Files
       // are the three tabs of Diagnostics. Keep their query parameters.
@@ -598,7 +676,7 @@ async function viewGhostPlanner() {
   heading.tabIndex = -1;
   heading.focus({preventScroll: true});
   // Additive to the accepted Ghost Operations console: same shadow-root
-  // isolation and the planner's own controller copy, never a replacement.
+  // isolation and the planner's own script copy, never a replacement.
   const [response, module] = await Promise.all([
     fetch('/ghost/planner/index.html',{cache:'no-store',signal:state.routeAbort?.signal}),
     import('./ghost/planner/dashboard.js'),
@@ -622,7 +700,34 @@ function pageHead(title, subtitle, actions = "") {
   return `<div class="page-head">
     <div><h1>${esc(title)}</h1><div class="sub">${esc(subtitle)}</div></div>
     <div class="actions">${actions}</div>
-  </div>`;
+  </div>` + groupTabs();
+}
+
+// One sidebar entry per workspace; its sibling pages are tabs on every page of
+// the group (Harness telemetry, Agents). Routes are unchanged, so old links work.
+const HARNESS_TABS = [
+  { id: "/harness", label: "Overview" },
+  { id: "/harness/agents", label: "Live agents" },
+  { id: "/harness/runs", label: "Runs" },
+  { id: "/harness/performance", label: "Performance" },
+  { id: "/harness/events", label: "Events" },
+  { id: "/harness/settings", label: "Settings" },
+];
+const AGENT_TABS = [
+  { id: "/agents-control", label: "Configuration" },
+  { id: "/reference/agents", label: "Roles" },
+  { id: "/openmausbot/fleet", label: "Bot fleet" },
+];
+function groupTabs() {
+  const { path } = parseRoute();
+  if (path === "/harness" || path.startsWith("/harness/")) {
+    const active = path === "/harness/run" ? "/harness/runs" : HARNESS_TABS.some(t => t.id === path) ? path : "/harness";
+    return tabStrip(HARNESS_TABS.map(t => ({ ...t, href: () => href(t.id, {}) })), active, "Harness sections");
+  }
+  if (AGENT_TABS.some(t => t.id === path)) {
+    return tabStrip(AGENT_TABS.map(t => ({ ...t, href: () => href(t.id, {}) })), path, "Agent sections");
+  }
+  return "";
 }
 
 function pill(status) {
@@ -732,23 +837,22 @@ function miniatureBrainGraph() {
 
 function dashboardSnapshot() {
   const destinations = [
-    ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','DELIVERY'],
+    ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','Delivery'],
     ...(nativeInstall
-      ? [['OpenMausBot','/openmausbot','View local bots and Ghost companion controls when installed.','ghost','BOTS & COMPANION']]
-      : [['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','HOUSEHOLD & SCHEDULE']]),
-    ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','AGENT ACTIVITY'],
-    ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','KNOWLEDGE'],
-    ['Office Viewer','/office','Open the live protected office scene.','office','WORKSPACE'],
-    ...(nativeInstall ? [['Agents Control','/claude/agents','Manage your installed Claude Code agents and MCP inventory.','chat','AGENT SETTINGS']] : []),
+      ? [['OpenMausBot','/openmausbot','View local bots and Ghost companion controls when installed.','ghost','Bots & companion']]
+      : [['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','Household & schedule']]),
+    ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','Agent activity'],
+    ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','Knowledge'],
+    ['Office Viewer','/office','Open the live protected office scene.','office','Workspace'],
+    ...(nativeInstall ? [['Agents Control','/claude/agents','Manage your installed Claude Code agents and MCP inventory.','chat','Agent settings']] : []),
   ];
   const REPOQL_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".55" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg>`;
   const BRAIN_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>`;
   const iconBadges = {
     '/kanban': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="5.5" height="15" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="10.2" y="8" width="5.5" height="11.5" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="16.9" y="6" width="3.6" height="13.5" rx="1.6" stroke="currentColor" stroke-width="1.6"/></svg>`,
-    '/openmausbot': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="13" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor"/><path d="M12 7V4" stroke="currentColor" stroke-width="1.5"/></svg>`,
     '/ghost': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 18.5V9a4.5 4.5 0 1 1 9 0v9l-2.2-1.5-2.3 1.5-2.3-1.5-2.2 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10.2" r="1" fill="currentColor"/><circle cx="14" cy="10.2" r="1" fill="currentColor"/></svg>`,
     '/agentchat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H11l-4 3v-3.2A3.5 3.5 0 0 1 5 11.5v-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8.7h6M9 11.3h3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
-    '/office': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="11" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M9 19.5h6M12 15.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    '/office': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M2.5 20.5h19"/><path d="M8.5 7.5h2M13.5 7.5h2M8.5 11.5h2M13.5 11.5h2"/><path d="M10.5 20.5v-2.5a1.5 1.5 0 0 1 3 0v2.5"/></svg>`,
     '/unified/graph': BRAIN_ICON,
     '/repoql/control': REPOQL_ICON,
     '/unified/tencent': BRAIN_ICON,
@@ -802,20 +906,16 @@ function dashboardSnapshot() {
     ['To do','ready','work','#/kanban','Kanzo ready tasks'],
     ['In progress','doing','chat','#/kanban','Kanzo active stage'],
     ['Review','review','memory','#/kanban','Kanzo review stage'],
-    ['Backlog','backlog','ghost','#/kanban','Kanzo parked work'],
     ['Recently active agents','agents','repoql','#/agentchat','Agent Chat activity, last 5 min'],
   ];
-  return `<section class="command-hero block command-hero-rich" aria-labelledby="command-hero-heading">
-    <div class="command-hero-copy"><span class="command-kicker">Command center</span><h2 id="command-hero-heading">Launch your core workspaces.</h2><p class="command-hero-note">A clearer, faster control surface for work, agents, household planning and knowledge.</p></div>
-    <div class="command-hero-sidekick" aria-hidden="true"><div class="command-hero-orbit"><i></i><i></i><i></i><span>${REPOQL_ICON}</span></div></div>
-  </section>
-  <section class="command-overview block" aria-labelledby="command-focus-heading" id="command-live-overview">
+  return `<section class="command-overview block" aria-labelledby="command-focus-heading" id="command-live-overview">
     <div class="command-heading"><h2 id="command-focus-heading">Operations overview</h2>
       <span class="command-overview-actions"><span id="command-live-status" role="status" aria-live="polite">Checking live status…</span><button id="command-live-refresh" type="button">Refresh status</button></span></div>
+    <div class="command-health" id="command-health" role="list" aria-label="Service health"></div>
     <div class="command-overview-grid">${overview.map(([title,key,accent,link,description]) => `<a class="command-overview-card" data-accent="${esc(accent)}" href="${esc(link)}"><span class="command-overview-name">${esc(title)}</span><strong class="command-overview-value" id="command-live-${esc(key)}">…</strong><small>${esc(description)}</small></a>`).join('')}</div>
   </section>
   <section aria-labelledby="goto-heading">
-    <div class="command-heading"><h2 id="goto-heading">Primary workspaces</h2><span>Most-used surfaces first</span></div>
+    <div class="command-heading"><h2 id="goto-heading">Primary workspaces</h2></div>
     <div class="command-links command-links-priority command-links-visual">${destinations.map(([title,link,description,accent,kicker])=>`<a class="command-link command-workspace${featureCards.has(link)?' command-workspace-feature':''}" data-accent="${esc(accent)}" href="#${esc(link)}">
       <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || REPOQL_ICON}</span>
       <span class="command-card-content"><span class="command-card-kicker">${esc(kicker)}</span><strong>${esc(title)}</strong><span class="command-card-description">${esc(description)}</span><span class="command-card-cta">Open workspace <span aria-hidden="true">↗</span></span></span>
@@ -823,11 +923,11 @@ function dashboardSnapshot() {
     </a>`).join('')}</div>
   </section>
   <details class="command-more block" data-accent="office" open>
-    <summary><span>Reference documents</span><span class="muted small">Core reference material</span></summary>
+    <summary><span>Reference documents</span></summary>
     <div class="command-more-grid">${referenceDocuments.map(([title,link])=>`<a class="command-mini-chip" href="#${esc(link)}">${esc(title)}</a>`).join('')}</div>
   </details>
   <details class="command-more block" data-accent="memory" open>
-    <summary><span>System knowledge</span><span class="muted small">Knowledge surfaces and sources</span></summary>
+    <summary><span>System knowledge</span></summary>
     <div class="command-more-grid">${systemKnowledge.map(([title,link])=>`<a class="command-mini-chip" href="#${esc(link)}">${esc(title)}</a>`).join('')}</div>
   </details>
   <details class="command-more block" data-accent="attention" open>
@@ -841,6 +941,11 @@ async function viewDashboard() {
   APP.innerHTML = pageHead('Command center', '') +
     `<div id="dash" class="stack">${dashboardSnapshot()}</div>`;
   HOST_LINE.textContent = 'RepoQL Dashboard';
+  if (window.matchMedia?.('(max-width:760px)').matches) {
+    // Keep primary workspaces and live status prominent on phone-sized screens.
+    // Secondary links remain accessible via their native disclosure controls.
+    APP.querySelectorAll('#dash .command-more').forEach(details => { details.open = false; });
+  }
   const panel = document.getElementById('command-live-overview');
   const refresh = document.getElementById('command-live-refresh');
   const status = document.getElementById('command-live-status');
@@ -864,13 +969,24 @@ async function viewDashboard() {
     ]);
     if (epoch !== state.routeEpoch || !panel.isConnected) return;
     const tasks = kanzo.status === 'fulfilled' && Array.isArray(kanzo.value?.tasks) ? kanzo.value.tasks : null;
-    for (const [key, stage] of [['ready','todo'],['doing','doing'],['review','review'],['backlog','backlog']]) {
-      update(key, tasks ? String(tasks.filter(task => task?.status === stage).length) : 'Unavailable');
+    for (const [key, stage] of [['ready','todo'],['doing','doing'],['review','review']]) {
+      update(key, tasks ? String(tasks.filter(task => task?.status === stage).length) : '–');
     }
     const roster = agents.status === 'fulfilled' && agents.value?.available === true && Array.isArray(agents.value?.agents)
       ? agents.value.agents : null;
-    update('agents', roster ? String(roster.filter(agent => agent?.status === 'working').length) : 'Unavailable');
-    status.textContent = tasks && roster ? 'Latest snapshot' : 'Some services unavailable';
+    update('agents', roster ? String(roster.filter(agent => agent?.status === 'working').length) : '–');
+    const stamp = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    status.textContent = tasks && roster ? `Updated ${stamp}` : `Some services unavailable · ${stamp}`;
+    const health = document.getElementById('command-health');
+    if (health) {
+      const tasksN = tasks ? tasks.length : 0;
+      const items = [
+        ['Kanzo board', tasks ? 'up' : 'down', tasks ? `${tasksN} tasks` : 'not responding', '#/kanban'],
+        ['Agent Chat', roster ? 'up' : 'down', roster ? `${roster.length} agents known` : 'not responding', '#/agentchat'],
+        ['Diagnostics', 'link', 'runtime and service details', '#/diagnostics'],
+      ];
+      health.innerHTML = items.map(([name, st, note, href]) => `<a class="health-chip ${st}" role="listitem" href="${href}"><i aria-hidden="true"></i><b>${name}</b><span>${note}</span></a>`).join('');
+    }
     refresh.disabled = false;
     busy = false;
   };
@@ -1107,7 +1223,7 @@ function renderGraph(container, { nodes = [], edges = [], focus = null }) {
       const other = nodeById.get(edge.source === uri ? edge.target : edge.source);
       return other ? `<button type="button" class="conn-neighbor" data-inspect="${esc(other.id)}"><span class="conn-neighbor-dot" style="--neuron-color:${colorFor(other.category)}"></span>${esc(other.name)}<span class="muted small">${esc(edge.type || 'SEE_ALSO')}</span></button>` : '';
     });
-    inspector.innerHTML = `<div class="conn-inspector-head"><div><span class="conn-kicker">SELECTED MEMORY</span><strong>${esc(node.name)}</strong><span class="muted small">${esc(node.category || 'uncategorised')} · ${neighbors.length} stored connections</span></div><a class="btn small primary" href="${href('/knowledge/item',{uri})}">View memory</a></div>
+    inspector.innerHTML = `<div class="conn-inspector-head"><div><span class="conn-kicker">Selected memory</span><strong>${esc(node.name)}</strong><span class="muted small">${esc(node.category || 'uncategorised')} · ${neighbors.length} stored connections</span></div><a class="btn small primary" href="${href('/knowledge/item',{uri})}">View memory</a></div>
       <div class="conn-neighbors">${neighbors.join('') || '<span class="muted small">No stored connections in this view.</span>'}</div>`;
     inspector.querySelectorAll('[data-inspect]').forEach(el => el.addEventListener('click', () => inspect(el.dataset.inspect)));
   }
@@ -2069,6 +2185,37 @@ function frontMatter(text) {
   return fields;
 }
 
+// Read-only metadata lint for a single loaded source document. This does
+// not verify the evidence or change RepoQL concepts. The list API does not
+// expose frontmatter, so do NOT scan every row with extra item requests.
+function conceptMetadataCheck(meta, category, sourceAvailable) {
+  if (!sourceAvailable) return {state: 'unavailable', issues: ['Source document not readable; metadata was not evaluated.']};
+  const kind = String(category || '').toLowerCase().trim();
+  const has = key => {
+    const value = meta?.[key];
+    return typeof value === 'string' ? Boolean(value.trim()) : Array.isArray(value) && value.length > 0;
+  };
+  if (!['principle','wisdom','rule','shape','knowledge'].includes(kind))
+    return {state: 'not_evaluated', issues: ['No metadata contract is defined for this category.']};
+  const issues = [];
+  const relevance = has('relevance'), verification = has('verification'), ttl = has('ttlDays');
+  if (kind !== 'principle' && !relevance) issues.push('Missing required relevance.');
+  if (kind === 'principle' && relevance) issues.push('Principle must not specify relevance.');
+  if (kind === 'principle' || kind === 'wisdom') {
+    if (verification) issues.push('Verification is not allowed for this category.');
+    if (ttl) issues.push('ttlDays is not allowed for this category.');
+  } else {
+    if (kind === 'knowledge' && !verification) issues.push('Knowledge requires verification.');
+    if (kind === 'knowledge' && !ttl) issues.push('Knowledge requires ttlDays.');
+    if (kind !== 'knowledge' && verification !== ttl) issues.push('Verification and ttlDays must be provided together.');
+    if (ttl) {
+      const n = Number(meta.ttlDays);
+      if (!Number.isInteger(n) || n < 1 || n > 3650) issues.push('ttlDays must be an integer from 1 through 3650.');
+    }
+  }
+  return {state: issues.length ? 'review_needed' : 'metadata_present', issues};
+}
+
 async function viewKnowledgeItem(params) {
   const uri = params.uri || "";
   APP.innerHTML = pageHead("Knowledge record", uri, `<a class="btn ghost" href="${href("/knowledge/all")}">Back to concepts</a>`) +
@@ -2077,6 +2224,11 @@ async function viewKnowledgeItem(params) {
   const record = data.record;
   const meta = frontMatter(data.content?.text || "");
   const tags = Array.isArray(meta.tags) ? meta.tags : meta.tags ? [meta.tags] : [];
+  const metadata = conceptMetadataCheck(meta, data.category || record.category, data.content?.available === true);
+  const metadataNote = metadata.state === 'metadata_present'
+    ? 'Required fields are present. Accuracy, relevance, verification and expiry are not proven by this check.'
+    : metadata.state === 'review_needed' ? 'Source metadata needs review; no change has been made.'
+    : metadata.issues[0];
   document.getElementById("knowledge-item").innerHTML = `
     <div class="grid cols-2">
       <div class="block">
@@ -2110,6 +2262,11 @@ async function viewKnowledgeItem(params) {
       </div>
     </div>
 
+    <div class="block" style="margin-top:14px">
+      <div class="block-title">Concept metadata check <span class="tag">read only</span></div>
+      <p class="muted small">${esc(metadataNote)}</p>
+      ${metadata.state === 'review_needed' ? `<ul class="small">${metadata.issues.map(issue => `<li>${esc(issue)}</li>`).join('')}</ul>` : ''}
+    </div>
     <div class="block" style="margin-top:14px">
       <div class="block-title">Document <span class="tag">rql read ${esc(record.file_uri)}</span></div>
       ${data.content.available
@@ -2244,7 +2401,7 @@ async function viewLinks(params, connections = false) {
 async function viewConnectors() {
   APP.innerHTML = pageHead('RepoQL Connectors', 'Source ingestion connectors · Separate from stored concept and code relationships') + `
     <div class="connectors-intro block">
-      <div><span class="conn-kicker">EXTERNAL SOURCE INGESTION</span><h2>Connect outside knowledge to RepoQL</h2>
+      <div><span class="conn-kicker">External source ingestion</span><h2>Connect outside knowledge to RepoQL</h2>
         <p class="muted">Connectors transform records from supported systems into material RepoQL can index and cite. They are not knowledge graph relationships or agent MCP connections.</p></div>
       <a class="btn" href="https://github.com/RepoQL/RepoQL/tree/main/plugins/repoql/skills/installing-connectors" target="_blank" rel="noopener noreferrer">Official connector guidance</a>
     </div>
@@ -2303,6 +2460,9 @@ const selectedFeatures = window.__SINGULARITY_VARIANT__?.features || null;
 function featureAllowed(path) {
   if (nativeInstall && (path === "/architecture/orchestra" || path === "/harness" || path.startsWith("/harness/"))) return false;
   if (path === "/claude/agents") return nativeInstall;
+  // Fleet-only pages need operations APIs this product does not ship.
+  if (path === "/agents-control" || path === "/reference/agents" || path === "/bots" || path.startsWith("/bots/")
+    || path === "/openmausbot/fleet" || path === "/openmausbot/chat" || ["/openmausbot/calendar","/openmausbot/attention","/openmausbot/history"].includes(path)) return false;
   if (!selectedFeatures) return true;
   if (path === "/ghost" || path.startsWith("/ghost/")) return selectedFeatures.ghost === true;
   if (path === "/office" || path.startsWith("/office/")) return selectedFeatures.office === true;
@@ -2431,7 +2591,7 @@ function metricBlock(title, value, unit = "", tone = "", sub = "", link = null) 
   if (displayLabel(value, null) === null) return "";
   const body = `<div class="block ${link ? "link" : ""} ${tone ? `accent-${tone}` : ""}" ${link ? `data-href="${esc(link)}"` : ""}>
     <div class="block-title">${esc(title)}</div>
-    <div class="metric ${tone}"><span class="value">${esc(value)}</span>${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
+    <div class="metric ${tone}"><span class="value${String(value).length > 7 ? " long" : ""}">${esc(value)}</span>${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
     ${sub ? `<div class="muted small">${esc(sub)}</div>` : ""}</div>`;
   return body;
 }
@@ -2475,7 +2635,7 @@ function rustAuthorityBlock(r) {
 
 async function viewHarnessOverview(params) {
   const range = params.range || "24h";
-  APP.innerHTML = pageHead("Harness Control Center", "Live state of the AI Orchestra harness: runs, agents, models, reviews and bounded telemetry health.") +
+  APP.innerHTML = pageHead("Harness Control Center", "Live state of the AI Orchestra harness: runs, agents, models, reviews and bounded telemetry health.", '<a class="btn small" href="#/openmausbot">OpenMausBot</a>') +
     harnessRangeBar("/harness", params) + `<div id="harness-body"><div class="loading">Reading harness telemetry…</div></div>`;
   const body = document.getElementById("harness-body");
   const next = sequencer();
@@ -2576,11 +2736,22 @@ function livenessTone(state) {
 
 function sessionRow(x) {
   const state = livenessState(x, x.live ? "fresh" : "stale");
-  const label = state === "fresh" ? (x.state || "live") : livenessLabel(state);
-  const note = livenessNote(x, state);
+  // A row whose own report is inactive (idle, closed, ended) says more than the
+  // class can: show that claim, never a running one the row did not make. Stale
+  // and unknown rows keep their existing pill. The name is the source's own
+  // agent name when it reports one.
+  const reported = String(x.state || "").trim().toLowerCase();
+  // Only a report that itself says the row is idle/closed/ended may replace the
+  // label; an "open"/"active" claim never becomes the word shown for an
+  // inactive row, or the pill would read "open" while liveness says inactive.
+  const ACTIVE_CLAIMS = ["running", "live", "fresh", "active", "busy", "open", "started", "working"];
+  const claimed = state === "inactive" && reported && !ACTIVE_CLAIMS.includes(reported) && reported !== "inactive";
+  const label = state === "fresh" ? (x.state || "live") : claimed ? reported : livenessLabel(state);
+  const note = (claimed && String(x.liveness_reason || "").trim()) || livenessNote(x, state);
+  const title = String(x.agent_name || "").trim() || x.harness || "freebuff";
   return `<div class="harness-node">
     <span class="node-dot"></span>
-    <div><strong>${esc(x.harness || "freebuff")}</strong>
+    <div><strong>${esc(title)}</strong>
       <div class="muted small">${esc(x.model || "model not recorded")} · ${esc(x.agent_mode || "—")} · ${esc(x.execution_mode || "—")} · ${fmt(x.messages)} msgs</div>
       <div class="muted small mono">${esc(String(x.session_id).slice(0, 8))}${x.last_turn_outcome ? " · last turn " + esc(x.last_turn_outcome) : ""}</div>
       ${note ? `<div class="muted small">${esc(note)}</div>` : ""}</div>
@@ -2759,6 +2930,8 @@ async function viewHarnessPerformance(params) {
   if (p?.refresh_seconds) applyHarnessRefresh(p.refresh_seconds);
   const c = p.completion_ms;
   const cov = p.coverage || {};
+  const subEl = APP.querySelector('.page-head .sub');
+  if (subEl && c) subEl.textContent = `${fmt(c.samples)} runs in ${range}: median ${ms(c.p50)}, 95th percentile ${ms(c.p95)}. Missing samples are shown as missing.`;
   body.innerHTML = `
     ${cov.window_fully_covered === false ? `<div class="block accent-amber" style="margin-bottom:14px"><div class="block-title">Coverage note</div><p class="muted small">${esc(cov.note || "window extends past retained detail events; per-event metrics cover only the retained range")}${cov.earliest_event ? ` · earliest retained event ${esc(cov.earliest_event)}` : ""}.${fmt(cov.terminal_in_window)} terminal-status runs in range have no recorded end timestamp and are counted as ${fmt(p.completion_incomplete)} incomplete, never estimated from file times.</p></div>` : ""}
     <div class="grid cols-3">
@@ -2769,7 +2942,7 @@ async function viewHarnessPerformance(params) {
       ${metricBlock("Model latency p95", ms(p.model_latency_ms.p95), "", "amber", "provider-observed")}
       ${metricBlock("Tool latency", "unavailable", "", "amber", p.tool_latency_ms.unavailable_reason)}
       ${metricBlock("Fallbacks", fmt(p.fallbacks), "", "amber", "provider fallback events")}
-      ${metricBlock("Retries", fmt(p.retries), "", "", `${ms(p.retry_attempt_ms)} retry-attempt time — ${esc(p.retry_definition)}`)}
+      ${metricBlock("Retries", fmt(p.retries), "", "", `${ms(p.retry_attempt_ms)} retry-attempt time — ${p.retry_definition}`)}
       ${metricBlock("Review iterations", fmt(p.review_iterations), "", "purple", "Sol consult turns")}
     </div>
     <div class="block" style="margin-top:14px"><div class="block-title">Daily completed run throughput</div><div id="h-perf-chart" class="ob-chart"></div></div>
@@ -2791,24 +2964,68 @@ async function viewHarnessPerformance(params) {
   schedule(() => load().catch((error)=>{if(document.getElementById("harness-body")) toast("Harness refresh",error.message,"error")}), harnessInterval());
 }
 async function viewHarnessEvents(params) {
-  const query = { range: params.range || "24h", category: params.category || "", severity: params.severity || "", limit: 120 };
-  APP.innerHTML = pageHead("Important Events", "Failures, repeated model errors, fallbacks, review rejections, interruptions and gate decisions. Identical events are collapsed with a count.") + `
+  const query = { range: params.range || "24h", category: params.kind === "gate_decision" ? "operator" : params.kind === "nudge_recorded" ? "agent" : params.kind === "hook_registration" ? "operator" : (params.category || ""),
+    severity: params.severity || "", kind: ["gate_decision", "nudge_recorded", "hook_registration"].includes(params.kind) ? params.kind : "", limit: 120 };
+  const gateOnly = query.kind === "gate_decision";
+  const nudgeOnly = query.kind === "nudge_recorded";
+  const hookOnly = query.kind === "hook_registration";
+  APP.innerHTML = pageHead(gateOnly ? "Gate Evidence" : nudgeOnly ? "Nudge Evidence" : hookOnly ? "Hook Registration" : "Important Events", gateOnly
+    ? "Recorded decisions from the existing harness audit. No rows means no retained evidence, not a successful gate check."
+    : nudgeOnly ? "Recorded nudges, not proof that an agent acted on them or saved model calls."
+    : hookOnly ? "Plugin initialization decisions, not proof that every active session is currently hooked."
+    : "Failures, repeated model errors, fallbacks, review rejections, interruptions and gate decisions. Identical events are collapsed with a count.") + `
     <div class="toolbar">
-      <select class="select" id="h-cat">${["", "run", "agent", "model", "tool", "review", "operator"].map(v => `<option value="${v}" ${query.category === v ? "selected" : ""}>${v || "any category"}</option>`).join("")}</select>
+      <a class="btn small ${!gateOnly && !nudgeOnly && !hookOnly ? 'primary' : ''}" href="${href('/harness/events', {range: query.range})}">All events</a>
+      <a class="btn small ${gateOnly ? 'primary' : ''}" href="${href('/harness/events', {range: query.range, kind: 'gate_decision'})}">Gate decisions</a>
+      <a class="btn small ${nudgeOnly ? 'primary' : ''}" href="${href('/harness/events', {range: query.range, kind: 'nudge_recorded'})}">Nudges</a>
+      <a class="btn small ${hookOnly ? 'primary' : ''}" href="${href('/harness/events', {range: query.range, kind: 'hook_registration'})}">Hook startup</a>
+      <select class="select" id="h-cat" ${gateOnly || nudgeOnly || hookOnly ? 'disabled' : ''}>${["", "run", "agent", "model", "tool", "review", "operator"].map(v => `<option value="${v}" ${query.category === v ? "selected" : ""}>${v || "any category"}</option>`).join("")}</select>
       <select class="select" id="h-sev">${["", "info", "warn", "error", "critical"].map(v => `<option value="${v}" ${query.severity === v ? "selected" : ""}>${v || "any severity"}</option>`).join("")}</select>
       ${HARNESS_RANGES.map(([value, label]) => `<a class="btn small ${query.range === value ? "primary" : ""}" href="${href("/harness/events", { ...query, range: value })}">${label}</a>`).join("")}
       <button class="btn" id="h-apply">Apply</button>
     </div>
     <div id="harness-body"><div class="loading">Reading events…</div></div>`;
   document.getElementById("h-apply").addEventListener("click", () => {
-    location.hash = href("/harness/events", { ...query, category: document.getElementById("h-cat").value, severity: document.getElementById("h-sev").value });
+    location.hash = href("/harness/events", { ...query, category: gateOnly || hookOnly ? "operator" : nudgeOnly ? "agent" : document.getElementById("h-cat").value,
+      severity: document.getElementById("h-sev").value });
   });
   const body = document.getElementById("harness-body");
   const e = await api(`/api/harness/events?${new URLSearchParams(query).toString()}`);
-  body.innerHTML = dataTable(["Time", "Category", "Event", "Severity", "Run", "Agent", "Detail", "Count"], e.events, (ev) => `<tr>
-    <td class="mono">${esc(ev.ts)}</td><td>${esc(ev.category)}</td><td>${esc(ev.kind)}</td><td>${pill(ev.severity || "")}</td>
-    <td class="mono">${ev.run_id ? `<a href="${href("/harness/run", { id: ev.run_id })}">${esc(ev.run_id)}</a>` : "—"}</td>
-    <td>${esc(ev.agent || "—")}</td><td class="wrap">${esc(ev.detail || "")}</td><td class="mono">${ev.occurrences > 1 ? fmt(ev.occurrences) : ""}</td></tr>`, "No events match these filters.");
+  const source = e.events || [];
+  if (gateOnly) {
+    const gateName = ev => {
+      const status = String(ev.status || '');
+      const reason = String(ev.detail || '');
+      if (status.startsWith('repoql_') || reason.startsWith('RepoQL pre-work')) return 'RepoQL';
+      if (status.startsWith('review_')) return 'Reviewer';
+      if (status.startsWith('kanzo_')) return 'Kanzo';
+      if (status.startsWith('task_')) return 'Task ownership';
+      if (status.startsWith('cred_') || status.startsWith('operator_override_')) return 'Credentials';
+      return 'Other';
+    };
+    body.innerHTML = `<p class="muted small">Audit collection begins at the end of the source log on its first successful ingest. These are observed decisions, not an assertion that every hook registered or every action was intercepted.</p>` +
+      dataTable(["Time", "Gate", "Decision", "Session", "Tool", "Reason", "Count"], source, (ev) => `<tr>
+        <td class="mono">${esc(ev.ts)}</td><td>${esc(gateName(ev))}</td>
+        <td>${pill(ev.status || 'unknown')}</td><td class="mono wrap">${esc(ev.session_id || 'unattributed')}</td>
+        <td>${esc(ev.tool || '—')}</td><td class="wrap">${esc(ev.detail || 'not recorded')}</td>
+        <td class="mono">${ev.occurrences > 1 ? fmt(ev.occurrences) : ''}</td></tr>`, "No retained gate decisions match these filters.");
+  } else if (hookOnly) {
+    body.innerHTML = `<p class="muted small">These are startup audit records only. A LOADED event alone does not prove the tool wrappers were registered; check GATED and current source health.</p>` +
+      dataTable(["Time", "Plugin", "Decision", "Recorded detail"], source, (ev) => `<tr>
+        <td class="mono">${esc(ev.ts)}</td><td>${esc(ev.tool || '—')}</td>
+        <td>${pill(ev.status || 'unknown')}</td><td class="wrap">${esc(ev.detail || 'not recorded')}</td></tr>`, 'No hook startup evidence retained.');
+  } else if (nudgeOnly) {
+    body.innerHTML = `<p class="muted small">Source emits NUDGE audit decisions; delivery and subsequent action are not proven by these rows.</p>` +
+      dataTable(["Time", "Session", "Tool", "Recorded nudge", "Count"], source, (ev) => `<tr>
+        <td class="mono">${esc(ev.ts)}</td><td class="mono wrap">${esc(ev.session_id || 'unattributed')}</td>
+        <td>${esc(ev.tool || '—')}</td><td class="wrap">${esc(ev.detail || 'not recorded')}</td>
+        <td class="mono">${ev.occurrences > 1 ? fmt(ev.occurrences) : ''}</td></tr>`, 'No retained nudges match these filters.');
+  } else {
+    body.innerHTML = dataTable(["Time", "Category", "Event", "Severity", "Run", "Agent", "Detail", "Count"], source, (ev) => `<tr>
+      <td class="mono">${esc(ev.ts)}</td><td>${esc(ev.category)}</td><td>${esc(ev.kind)}</td><td>${pill(ev.severity || "")}</td>
+      <td class="mono">${ev.run_id ? `<a href="${href("/harness/run", { id: ev.run_id })}">${esc(ev.run_id)}</a>` : "—"}</td>
+      <td>${esc(ev.agent || "—")}</td><td class="wrap">${esc(ev.detail || "")}</td><td class="mono">${ev.occurrences > 1 ? fmt(ev.occurrences) : ""}</td></tr>`, "No events match these filters.");
+  }
 }
 
 // Dashboard access (fleet#893 A2): the local dashboard signs in automatically on
@@ -3021,6 +3238,7 @@ function nativeViewerFrameState(body, frameSelector, statusSelector) {
 }
 
 async function viewKanban(params = {}) {
+  const phone=window.matchMedia?.('(max-width:760px)').matches===true;
   APP.innerHTML = pageHead('Kanban Board', '') +
     `<section id="kanban-body" class="kn-shell"><div class="loading">Connecting to Kanzo…</div></section>`;
   const body = document.getElementById('kanban-body');
@@ -3100,7 +3318,7 @@ async function viewUnifiedGraph() {
           <label class="graph-toggle ug-chip mem"><input type="checkbox" id="ug-memories" checked><i></i>Memories</label>
           <label class="graph-toggle ug-chip cross"><input type="checkbox" id="ug-cross" checked><i></i>Cross-system</label>
         </div></div>
-      <div class="ug-toolbar-group ug-toolbar-secondary"><label class="ug-clarity-label" for="ug-detail-level">Detail
+      <div class="ug-toolbar-group ug-toolbar-secondary" id="ug-toolbar-secondary"><label class="ug-clarity-label" for="ug-detail-level">Detail
           <select id="ug-detail-level" class="select" aria-label="Graph detail level">
             <option value="overview">Overview · key topics</option>
             <option value="all" selected>Explore all loaded topics</option>
@@ -3122,22 +3340,32 @@ async function viewUnifiedGraph() {
           <div class="ug-zoom" role="group" aria-label="Zoom">
             <button class="btn" id="ug-zoom-out" aria-label="Zoom out">−</button><button class="btn" id="ug-fit" aria-label="Fit network">Fit</button><button class="btn" id="ug-zoom-in" aria-label="Zoom in">+</button>
           </div>
+          <a class="btn small" href="#/openmausbot">Bot learning</a>
           <button class="btn primary" id="ug-reload">↻ Refresh</button>
         </div></div>
+      <button type="button" class="ug-filters-toggle" id="ug-filters-toggle" aria-expanded="false" aria-controls="ug-toolbar-secondary">Filters and view options</button>
     </div>
     <div class="unified-graph-layout">
       <div class="graph-stage ug-stage-shell">
         <div class="graph-stage-heading ug-stage-heading"><div class="ug-stage-copy"><strong>Memory network</strong><span id="ug-stage-caption" class="visually-hidden"></span></div></div>
         <canvas id="ug-canvas" class="unified-graph-canvas" tabindex="0" role="img" aria-label="Interactive network. Select any node or link to inspect relationships. Drag to pan, pinch with two fingers or scroll to zoom."></canvas>
+        <div id="ug-graph-stats" class="visually-hidden" role="status"></div>
         <div class="ug-legend" aria-hidden="true"><span class="rq"><i></i>RepoQL</span><span class="tx"><i></i>Tencent</span><span class="mem"><i></i>Memories</span><span class="cross"><i></i>Cross-system link</span></div>
         <div class="ug-loading" id="ug-loading" role="status"><div class="ug-loader"><i></i><i></i><i></i></div><strong>Mapping knowledge network…</strong><span>Reading RepoQL and Tencent MemoryCore. A cold load can take around 10 seconds.</span></div>
 
       </div>
-      <aside class="graph-side"><section class="block graph-details ug-inspector-card" id="ug-detail" aria-label="Relationship inspector"><div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a glowing topic to reveal its real relationships.</span></div></section>
+      <aside class="graph-side"><section class="block graph-details ug-inspector-card" id="ug-detail" aria-label="Relationship inspector"><div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a topic to reveal its relationships.</span></div></section>
       <details class="block ug-source-disclosure"><summary class="block-title">Source diagnostics</summary><p class="muted small ug-source-update" id="ug-info">Loading…</p><div id="ug-sources" class="graph-source-list muted">Checking…</div></details>
       </aside>
     </div>
-    <div class="block ug-topic-explorer"><div class="ug-topic-head"><div class="block-title">Explore visible topics <span class="tag" id="ug-visible-count"></span></div><p class="muted small" id="ug-projection-note">All data sources are enabled by default and the brain opens with a larger live sample. Switch back to Overview if you want a reduced projection.</p></div><div class="unified-node-list ug-topic-grid" id="ug-results"></div><button class="btn small" id="ug-show-topics" type="button" hidden>Show more topics</button></div>`;
+    <div class="block ug-topic-explorer"><div class="ug-topic-head"><div class="block-title">Explore visible topics <span class="tag" id="ug-visible-count"></span></div><p class="muted small" id="ug-projection-note">All sources are available. Mobile initially shows a smaller projection for smoother navigation; choose a larger node limit or Explore all loaded topics when needed.</p></div><div class="unified-node-list ug-topic-grid" id="ug-results"></div><button class="btn small" id="ug-show-topics" type="button" hidden>Show more topics</button></div>
+    <div class="ug-sheet" id="ug-sheet" hidden>
+      <button class="ug-sheet-scrim" id="ug-sheet-scrim" type="button" tabindex="-1" aria-label="Close details"></button>
+      <section class="ug-sheet-panel" role="dialog" aria-labelledby="ug-sheet-title">
+        <header class="ug-sheet-head"><strong id="ug-sheet-title">Relationships</strong><button class="ug-sheet-x" id="ug-sheet-x" type="button" aria-label="Close details">✕</button></header>
+        <div class="ug-sheet-body" id="ug-sheet-body"></div>
+      </section>
+    </div>`;
   const el=id=>document.getElementById(id);
   let raw={nodes:[],edges:[],sources:[]}, graph=raw, annotations={}, active=null, disposed=false, refreshing=false,showAllTopics=false;
   const sourceChecks=()=>['repoql','tencent','memories'].filter(k=>el('ug-'+k)?.checked);
@@ -3158,15 +3386,42 @@ async function viewUnifiedGraph() {
     nodes:(data.nodes||[]).map(n=>({...n,display_label:annotations[n.id]?.display_label||n.label,annotation_notes:annotations[n.id]?.notes||''})),
     edges:(data.edges||[]).map(e=>({...e,annotation_notes:annotations[edgeKey(e)]?.notes||'',display_label:annotations[edgeKey(e)]?.display_label||e.type}))};}
   // Brain is the default (operator 2026-10-26); an explicit later choice persists under the v2 key.
-  let initialMode='neural';try{if(localStorage.getItem('repoql.graph.mode.v2')==='network')initialMode='network';}catch{}
+  const phoneShell=window.matchMedia?.('(max-width:768px), (hover:none) and (pointer:coarse)');
+  // Phones start on the plain network layout; the saved choice still wins.
+  let initialMode=phoneShell?.matches?'network':'neural';try{const saved=localStorage.getItem('repoql.graph.mode.v2');if(saved==='network'||saved==='neural')initialMode=saved;}catch{}
   const setModeUI=(mode)=>{el('ug-mode').dataset.active=mode;el('ug-mode').querySelectorAll('[data-mode]').forEach(b=>{const on=b.dataset.mode===mode;b.setAttribute('aria-checked',String(on));b.tabIndex=on?0:-1;});};
   setModeUI(initialMode);
-  const viewer=createKnowledgeGraph(el('ug-canvas'),{mode:initialMode,onSelect:(node,edges,edge)=>{
+  // Phones and touch tablets render the same 2D canvas as desktop; only the
+  // starting projection is smaller so a 390px stage stays readable.
+  if(phoneShell?.matches){
+    // Phones show every loaded topic and every link, as desktop does, from a 250-node sample.
+    el('ug-limit').value='250';
+    el('ug-detail-level').value='all';
+    el('ug-connections').value='all';
+  }
+  el('ug-filters-toggle')?.addEventListener('click',(e)=>{const t=e.currentTarget,o=t.getAttribute('aria-expanded')!=='true';t.setAttribute('aria-expanded',String(o));el('ug-toolbar-secondary')?.classList.toggle('open',o);});
+  let viewer=null;
+  // Phones slide the same inspector up as a sheet; desktop keeps the side panel.
+  const sheet=el('ug-sheet'), sheetBody=el('ug-sheet-body'), sheetClose=el('ug-sheet-x'), sheetScrim=el('ug-sheet-scrim');
+  const inspectorCard=el('ug-detail'), inspectorHome=inspectorCard?.parentElement, inspectorNext=inspectorCard?.nextElementSibling;
+  function openSheet(){return; /* phones: show details below the graph, no overlay */ if(!sheet||!phoneShell?.matches)return;
+    if(inspectorCard.parentElement!==sheetBody)sheetBody.appendChild(inspectorCard);
+    sheet.hidden=false;document.body.classList.add('ug-sheet-open');sheetClose?.focus({preventScroll:true});}
+  function closeSheet(){if(!sheet||sheet.hidden)return;
+    if(inspectorCard.parentElement===sheetBody)inspectorHome.insertBefore(inspectorCard,inspectorNext);
+    sheet.hidden=true;document.body.classList.remove('ug-sheet-open');}
+  const sheetKeys=event=>{if(event.key==='Escape'&&!sheet?.hidden)closeSheet();};
+  const sheetFit=event=>{if(!event.matches)closeSheet();};
+  document.addEventListener('keydown',sheetKeys);phoneShell?.addEventListener?.('change',sheetFit);
+  sheetScrim?.addEventListener('click',closeSheet);
+  sheetClose?.addEventListener('click',()=>{closeSheet();el('ug-canvas')?.focus({preventScroll:true})});
+  viewer=createKnowledgeGraph(el('ug-canvas'),{mode:initialMode,onSelect:(node,edges,edge)=>{
     active=node?{kind:'node',id:node.id}:edge?{kind:'edge',id:edgeKey(edge)}:null;
     renderInspector(node,edge);
+    if(node||edge)openSheet();else closeSheet();
   }});
   function renderInspector(node,edge){const area=el('ug-detail');if(!area)return;
-    if(!node&&!edge){area.innerHTML='<div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a glowing topic to reveal its actual links. The brain image is illustrative; source records and relationships remain authoritative.</span></div>';return;}
+    if(!node&&!edge){area.innerHTML='<div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a topic to reveal its actual links. The layout is illustrative; source records and relationships remain authoritative.</span></div>';return;}
     const item=node||edge,key=node?node.id:edgeKey(edge),notes=annotations[key]||{},label=notes.display_label||'',
       caption=node?(node.display_label||node.label):(edge.display_label||edge.type||'Relationship');
     const connections=node?relationshipDetails(viewer.getVisible(),node.id):[];
@@ -3184,7 +3439,7 @@ async function viewUnifiedGraph() {
       node?.source_system==='tencent'?'<a class="btn small" href="#/unified/tencent">Tencent memory control</a>':'';
     area.innerHTML=`<div class="block-title">${node?'Topic':'Relationship'} inspector</div>
       <h2 class="inspector-title">${esc(caption)}</h2><div class="inspector-meta">${pill(source)} ${node?categoryChip(node.category):pill(edge.verified?'verified':'source relationship')}</div>
-      <p class="muted small wrap">${esc(node?.source_id||edge.id||key)}</p>
+      <p class="muted small wrap">${esc(node?.source_id||edge?.id||key)}</p>
       ${node?`<p class="small">${fmt(connections.length)} visible connected topics. Click a relationship below to inspect its direction and provenance.</p>`:''}
       ${endpoints}
       <p class="small">Provenance: <span class="mono">${esc(item.provenance||'source API')}</span></p>
@@ -3210,7 +3465,12 @@ async function viewUnifiedGraph() {
   function applyFilters(fit=false){if(!alive())return;
     viewer.filter({sources:sourceChecks(),cross:el('ug-cross').checked,query:el('ug-search').value,
       detail:el('ug-detail-level').value,connections:el('ug-connections').value});
-    const filtered=viewer.getVisible();if(fit)viewer.fit();
+    const filtered=viewer.getVisible();
+    // A changed filter or refreshed sample must not leave a stale inspector open.
+    if(active?.kind==='node'&&!filtered.nodes.some(n=>n.id===active.id))viewer.focus(null);
+    else if(active?.kind==='edge'&&!filtered.edges.some(e=>edgeKey(e)===active.id))viewer.focus(null);
+    if(fit)viewer.fit();
+    setText('ug-graph-stats', `${fmt(filtered.nodes.length)} loaded nodes · ${fmt(filtered.edges.length)} recorded links`);
     refreshStageMeta(filtered);
     el('ug-visible-count').textContent=filtered.omitted
       ?`${fmt(filtered.nodes.length)} of ${fmt(filtered.totalVisibleBeforeProjection)} topics shown`
@@ -3242,12 +3502,12 @@ async function viewUnifiedGraph() {
       if(active){if(active.kind==='node')viewer.focus(active.id);else viewer.focusEdge(active.id.replace(/^edge:/,''));}
       loading(false);
     }catch(error){if(alive()){
-      // A failed refresh must never leave the previous source graph appearing live.
-      raw={nodes:[],edges:[],sources:[]};graph=raw;active=null;
-      viewer.update(raw);renderInspector(null,null);applyFilters(false);
-      el('ug-info').textContent='Graph unavailable · no current source data';
-      el('ug-sources').textContent='Local graph sources could not be verified.';
-      loading(true,error.message||'Unified graph unavailable');
+      if(!raw.nodes?.length)loading(true,error.message||'Unified graph unavailable');
+      else {
+        // Cached source records remain visible, but are explicitly marked stale.
+        setText('ug-graph-stats', 'Previously loaded graph · refresh failed');
+        setText('ug-info', 'Refresh failed. Showing previously loaded source data.');
+      }
     }throw error;}
     finally{refreshing=false;if(alive()){el('ug-reload').disabled=false;if(loadPending){loadPending=false;load().catch(e=>{if(alive())toast('Graph',e.message,'error')});}}}
   }
@@ -3265,8 +3525,8 @@ async function viewUnifiedGraph() {
   el('ug-mode').addEventListener('click',e=>{const b=e.target.closest('button[data-mode]');if(b)chooseMode(b.dataset.mode)});
   el('ug-mode').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();
     const next=el('ug-mode').dataset.active==='neural'?'network':'neural';chooseMode(next);el('ug-mode').querySelector(`[data-mode="${next}"]`)?.focus();});
-  state.cleanup=()=>{disposed=true;viewer.dispose()};
-  await load().catch(e=>{if(alive())toast('Graph',e.message,'error')});schedule(()=>load().catch(e=>{if(alive())toast('Graph refresh',e.message,'error')}),60000);
+  state.cleanup=()=>{disposed=true;document.removeEventListener('keydown',sheetKeys);phoneShell?.removeEventListener?.('change',sheetFit);closeSheet();viewer.dispose()};
+  await load().catch(e=>{if(alive())toast('Graph',e.message,'error')});schedule(()=>{if(!document.hidden && alive())load().catch(e=>{if(alive())toast('Graph refresh',e.message,'error')})},120000);
 }
 
 // Embed the original upstream applications instead of reproducing their controls.
@@ -3465,7 +3725,7 @@ async function viewUnifiedUsage() {
     const daily=filtered&&Array.isArray(filtered.daily)?filtered.daily:null;
     let dailyRows=daily;
     if(!dailyRows){const dailyMap=new Map();for(const row of all){const day=String(row.timestamp||'').slice(0,10);if(!day)continue;const bucket=dailyMap.get(day)||{day,input_tokens:null,fresh_input_tokens:null,output_tokens:null};for(const key of ['input_tokens','fresh_input_tokens','output_tokens']){const n=numeric(row[key]);if(n!==null)bucket[key]=(bucket[key]||0)+n;}dailyMap.set(day,bucket);}dailyRows=[...dailyMap.values()].sort((a,b)=>a.day.localeCompare(b.day));}
-    sparkChart(document.getElementById('fb-chart'),dailyRows,[{key:'input_tokens',label:'Input (gross)',color:'#4aabff'},{key:'fresh_input_tokens',label:'Fresh input',color:'#26e6ff'},{key:'output_tokens',label:'Output',color:'#bd96ff'}],{empty:'No timestamped Freebuff receipts in this filter.'});
+    sparkChart(document.getElementById('fb-chart'),dailyRows,[{key:'input_tokens',label:'Input (gross)',color:'#4aabff'},{key:'fresh_input_tokens',label:'Fresh input',color:'#8b8b90'},{key:'output_tokens',label:'Output',color:'#bd96ff'}],{empty:'No timestamped Freebuff receipts in this filter.'});
     const exactIn=sampleOnly?sum(all.filter(e=>!e.usage_incomplete),'input_tokens'):{value:filtered.exact_input_tokens};
     const exactOut=sampleOnly?sum(all.filter(e=>!e.usage_incomplete),'output_tokens'):{value:filtered.exact_output_tokens};
     const collector=fbData.collector||{}, chosts=Array.isArray(collector.hosts)?collector.hosts:[];
@@ -3520,10 +3780,16 @@ async function viewUnifiedUsage() {
   await load();schedule(refresh,60000);
 }
 
+// Agents Control lives in agents_control_view.js; dependencies are handed over lazily.
+function viewAgentsControl() {
+  bindAgentsControl({APP, api, bytes, esc, modal, pageHead, pill, state, toast});
+  return viewAgentsControlPage();
+}
+
 // -------------------------------------------------------------- test hook
 // Regression-test surface for the pure helpers (node/bun). Importing this
 // module only ever runs the bootstrap above; no view, fetch or timer starts.
-export const __editorTestSurface = {validNativeEmbed, rowsOf, contentOf, createDiscoveryGuard, applyHarnessRefresh, harnessInterval,
+export const __editorTestSurface = {conceptMetadataCheck, validNativeEmbed, rowsOf, contentOf, createDiscoveryGuard, applyHarnessRefresh, harnessInterval,
   displayLabel, pill, statusPill, categoryChip, metricBlock, dashboardSnapshot, miniatureBrainGraph, fmt, renderOpenChamberCoverage,
   LIVENESS_STATES, livenessState, livenessLabel, livenessNote, sessionRow, sessionsBlock, seatPill, runBlock, runsBlock,
   diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS, architectureProbeState,
@@ -3637,30 +3903,35 @@ function loungeDateVisible(timestamp, range, now=Date.now()) {
 // Messenger-style, read-only viewer. The durable agentchat inboxes remain the
 // source of truth. This view never acknowledges mail or sends for an agent.
 async function viewAgentChat() {
-  APP.innerHTML = pageHead('Agent Lounge', '') + `
-    <section class="messenger-shell messenger-mode-feed" id="ac-shell" aria-label="Agent Lounge">
+  APP.innerHTML = pageHead('Agent Lounge', '', '<a class="btn small" href="#/openmausbot">OpenMausBot</a>') + `
+    <section class="messenger-shell messenger-mode-threads" id="ac-shell" aria-label="Agent Lounge">
       <header class="messenger-toolbar" aria-label="Agent Lounge controls">
-        <div class="messenger-brand"><span class="messenger-brand-mark" aria-hidden="true">✦</span>
-          <div><strong>Agent Lounge</strong><span id="ac-mode-description"></span></div></div>
-        <div class="messenger-modes" role="group" aria-label="Message layout">
-          <button type="button" id="ac-mode-feed" aria-pressed="true">Live Feed</button>
-          <button type="button" id="ac-mode-threads" aria-pressed="false">Conversations</button>
+        <div class="messenger-modes" role="group" aria-label="Lounge view">
+          <button type="button" id="ac-view-chats" aria-pressed="true">Conversations</button>
+          <button type="button" id="ac-view-feed" aria-pressed="false">Activity</button>
         </div>
-        <label class="messenger-search messenger-global-search"><span class="visually-hidden">Search Agent Lounge messages and Kanzo activity</span>
-          <input id="ac-filter" type="search" placeholder="Search Lounge" autocomplete="off" /></label>
-        <label class="lounge-date-picker"><span class="visually-hidden">Message date range</span>
-          <select id="ac-range" aria-label="Lounge date range"><option value="all">All dates</option><option value="today">Today</option><option value="7d">Last 7 days</option></select></label>
-        <div class="messenger-toolbar-status"><span id="ac-status" role="status" aria-live="polite">Connecting…</span>
-          <button class="messenger-pause" type="button" id="ac-pause">Pause updates</button></div>
+        <details class="lounge-filters" id="ac-filters">
+          <summary>Filters</summary>
+          <div class="lounge-filter-fields">
+            <label class="messenger-search messenger-global-search"><span class="visually-hidden">Search agent messages and Kanzo activity</span>
+              <input id="ac-filter" type="search" placeholder="Search agent messages" autocomplete="off"></label>
+            <label class="lounge-date-picker"><span class="visually-hidden">Message date range</span>
+              <select id="ac-range" aria-label="Lounge date range"><option value="all">All dates</option><option value="today">Today</option><option value="7d">Last 7 days</option></select></label>
+          </div>
+        </details>
+        <span id="ac-status" class="lounge-live-status" role="status" aria-live="polite">Connecting…</span>
       </header>
       <details class="lounge-presence" id="ac-presence">
         <summary><span><span class="lounge-pulse" aria-hidden="true"></span> Agents on duty</span>
-          <span id="ac-presence-summary">Checking presence…</span></summary>
+          <span class="lounge-presence-end"><span id="ac-presence-summary">Checking presence…</span>
+            <svg class="lounge-presence-chevron" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></summary>
         <div id="ac-presence-list" class="lounge-roster" role="list" aria-label="Current agent activity"></div>
         <p class="lounge-presence-note">Online status uses recent Agent Chat activity. Aliases and task descriptions are agent announcements, not proof of a Kanzo claim.</p>
       </details>
       <aside class="messenger-listpane" aria-label="Conversation list">
         <div class="messenger-listhead"><h2>Conversations</h2></div>
+        <label class="messenger-search messenger-chat-search"><span class="visually-hidden">Search conversations</span>
+          <input id="ac-chat-search" type="search" placeholder="Search conversations" autocomplete="off"></label>
         <div id="ac-conversations" class="messenger-conversations" aria-label="Conversations"></div>
       </aside>
       <section class="messenger-thread" aria-label="Agent messages">
@@ -3680,25 +3951,21 @@ async function viewAgentChat() {
   const presenceDetails = document.getElementById('ac-presence');
   const presenceSummary = document.getElementById('ac-presence-summary');
   const presenceList = document.getElementById('ac-presence-list');
-  presenceDetails.open = !window.matchMedia?.('(max-width:760px)').matches;
+  presenceDetails.open = false;
 
   const conversations = document.getElementById('ac-conversations');
   const stream = document.getElementById('ac-stream');
   const status = document.getElementById('ac-status');
   const filter = document.getElementById('ac-filter');
+  const chatSearch = document.getElementById('ac-chat-search');
   const dateRange = document.getElementById('ac-range');
-  const pauseButton = document.getElementById('ac-pause');
-  const feedButton = document.getElementById('ac-mode-feed');
-  const threadsButton = document.getElementById('ac-mode-threads');
   const latestButton = document.getElementById('ac-latest');
   const threadName = document.getElementById('ac-thread-name');
   const threadDescription = document.getElementById('ac-thread-description');
   const threadAvatar = document.getElementById('ac-thread-avatar');
   const clearAgentButton = document.getElementById('ac-clear-agent');
-  let mode = 'feed';
-  try { if (localStorage.getItem('repoql.agentlounge.mode') === 'threads') mode = 'threads'; } catch {}
+  let mode = 'threads';
   let cursor = 0;
-  let paused = false;
   let pending = false;
   let selected = null;
   let mobileOpen = false;
@@ -3713,6 +3980,7 @@ async function viewAgentChat() {
   let kanzoHandshakeDone = false;
   const expandedMessages = new Set();
   let presence = null;
+  let agentAvatars = {};
   let lastPresencePoll = 0;
   let lastRosterKey = '';
   let selectedAgent = '';
@@ -3738,7 +4006,9 @@ async function viewAgentChat() {
       const parts=task?.match(/^([a-z0-9_-]{1,60})#([1-9][0-9]{0,9})$/);
       const taskLink=parts ? `<a class="lounge-task-link" href="#/kanban?task=${encodeURIComponent(parts[2])}" title="Open reported task in Kanzo board">${esc(task)}</a>` : '';
       return `<div class="lounge-person${selectedAgent===a.role?' selected':''}" role="listitem" data-agent-role="${esc(a.role)}">
-        <span class="lounge-person-avatar" aria-hidden="true">${esc(initials(a.role))}</span>
+        ${agentAvatar({role: a.role, name: recent ? note.alias : a.role,
+          avatar: agentAvatars[a.role]?.avatar, avatar_default: agentAvatars[a.role]?.avatar_default},
+          esc, {pickable: true})}
         <div class="lounge-person-body"><button type="button" class="lounge-agent-select" data-select-agent="${esc(a.role)}" aria-pressed="${String(selectedAgent===a.role)}" aria-label="${selectedAgent===a.role?'Show all agents':'Focus on agent'} ${esc(recent ? note.alias : a.role)}"><strong>${esc(recent ? note.alias : a.role)}</strong></button>
           <span><button type="button" class="lounge-copy-role" data-copy-role="${esc(a.role)}" title="Copy Agent Chat address">@${esc(a.role)}</button> · ${a.status==='working'?'Working':'Recently seen'}</span>
           ${recent&&note.work?`<small title="Self-reported task">${esc(note.work)}</small>`:''}
@@ -3746,6 +4016,19 @@ async function viewAgentChat() {
     }).join('');
   };
   presenceList.addEventListener('click', async event => {
+    const avatarButton = event.target.closest?.('button[data-agent-avatar]');
+    if (avatarButton) {
+      const role = avatarButton.dataset.agentAvatar || '';
+      if (!/^[a-z0-9_-]{1,32}$/.test(role)) return;
+      const current = agentAvatars[role] || {};
+      openAvatarPicker({subject: {role, name: current.alias || role,
+          avatar: current.avatar, avatar_default: current.avatar_default}, api, esc,
+        title: 'Choose an avatar',
+        note: 'Saved for this agent and shown wherever the Lounge lists them.',
+        endpoint: '/api/agentchat/agents/' + encodeURIComponent(role) + '/avatar',
+        onSaved: () => { void loadAgentAvatars(); }});
+      return;
+    }
     const button=event.target.closest?.('button[data-copy-role]');
     if(button){
       const role=button.dataset.copyRole;
@@ -3765,6 +4048,15 @@ async function viewAgentChat() {
     render({force:true});
     [...presenceList.querySelectorAll('button[data-select-agent]')].find(b => b.dataset.selectAgent === role)?.focus({preventScroll:true});
   });
+  const loadAgentAvatars = async () => {
+    try {
+      const reply = await api('/api/agentchat/avatars');
+      const map = reply?.agents;
+      agentAvatars = map && typeof map === 'object' ? map : {};
+    } catch { agentAvatars = {}; }
+    lastRosterKey = '';
+    renderPresence();
+  };
   const loadPresence = async () => {
     if (!presenceList.isConnected) return;
     try {
@@ -3788,7 +4080,7 @@ async function viewAgentChat() {
   const targetLabel = m => [...(m.recipients || []), ...(m.sessions || []).map(s => `session:${s}`)].join(', ');
   const renderKanzo = event => {
     const statusText = event.observed ? `Moved ${event.from || 'previous stage'} → ${event.status}` : `Current stage: ${event.status}`;
-    return `<article class="messenger-kanzo" aria-label="Kanzo task activity">
+    return `<article class="messenger-kanzo" data-stage="${esc(event.status || 'unknown')}" aria-label="Kanzo task activity">
       <span class="messenger-kanzo-icon" aria-hidden="true">▤</span><div>
         <span class="messenger-kanzo-label">KANZO · ${event.observed ? 'Observed change' : 'Recent task update'}</span>
         <strong>${esc(event.title)}</strong>
@@ -3806,7 +4098,9 @@ async function viewAgentChat() {
       const task = announcement.task?.match(/^([a-z0-9_-]{1,60})#([1-9][0-9]{0,9})$/);
       const destination = task ? `<a href="#/kanban?task=${encodeURIComponent(task[2])}" class="lounge-task-link">${esc(announcement.task)}</a>` : '';
       return `<article class="messenger-announcement" aria-label="Agent work announcement">
-        <span class="messenger-announcement-icon" aria-hidden="true">✦</span>
+        ${agentAvatar({role: sender, name: announcement.alias, avatar: agentAvatars[sender]?.avatar,
+          avatar_default: agentAvatars[sender]?.avatar_default}, esc,
+          {className: 'messenger-announcement-icon'})}
         <div><strong>${esc(announcement.alias)}</strong> <span>${activity}</span> <small>· @${esc(sender)}</small>
           ${announcement.work ? `<p>${esc(announcement.work)}</p>` : ''}${destination ? `<div>${destination}</div>` : ''}
           <time>${esc(agentChatTime(m.created_at) || `#${m.id}`)}</time></div>
@@ -3815,7 +4109,9 @@ async function viewAgentChat() {
     const long = String(m.text || '').length > 320 || String(m.text || '').split('\n').length > 8;
     const open = mode === 'feed' || expandedMessages.has(Number(m.id));
     return `<article class="messenger-message messenger-agent-tone-${tone(sender)} ${alternate ? 'messenger-message-alt' : ''}${continued ? ' messenger-message-continued' : ''}">
-        <span class="messenger-avatar messenger-avatar-small" aria-hidden="true">${esc(initials(sender))}</span>
+        ${agentAvatar({role: sender, name: sender, avatar: agentAvatars[sender]?.avatar,
+          avatar_default: agentAvatars[sender]?.avatar_default}, esc,
+          {className: 'messenger-avatar messenger-avatar-small'})}
         <div class="messenger-message-content"><div class="messenger-sender">${esc(sender)}</div>
           <div class="messenger-bubble ${long && !open ? 'messenger-bubble-collapsed' : ''}">${esc(m.text || '')}</div>
           ${long && mode !== 'feed' ? `<button type="button" class="messenger-expand" data-expand-message="${Number(m.id)}" aria-expanded="${open}">${open ? 'Show less' : 'Read full message'}</button>` : ''}
@@ -3825,7 +4121,7 @@ async function viewAgentChat() {
   // A single seven-day initial snapshot plus verified changes observed while
   // Lounge is open. This does not attribute task changes to an agent.
   const loadKanzo = async () => {
-    if (kanzoPending || !stream.isConnected || paused) return;
+    if (kanzoPending || !stream.isConnected) return;
     kanzoPending = true;
     try {
       if (!kanzoHandshakeDone) {
@@ -3856,19 +4152,19 @@ async function viewAgentChat() {
     const feedMode = mode === 'feed';
     shell.classList.toggle('messenger-mode-feed', feedMode);
     shell.classList.toggle('messenger-mode-threads', !feedMode);
-    feedButton.setAttribute('aria-pressed', String(feedMode));
-    threadsButton.setAttribute('aria-pressed', String(!feedMode));
-    document.getElementById('ac-mode-description').textContent = ''; // No duplicate description below title
     filter.placeholder = feedMode ? 'Search agent messages' : 'Search conversations';
     const threads = agentChatThreads(records);
     if (!threads.some(t => t.key === selected)) selected = threads[0]?.key || null;
-    const term = filter.value.toLowerCase().trim();
+    // Search scopes are independent. Looking for a conversation must not
+    // silently filter the separate Activity feed when switching views.
+    const term = (feedMode ? filter : chatSearch).value.toLowerCase().trim();
     if (!feedMode) {
       const visible = threads.filter(t => !term || t.title.toLowerCase().includes(term) || t.messages.some(m =>
         [m.text, m.from_session, m.origin, ...(m.recipients || []), ...(m.sessions || [])].join(' ').toLowerCase().includes(term)));
+      if (!visible.some(t => t.key === selected)) selected = visible[0]?.key || null;
       const listScroll = conversations.scrollTop;
       const focusedThread = document.activeElement?.closest?.('button[data-thread]')?.dataset.thread;
-      const listKey = `${visible.map(t => `${t.key}:${t.latest.id}`).join('|')}:${selected}`;
+      const listKey = `${term}:${visible.map(t => `${t.key}:${t.latest.id}`).join('|')}:${selected}`;
       if (force || conversations.dataset.renderKey !== listKey) {
         conversations.innerHTML = visible.length ? visible.map(t => `
           <button class="messenger-conversation ${t.key === selected ? 'selected' : ''}" type="button"
@@ -3877,7 +4173,7 @@ async function viewAgentChat() {
             <span class="messenger-conversation-info"><strong>${esc(t.title)}</strong>
               <span class="messenger-preview">${esc(t.latest.from)}: ${esc(t.latest.text || 'Message')}</span></span>
             <span class="messenger-conversation-time">${esc(agentChatTime(t.latest.created_at))}</span>
-          </button>`).join('') : '<p class="messenger-empty-list">No conversations match your search.</p>';
+          </button>`).join('') : `<div class="messenger-empty-list"><p>${term ? 'No conversations match your search.' : 'No conversations yet.'}</p>${term ? '<button class="btn small" type="button" data-clear-conversation-search>Clear search</button>' : ''}</div>`;
         conversations.dataset.renderKey = listKey;
         conversations.scrollTop = listScroll;
         if (focusedThread && !mobileOpen) {
@@ -3935,26 +4231,32 @@ async function viewAgentChat() {
       }).join('');
     } else stream.innerHTML = `<p class="messenger-empty-thread">${feedMode
       ? (term ? 'No messages match your search.' : 'No recent messages yet.')
-      : 'Select a conversation to see its messages.'}</p>`;
+      : (term ? 'No conversations match your search.' : 'Select a conversation to see its messages.')}</p>`;
     if (changedView || nearBottom) stream.scrollTop = stream.scrollHeight;
     else stream.scrollTop = previousScroll;
     updateUnread();
   };
+  const chatsButton = document.getElementById('ac-view-chats');
+  const feedButton = document.getElementById('ac-view-feed');
   const changeMode = next => {
     if (next === mode) return;
     mode = next;
     mobileOpen = false;
-    try { localStorage.setItem('repoql.agentlounge.mode', mode); } catch {}
+    selectedAgent = '';
+    chatsButton.setAttribute('aria-pressed', String(mode === 'threads'));
+    feedButton.setAttribute('aria-pressed', String(mode === 'feed'));
     render({force:true});
-    if (mode === 'feed') {
-      stream.scrollTop = stream.scrollHeight;
-      kanzoPollAt = Date.now();
-      void loadKanzo();
-    }
+    if (mode === 'feed') void loadKanzo();
   };
+  chatsButton.addEventListener('click', () => changeMode('threads'));
   feedButton.addEventListener('click', () => changeMode('feed'));
-  threadsButton.addEventListener('click', () => changeMode('threads'));
   conversations.addEventListener('click', event => {
+    if (event.target.closest('button[data-clear-conversation-search]')) {
+      chatSearch.value = '';
+      render({force:true});
+      chatSearch.focus();
+      return;
+    }
     const button = event.target.closest('button[data-thread]');
     if (!button) return;
     selected = button.dataset.thread;
@@ -3966,12 +4268,12 @@ async function viewAgentChat() {
   document.getElementById('ac-back').addEventListener('click', () => {
     mobileOpen = false;
     shell.classList.remove('messenger-open');
-    filter.focus();
+    chatSearch.focus();
   });
   latestButton.addEventListener('click', () => { stream.scrollTop = stream.scrollHeight;unreadCount = 0;updateUnread(); });
   stream.addEventListener('scroll', () => { if (isNearBottom()) { unreadCount = 0; updateUnread(); } }, {passive:true});
   const load = async () => {
-    if (pending || paused || !document.getElementById('ac-stream')) return;
+    if (pending || !document.getElementById('ac-stream')) return;
     pending = true;
     try {
       const response = await api('/api/agentchat/feed?' + new URLSearchParams({ after: String(cursor), limit: '100' }));
@@ -3997,6 +4299,7 @@ async function viewAgentChat() {
       if (newMessages) renderPresence();
       if (Date.now()-lastPresencePoll > 55000) {
         lastPresencePoll=Date.now();
+        void loadAgentAvatars();
         void loadPresence();
       }
     } catch (error) { if (error.status !== -1) status.textContent = 'Feed error: ' + error.message; }
@@ -4022,14 +4325,19 @@ async function viewAgentChat() {
       replacement.focus({preventScroll:true});
     }
   });
+  chatSearch.addEventListener('input', () => render({force:true}));
+  chatSearch.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && chatSearch.value) {
+      chatSearch.value = '';
+      render({force:true});
+      event.preventDefault();
+    } else if (event.key === 'Enter') {
+      const first = conversations.querySelector('button[data-thread]');
+      if (first) { first.click(); event.preventDefault(); }
+    }
+  });
   filter.addEventListener('input', () => render({force:true}));
   dateRange.addEventListener('change', () => render({force:true}));
-  pauseButton.addEventListener('click', () => {
-    paused = !paused;
-    pauseButton.textContent = paused ? 'Resume updates' : 'Pause updates';
-    if (!paused) load();
-    else status.textContent = 'Updates paused';
-  });
   clearAgentButton.addEventListener('click', () => {
     selectedAgent = '';
     renderPresence();

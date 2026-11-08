@@ -1,0 +1,177 @@
+/* Phone-only app presentation. Desktop keeps the existing dashboard stylesheet.
+   Decorative treatment only; workspaces, APIs and Kanzo ownership stay unchanged. */
+@media (max-width: 760px) {
+  html:not([data-theme-mode="light"]) body {
+    background:radial-gradient(100% 260px at 80% -35px,rgba(74,80,237,.30),transparent 85%),
+      radial-gradient(90% 390px at 8% 130px,rgba(0,211,226,.14),transparent 85%),#050b18;
+  }
+  html:not([data-theme-mode="light"]) body::before {background-size:80px 80px;opacity:.28;}
+  .mobile-topbar {
+    height:64px;gap:10px;padding:0 13px;
+    background:radial-gradient(100% 110px at 50% -30px,rgba(30,121,225,.22),transparent 100%),
+      linear-gradient(120deg,rgba(5,14,30,.98),rgba(9,12,34,.98));
+    border-bottom:1px solid rgba(41,216,247,.45);
+    box-shadow:0 3px 22px rgba(2,167,207,.12);
+  }
+  .mobile-topbar strong {font-size:clamp(14px,4vw,18px);font-weight:790;letter-spacing:-.02em;color:#ecf8ff;}
+  .mobile-menu-button {border-color:rgba(71,192,247,.62);background:linear-gradient(130deg,#091c36,#091626);color:#dffaff;border-radius:15px;}
+  .mobile-brand-mark {width:35px;height:35px;border-radius:12px;border-color:#00e7ec;
+    background:linear-gradient(135deg,rgba(0,228,215,.18),rgba(107,57,227,.18));
+    box-shadow:0 0 18px rgba(31,210,252,.2);}
+  .main {padding:13px 12px 100px;}
+  .main[data-workspace] {background:radial-gradient(95% 210px at 50% -60px,
+    color-mix(in srgb,var(--page-accent,var(--cyan)) 20%,transparent),transparent 100%);}
+  .main[data-workspace] > .page-head {margin-bottom:14px;border-bottom:0;}
+  .main[data-workspace] > .page-head h1 {font-size:clamp(21px,6vw,27px);font-weight:810;letter-spacing:-.03em;color:#f1f8ff;}
+  /* The home screen puts interactive workspaces first; operational counts remain below. */
+  #dash {display:flex;flex-direction:column;gap:16px;}
+  #dash > .command-hero-rich {order:0;}
+  #dash > section[aria-labelledby="goto-heading"] {order:1;}
+  #dash > .command-overview {order:2;}
+  #dash > .command-more {order:3;margin-top:0;}
+  #dash > section[aria-labelledby="goto-heading"] > .command-heading {display:none;}
+  .command-hero-rich {
+    min-height:130px;margin:0;padding:18px 18px 20px;border-radius:23px;
+    border:1px solid rgba(63,221,255,.62);
+    background:radial-gradient(170px 100px at 86% 20%,rgba(164,57,240,.36),transparent 100%),
+      radial-gradient(210px 110px at 12% 7%,rgba(5,236,215,.29),transparent 100%),
+      linear-gradient(130deg,#09263a,#101a4a 70%,#321049);
+    box-shadow:inset 0 1px 0 rgba(209,250,255,.18),0 12px 32px rgba(17,70,165,.23);
+  }
+  .command-hero-rich .command-hero-copy {max-width:100%;}
+  .command-hero-rich .command-kicker {font-weight:800;color:#65f1ff;letter-spacing:.12em;
+    border-color:rgba(84,228,247,.52);background:rgba(3,17,32,.42);}
+  .command-hero-rich .command-hero-copy h2 {font-size:clamp(23px,6.2vw,30px);
+    max-width:100%;margin:11px 0 0;line-height:1.19;text-wrap:balance;color:#f6fcff;
+    text-shadow:0 2px 12px rgba(1,8,23,.3);}
+  .command-links-priority {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;}
+  .command-links-visual .command-workspace,
+  .command-links-visual .command-workspace-feature,
+  .command-links-visual .command-workspace:not(.command-workspace-feature),
+  .command-links-priority > .command-workspace {
+    grid-column:auto!important;display:block;min-width:0;min-height:194px;padding:12px 12px 15px;
+    border-radius:22px;isolation:isolate;border:1px solid color-mix(in srgb,var(--tile-accent) 76%,#8fcfff);
+    background:radial-gradient(110px 96px at 64% 26%,color-mix(in srgb,var(--tile-accent) 62%,transparent),transparent 100%),
+      linear-gradient(143deg,color-mix(in srgb,var(--tile-accent) 37%,#09203d),#090f2d 82%);
+    box-shadow:inset 0 1px 0 color-mix(in srgb,var(--tile-accent) 34%,transparent),
+      0 9px 21px color-mix(in srgb,var(--tile-accent) 15%,transparent);
+    overflow:hidden;
+  }
+  .command-links-priority > .command-workspace[data-accent="work"] {grid-column:span 2!important;min-height:210px;}
+  .command-links-priority > .command-workspace[data-accent="work"] .command-card-illustration {left:36%;width:60%!important;}
+  .command-links-priority > .command-workspace[data-accent="work"] .command-card-content strong {font-size:21px;}
+  .command-links-priority .command-workspace::before {top:auto;bottom:0;left:12px;right:12px;width:auto;height:3px;
+    border-radius:4px;background:linear-gradient(90deg,var(--tile-accent),transparent);}
+  .command-links-priority .command-workspace::after {inset:0;opacity:.4;background:linear-gradient(160deg,transparent 35%,color-mix(in srgb,var(--tile-accent) 16%,transparent));}
+  .command-links-priority .command-workspace .command-card-content,
+  .command-links-priority .command-workspace-feature .command-card-content {
+    position:absolute;inset:auto 9px 11px 11px;display:grid;gap:0;z-index:3;
+    width:calc(100% - 20px)!important;max-width:calc(100% - 20px)!important;
+  }
+  .command-links-visual .command-card-kicker,
+  .command-links-visual .command-card-description,
+  .command-links-visual .command-card-icon {display:none;}
+  .command-links-visual .command-workspace .command-card-content strong,
+  .command-links-visual .command-workspace-feature .command-card-content strong {
+    max-width:calc(100% - 26px);color:#fff;font-size:clamp(15px,4.15vw,19px);
+    font-weight:810;line-height:1.12;text-shadow:0 2px 9px rgba(0,4,15,.8);
+  }
+  .command-links-visual .command-workspace .command-card-illustration,
+  .command-links-visual .command-workspace-feature .command-card-illustration,
+  .command-links-visual .command-workspace:not(.command-workspace-feature) .command-card-illustration,
+  .command-links-priority .command-workspace-feature[data-accent="ghost"] .command-card-illustration {
+    position:absolute;left:6%;right:auto!important;top:5px;width:88%!important;height:71%;
+    opacity:.95!important;filter:drop-shadow(0 4px 17px color-mix(in srgb,var(--tile-accent) 77%,transparent));
+  }
+  .command-links-visual .command-workspace .command-card-illustration svg {max-width:100%;max-height:100%;}
+  .command-links-visual .command-workspace .command-card-cta {font-size:0;margin:0;position:absolute;
+    right:1px;bottom:0;display:block;}
+  .command-links-visual .command-workspace .command-card-cta span {width:26px;height:26px;border-radius:50%;
+    font-size:17px;color:#fff;border:1px solid color-mix(in srgb,var(--tile-accent) 65%,white);
+    background:color-mix(in srgb,var(--tile-accent) 29%,#11204a);}
+  .command-overview {padding:14px;border-radius:20px;
+    border-color:rgba(50,211,243,.34);background:linear-gradient(130deg,#0c2233,#11172d);}
+  .command-overview .command-heading h2 {font-size:17px;color:#e8f8ff;}
+  .command-overview-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+  .command-overview-card {min-height:91px;border-radius:14px;}
+  .command-overview-card strong {font-variant-numeric:tabular-nums;}
+  .command-more {border-radius:17px;}
+  .ghost-operations-tile {border-radius:21px;padding:12px;min-height:115px;gap:8px;
+    box-shadow:0 10px 25px rgba(134,52,230,.18);}
+  .ghost-operations-tile-icon {width:51px;height:51px;}
+  .ghost-operations-tile-copy strong {font-size:18px;}
+  .ghost-operations-tile-copy > span {font-size:11px;}
+  .ghost-operations-tile-arrow {width:32px;height:32px;}
+  /* A compact feed stays dominant; color identifies chat versus Kanzo updates. */
+  .messenger-mode-feed .messenger-toolbar {background:linear-gradient(110deg,#091d31,#161239);}
+  .messenger-mode-feed .messenger-message {border-radius:16px;border-color:rgba(168,111,255,.48);
+    background:linear-gradient(120deg,rgba(57,27,119,.72),rgba(17,34,83,.72));}
+  .messenger-mode-feed .messenger-message:nth-of-type(3n) {border-color:rgba(51,205,255,.52);
+    background:linear-gradient(120deg,rgba(12,77,139,.72),rgba(36,21,92,.72));}
+  .messenger-mode-feed .messenger-kanzo {border-radius:16px;border-color:rgba(26,237,205,.58);
+    background:linear-gradient(120deg,rgba(4,95,87,.82),rgba(9,43,80,.86));}
+  .messenger-mode-feed .messenger-announcement {border-radius:16px;}
+  .lounge-filters > summary {min-height:42px;}
+  /* Kanban is still Kanzo data, merely presented as colorful phone cards. */
+  .kn-shell .kn-head {border-radius:19px;border-color:rgba(62,229,239,.46);}
+  .kn-shell .kn-column {border-radius:19px;
+    box-shadow:inset 0 3px 0 color-mix(in srgb,var(--stage-color) 90%,white),
+      0 9px 24px color-mix(in srgb,var(--stage-color) 15%,transparent);}
+  .kn-shell .kn-task {border-radius:14px;}
+  .ug-stage-shell {border-radius:20px;background:linear-gradient(90deg,#073543,#251344);}
+  .ug-hemisphere-labels span {background:rgba(5,12,29,.9);box-shadow:0 0 15px currentColor;}
+  /* Native-app-like tab bar, kept distinct from the desktop sidebar. */
+  .mobile-dock {gap:4px;padding:6px 6px max(8px,env(safe-area-inset-bottom,8px));
+    min-height:calc(72px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(180deg,rgba(4,14,32,.98),rgba(4,10,24,.99));
+    border-top:1px solid rgba(45,229,250,.48);box-shadow:0 -8px 25px rgba(0,111,176,.14);}
+  .mobile-dock a {min-height:56px;border-radius:17px;gap:4px;font-size:11px;font-weight:700;color:#a8c9e3;}
+  .mobile-dock svg {width:24px;height:24px;}
+  .mobile-dock a[aria-current="page"] {color:#76f4ff;border-color:rgba(3,237,243,.75);
+    background:linear-gradient(140deg,rgba(3,199,203,.27),rgba(107,44,205,.3));
+    box-shadow:inset 0 0 19px rgba(12,196,228,.19),0 0 17px rgba(30,126,231,.21);}
+  .layout {padding-bottom:calc(82px + env(safe-area-inset-bottom,0px));}
+  .messenger-shell {height:calc(100dvh - 64px - 82px - env(safe-area-inset-bottom,0px));}
+}
+@media (max-width: 360px) {
+  .command-links-visual .command-workspace .command-card-content strong,
+  .command-links-visual .command-workspace-feature .command-card-content strong {font-size:15px;}
+  .command-links-priority {gap:8px;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .command-links-visual .command-workspace {transition:none;}
+}
+
+/* A genuinely rotatable, locally rendered cortical surface, driven by the
+   existing authenticated graph. No external libraries or invented links. */
+.ug-brain-3d { display:none; }
+@media(max-width:760px) {
+  .ug-stage-shell.is-mobile-3d { min-height:425px; }
+  .ug-stage-shell.is-mobile-3d > .ug-hemisphere-labels { display:none; }
+  .ug-stage-shell.is-mobile-3d::after { display:none; }
+  .ug-stage-shell.is-mobile-3d #ug-canvas { display:none!important; }
+  .ug-stage-shell.is-mobile-3d .ug-brain-3d { display:block; }
+  .ug-brain-3d {
+    position:relative; height:min(105vw,430px);min-height:335px;
+    border-radius:18px; overflow:hidden; isolation:isolate;
+    background:radial-gradient(ellipse at 29% 45%,rgba(0,220,242,.12),transparent 52%),
+      radial-gradient(ellipse at 73% 45%,rgba(168,76,252,.18),transparent 55%);
+  }
+  .memory-3d-surface,.memory-3d-links {position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .memory-3d-surface {touch-action:none;cursor:grab;}
+  .memory-3d-surface:active {cursor:grabbing;}
+  .memory-3d-surface:focus-visible {outline:2px solid #8dfaff;outline-offset:-4px;}
+  .memory-3d-links {pointer-events:none;}
+  .ug-brain-side-tags {position:absolute;inset:10px 9px auto;display:flex;
+    justify-content:space-between;gap:8px;z-index:1;pointer-events:none;}
+  .ug-brain-side-tags span {border:1px solid rgba(63,220,249,.55);background:rgba(1,21,37,.82);
+    color:#6af0ff;padding:6px 9px;border-radius:12px;font:700 11px system-ui,sans-serif;}
+  .ug-brain-side-tags span:last-child {color:#dda0ff;border-color:rgba(194,92,252,.62);}
+  .ug-brain-stats {position:absolute;bottom:44px;left:8px;right:8px;z-index:1;
+    padding:7px 9px;background:rgba(2,12,28,.76);border:1px solid rgba(81,175,246,.28);
+    border-radius:11px;text-align:center;font:650 11px system-ui,sans-serif;color:#c9f0ff;pointer-events:none;}
+  .ug-brain-gesture {position:absolute;bottom:10px;left:8px;right:8px;z-index:1;
+    text-align:center;font:500 11px system-ui,sans-serif;color:#a8cae7;pointer-events:none;}
+  .ug-brain-3d[hidden] {display:none!important;}
+  #ug-canvas[hidden] {display:none!important;}
+}

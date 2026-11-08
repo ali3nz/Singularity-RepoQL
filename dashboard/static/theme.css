@@ -1,0 +1,2271 @@
+/* Theme layers merged in cascade order (formerly 12 files). Edit here, then run tools/build_css.py. */
+
+/* ==== command_tiles_v11_1.css ==== */
+/* Scoped Command Center image replacement, v11.1. No other workspace UI changes. */
+#dash .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration,
+#dash .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {
+  background-repeat:no-repeat!important;
+  background-size:cover!important;
+  background-position:center 32%!important;
+  pointer-events:none;
+  filter:none!important;
+}
+#dash .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration {
+  background-image:url('/assets/mobile/office-viewer-command-v11-1.webp')!important;
+}
+#dash .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {
+  background-image:url('/assets/mobile/memory-graph-command-v11-1.webp')!important;
+}
+/* Hide only the outdated inline SVG illustrations. Names, routes and icons remain. */
+#dash .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration > svg,
+#dash .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration > svg {
+  display:none!important;
+}
+@media (min-width:761px) {
+  #dash .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration,
+  #dash .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {
+    top:0!important;right:0!important;width:52%!important;height:100%!important;
+    opacity:.86!important;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 24%,#000 100%)!important;
+    mask-image:linear-gradient(90deg,transparent 0%,#000 24%,#000 100%)!important;
+  }
+}
+@media (max-width:760px) {
+  #dash .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration,
+  #dash .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {
+    top:0!important;right:0!important;width:100%!important;height:100%!important;
+    opacity:1!important;
+    -webkit-mask-image:linear-gradient(#000 0%,#000 55%,transparent 98%)!important;
+    mask-image:linear-gradient(#000 0%,#000 55%,transparent 98%)!important;
+  }
+}
+
+
+/* ==== agent_avatars.css ==== */
+/* agent_avatars.css — shared avatar faces, picker and Lounge avatar rules.
+   Extracted from the retired Bot Operations stylesheet (fleet#832, 2026-11-05);
+   tokens only, no new colours. */
+/* v30 — bot avatars: inline SVG faces + one picker. Tokens only, no new colours. */
+.botops-roster-avatar{position:relative;color:#11151b}
+.botops-roster-avatar svg{display:block;width:60%;height:60%;fill:currentColor}
+button.botops-avatar-edit{appearance:none;margin:0;padding:0;border:0;cursor:pointer;font:inherit;letter-spacing:.015em;background:var(--bot-avatar,#52cdbc);transition:transform .12s ease,box-shadow .12s ease}
+button.botops-avatar-edit:hover{transform:translateY(-1px);box-shadow:0 0 0 2px color-mix(in srgb,var(--bot-avatar,#52cdbc) 40%,transparent)}
+button.botops-avatar-edit:focus-visible{outline:2px solid var(--cyan,#60d2ea);outline-offset:3px}
+.botops-avatar-edit-badge{position:absolute;right:-2px;bottom:-2px;width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:var(--surface-raised,#161a21);border:1px solid var(--line);color:var(--muted);font-size:9px;line-height:1;opacity:0;transition:opacity .12s ease}
+button.botops-avatar-edit:hover .botops-avatar-edit-badge,button.botops-avatar-edit:focus-visible .botops-avatar-edit-badge{opacity:1}
+@media (hover:none){.botops-avatar-edit-badge{opacity:1}}
+.botops-avatar-overlay{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:24px;background:color-mix(in srgb,#05070a 62%,transparent);backdrop-filter:blur(3px)}
+.botops-avatar-sheet{width:min(540px,100%);max-height:min(88vh,640px);overflow:auto;padding:20px;border-radius:20px;background:var(--panel,#14171d);border:1px solid var(--line);box-shadow:0 24px 60px color-mix(in srgb,#000 55%,transparent)}
+.botops-avatar-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.botops-avatar-head h2{margin:0;font-size:17px;font-weight:750;letter-spacing:-.01em;color:var(--text)}
+.botops-avatar-close{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;line-height:1}
+.botops-avatar-close:hover{background:var(--surface-hover);color:var(--text)}
+.botops-avatar-close:focus-visible{outline:2px solid var(--cyan,#60d2ea);outline-offset:2px}
+.botops-avatar-note{margin:6px 0 14px;font-size:12px;line-height:1.45;color:var(--muted)}
+.botops-avatar-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.botops-avatar-option{appearance:none;padding:0;border:0;background:transparent;cursor:pointer;border-radius:12px;display:grid;place-items:center;min-height:56px}
+.botops-avatar-option:focus-visible{outline:2px solid var(--cyan,#60d2ea);outline-offset:2px}
+.botops-avatar-chip{position:relative;width:46px;height:46px;display:grid;place-items:center;border-radius:50%;background:var(--bot-avatar,#52cdbc);transition:transform .12s ease}
+.botops-avatar-chip svg{display:block;width:60%;height:60%;fill:#11151b}
+.botops-avatar-initials{font-size:15px;font-weight:800;color:#102033;letter-spacing:.01em}
+.botops-avatar-option:hover .botops-avatar-chip{transform:translateY(-1px)}
+.botops-avatar-option[aria-selected="true"] .botops-avatar-chip{box-shadow:0 0 0 2px var(--panel,#14171d),0 0 0 4px var(--bot-avatar,#52cdbc)}
+.botops-avatar-option[aria-selected="true"] .botops-avatar-chip::after{content:'✓';position:absolute;right:-3px;bottom:-3px;width:16px;height:16px;display:grid;place-items:center;border-radius:50%;background:var(--panel,#14171d);border:1px solid var(--line);color:var(--green,#55d89e);font-size:9px;font-weight:800}
+.botops-avatar-status{min-height:18px;margin:12px 0 0;font-size:12px;color:var(--muted)}
+.botops-avatar-status:empty{margin:0;min-height:0}
+@media(max-width:760px){
+  .botops-avatar-overlay{padding:0;place-items:end stretch;align-items:end}
+  .botops-avatar-sheet{width:100%;max-height:86vh;border-radius:20px 20px 0 0;border-bottom:0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+  .botops-avatar-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .botops-avatar-chip{width:50px;height:50px}
+  .botops-avatar-option{min-height:60px}
+  .botops-avatar-close{width:44px;height:44px}
+}
+@media(prefers-reduced-motion:reduce){
+  button.botops-avatar-edit,.botops-avatar-edit-badge,.botops-avatar-chip{transition:none}
+  button.botops-avatar-edit:hover,.botops-avatar-option:hover .botops-avatar-chip{transform:none}
+}
+.lounge-person-avatar svg,.messenger-avatar svg,.messenger-announcement-icon svg{width:60%;height:60%;fill:#102033}
+.lounge-person-avatar-pick,.messenger-avatar[style*="--bot-avatar"],.messenger-announcement-icon[style*="--bot-avatar"]{background:var(--bot-avatar,#52cdbc);color:#102033}
+.lounge-person-avatar-pick{position:relative;border:0;padding:0;cursor:pointer;font:inherit}
+.lounge-person-avatar-pick:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+/* Touch and small screens: keep the 28px avatar but give it a 44px hit area. */
+@media (max-width:768px),(hover:none) and (pointer:coarse){
+  .lounge-person-avatar-pick::after{content:"";position:absolute;inset:-8px;border-radius:inherit}
+}
+
+
+/* ==== charcoal_theme.css ==== */
+/* v44: Grok-inspired sitewide charcoal. Visual tokens and scoped presentation only.
+   Semantic/status accents, workspace hues, embedded visualizations and existing
+   alternate themes remain independent. Loaded after all existing stylesheets. */
+html[data-theme="charcoal"] {
+  color-scheme: dark;
+  --bg: #09090a;
+  --bg-elevated: #101012;
+  --panel: #171719;
+  --panel-2: #222225;
+  --line: #2d2d31;
+  --line-hot: #48484e;
+  --text: #f1f1f3;
+  --muted: #b3b3bb;
+  --dim: #909199;
+  --cyan: #76b7ee;
+  --blue: #69aaf5;
+  --purple: #bb9ae9;
+  --green: #72d2ab;
+  --amber: #e5b97b;
+  --red: #ef8d9b;
+  --surface: #171719;
+  --surface-raised: #242426;
+  --surface-hover: #2d2d30;
+  --input-surface: #242426;
+  --glass-border: #36363a;
+  --shadow-soft: 0 8px 25px rgba(0, 0, 0, .20);
+  --glow-soft: color-mix(in srgb, var(--role-repoql) 7%, transparent);
+}
+html[data-theme="charcoal"] body {
+  background: var(--bg) !important;
+}
+html[data-theme="charcoal"] body::before {
+  background-image: none !important;
+}
+html[data-theme="charcoal"] .sidebar {
+  background: #101011 !important;
+  border-right-color: var(--line);
+  box-shadow: none;
+}
+html[data-theme="charcoal"] .brand-mark {
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--role-repoql) 40%, var(--line));
+}
+html[data-theme="charcoal"] .nav-link.active {
+  background: #29292c;
+  border-color: #39393e;
+}
+html[data-theme="charcoal"] .nav-link:hover {
+  background: #232326;
+}
+html[data-theme="charcoal"] .block,
+html[data-theme="charcoal"] .command-link,
+html[data-theme="charcoal"] .table-wrap,
+html[data-theme="charcoal"] .modal {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
+}
+html[data-theme="charcoal"] .command-hero-rich {
+  background:
+    radial-gradient(ellipse 360px 240px at 93% 15%, color-mix(in srgb, var(--role-memory) 9%, transparent), transparent 85%),
+    linear-gradient(145deg, #1c1c1f, #121214) !important;
+  border-color: #343439;
+  box-shadow: var(--shadow-soft);
+}
+/* Cards retain distinct category identity, but no full-panel blue/purple wash. */
+html[data-theme="charcoal"] .command-links-visual .command-workspace,
+html[data-theme="charcoal"] .command-links-priority > .command-workspace {
+  background:
+    radial-gradient(ellipse 240px 175px at 108% -8%, color-mix(in srgb, var(--tile-accent) 14%, transparent), transparent 82%),
+    linear-gradient(145deg, #252528, #1a1a1c 90%) !important;
+  border: 1px solid color-mix(in srgb, var(--tile-accent) 30%, var(--line)) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+html[data-theme="charcoal"] .command-links-priority .command-workspace::after {
+  opacity: .18 !important;
+}
+html[data-theme="charcoal"] .command-overview,
+html[data-theme="charcoal"] .command-more,
+html[data-theme="charcoal"] .command-overview-card {
+  background: var(--surface) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+/* Use charcoal consistently through real reference and architecture pages;
+   their existing per-node, per-topic and semantic colours remain visible. */
+html[data-theme="charcoal"] .arch-hero {
+  background: linear-gradient(150deg, #202023, #111113);
+}
+html[data-theme="charcoal"] .arch-board {
+  background: linear-gradient(160deg, #1d1d20, #121214);
+}
+html[data-theme="charcoal"] .memory-brain-node {
+  background: linear-gradient(160deg, #252528, #18181b);
+}
+html[data-theme="charcoal"] .cs-jump button,
+html[data-theme="charcoal"] .cs-step,
+html[data-theme="charcoal"] .cs-tool,
+html[data-theme="charcoal"] .cs-skill,
+html[data-theme="charcoal"] .cs-fleet article,
+html[data-theme="charcoal"] .cs-cats article,
+html[data-theme="charcoal"] .cs-cmd {
+  border-color: color-mix(in srgb, var(--tone, var(--role-repoql)) 20%, var(--line));
+}
+/* Bot Operations already implements the approved reference's near-black
+   roster + charcoal 2x2 cards. Only unify surrounding tokens. */
+html[data-theme="charcoal"] .botops-workspace {
+  --botops-panel-bg: #0d0d0f;
+  --botops-panel-rail: #101012;
+  --botops-panel-card: #252527;
+  --botops-panel-selected: #29292b;
+  --botops-panel-line: #303034;
+}
+html[data-theme="charcoal"] .botops-stage-hero {
+  background: #222224;
+  border-color: #343439;
+}
+/* Mobile had independent neon overrides. Keep the same neutral atmosphere as
+   desktop while retaining tiny coloured nav icons and workspace accents. */
+@media (max-width:760px) {
+  html[data-theme="charcoal"] .mobile-topbar {
+    background: #101012 !important;
+    border-bottom: 1px solid #2f2f34 !important;
+    box-shadow: none !important;
+  }
+  html[data-theme="charcoal"] .mobile-dock {
+    background: #111113 !important;
+    border-top: 1px solid #343439 !important;
+    box-shadow: 0 -5px 22px rgba(0,0,0,.30) !important;
+  }
+  html[data-theme="charcoal"] .mobile-dock a {
+    color: var(--muted);
+  }
+  html[data-theme="charcoal"] .mobile-dock a[aria-current="page"] {
+    color: var(--cyan);
+    background: #28282b !important;
+    border: 1px solid #3a4751 !important;
+    box-shadow: none !important;
+  }
+  html[data-theme="charcoal"] .command-links-priority .command-workspace .command-card-content strong {
+    color: var(--text) !important;
+    text-shadow: 0 1px 3px rgba(0,0,0,.4) !important;
+  }
+  html[data-theme="charcoal"] .command-links-priority .command-workspace .command-card-illustration {
+    opacity: .54 !important;
+  }
+  html[data-theme="charcoal"] .command-links-priority .command-workspace::before {
+    background: linear-gradient(0deg, #19191ce8, #1d1d1da0, transparent) !important;
+  }
+  html[data-theme="charcoal"] .command-overview,
+  html[data-theme="charcoal"] .command-more {
+    border-color: var(--line) !important;
+    background: #1b1b1e !important;
+  }
+  html[data-theme="charcoal"] .messenger-shell {
+    background: #131316 !important;
+  }
+  html[data-theme="charcoal"] .kn-head {
+    background: #1d1d21 !important;
+    border-color: color-mix(in srgb, var(--role-work) 30%, var(--line)) !important;
+    box-shadow: none !important;
+  }
+}
+
+/* The older phone mockup carries an ID-specific header gradient. The charcoal
+   shell wins that rule without changing workspace content or semantic accents. */
+@media (max-width:760px) {
+  html[data-theme="charcoal"] body:has(#app:not([data-workspace="memory"]):not([data-workspace="office"])) .mobile-topbar,
+  html[data-theme="charcoal"] #mobile-topbar {
+    background: #111113 !important;
+    border-bottom-color: #333338 !important;
+    box-shadow: none !important;
+  }
+  html[data-theme="charcoal"] .main {
+    background: transparent !important;
+  }
+  html[data-theme="charcoal"] .mobile-menu-button {
+    background: #232326 !important;
+    border-color: #414147 !important;
+    color: var(--text) !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Keep operational facts neutral like the approved Grok-inspired panel.
+   Status accents remain on verified admission entries and navigation. */
+html[data-theme="charcoal"] .botops-stage .botops-summary > div {
+  background: #242426;
+  border-color: #38383c;
+}
+
+/* ---------------------------------------------------------------- v45 polish
+   Operator-directed visual polish, 2026-11-04 (dashboard-polish-20261104).
+   Everything here is scoped to html[data-theme="charcoal"], so light-paper and
+   neon keep their existing presentation. Charcoal tokens only; no new palette. */
+
+/* 1. Kanban: charcoal columns, neutral cards, muted per-stage accents. */
+html[data-theme="charcoal"] .kn-shell { --kn-cyan: #9ec2d5; --kn-purple: #b2a5d2; }
+html[data-theme="charcoal"] .kn-column,
+html[data-theme="charcoal"] .kn-column[data-stage="doing"] {
+  background: var(--panel); border-color: var(--line); box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-column[data-stage="doing"] { border-top: 2px solid color-mix(in srgb, var(--cyan) 34%, var(--line)); }
+html[data-theme="charcoal"] .kn-column[data-stage="review"] { border-color: var(--line); border-top: 2px solid color-mix(in srgb, var(--purple) 32%, var(--line)); }
+html[data-theme="charcoal"] .kn-column[data-stage="done"] { border-color: var(--line); border-top: 2px solid color-mix(in srgb, var(--green) 28%, var(--line)); }
+html[data-theme="charcoal"] .kn-column-head { border-bottom-color: var(--line); }
+html[data-theme="charcoal"] .kn-column-title h3 { color: #dedee5; font-weight: 650; }
+html[data-theme="charcoal"] .kn-count { color: var(--muted); background: var(--panel-2); }
+html[data-theme="charcoal"] .kn-task {
+  background: var(--surface-raised); border-color: var(--line); box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-task:hover,
+html[data-theme="charcoal"] .kn-task:focus-visible {
+  transform: none; border-color: var(--line-hot); box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+}
+html[data-theme="charcoal"] .kn-key { color: var(--dim); }
+html[data-theme="charcoal"] .kn-human,
+html[data-theme="charcoal"] .kn-tag { color: var(--muted); border-color: var(--line-hot); }
+html[data-theme="charcoal"] .kn-button:hover { border-color: var(--line-hot); box-shadow: none; }
+html[data-theme="charcoal"] .kn-primary {
+  color: var(--text); border-color: var(--line-hot); background: var(--surface-hover); box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-primary:hover {
+  color: #fff; border-color: color-mix(in srgb, var(--cyan) 42%, var(--line-hot)); box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-quiet { background: var(--surface); }
+html[data-theme="charcoal"] .kn-lane { background: var(--panel); border-color: var(--line); color: var(--muted); }
+html[data-theme="charcoal"] .kn-lane.selected {
+  background: var(--surface-hover); border-color: var(--line-hot); color: var(--text); box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-full-task { color: var(--cyan); }
+html[data-theme="charcoal"] .kn-column.kn-drop-target {
+  border-color: var(--line-hot); background: var(--surface); box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-dialog {
+  background: var(--panel); color: var(--text); border-color: var(--line-hot);
+  box-shadow: 0 25px 90px rgba(0, 0, 0, .6);
+}
+html[data-theme="charcoal"] .kn-modal-close { color: var(--muted); }
+html[data-theme="charcoal"] .kn-field { color: var(--muted); }
+html[data-theme="charcoal"] .kn-field-control {
+  background: var(--input-surface); color: var(--text); border-color: var(--glass-border);
+}
+html[data-theme="charcoal"] .kn-form-feedback,
+html[data-theme="charcoal"] .kn-task-identity { color: var(--muted); }
+html[data-theme="charcoal"] .kn-comments { border-top-color: var(--line); }
+html[data-theme="charcoal"] .kn-comment { background: var(--panel-2); }
+html[data-theme="charcoal"] .kn-comment strong { color: var(--muted); }
+html[data-theme="charcoal"] .kn-error { color: var(--red) !important; }
+
+/* 2. Left navigation: clear contrast, defined active state. */
+html[data-theme="charcoal"] .sidebar { background: #0e0e10 !important; border-right-color: #26262a; }
+html[data-theme="charcoal"] .nav-section h2 { color: #8d8d99; }
+html[data-theme="charcoal"] .nav-link { color: #cdcdd6; }
+html[data-theme="charcoal"] .nav-link:hover { color: #fff; background: #1d1d20; }
+html[data-theme="charcoal"] .nav-link.active {
+  color: #fff; font-weight: 600;
+  background: color-mix(in srgb, var(--nav-accent) 15%, #1c1c1f);
+  border-color: color-mix(in srgb, var(--nav-accent) 42%, var(--line));
+  box-shadow: inset 3px 0 0 var(--nav-accent);
+}
+html[data-theme="charcoal"] .nav-section .nav-link .nav-icon {
+  color: color-mix(in srgb, var(--nav-accent) 82%, #fff);
+  background: color-mix(in srgb, var(--nav-accent) 16%, #171719);
+  border-color: color-mix(in srgb, var(--nav-accent) 26%, var(--line));
+}
+html[data-theme="charcoal"] .nav-section .nav-link:hover .nav-icon,
+html[data-theme="charcoal"] .nav-section .nav-link.active .nav-icon {
+  color: #fff; background: color-mix(in srgb, var(--nav-accent) 28%, #171719);
+  border-color: color-mix(in srgb, var(--nav-accent) 46%, var(--line)); box-shadow: none;
+}
+html[data-theme="charcoal"] .nav-more > summary { color: #cdcdd6; }
+html[data-theme="charcoal"] .sidebar-search input {
+  background: #141416; border-color: #34343a; color: var(--text);
+}
+html[data-theme="charcoal"] .sidebar-search label,
+html[data-theme="charcoal"] .sidebar-search [role=status] { color: #9c9ca8; }
+html[data-theme="charcoal"] .sidebar-search kbd { color: #b6b6c0; border-color: #3a3a40; background: #1c1c1f; }
+html[data-theme="charcoal"] .sidebar-foot { color: #8d8d99; }
+
+/* 3. Bot Operations: fill the page at >=1101px (no 1120px centring gutter). */
+@media (min-width: 1101px) {
+  html[data-theme="charcoal"] .botops-workspace,
+  html[data-theme="charcoal"] .page-head:has(+ .botops-workspace) { max-width: none; }
+  html[data-theme="charcoal"] .botops-workspace { min-height: max(620px, calc(100dvh - 200px)); }
+}
+
+/* 5. Documentation / reading pages and their buttons. */
+html[data-theme="charcoal"] .main :is(.cs-lead, .cheat-section > p, .cs-quickstart p, .cs-glossary p,
+  .cs-decisions p, .arch-hero p, .memory-brain-head p, .kg-guide p) { color: #c4c4cd; }
+html[data-theme="charcoal"] .main :is(.cs-quickstart article, .cs-glossary article, .cs-decisions article,
+  .cs-prompt, .cs-step, .cs-tool, .cs-skill, .cs-fleet article, .cs-cats article) {
+  background: var(--surface) !important; border-color: var(--line) !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main :is(.cs-quickstart article, .cs-glossary article, .cs-decisions article,
+  .cs-prompt):hover { border-color: var(--line-hot) !important; }
+html[data-theme="charcoal"] .main :is(.btn, .cs-jump button) {
+  background: #1e1e21; border-color: #3a3a40; color: #ececf1;
+}
+html[data-theme="charcoal"] .main :is(.btn, .cs-jump button):hover {
+  background: #272729; border-color: #565660; color: #fff;
+}
+html[data-theme="charcoal"] .main .cs-jump button { border-radius: 999px; }
+html[data-theme="charcoal"] .main :is(.cs-jump button.active, .cs-jump button[aria-pressed="true"]) {
+  background: #2d2d31; border-color: #5b5b66; color: #fff;
+}
+html[data-theme="charcoal"] .main .cs-cmd { background: #1b1b1e; border-color: #34343a; }
+html[data-theme="charcoal"] .main :is(.arch-hero, .cs-hero) { border-color: #34343a; }
+html[data-theme="charcoal"] .main :is(table.data thead th, .kg-guide-table th) {
+  background: #1c1c1f; color: #cfcfd8; border-bottom-color: var(--line);
+}
+
+/* 6. Run performance typography matched to Diagnostics (#/diagnostics):
+   labels 12.5px Inter, mono values 12px, controls 12px, table heads 10.5px. */
+html[data-theme="charcoal"] .main[data-page-route="/harness/performance"] :is(.small, .muted.small) { font-size: 12.5px; }
+html[data-theme="charcoal"] .main[data-page-route="/harness/performance"] .btn.small { font-size: 12px; min-height: 34px; }
+html[data-theme="charcoal"] .main[data-page-route="/harness/performance"] table.data th { font-size: 10.5px; font-weight: 600; }
+html[data-theme="charcoal"] .main[data-page-route="/harness/performance"] table.data :is(td.mono, td .mono) { font-size: 12px; line-height: 1.63; }
+html[data-theme="charcoal"] .main[data-page-route="/harness/performance"] table.data td { font-size: 12.5px; }
+
+/* 1b. Kanban headline card, tags and advance buttons held to the same charcoal. */
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-shell .kn-head,
+html[data-theme="charcoal"] .kn-shell .kn-head {
+  border-color: var(--line-hot) !important; background: var(--panel) !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .kn-heading h2 { background: none; color: var(--text); -webkit-text-fill-color: var(--text); }
+html[data-theme="charcoal"] .kn-tag { background: #1e1e21 !important; border-color: #3a3a40 !important; color: #c2c2cb !important; }
+html[data-theme="charcoal"] .kn-task-advance {
+  background: #1b1b1e !important; border-color: var(--line) !important; color: #c9c9d2 !important;
+}
+html[data-theme="charcoal"] .kn-task-advance:hover,
+html[data-theme="charcoal"] .kn-task-advance:focus-visible { background: #232326 !important; border-color: var(--line-hot) !important; }
+html[data-theme="charcoal"] .kn-column .kn-count { color: var(--muted); background: var(--panel-2); }
+html[data-theme="charcoal"] .kn-lane:hover { border-color: var(--line-hot); }
+html[data-theme="charcoal"] .kn-form-actions { background: transparent; }
+html[data-theme="charcoal"] .kn-form-feedback:not(:empty) { background: var(--panel-2); }
+html[data-theme="charcoal"] .kn-task:focus-visible,
+html[data-theme="charcoal"] .kn-lane:focus-visible,
+html[data-theme="charcoal"] .kn-button:focus-visible,
+html[data-theme="charcoal"] .kn-field-control:focus-visible,
+html[data-theme="charcoal"] .kn-search:focus-visible,
+html[data-theme="charcoal"] .kn-select:focus-visible { outline-color: var(--cyan); }
+
+/* 4b. Ghost Operations entry tile: charcoal panel, muted ghost accent. */
+html[data-theme="charcoal"] .ghost-operations-tile {
+  background: var(--panel) !important; border-color: color-mix(in srgb, var(--role-ghost) 34%, var(--line)) !important;
+  box-shadow: none !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile:hover,
+html[data-theme="charcoal"] .ghost-operations-tile:focus-visible {
+  border-color: color-mix(in srgb, var(--role-ghost) 60%, var(--line-hot)) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .3) !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-icon { color: color-mix(in srgb, var(--role-ghost) 78%, #fff); filter: none; }
+html[data-theme="charcoal"] .ghost-operations-tile-copy > span { color: var(--muted); }
+html[data-theme="charcoal"] .ghost-operations-tile-arrow {
+  background: #232326; border-color: var(--line-hot); color: var(--text);
+}
+
+/* 0. Charcoal semantic palette: the muted pre-spectrum role hues, so accents,
+   nav icons, workspace tiles and Kanban stages stay quiet on charcoal. Light
+   and neon themes keep their own saturated role palettes. */
+html[data-theme="charcoal"] {
+  --role-repoql: #6f9ddf; --role-harness: #64bcbe; --role-agents: #68bca0;
+  --role-history: #c3a176; --role-memory: #a690d8; --role-orchestra: #ca94b8;
+  --role-chat: #75b3d0; --role-work: #88b998; --role-office: #cbac79;
+  --role-ghost: #8fb4c4; --role-tencent: #9d8cff; --role-usage: #d4ac71;
+  --role-attention: #d4ac71;
+}
+html[data-theme="charcoal"] .kn-shell {
+  --kn-ready: #b09a78; --kn-doing: #6f97a8; --kn-review: #8f81a8;
+  --kn-done: #709b85; --kn-backlog: #8a8f9b;
+}
+
+/* v46 — design-consistency pass (worker B, fleet#787): rhythm, control metrics and
+   keyboard focus only. No token or colour changes; ghost/alternate skins untouched. */
+html[data-theme="charcoal"] .page-head{margin-bottom:20px}
+html[data-theme="charcoal"] .page-head h1{line-height:1.15}
+html[data-theme="charcoal"] .pill,html[data-theme="charcoal"] .chip{min-height:22px;padding:2px 9px;line-height:1.35}
+html[data-theme="charcoal"] :where(a,button,input,select,textarea,summary,[tabindex]):focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+html[data-theme="charcoal"]{scrollbar-color:var(--line-hot) transparent;scrollbar-width:thin}
+html[data-theme="charcoal"] ::-webkit-scrollbar{width:10px;height:10px}
+html[data-theme="charcoal"] ::-webkit-scrollbar-track{background:transparent}
+html[data-theme="charcoal"] ::-webkit-scrollbar-thumb{background:var(--line-hot);border-radius:8px;border:2px solid var(--bg)}
+html[data-theme="charcoal"] ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+
+
+/* ==== deslop.css ==== */
+/* ============================================================================
+   Type tidy-up — charcoal dashboard (2026-11-04, fleet#816; colour half retired 2026-11-05)
+
+   Method: "unslop" by Damir Sokolovsky (@heydamir), CC BY 4.0.
+   Kept from the unslop pass: sentence-case labels and lighter heading weight.
+   The colour-draining half of that pass was removed; palette.css owns colour now.
+   Original signs list, for reference:
+     colour   one charcoal surface per card; accent bars, radial accent washes and
+              tinted icon tiles removed; the accent stays on the active row and
+              on live state only
+     type     uppercase tracked micro-labels become sentence case at label size;
+              weight-750 headings drop to 500; one figure format kept as is
+     icons    sidebar glyphs take the muted text role; no per-section hues
+     spacing  card rhythm unchanged (already on the charcoal scale)
+     visuals  neon card illustrations drop to a quiet muted render
+   The mobile card grid gets the same treatment at the end. Loaded after
+   charcoal_theme.css and mobile_mockup.css, so it only has to state overrides.
+   ============================================================================ */
+
+/* --- Type: sentence case labels, no tracking ------------------------------- */
+html[data-theme="charcoal"] .block-title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+html[data-theme="charcoal"] .main[data-workspace] .block-title { letter-spacing: 0; }
+html[data-theme="charcoal"] .block-title .tag {
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--dim);
+}
+html[data-theme="charcoal"] .main th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--dim);
+}
+html[data-theme="charcoal"] .ug-source-disclosure summary { text-transform: none; letter-spacing: 0; }
+html[data-theme="charcoal"] .command-workspace .command-card-content strong {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+html[data-theme="charcoal"] .command-card-kicker {
+  font: 500 11.5px/1.3 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dim);
+}
+html[data-theme="charcoal"] .main[data-workspace] > .page-head h1 { text-shadow: none !important; }
+
+
+/* ==== palette.css ==== */
+/* ============================================================================
+   Charcoal palette layer — 2026-11-05
+   Charcoal surfaces stay as they are (Bot Operations is the reference). This
+   file puts colour back, in measured amounts:
+     - every workspace has one hue (--page-accent); it tints edges, titles,
+       table heads, icons and figures at 8-40%, never a full-panel wash
+     - status colours (green/amber/red/blue) keep their meaning everywhere
+     - nothing glows; depth comes from a hairline and a small tinted wash
+   Loaded after charcoal_theme.css and deslop.css. Charcoal theme only.
+   ============================================================================ */
+
+/* --- 1. Hues: clear, not neon ---------------------------------------------- */
+html[data-theme="charcoal"] {
+  --role-repoql: #6ca6ff;   --role-harness: #45c4c9;  --role-agents: #50caa0;
+  --role-history: #dca45c;  --role-memory: #a98cf3;   --role-orchestra: #e583b8;
+  --role-chat: #55b8ee;     --role-work: #69cf8e;     --role-office: #e6b150;
+  --role-ghost: #7fbce0;    --role-tencent: #9f8fff;  --role-usage: #eba952;
+  --role-attention: #e6a94f;
+  --cyan: #62b9f0; --blue: #6ca6ff; --purple: #b399f4; --green: #5fd49f;
+  --amber: #e9b25c; --red: #f28a99;
+  --pa: var(--page-accent, var(--role-repoql));
+}
+html[data-theme="charcoal"] .main[data-page-route="/diagnostics"] { --page-accent: var(--role-harness); }
+html[data-theme="charcoal"] .main[data-page-route^="/unified/usage"] { --page-accent: var(--role-usage); }
+html[data-theme="charcoal"] .main[data-page-route^="/indexing"] { --page-accent: var(--role-agents); }
+html[data-theme="charcoal"] .main[data-page-route^="/knowledge"] { --page-accent: var(--role-memory); }
+html[data-theme="charcoal"] .main[data-page-route^="/links"] { --page-accent: var(--role-chat); }
+html[data-theme="charcoal"] .main[data-page-route^="/architecture"] { --page-accent: var(--role-orchestra); }
+html[data-theme="charcoal"] .main[data-page-route^="/repoql/cheat"] { --page-accent: var(--role-repoql); }
+html[data-theme="charcoal"] .main[data-page-route^="/harness/performance"] { --page-accent: var(--role-usage); }
+html[data-theme="charcoal"] .main[data-page-route^="/harness/events"] { --page-accent: var(--role-orchestra); }
+html[data-theme="charcoal"] .main[data-page-route^="/harness/runs"] { --page-accent: var(--role-history); }
+html[data-theme="charcoal"] .main[data-page-route^="/harness/agents"] { --page-accent: var(--role-agents); }
+
+/* --- 2. Left navigation: each destination keeps its own hue ---------------- */
+html[data-theme="charcoal"] .sidebar .nav-link .nav-icon,
+html[data-theme="charcoal"] .nav-section .nav-link .nav-icon {
+  color: color-mix(in srgb, var(--nav-accent, var(--role-repoql)) 88%, #fff);
+  background: color-mix(in srgb, var(--nav-accent, var(--role-repoql)) 17%, #151518);
+  border-color: color-mix(in srgb, var(--nav-accent, var(--role-repoql)) 30%, var(--line));
+}
+html[data-theme="charcoal"] .sidebar .nav-link:hover .nav-icon {
+  background: color-mix(in srgb, var(--nav-accent, var(--role-repoql)) 26%, #151518);
+}
+html[data-theme="charcoal"] .sidebar .nav-link.active .nav-icon {
+  color: #fff;
+  background: color-mix(in srgb, var(--nav-accent, var(--role-repoql)) 34%, #151518);
+  border-color: color-mix(in srgb, var(--nav-accent, var(--role-repoql)) 55%, var(--line));
+}
+html[data-theme="charcoal"] .nav-section h2 { color: #a3a3b0; }
+
+/* --- 3. Page head: title plain, underline carries the workspace hue -------- */
+html[data-theme="charcoal"] .main[data-workspace] > .page-head {
+  border-bottom-color: color-mix(in srgb, var(--pa) 22%, var(--line)) !important;
+}
+html[data-theme="charcoal"] .main[data-workspace] > .page-head::before {
+  background: linear-gradient(90deg, var(--pa), color-mix(in srgb, var(--pa) 0%, transparent) 70%) !important;
+  opacity: .9;
+}
+html[data-theme="charcoal"] .main > .page-head h1 { color: #fff; }
+
+/* --- 4. Blocks and tables: tinted edge, tinted head, coloured marker ------- */
+html[data-theme="charcoal"] .main .block {
+  border-color: color-mix(in srgb, var(--pa) 16%, var(--line));
+  border-top: 2px solid color-mix(in srgb, var(--pa) 46%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--pa) 8%, transparent), transparent 140px),
+    var(--surface);
+}
+html[data-theme="charcoal"] .main .block .block,
+html[data-theme="charcoal"] .main details.block,
+html[data-theme="charcoal"] .main .command-overview-card,
+html[data-theme="charcoal"] .main .command-more {
+  border-top-width: 1px;
+}
+html[data-theme="charcoal"] .main .block-title {
+  display: flex; align-items: center; gap: 8px;
+  color: color-mix(in srgb, var(--pa) 38%, #e8e8ee);
+  font-size: 12.5px; font-weight: 600;
+}
+html[data-theme="charcoal"] .main .block-title::before {
+  content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--pa);
+}
+html[data-theme="charcoal"] .main .block-title .tag { color: var(--muted); font-weight: 500; }
+html[data-theme="charcoal"] .main table.data thead th,
+html[data-theme="charcoal"] .main .main th {
+  background: color-mix(in srgb, var(--pa) 11%, #17181b);
+  color: color-mix(in srgb, var(--pa) 30%, #dcdce4);
+  border-bottom: 1px solid color-mix(in srgb, var(--pa) 28%, var(--line));
+}
+html[data-theme="charcoal"] .main table.data tbody tr:hover td {
+  background: color-mix(in srgb, var(--pa) 7%, var(--surface));
+}
+html[data-theme="charcoal"] .main table.data a,
+html[data-theme="charcoal"] .main td a { color: color-mix(in srgb, var(--pa) 62%, #fff); }
+
+/* --- 5. Figures and stat tiles --------------------------------------------- */
+html[data-theme="charcoal"] .main .usage-stat,
+html[data-theme="charcoal"] .main .unified-metric,
+html[data-theme="charcoal"] .main .metric {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--pa) 12%, transparent), transparent 70%),
+    var(--surface) !important;
+  border: 1px solid color-mix(in srgb, var(--pa) 26%, var(--line)) !important;
+  border-inline-start: 3px solid color-mix(in srgb, var(--pa) 72%, transparent) !important;
+}
+html[data-theme="charcoal"] .main .usage-stat .value,
+html[data-theme="charcoal"] .main .unified-metric .value,
+html[data-theme="charcoal"] .main .metric .value,
+html[data-theme="charcoal"] .main .usage-stat strong {
+  color: color-mix(in srgb, var(--pa) 55%, #fff);
+}
+html[data-theme="charcoal"] .main .metric.green { --pa: var(--green); }
+html[data-theme="charcoal"] .main .metric.cyan { --pa: var(--cyan); }
+html[data-theme="charcoal"] .main .metric.amber { --pa: var(--amber); }
+html[data-theme="charcoal"] .main .metric.red { --pa: var(--red); }
+html[data-theme="charcoal"] .main .metric.purple { --pa: var(--purple); }
+html[data-theme="charcoal"] .main .block.accent-green { --pa: var(--green); }
+html[data-theme="charcoal"] .main .block.accent-amber { --pa: var(--amber); }
+html[data-theme="charcoal"] .main .block.accent-red { --pa: var(--red); }
+html[data-theme="charcoal"] .main .block.accent-cyan { --pa: var(--cyan); }
+html[data-theme="charcoal"] .main .block.accent-purple { --pa: var(--purple); }
+
+/* --- 6. Buttons, tabs, controls -------------------------------------------- */
+html[data-theme="charcoal"] .main :is(.btn.primary, button.primary) {
+  background: color-mix(in srgb, var(--pa) 30%, #1b1c20);
+  border-color: color-mix(in srgb, var(--pa) 62%, var(--line));
+  color: #fff;
+}
+html[data-theme="charcoal"] .main :is(.btn.primary, button.primary):hover {
+  background: color-mix(in srgb, var(--pa) 42%, #1b1c20);
+}
+html[data-theme="charcoal"] .main .btn:not(.primary):hover {
+  border-color: color-mix(in srgb, var(--pa) 55%, #565660);
+}
+html[data-theme="charcoal"] .main .page-tab[aria-current="page"],
+html[data-theme="charcoal"] .main .page-tab.active,
+html[data-theme="charcoal"] .main .seg button.active {
+  background: color-mix(in srgb, var(--pa) 24%, #1b1c20);
+  border-color: color-mix(in srgb, var(--pa) 60%, var(--line));
+  color: #fff;
+}
+html[data-theme="charcoal"] .main :is(input, select, textarea):focus {
+  border-color: color-mix(in srgb, var(--pa) 70%, var(--line-hot));
+}
+
+/* --- 7. Command Center ----------------------------------------------------- */
+html[data-theme="charcoal"] #dash .command-overview {
+  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-card {
+  --a: var(--card-accent, var(--role-repoql));
+  border: 1px solid color-mix(in srgb, var(--a) 26%, var(--line)) !important;
+  border-inline-start: 3px solid var(--a) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--a) 13%, transparent), transparent 75%),
+    var(--surface-raised) !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-card::before { background: transparent !important; }
+html[data-theme="charcoal"] #dash .command-overview-card .command-overview-name {
+  color: color-mix(in srgb, var(--a) 40%, #d6d6de) !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-value {
+  color: color-mix(in srgb, var(--a) 62%, #fff) !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-card:hover {
+  border-color: color-mix(in srgb, var(--a) 60%, var(--line)) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--a) 20%, transparent), transparent 75%),
+    var(--surface-raised) !important;
+}
+
+/* Workspace cards: a tinted wash in the corner, the hue on edge, icon, kicker. */
+html[data-theme="charcoal"] .command-links-priority .command-workspace,
+html[data-theme="charcoal"] .command-links-priority .command-workspace-feature {
+  --a: var(--tile-accent, var(--role-repoql));
+  border: 1px solid color-mix(in srgb, var(--a) 34%, var(--line)) !important;
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse 62% 130% at 100% 0%, color-mix(in srgb, var(--a) 20%, transparent), transparent 72%),
+    linear-gradient(160deg, color-mix(in srgb, var(--a) 7%, #202226), #141518 88%) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--a) 22%, transparent) inset, 0 10px 26px rgba(0, 0, 0, .28) !important;
+}
+html[data-theme="charcoal"] .command-links-priority .command-workspace::before,
+html[data-theme="charcoal"] .command-links-priority .command-workspace::after { display: none; }
+html[data-theme="charcoal"] .command-links-priority .command-workspace:hover,
+html[data-theme="charcoal"] .command-links-priority .command-workspace:focus-visible {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--a) 66%, var(--line)) !important;
+  background:
+    radial-gradient(ellipse 66% 135% at 100% 0%, color-mix(in srgb, var(--a) 28%, transparent), transparent 72%),
+    linear-gradient(160deg, color-mix(in srgb, var(--a) 10%, #24262b), #16171a 88%) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .36) !important;
+}
+html[data-theme="charcoal"] .command-card-icon {
+  color: color-mix(in srgb, var(--a, var(--role-repoql)) 85%, #fff);
+  background: color-mix(in srgb, var(--a, var(--role-repoql)) 20%, #16171a);
+  border: 1px solid color-mix(in srgb, var(--a, var(--role-repoql)) 42%, var(--line));
+}
+html[data-theme="charcoal"] .command-card-kicker {
+  color: color-mix(in srgb, var(--a, var(--role-repoql)) 62%, #fff);
+  font-weight: 600;
+}
+html[data-theme="charcoal"] .command-workspace .command-card-content strong { color: #fff; font-weight: 650; }
+html[data-theme="charcoal"] .command-workspace .command-card-description { color: #c4c7d0; }
+html[data-theme="charcoal"] .command-workspace .command-card-cta { color: color-mix(in srgb, var(--a, var(--role-repoql)) 70%, #fff) !important; font-weight: 600; }
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-cta span {
+  background: color-mix(in srgb, var(--a) 24%, #1a1b1f) !important;
+  border-color: color-mix(in srgb, var(--a) 50%, var(--line)) !important;
+  color: #fff !important;
+}
+/* The card art is the colour: render it in full, tinted shadow underneath. */
+html[data-theme="charcoal"] .command-card-illustration,
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace[data-accent] .command-card-illustration {
+  filter: saturate(1.05) drop-shadow(0 12px 22px color-mix(in srgb, var(--a, var(--role-repoql)) 26%, transparent)) !important;
+  opacity: .92 !important;
+}
+html[data-theme="charcoal"] .command-workspace-feature[data-accent="ghost"] .command-card-illustration { opacity: .5 !important; }
+
+html[data-theme="charcoal"] #dash .command-more {
+  --s: var(--section-accent, var(--role-repoql));
+  border: 1px solid color-mix(in srgb, var(--s) 28%, var(--line)) !important;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--s) 9%, transparent), transparent 55%),
+    var(--surface) !important;
+}
+html[data-theme="charcoal"] #dash .command-more::before { background: var(--s) !important; }
+html[data-theme="charcoal"] #dash .command-more > summary > span:first-child {
+  color: color-mix(in srgb, var(--s) 45%, #fff);
+}
+html[data-theme="charcoal"] #dash .command-more[data-accent="office"] { --section-accent: var(--role-office); }
+html[data-theme="charcoal"] #dash .command-more[data-accent="memory"] { --section-accent: var(--role-memory); }
+html[data-theme="charcoal"] #dash .command-more[data-accent="attention"] { --section-accent: var(--role-harness); }
+html[data-theme="charcoal"] .command-mini-chip {
+  background: color-mix(in srgb, var(--s, var(--role-repoql)) 12%, #1c1d21);
+  border-color: color-mix(in srgb, var(--s, var(--role-repoql)) 32%, var(--line));
+  color: #eceef3;
+}
+html[data-theme="charcoal"] .command-mini-chip:hover,
+html[data-theme="charcoal"] .command-mini-chip:focus-visible {
+  background: color-mix(in srgb, var(--s, var(--role-repoql)) 24%, #1f2024);
+  border-color: color-mix(in srgb, var(--s, var(--role-repoql)) 66%, var(--line));
+}
+html[data-theme="charcoal"] .command-hero-rich {
+  background:
+    radial-gradient(ellipse 380px 260px at 93% 15%, color-mix(in srgb, var(--role-memory) 20%, transparent), transparent 80%),
+    radial-gradient(ellipse 300px 200px at 6% 100%, color-mix(in srgb, var(--role-repoql) 14%, transparent), transparent 80%),
+    linear-gradient(145deg, #1d1e23, #121316) !important;
+}
+
+/* Ghost entry tile and any remaining tiles that carry --tile-accent. */
+html[data-theme="charcoal"] .ghost-operations-tile {
+  background:
+    radial-gradient(ellipse 60% 140% at 100% 0%, color-mix(in srgb, var(--role-ghost) 20%, transparent), transparent 72%),
+    var(--panel) !important;
+  border-color: color-mix(in srgb, var(--role-ghost) 44%, var(--line)) !important;
+}
+
+/* --- 8. Reading pages (cheat sheet, architecture) -------------------------- */
+html[data-theme="charcoal"] .main :is(.cs-quickstart article, .cs-glossary article, .cs-decisions article,
+  .cs-prompt, .cs-step, .cs-tool, .cs-skill, .cs-fleet article, .cs-cats article) {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--pa)) 10%, transparent), transparent 70%),
+    var(--surface) !important;
+  border-color: color-mix(in srgb, var(--tone, var(--pa)) 28%, var(--line)) !important;
+  border-inline-start: 3px solid color-mix(in srgb, var(--tone, var(--pa)) 70%, transparent) !important;
+}
+html[data-theme="charcoal"] .main :is(.cs-jump button.active, .cs-jump button[aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--pa) 26%, #1b1c20);
+  border-color: color-mix(in srgb, var(--pa) 62%, var(--line));
+}
+html[data-theme="charcoal"] .main .cs-cmd { border-color: color-mix(in srgb, var(--pa) 26%, #34343a); }
+html[data-theme="charcoal"] .main :is(.arch-hero, .cs-hero) {
+  background:
+    radial-gradient(ellipse 50% 130% at 100% 0%, color-mix(in srgb, var(--pa) 18%, transparent), transparent 70%),
+    linear-gradient(150deg, #202227, #121316);
+  border-color: color-mix(in srgb, var(--pa) 34%, #34343a);
+}
+html[data-theme="charcoal"] .main .arch-board {
+  background:
+    radial-gradient(ellipse 60% 100% at 0% 0%, color-mix(in srgb, var(--pa) 10%, transparent), transparent 70%),
+    linear-gradient(160deg, #1d1e22, #121316);
+}
+
+/* --- 9. Messenger (Agent Lounge) ------------------------------------------- */
+html[data-theme="charcoal"] .messenger-shell { --pa: var(--role-chat); }
+html[data-theme="charcoal"] .messenger-conversation[aria-current="true"],
+html[data-theme="charcoal"] .messenger-conversation.active {
+  background: color-mix(in srgb, var(--role-chat) 16%, #1b1c20);
+  border-color: color-mix(in srgb, var(--role-chat) 50%, var(--line));
+}
+html[data-theme="charcoal"] .messenger-announcement {
+  border-color: color-mix(in srgb, var(--role-chat) 26%, var(--line));
+  background: color-mix(in srgb, var(--role-chat) 7%, var(--surface));
+}
+
+/* --- 10. Knowledge graph chips keep their per-source hue -------------------- */
+html[data-theme="charcoal"] .ug-toolbar .graph-toggle.ug-chip {
+  border-color: color-mix(in srgb, var(--pa) 30%, var(--line)) !important;
+  background: color-mix(in srgb, var(--pa) 8%, var(--surface)) !important;
+}
+html[data-theme="charcoal"] .ug-toolbar .graph-toggle.ug-chip:has(input:checked) {
+  border-color: color-mix(in srgb, var(--pa) 66%, var(--line)) !important;
+  background: color-mix(in srgb, var(--pa) 22%, var(--surface-raised)) !important;
+}
+
+/* --- 11. Phones ------------------------------------------------------------- */
+@media (max-width: 768px) {
+  html[data-theme="charcoal"] .command-links-priority > .command-workspace {
+    border: 1px solid color-mix(in srgb, var(--a, var(--role-repoql)) 36%, var(--line)) !important;
+    background:
+      radial-gradient(ellipse 70% 130% at 100% 0%, color-mix(in srgb, var(--a, var(--role-repoql)) 22%, transparent), transparent 72%),
+      linear-gradient(160deg, color-mix(in srgb, var(--a, var(--role-repoql)) 8%, #202226), #141518 88%) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .3) !important;
+  }
+  html[data-theme="charcoal"] .command-links-priority .command-workspace .command-card-illustration {
+    opacity: .85 !important;
+    filter: none !important;
+  }
+  html[data-theme="charcoal"] .mobile-dock a[aria-current="page"] {
+    border-color: color-mix(in srgb, var(--pa, var(--role-repoql)) 55%, #3a3a40) !important;
+    color: color-mix(in srgb, var(--pa, var(--role-repoql)) 60%, #fff);
+  }
+}
+
+/* --- 12. Panels that stayed plain grey -------------------------------------- */
+html[data-theme="charcoal"] .main .table-wrap {
+  border: 1px solid color-mix(in srgb, var(--pa) 24%, var(--line));
+  border-top: 2px solid color-mix(in srgb, var(--pa) 46%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--pa) 6%, transparent), transparent 110px),
+    var(--surface);
+}
+html[data-theme="charcoal"] .main :is(.kg-guide, .memory-brain-head) {
+  background:
+    radial-gradient(ellipse 50% 160% at 100% 0%, color-mix(in srgb, var(--pa) 16%, transparent), transparent 70%),
+    linear-gradient(150deg, #1d1e23, #131417);
+  border-color: color-mix(in srgb, var(--pa) 30%, var(--line));
+}
+html[data-theme="charcoal"] .main :is(.arch-board, .arch-hero, .arch-guide, .arch-guide-grid) article {
+  background: color-mix(in srgb, var(--pa) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pa) 26%, var(--line));
+  border-inline-start: 3px solid color-mix(in srgb, var(--pa) 65%, transparent);
+}
+
+/* Kanban: stage hue on a hairline and a faint wash; cards stay calm. */
+html[data-theme="charcoal"] .kn-shell { --ks: var(--role-work); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-shell .kn-head,
+html[data-theme="charcoal"] .kn-shell .kn-head {
+  background:
+    radial-gradient(ellipse 45% 200% at 0% 0%, color-mix(in srgb, var(--role-work) 16%, transparent), transparent 70%),
+    linear-gradient(90deg, color-mix(in srgb, var(--role-work) 6%, #1a1b1f), #141518 85%) !important;
+  border-color: color-mix(in srgb, var(--role-work) 30%, var(--line)) !important;
+}
+html[data-theme="charcoal"] .kn-column { --ks: var(--kn-backlog); }
+html[data-theme="charcoal"] .kn-column[data-stage="ready"] { --ks: var(--kn-ready); }
+html[data-theme="charcoal"] .kn-column[data-stage="doing"] { --ks: var(--kn-doing); }
+html[data-theme="charcoal"] .kn-column[data-stage="review"] { --ks: var(--kn-review); }
+html[data-theme="charcoal"] .kn-column[data-stage="done"] { --ks: var(--kn-done); }
+html[data-theme="charcoal"] .kn-column[data-stage] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--ks) 10%, transparent), transparent 220px),
+    var(--panel);
+  border-color: color-mix(in srgb, var(--ks) 22%, var(--line));
+  border-top: 2px solid color-mix(in srgb, var(--ks) 70%, var(--line));
+}
+html[data-theme="charcoal"] .kn-column-title h3 { color: color-mix(in srgb, var(--ks) 50%, #fff); }
+html[data-theme="charcoal"] .kn-count { background: color-mix(in srgb, var(--ks) 20%, var(--panel-2)); color: #fff; }
+html[data-theme="charcoal"] .kn-task {
+  border-inline-start: 3px solid color-mix(in srgb, var(--ks) 62%, transparent);
+}
+html[data-theme="charcoal"] .kn-task:hover { border-color: color-mix(in srgb, var(--ks) 60%, var(--line-hot)); }
+html[data-theme="charcoal"] .kn-key { color: color-mix(in srgb, var(--ks) 55%, #cfd1d8); }
+html[data-theme="charcoal"] .kn-task {
+  background: color-mix(in srgb, var(--ks) 7%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--ks) 24%, var(--line));
+}
+
+
+/* --- 13. Bot Operations look, spread: near-black frame, 14px cards, hairlines -- */
+html[data-theme="charcoal"] .main :is(.block, .table-wrap, .kn-column, .kn-head, .command-overview, .command-more) {
+  border-radius: 14px;
+}
+html[data-theme="charcoal"] .main .block {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--pa) 8%, transparent), transparent 140px),
+    #151517;
+}
+html[data-theme="charcoal"] .main .block :is(.block, .stat, .metric, .unified-metric, .usage-stat, .hero, article, details) {
+  border-radius: 12px;
+}
+html[data-theme="charcoal"] .main .block .block {
+  background: color-mix(in srgb, var(--pa) 5%, #242426);
+  border-color: color-mix(in srgb, var(--pa) 18%, #38383c);
+}
+html[data-theme="charcoal"] .main :is(.pill, .chip) { border-radius: 999px; }
+html[data-theme="charcoal"] .main .pill.green { background: color-mix(in srgb, var(--green) 16%, #1a1b1d); border-color: color-mix(in srgb, var(--green) 45%, var(--line)); color: color-mix(in srgb, var(--green) 70%, #fff); }
+html[data-theme="charcoal"] .main .pill.amber { background: color-mix(in srgb, var(--amber) 16%, #1d1b18); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); color: color-mix(in srgb, var(--amber) 70%, #fff); }
+html[data-theme="charcoal"] .main .pill.red { background: color-mix(in srgb, var(--red) 16%, #1d1819); border-color: color-mix(in srgb, var(--red) 45%, var(--line)); color: color-mix(in srgb, var(--red) 70%, #fff); }
+html[data-theme="charcoal"] .main .pill.cyan { background: color-mix(in srgb, var(--cyan) 16%, #171b1e); border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); color: color-mix(in srgb, var(--cyan) 70%, #fff); }
+
+
+/* ==== charcoal_kanban.css ==== */
+/* charcoal_kanban.css - 2026-11-05 professional redesign layer. Charcoal theme only: every rule scoped html[data-theme="charcoal"]. Loaded last. */
+
+/* Single page header: the route's "Kanban Board" bar is replaced by the board header. */
+html[data-theme="charcoal"] .page-head:has(~ #kanban-body) { display: none; }
+
+html[data-theme="charcoal"] .kn-shell { --kn-cyan: #9aa3b2; --kn-purple: #9aa3b2; min-width: 0; color: #ececef; }
+
+/* Header: title and status on the left, compact actions on the right. */
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-shell .kn-head,
+html[data-theme="charcoal"] .kn-shell .kn-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  margin: 0 0 16px !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  background: none !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .kn-shell .kn-heading { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+html[data-theme="charcoal"] .kn-shell .kn-heading h1 {
+  margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em;
+  color: #ececef; background: none; -webkit-text-fill-color: #ececef;
+}
+html[data-theme="charcoal"] .kn-shell .kn-status { margin: 0; font-size: 12px; line-height: 16px; color: #8a8a92; }
+html[data-theme="charcoal"] .kn-shell .kn-actions { gap: 8px; flex-wrap: wrap; }
+
+/* Controls: 32px, 8px radius, one hairline. A control is no bigger than its content. */
+html[data-theme="charcoal"] .kn-shell .kn-button,
+html[data-theme="charcoal"] .kn-shell .kn-select,
+html[data-theme="charcoal"] .kn-shell .kn-search {
+  height: 32px; min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #2a2a2e;
+  background: #151517; color: #ececef; font-size: 13px; line-height: 1; box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-shell .kn-button {
+  font-weight: 500; transform: none; transition: background-color .15s, border-color .15s, color .15s;
+}
+html[data-theme="charcoal"] .kn-shell .kn-button:hover { background: #1e1e22; border-color: #3d3d44; box-shadow: none; }
+html[data-theme="charcoal"] .kn-shell .kn-button:active { transform: none; }
+html[data-theme="charcoal"] .kn-shell .kn-primary { background: #ececef; border-color: #ececef; color: #0b0b0c; }
+html[data-theme="charcoal"] .kn-shell .kn-primary:hover { background: #ffffff; border-color: #ffffff; color: #0b0b0c; box-shadow: none; }
+html[data-theme="charcoal"] .kn-shell .kn-search::placeholder { color: #8a8a92; }
+
+/* Filters: one toolbar row, then the stage chips. */
+html[data-theme="charcoal"] .kn-shell .kn-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 0;
+  border: 0; border-radius: 0; background: none;
+}
+html[data-theme="charcoal"] .kn-shell .kn-select { flex: 0 1 180px; min-width: 0; padding-right: 28px; }
+html[data-theme="charcoal"] .kn-shell .kn-search { flex: 1 1 240px; min-width: 180px; max-width: 420px; }
+html[data-theme="charcoal"] .kn-shell .kn-done-label {
+  min-height: 32px; gap: 6px; padding: 0 4px; color: #a8a8b0; font-size: 13px;
+}
+html[data-theme="charcoal"] .kn-shell .kn-done-label input,
+html[data-theme="charcoal"] .kn-shell .kn-human-field input { width: 15px; height: 15px; accent-color: #a8a8b0; }
+html[data-theme="charcoal"] .kn-shell .kn-toolbar .kn-clear-filters { font-size: 12px; color: #a8a8b0; }
+
+html[data-theme="charcoal"] .kn-shell .kn-lanes { gap: 6px; margin: 0; padding: 0 0 16px; }
+html[data-theme="charcoal"] .kn-shell .kn-lanes .kn-lane {
+  height: 28px; min-height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid #2a2a2e;
+  background: transparent; color: #a8a8b0; font-size: 12px; font-weight: 500; line-height: 1; box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-shell .kn-lanes .kn-lane:hover { background: #18181b; border-color: #3d3d44; color: #ececef; }
+html[data-theme="charcoal"] .kn-shell .kn-lanes .kn-lane.selected {
+  background: #ececef; border-color: #ececef; color: #0b0b0c; font-weight: 600; box-shadow: none;
+}
+html[data-theme="charcoal"] .kn-shell .kn-lanes .kn-lane:focus-visible { outline: 2px solid #ececef; outline-offset: 2px; }
+
+/* The per-page explanatory banner is gone; counts sit on the chips. */
+html[data-theme="charcoal"] .kn-shell .kn-board-summary { display: none; }
+
+/* Columns: no panel. A light header over a stack of cards. Equal widths. */
+html[data-theme="charcoal"] .kn-shell .kn-results { gap: 16px; }
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-queue,
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns {
+  display: grid; align-items: start; gap: 24px 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-queue { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns:has(> .kn-column:nth-child(5)) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns:has(> .kn-column:nth-child(3)):not(:has(> .kn-column:nth-child(4))) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns:has(> .kn-column:nth-child(2)):not(:has(> .kn-column:nth-child(3))) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns:not(:has(> .kn-column:nth-child(2))) { grid-template-columns: minmax(0, 1fr); }
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-queue > .kn-column[data-stage="todo"] { grid-column: auto; }
+
+html[data-theme="charcoal"] .kn-shell .kn-column,
+html[data-theme="charcoal"] .kn-shell .kn-results .kn-column {
+  min-width: 0; padding: 0 !important; border: 0 !important; border-radius: 12px; background: none !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .kn-shell .kn-column .kn-column-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 32px; margin: 0 0 8px !important; padding: 0 2px !important; border: 0 !important;
+}
+html[data-theme="charcoal"] .kn-shell .kn-column-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+html[data-theme="charcoal"] .kn-shell .kn-column-title::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--kn-col, #6b707a);
+}
+html[data-theme="charcoal"] .kn-shell .kn-column[data-stage="backlog"] { --kn-col: #6b707a; }
+html[data-theme="charcoal"] .kn-shell .kn-column[data-stage="todo"] { --kn-col: #9aa0aa; }
+html[data-theme="charcoal"] .kn-shell .kn-column[data-stage="doing"] { --kn-col: #6d9ccf; }
+html[data-theme="charcoal"] .kn-shell .kn-column[data-stage="review"] { --kn-col: #d4a85a; }
+html[data-theme="charcoal"] .kn-shell .kn-column[data-stage="done"] { --kn-col: #6fb58a; }
+html[data-theme="charcoal"] .kn-shell .kn-column-title h3 {
+  margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: #ececef; -webkit-text-fill-color: #ececef;
+}
+html[data-theme="charcoal"] .kn-shell .kn-column .kn-count {
+  min-width: 22px; height: 20px; padding: 0 7px; box-sizing: border-box; border-radius: 999px;
+  border: 1px solid #2a2a2e; background: #1c1c20; color: #a8a8b0;
+  font-size: 12px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+}
+html[data-theme="charcoal"] .kn-shell .kn-column.kn-drop-target {
+  background: rgba(255, 255, 255, .025) !important; outline: 1px dashed #3d3d44; outline-offset: 6px;
+}
+html[data-theme="charcoal"] .kn-shell .kn-results .kn-column .kn-cards {
+  display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) !important;
+}
+html[data-theme="charcoal"] .kn-shell .kn-column-empty {
+  margin: 0; padding: 16px 12px; border: 1px dashed #2a2a2e; border-radius: 10px;
+  color: #8a8a92; font-size: 12px; line-height: 16px; text-align: center;
+}
+html[data-theme="charcoal"] .kn-shell .kn-more-tasks {
+  width: 100%; height: 32px; min-height: 32px; border-style: dashed; background: transparent; color: #a8a8b0;
+}
+html[data-theme="charcoal"] .kn-shell .kn-more-tasks:hover { color: #ececef; }
+
+/* Cards. */
+html[data-theme="charcoal"] .kn-shell .kn-task-row { position: relative; min-width: 0; }
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task {
+  position: relative; display: grid; gap: 8px; width: 100%; min-width: 0; min-height: 0;
+  padding: 12px 14px 12px 16px; border: 1px solid #2a2a2e; border-radius: 10px;
+  background: #151517; color: #ececef; box-shadow: none; transform: none;
+  transition: border-color .15s, background-color .15s;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task::before {
+  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--kn-col, #6b707a); opacity: 1;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task:hover,
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task:focus-visible {
+  border-color: #3d3d44; background: #18181b; box-shadow: none; transform: none;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-top { display: flex; align-items: center; gap: 8px; min-height: 16px; }
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-key {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px; line-height: 16px; color: #8a8a92;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-title {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  margin: 0; font-size: 14px; line-height: 20px; font-weight: 500; color: #ececef; overflow-wrap: anywhere;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-description {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  margin: 0; font-size: 13px; line-height: 20px; color: #a8a8b0; white-space: normal; overflow-wrap: anywhere;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-bottom {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0;
+  color: #8a8a92; font-size: 12px; line-height: 16px;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-bottom:empty { display: none; }
+html[data-theme="charcoal"] .kn-shell .kn-comment-count { display: inline-flex; align-items: center; gap: 4px; color: #8a8a92; }
+html[data-theme="charcoal"] .kn-shell .kn-comment-count svg { width: 12px; height: 12px; flex: none; }
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-tag {
+  display: inline-flex; align-items: center; max-width: 100%; height: 20px; padding: 0 8px; box-sizing: border-box;
+  border: 1px solid #2a2a2e; border-radius: 999px; background: transparent !important; color: #a8a8b0 !important;
+  font-size: 11px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-human {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; box-sizing: border-box;
+  border: 1px solid rgba(212, 168, 90, .4); border-radius: 999px; background: transparent; color: #d4a85a;
+  font-size: 11px; line-height: 1;
+}
+
+/* Move button: a quiet text action, revealed on hover or keyboard focus. */
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance {
+  position: absolute; top: 8px; right: 8px; width: auto; height: 24px; min-height: 24px; margin: 0; padding: 0 8px;
+  border: 1px solid transparent !important; border-radius: 6px;
+  background: transparent !important; color: #a8a8b0 !important;
+  font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; text-align: center;
+  opacity: 0; transition: opacity .15s, background-color .15s, color .15s;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row:hover .kn-task-advance,
+html[data-theme="charcoal"] .kn-shell .kn-task-row:focus-within .kn-task-advance,
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance:focus-visible { opacity: 1; }
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance:hover,
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance:focus-visible {
+  background: #232327 !important; border-color: #3d3d44 !important; color: #ececef !important;
+}
+html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance:focus-visible { outline: 2px solid #ececef; outline-offset: 2px; }
+@media (hover: none) {
+  html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance { opacity: 1; }
+}
+
+/* Focus mode (one stage selected): cards wrap in a grid rather than one long list. */
+html[data-theme="charcoal"] .kn-shell .kn-results.kn-focused .kn-column .kn-cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)) !important; gap: 12px;
+}
+
+/* Empty states. */
+html[data-theme="charcoal"] .kn-shell .kn-empty {
+  padding: 40px 24px; border: 1px dashed #2a2a2e; border-radius: 12px; text-align: center; color: #a8a8b0;
+}
+html[data-theme="charcoal"] .kn-shell .kn-empty h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: #ececef; }
+html[data-theme="charcoal"] .kn-shell .kn-empty p { margin: 0 auto; max-width: 440px; font-size: 13px; line-height: 20px; }
+html[data-theme="charcoal"] .kn-shell .kn-empty .kn-button { margin-top: 16px; }
+
+/* Idle strip: sits beside To do, not as a second full-width panel. */
+html[data-theme="charcoal"] .kn-shell .kn-idle-activity {
+  grid-column: 2 / -1; grid-row: 1; align-self: start; gap: 12px; padding: 12px 14px; margin: 0;
+  border: 1px solid #2a2a2e; border-radius: 10px; background: #151517;
+}
+html[data-theme="charcoal"] .kn-shell .kn-idle-dot { width: 8px; height: 8px; background: #6b707a; box-shadow: none; }
+html[data-theme="charcoal"] .kn-shell .kn-idle-copy { gap: 2px; }
+html[data-theme="charcoal"] .kn-shell .kn-idle-copy strong { font-size: 13px; font-weight: 500; color: #ececef; }
+html[data-theme="charcoal"] .kn-shell .kn-idle-copy span { font-size: 12px; line-height: 18px; color: #a8a8b0; }
+
+/* Narrower desktop: four-stage board goes to two columns. */
+@media (max-width: 1100px) {
+  html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns:has(> .kn-column:nth-child(4)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Phone: one column, stacked, toolbar wraps to full-width controls. */
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] .kn-shell .kn-results.kn-queue,
+  html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns,
+  html[data-theme="charcoal"] .kn-shell .kn-results.kn-columns:has(> .kn-column:nth-child(2)) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  html[data-theme="charcoal"] .kn-shell .kn-results.kn-queue > .kn-column[data-stage="todo"],
+  html[data-theme="charcoal"] .kn-shell .kn-idle-activity { grid-column: auto; grid-row: auto; }
+  html[data-theme="charcoal"] .kn-shell .kn-head { margin-bottom: 12px !important; }
+  html[data-theme="charcoal"] .kn-shell .kn-actions { width: 100%; }
+  html[data-theme="charcoal"] .kn-shell .kn-actions .kn-button { flex: 1 1 0; }
+  html[data-theme="charcoal"] .kn-shell .kn-toolbar { gap: 8px; }
+  html[data-theme="charcoal"] .kn-shell .kn-select { flex: 1 1 calc(50% - 4px); }
+  html[data-theme="charcoal"] .kn-shell .kn-search { flex: 1 1 100%; max-width: none; min-width: 0; }
+  html[data-theme="charcoal"] .kn-shell .kn-done-label { flex: 1 1 auto; }
+  html[data-theme="charcoal"] .kn-shell .kn-lanes { margin-left: -12px; margin-right: -12px; padding: 0 12px 16px; }
+  html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task { padding: 14px; }
+  html[data-theme="charcoal"] .kn-shell .kn-task-row .kn-task-advance { opacity: 1; }
+  html[data-theme="charcoal"] .kn-shell .kn-results.kn-focused .kn-column .kn-cards { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+/* ---- Phone-first Kanban: stage tiles are the navigation; filters fold away. ---- */
+.kn-kpis, .kn-filter-toggle { display: none; }
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] .kn-shell .kn-kpis {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 12px;
+    position: sticky; top: 66px; z-index: 5; padding: 8px 0; background: #0e0e10;
+  }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi {
+    appearance: none; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+    min-height: 58px; padding: 9px 10px; border-radius: 12px; cursor: pointer; text-align: left;
+    background: #171719; color: #b3b3bb; border: 1px solid #2d2d31; border-inline-start: 2px solid var(--kpi, #8a8a92);
+    -webkit-tap-highlight-color: transparent;
+  }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi strong { font-size: 20px; font-weight: 600; line-height: 1; color: #f1f1f3; }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi span { font-size: 11px; line-height: 1.1; white-space: nowrap; }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi.kpi-all { --kpi: #8a8a92; }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi.kpi-doing { --kpi: var(--role-chat, #7cb7ff); }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi.kpi-review { --kpi: var(--role-memory, #a78bfa); }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi.kpi-done { --kpi: #7dd3a8; }
+  html[data-theme="charcoal"] .kn-shell .kn-kpi.selected {
+    background: color-mix(in srgb, var(--kpi) 16%, #171719); border-color: var(--kpi); color: #ececef;
+  }
+  /* Heading, status line and actions condensed. */
+  html[data-theme="charcoal"] .kn-shell .kn-heading h1 { font-size: 17px; }
+  html[data-theme="charcoal"] .kn-shell .kn-head { gap: 8px; }
+  html[data-theme="charcoal"] .kn-shell .kn-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  html[data-theme="charcoal"] .kn-shell .kn-actions .kn-primary { grid-column: 1 / -1; min-height: 46px; }
+  html[data-theme="charcoal"] .kn-shell .kn-actions .kn-button { min-height: 42px; padding: 0 6px; font-size: 13px; }
+  html[data-theme="charcoal"] .kn-shell .kn-filter-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  html[data-theme="charcoal"] .kn-shell .kn-filter-toggle[aria-expanded="true"] { background: #232327; border-color: #55555d; color: #fff; }
+  /* Toolbar: search always, the rest behind Filters. */
+  html[data-theme="charcoal"] .kn-shell .kn-toolbar { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
+  html[data-theme="charcoal"] .kn-shell:not(.kn-filters-open) .kn-toolbar > :not(.kn-search) { display: none !important; }
+  html[data-theme="charcoal"] .kn-shell .kn-search, html[data-theme="charcoal"] .kn-shell .kn-select { min-height: 44px; font-size: 16px; }
+  /* Chips are redundant with the stage tiles on a phone. */
+  html[data-theme="charcoal"] .kn-shell .kn-lanes { display: none; }
+  /* Cards: roomy tap targets, big advance button. */
+  html[data-theme="charcoal"] .kn-shell .kn-task-advance { min-height: 44px; width: 100%; font-size: 14px; }
+  /* Task editor as a full-height sheet. */
+  html[data-theme="charcoal"] .kn-dialog {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; border: 0;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto; background: #111113;
+  }
+  html[data-theme="charcoal"] .kn-dialog .kn-field-control { font-size: 16px; min-height: 44px; }
+  html[data-theme="charcoal"] .kn-dialog .kn-form-actions { position: sticky; bottom: 0; background: #111113; padding: 10px 0; }
+  html[data-theme="charcoal"] .kn-dialog .kn-form-actions .kn-button { flex: 1; min-height: 46px; }
+  html[data-theme="charcoal"] .kn-dialog .kn-modal-close { min-width: 44px; min-height: 44px; }
+}
+
+/* Agent Roles reference */
+.ar-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-top:12px; }
+.ar-card { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid #34343a; border-radius:12px; background:#1b1b1f; min-width:0; }
+.ar-card header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.ar-card h3 { margin:0; font:600 15px/1.2 var(--mono, monospace); color:#ececf0; overflow-wrap:anywhere; }
+.ar-kind { flex:none; padding:3px 8px; border:1px solid #3a3a42; border-radius:999px; font-size:11px; color:#a8a8b2; }
+.ar-card p { margin:0; font-size:13.5px; line-height:1.55; color:#c4c4cd; }
+.ar-card dl { margin:auto 0 0; display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; padding-top:10px; border-top:1px solid #2c2c32; }
+.ar-card dl div { min-width:0; }
+.ar-card dl div:first-child { grid-column:1 / -1; }
+.ar-card dt { font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:#85858f; }
+.ar-card dd { margin:2px 0 0; font-size:12.5px; color:#dcdce2; overflow-wrap:anywhere; }
+.ar-count { font-weight:400; color:#85858f; font-size:.8em; }
+.ar-foot { margin-top:14px; }
+@media (max-width:600px) { .ar-grid { grid-template-columns:minmax(0,1fr); } }
+
+
+/* ==== charcoal_graph.css ==== */
+/* charcoal_graph.css - 2026-11-05 professional redesign layer for the Memory Graph. Charcoal theme only: every rule scoped html[data-theme="charcoal"]. Loaded last. */
+
+/* Page heading: one quiet title, no gradient banner. */
+html[data-theme="charcoal"] .ug-hero.ug-hero-minimal { background:none; border:0; box-shadow:none; padding:0 0 10px; margin-bottom:6px; }
+html[data-theme="charcoal"] .ug-hero.ug-hero-minimal::after { display:none; }
+html[data-theme="charcoal"] .ug-hero.ug-hero-minimal h1 { background:none; -webkit-text-fill-color:#ececef; color:#ececef; font-size:20px; font-weight:600; letter-spacing:-.01em; }
+
+/* Controls bar: one compact, aligned band. */
+html[data-theme="charcoal"] .ug-toolbar.graph-controls { gap:8px; padding:10px 12px; margin-bottom:12px; border-radius:12px; border:1px solid #2a2a2e; background:#141415; box-shadow:none; }
+html[data-theme="charcoal"] .ug-toolbar-group { gap:8px 10px; }
+html[data-theme="charcoal"] .ug-toolbar-primary { flex:1 1 100%; align-items:center; }
+html[data-theme="charcoal"] .ug-search { flex:1 1 260px; min-width:200px; max-width:none; }
+html[data-theme="charcoal"] .ug-search .input { min-height:34px; height:34px; padding-left:34px; font-size:13px; border-radius:8px; }
+html[data-theme="charcoal"] .ug-search svg { width:14px; height:14px; stroke:#8a8a92; }
+html[data-theme="charcoal"] .ug-chips { gap:6px; }
+html[data-theme="charcoal"] .graph-toggle.ug-chip { min-height:30px; height:30px; padding:0 10px; gap:7px; font-size:12px; font-weight:500; border-radius:999px; color:#a8a8b0; }
+html[data-theme="charcoal"] .ug-toolbar .graph-toggle.ug-chip { border-color:#2a2a2e !important; background:#18181a !important; }
+html[data-theme="charcoal"] .ug-toolbar .graph-toggle.ug-chip:has(input:checked) { color:#ececef; border-color:#3a3a40 !important; background:#1f1f22 !important; box-shadow:none; }
+html[data-theme="charcoal"] .graph-toggle.ug-chip i { width:7px; height:7px; background:#4a4a52; }
+html[data-theme="charcoal"] .graph-toggle.ug-chip:has(input:checked) i { box-shadow:none; }
+html[data-theme="charcoal"] .ug-chip.rq { --c:#8fbfe6; } html[data-theme="charcoal"] .ug-chip.tx { --c:#b9a7e3; }
+html[data-theme="charcoal"] .ug-chip.mem { --c:#9ad3b0; } html[data-theme="charcoal"] .ug-chip.cross { --c:#d6aa70; }
+html[data-theme="charcoal"] .graph-toggle.ug-chip:has(input:focus-visible) { outline-color:#8a8a92; }
+
+html[data-theme="charcoal"] .ug-clarity-label,
+html[data-theme="charcoal"] .ug-limit { font:500 12px/1.2 var(--sans); letter-spacing:0; text-transform:none; color:#8a8a92; display:inline-flex; align-items:center; gap:6px; }
+html[data-theme="charcoal"] .ug-clarity-label .select,
+html[data-theme="charcoal"] .ug-limit .select { min-height:32px; height:32px; min-width:0; padding:0 28px 0 10px; font-size:12px; border-radius:8px; }
+html[data-theme="charcoal"] .ug-toolbar-secondary { justify-content:flex-start; }
+html[data-theme="charcoal"] .ug-viz { padding:3px; border-radius:9px; background:#0f0f11; border-color:#2a2a2e; box-shadow:none; }
+html[data-theme="charcoal"] .ug-viz-btn { min-height:28px; padding:0 11px; font:500 12px/1 var(--sans); color:#8a8a92; border-radius:6px; }
+html[data-theme="charcoal"] .ug-viz-btn svg { width:15px; height:15px; }
+html[data-theme="charcoal"] .ug-viz-btn[aria-checked="true"] { color:#ececef; }
+html[data-theme="charcoal"] .ug-viz-glider { top:3px; bottom:3px; left:3px; width:calc(50% - 3px); border-radius:6px; background:#2a2a2f; box-shadow:none; border:1px solid #3a3a40; }
+html[data-theme="charcoal"] .ug-viz[data-active="neural"] .ug-viz-glider { background:#2a2a2f; box-shadow:none; }
+html[data-theme="charcoal"] .ug-tools { gap:6px; }
+html[data-theme="charcoal"] .ug-tools .btn { min-height:30px; height:30px; padding:0 10px; font-size:12px; border-radius:8px; }
+html[data-theme="charcoal"] .ug-zoom { border-radius:8px; border-color:#2a2a2e; }
+html[data-theme="charcoal"] .ug-zoom .btn { min-width:32px; min-height:30px; height:30px; background:#18181a; }
+html[data-theme="charcoal"] .ug-zoom .btn + .btn { border-left-color:#2a2a2e; }
+html[data-theme="charcoal"] .ug-tools .btn.primary { background:#2a2a2f; border-color:#3a3a40; color:#ececef; }
+
+/* Stage: flat card, hairline edge. */
+html[data-theme="charcoal"] .graph-stage { background:#121214; border:1px solid #2a2a2e; border-radius:12px; box-shadow:none; }
+html[data-theme="charcoal"] .unified-graph-canvas { border-radius:0 0 12px 12px; }
+html[data-theme="charcoal"] .ug-stage-heading { background:#141415; border-bottom:1px solid #2a2a2e; padding:10px 14px; backdrop-filter:none; }
+html[data-theme="charcoal"] .ug-stage-copy { gap:2px; }
+html[data-theme="charcoal"] .ug-stage-copy strong { font-size:13px; font-weight:600; color:#ececef; letter-spacing:0; }
+html[data-theme="charcoal"] .ug-stage-copy span { font-size:12px; color:#8a8a92; }
+html[data-theme="charcoal"] .ug-legend { z-index:2; top:14px; right:14px; left:auto; bottom:auto; gap:10px; padding:5px 10px; border-radius:8px; background:rgba(20,20,23,.84); border:1px solid #2a2a2e; font-size:11px; color:#a8a8b0; backdrop-filter:none; }
+html[data-theme="charcoal"] .ug-legend i { width:6px; height:6px; box-shadow:none; background:#8fbfe6; }
+html[data-theme="charcoal"] .ug-legend .tx i { background:#b9a7e3; }
+html[data-theme="charcoal"] .ug-legend .mem i { background:#9ad3b0; }
+html[data-theme="charcoal"] .ug-legend .cross i { width:12px; height:2px; background:#d6aa70; box-shadow:none; }
+html[data-theme="charcoal"] .ug-loading { background:rgba(17,17,19,.9); }
+
+/* Side column: same card language as the stage. */
+html[data-theme="charcoal"] .ug-inspector-card,
+html[data-theme="charcoal"] .graph-side .block,
+html[data-theme="charcoal"] .ug-source-disclosure,
+html[data-theme="charcoal"] .ug-topic-explorer { background:#141415; border:1px solid #2a2a2e; border-radius:12px; box-shadow:none; }
+html[data-theme="charcoal"] .ug-source-disclosure[open] { border-color:#2a2a2e; box-shadow:none; }
+html[data-theme="charcoal"] .ug-empty-orb { background:#222226; box-shadow:none; }
+
+/* Topic pills: quiet, not neon. */
+html[data-theme="charcoal"] .ug-topic-grid .graph-result { min-height:30px; padding:0 11px; border-radius:999px; border:1px solid #2a2a2e; background:#18181a; color:#c9c9d0; font-size:12px; }
+html[data-theme="charcoal"] .ug-topic-grid .graph-result:hover,
+html[data-theme="charcoal"] .ug-topic-grid .graph-result:focus-visible { border-color:#3a3a40; background:#1f1f22; transform:none; box-shadow:none; }
+
+/* Phones: the legend chips above already name each source, so the overlay goes. */
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] .ug-hero.ug-hero-minimal { border:0 !important; background:none !important; box-shadow:none !important; padding:0 0 6px !important; }
+  html[data-theme="charcoal"] .ug-hero.ug-hero-minimal h1 { font-size:18px !important; font-weight:600 !important; }
+  html[data-theme="charcoal"] .ug-toolbar.graph-controls { border:1px solid #2a2a2e !important; background:#141415 !important; }
+  html[data-theme="charcoal"] .ug-legend { display:none; }
+  html[data-theme="charcoal"] .ug-clarity-label { flex:1 1 calc(50% - 8px); }
+  html[data-theme="charcoal"] .ug-clarity-label .select { width:100%; }
+}
+
+
+/* ==== charcoal_mobile.css ==== */
+@media (max-width:760px) {
+/* charcoal_mobile.css - 2026-11-05 phone layer (linked with media max-width 760px, loaded last).
+   Charcoal theme only: every rule starts html[data-theme="charcoal"]. Replaces the neon phone
+   presentation for charcoal with flat hairline surfaces, 24px line icons, a compact 2-column
+   workspace grid and a quiet bottom dock. Data, routes and other themes are unchanged.
+   The earlier phone mockup rules use !important and ID selectors, so overrides here match that. */
+
+/* 1. Header: plain charcoal bar, title in text colour, neutral menu button and mark. */
+html[data-theme="charcoal"] #mobile-topbar.mobile-topbar {
+  height: 56px !important; gap: 10px !important; padding: 0 12px !important;
+  background: #101012 !important; border-bottom: 1px solid #2d2d31 !important;
+  box-shadow: none !important; backdrop-filter: none !important;
+}
+html[data-theme="charcoal"] #mobile-topbar.mobile-topbar strong {
+  font-size: 16px !important; font-weight: 600 !important; letter-spacing: -.01em !important;
+  color: #f1f1f3 !important; text-shadow: none !important;
+}
+html[data-theme="charcoal"] #mobile-topbar .mobile-menu-button {
+  min-height: 44px !important; padding: 0 12px !important; border-radius: 10px !important;
+  border: 1px solid #36363a !important; background: #1b1b1e !important; color: #f1f1f3 !important;
+  box-shadow: none !important; font-size: 14px !important; font-weight: 500 !important;
+}
+html[data-theme="charcoal"] #mobile-topbar .mobile-brand-mark {
+  width: 32px !important; height: 32px !important; border-radius: 9px !important;
+  border: 1px solid #36363a !important; background: #1b1b1e !important; color: #b3b3bb !important;
+  box-shadow: none !important;
+}
+
+/* 2. Stray decoration from the neon mockup: the cyan arc under the header and the logo line. */
+html[data-theme="charcoal"] .main[data-workspace]::after,
+html[data-theme="charcoal"] .main::before {
+  display: none !important; content: none !important;
+}
+
+/* 3. Bottom dock: restored (the mockup hides it with an ID selector), quiet and line-icon only. */
+html[data-theme="charcoal"] .layout {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+}
+html[data-theme="charcoal"] #mobile-dock.mobile-dock {
+  display: grid !important; visibility: visible !important; pointer-events: auto !important;
+  position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important; z-index: 90 !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important; gap: 2px !important;
+  height: auto !important; min-height: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+  padding: 6px 6px max(8px, env(safe-area-inset-bottom, 8px)) !important;
+  background: #111113 !important; border-top: 1px solid #2d2d31 !important;
+  box-shadow: none !important; backdrop-filter: none !important;
+}
+html[data-theme="charcoal"] #mobile-dock.mobile-dock a {
+  min-width: 0 !important; min-height: 50px !important; padding: 0 !important; margin: 0 !important;
+  display: flex !important; flex-direction: column !important; align-items: center !important;
+  justify-content: center !important; gap: 3px !important;
+  border: 1px solid transparent !important; border-radius: 10px !important; background: transparent !important;
+  box-shadow: none !important; color: #a8a8b0 !important;
+  font-size: 11px !important; font-weight: 500 !important; letter-spacing: 0 !important;
+}
+html[data-theme="charcoal"] #mobile-dock.mobile-dock a[aria-current="page"] {
+  color: #f1f1f3 !important; background: #242427 !important; border-color: #38383e !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] #mobile-dock.mobile-dock svg {
+  width: 22px !important; height: 22px !important; fill: none !important; stroke: currentColor !important;
+  stroke-width: 1.5 !important; stroke-linecap: round !important; stroke-linejoin: round !important;
+}
+/* Lounge sizes its feed to the space between the header and the dock. */
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-shell,
+html[data-theme="charcoal"] .main:has(.messenger-shell) .messenger-shell {
+  height: calc(100dvh - 56px - 64px - env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* 4. Command center: section label, flat overview, compact workspace tiles. */
+html[data-theme="charcoal"] #dash > section[aria-labelledby="goto-heading"] > .command-heading {
+  display: flex !important; margin: 0 0 8px !important;
+}
+html[data-theme="charcoal"] #dash #goto-heading {
+  display: block !important; margin: 0 !important; font-size: 12px !important; font-weight: 500 !important;
+  letter-spacing: 0 !important; color: #a8a8b0 !important;
+}
+html[data-theme="charcoal"] #dash .command-overview {
+  padding: 12px !important; border-radius: 12px !important; border: 1px solid #2d2d31 !important;
+  background: #141416 !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] #dash .command-overview .command-heading {
+  margin: 0 0 10px !important; align-items: center !important;
+}
+html[data-theme="charcoal"] #dash .command-overview h2 {
+  font-size: 14px !important; font-weight: 600 !important; letter-spacing: 0 !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] #dash #command-live-status {
+  font-size: 12px !important; color: #a8a8b0 !important;
+}
+html[data-theme="charcoal"] #dash #command-live-refresh {
+  min-height: 44px !important; padding: 0 12px !important; border-radius: 10px !important;
+  border: 1px solid #36363a !important; background: #1f1f22 !important; color: #e6e6ea !important;
+  font-size: 13px !important; font-weight: 500 !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-grid {
+  display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-card {
+  display: flex !important; flex-direction: column !important; justify-content: space-between !important;
+  align-items: flex-start !important; gap: 4px !important; min-width: 0 !important; min-height: 72px !important;
+  padding: 10px 12px !important; border-radius: 10px !important; background: #1b1b1e !important;
+  border: 1px solid #2d2d31 !important; border-inline-start: 2px solid var(--a) !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-card .command-overview-name {
+  font-size: 12px !important; font-weight: 500 !important; line-height: 1.25 !important; color: #b3b3bb !important;
+}
+html[data-theme="charcoal"] #dash .command-overview-card .command-overview-value {
+  font-size: 22px !important; font-weight: 600 !important; line-height: 1.1 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* Workspace tiles: 24px line icon, title, chevron. Two per row, 88px minimum. */
+html[data-theme="charcoal"] #dash .command-workspace[data-accent="work"] { --tile-accent: var(--role-work); }
+html[data-theme="charcoal"] #dash .command-workspace[data-accent="chat"] { --tile-accent: var(--role-chat); }
+html[data-theme="charcoal"] #dash .command-workspace[data-accent="ghost"] { --tile-accent: var(--role-ghost); }
+html[data-theme="charcoal"] #dash .command-workspace[data-accent="ghostops"] { --tile-accent: var(--role-ghost); }
+html[data-theme="charcoal"] #dash .command-workspace[data-accent="memory"] { --tile-accent: var(--role-memory); }
+html[data-theme="charcoal"] #dash .command-workspace[data-accent="office"] { --tile-accent: var(--role-office); }
+
+html[data-theme="charcoal"] #dash .command-links-priority {
+  display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace {
+  display: grid !important; grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-rows: auto auto !important; grid-template-areas: "icon cta" "title title" !important;
+  align-content: space-between !important; gap: 12px 8px !important;
+  grid-column: auto !important; width: auto !important; min-width: 0 !important;
+  min-height: 88px !important; height: auto !important; padding: 12px 12px 13px !important;
+  border: 1px solid color-mix(in srgb, var(--tile-accent) 30%, #2d2d31) !important;
+  border-radius: 12px !important; background: #171719 !important; box-shadow: none !important;
+  overflow: hidden !important; position: relative !important; isolation: auto !important;
+  transform: none !important; transition: background-color .15s ease, border-color .15s ease !important;
+  color: #f1f1f3 !important; text-decoration: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace:hover,
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace:focus-visible {
+  border-color: color-mix(in srgb, var(--tile-accent) 55%, #3a3a40) !important;
+  background: #1b1b1e !important; transform: none !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace:active {
+  background: #1d1d20 !important; transform: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace:focus-visible {
+  outline: 2px solid #8a8a94 !important; outline-offset: 2px !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace::before,
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace::after {
+  display: none !important; content: none !important;
+}
+/* Only the Office Viewer keeps its illustration for now; see the report. */
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace .command-card-illustration {
+  display: block !important; opacity: .2 !important; filter: none !important; pointer-events: none;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-icon {
+  grid-area: icon !important; display: block !important; position: relative !important; z-index: 3 !important;
+  top: auto !important; left: auto !important; right: auto !important;
+  width: 24px !important; height: 24px !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important;
+  border: 0 !important; border-radius: 0 !important; background: none !important; box-shadow: none !important;
+  color: var(--tile-accent) !important; line-height: 0 !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-icon svg {
+  display: block !important; width: 24px !important; height: 24px !important; max-width: none !important;
+  fill: none !important; stroke: currentColor !important; stroke-linecap: round !important; stroke-linejoin: round !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-icon svg * {
+  stroke-width: 1.5 !important;
+}
+/* The Bot Operations icon is a 300x190 illustration; scale its strokes to 1.5px at 24px. */
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-icon svg[viewBox="0 0 300 190"] * {
+  stroke-width: 18.75 !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-content {
+  display: contents !important; position: static !important; inset: auto !important; top: auto !important;
+  right: auto !important; bottom: auto !important; left: auto !important; width: auto !important;
+  max-width: none !important; z-index: auto !important; transform: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-kicker,
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-description {
+  display: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-content strong {
+  grid-area: title !important; display: block !important; position: relative !important; z-index: 3 !important;
+  align-self: end !important; width: auto !important; max-width: none !important; margin: 0 !important; padding: 0 !important;
+  font-size: 15px !important; font-weight: 500 !important; line-height: 1.25 !important; letter-spacing: 0 !important;
+  color: #f1f1f3 !important; text-shadow: none !important;
+}
+/* The "Open workspace" caption stays in the DOM for screen readers; the chevron is drawn in CSS. */
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-cta {
+  grid-area: cta !important; display: flex !important; align-items: center !important; justify-content: center !important;
+  align-self: start !important; justify-self: end !important; position: relative !important; z-index: 3 !important;
+  inset: auto !important; top: auto !important; right: auto !important; bottom: auto !important; left: auto !important;
+  width: 20px !important; height: 20px !important; margin: 0 !important; padding: 0 !important;
+  font-size: 0 !important; line-height: 0 !important; color: #9a9aa3 !important;
+  border: 0 !important; background: none !important; box-shadow: none !important; text-shadow: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-cta > span {
+  display: none !important;
+}
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-cta::after {
+  content: ""; display: block; width: 7px; height: 7px; margin-left: -2px;
+  border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg);
+}
+
+/* Secondary sections: flat rows, 44px tap targets. */
+html[data-theme="charcoal"] #dash .command-more {
+  margin: 0 !important; padding: 0 !important; border-radius: 12px !important;
+  border: 1px solid #2d2d31 !important; background: #141416 !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] #dash .command-more[open] { padding-bottom: 12px !important; }
+html[data-theme="charcoal"] #dash .command-more > summary {
+  min-height: 44px !important; padding: 0 12px !important; display: flex !important; align-items: center !important;
+  justify-content: space-between !important; gap: 12px !important; font-size: 14px !important; font-weight: 500 !important;
+  color: #e6e6ea !important;
+}
+html[data-theme="charcoal"] #dash .command-more > summary::after { color: #9a9aa3 !important; }
+html[data-theme="charcoal"] #dash .command-more-grid { padding: 0 12px !important; gap: 8px !important; }
+html[data-theme="charcoal"] #dash .command-mini-chip {
+  min-height: 44px !important; padding: 0 12px !important; border-radius: 8px !important;
+  font-size: 13px !important; font-weight: 500 !important;
+}
+
+/* Ghost Operations entry: a flat row with the same icon and chevron as the home tiles. */
+html[data-theme="charcoal"] .main .ghost-operations-tile,
+html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile {
+  display: grid !important; grid-template-columns: 24px minmax(0, 1fr) 20px !important; align-items: center !important;
+  gap: 12px !important; min-height: 56px !important; margin: 0 0 10px !important; padding: 12px !important;
+  border-radius: 12px !important; border: 1px solid color-mix(in srgb, var(--role-ghost) 30%, #2d2d31) !important;
+  background: #171719 !important; background-image: none !important; box-shadow: none !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-icon {
+  display: block !important; width: 24px !important; height: 24px !important; color: var(--role-ghost) !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-icon svg { width: 24px !important; height: 24px !important; }
+html[data-theme="charcoal"] .ghost-operations-tile-copy {
+  display: grid !important; gap: 2px !important; min-width: 0 !important; max-width: none !important; margin: 0 !important; z-index: auto !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-copy strong {
+  font-size: 15px !important; font-weight: 500 !important; line-height: 1.25 !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-copy > span {
+  font-size: 12px !important; line-height: 1.35 !important; color: #b3b3bb !important; max-width: none !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-arrow {
+  display: block !important; width: 20px !important; height: 20px !important; margin: 0 !important; padding: 0 !important;
+  align-self: center !important; background: none !important; box-shadow: none !important;
+  font-size: 0 !important; line-height: 0 !important; color: #9a9aa3 !important; border: 0 !important;
+}
+html[data-theme="charcoal"] .ghost-operations-tile-arrow::after {
+  content: ""; display: block; width: 7px; height: 7px; margin-left: 6px;
+  border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg);
+}
+html[data-theme="charcoal"] .main[data-workspace="ghost"] #ghost-planner-integrated {
+  border: 1px solid #2d2d31 !important; border-radius: 12px !important; box-shadow: none !important; overflow: hidden !important;
+}
+
+/* Ghost entry copy: the mockup pushes the text right with margin-left:auto and caps its width. */
+html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy {
+  margin-left: 0 !important; max-width: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy strong {
+  font-size: 15px !important; font-weight: 500 !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy > span {
+  max-width: none !important; font-size: 12px !important; color: #b3b3bb !important;
+}
+
+/* Kanban: neutral KPI cards, stage colour only as a thin edge, sentence-case headings. */
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis > div {
+  min-height: 72px !important; padding: 10px 12px !important; gap: 4px !important; border-radius: 12px !important;
+  background: #171719 !important; border: 1px solid #2d2d31 !important; border-inline-start: 2px solid var(--kpi, #8a8a92) !important;
+  box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis > div:nth-child(1) { --kpi: #8a8a92; }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis > div:nth-child(2) { --kpi: var(--role-chat); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis > div:nth-child(3) { --kpi: var(--role-memory); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis strong {
+  font-size: 22px !important; font-weight: 600 !important; line-height: 1 !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis > div:nth-child(2) strong { color: color-mix(in srgb, var(--role-chat) 65%, #fff) !important; }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis > div:nth-child(3) strong { color: color-mix(in srgb, var(--role-memory) 65%, #fff) !important; }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-mobile-kpis span { font-size: 12px !important; color: #b3b3bb !important; }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-shell .kn-head {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 0 8px !important; margin-bottom: 8px !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-heading h2 {
+  font-size: 18px !important; font-weight: 600 !important; letter-spacing: 0 !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-shell :is(.kn-lane, .kn-button, .kn-search, .kn-select) {
+  min-height: 44px !important; border-radius: 10px !important; background: #1f1f22 !important;
+  border: 1px solid #36363a !important; color: #e6e6ea !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-shell .kn-lane.selected {
+  background: color-mix(in srgb, var(--role-work) 22%, #1f1f22) !important;
+  border-color: color-mix(in srgb, var(--role-work) 55%, #36363a) !important; color: #fff !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column[data-stage="todo"] { --stage-color: var(--kn-ready, #b09a78); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column[data-stage="doing"] { --stage-color: var(--kn-doing, #6f97a8); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column[data-stage="review"] { --stage-color: var(--kn-review, #8f81a8); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column[data-stage="done"] { --stage-color: var(--kn-done, #709b85); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column[data-stage="backlog"] { --stage-color: var(--kn-backlog, #8a8f9b); }
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 8px 0 0 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column-title h3 {
+  font-size: 15px !important; font-weight: 600 !important; letter-spacing: 0 !important; text-transform: none !important;
+  color: #e6e6ea !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-count {
+  background: #232326 !important; border: 1px solid #36363a !important; color: #e6e6ea !important; font-size: 12px !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-column .kn-task {
+  background: #171719 !important; border: 1px solid #2d2d31 !important; border-radius: 12px !important;
+  box-shadow: inset 3px 0 0 var(--stage-color, #8a8a92) !important; padding: 12px 14px !important; min-height: 64px !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-task-title {
+  font-size: 14px !important; font-weight: 500 !important; line-height: 1.35 !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-task-description {
+  font-size: 12.5px !important; line-height: 1.4 !important; color: #b3b3bb !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="work"] .kn-key { color: #a8a8b0 !important; }
+
+/* Lounge: neutral message cards; the Kanzo and announcement cards keep a thin edge only. */
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-shell {
+  background: #111113 !important; border: 0 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-toolbar,
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-threadhead {
+  background: transparent !important; border-bottom: 0 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .lounge-presence,
+html[data-theme="charcoal"] .main[data-workspace="chat"] .lounge-filters {
+  background: #1b1b1e !important; border: 1px solid #2d2d31 !important; border-radius: 12px !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-message,
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-message:nth-of-type(3n) {
+  background: #171719 !important; border: 1px solid #2d2d31 !important; border-radius: 12px !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-kanzo {
+  background: #171719 !important; border: 1px solid #2d2d31 !important; border-inline-start: 2px solid var(--role-work) !important;
+  border-radius: 12px !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-announcement {
+  background: #171719 !important; border: 1px solid #2d2d31 !important; border-inline-start: 2px solid var(--role-office) !important;
+  border-radius: 12px !important;
+}
+
+/* Lounge list, filters and people chips: navy inputs and selected rows become charcoal. */
+html[data-theme="charcoal"] .main[data-workspace="chat"] .lounge-filters > summary,
+html[data-theme="charcoal"] .main[data-workspace="chat"] .lounge-person {
+  background: #1b1b1e !important; border-color: #2d2d31 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-listpane {
+  background: #141416 !important; border-color: #2d2d31 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] :is(input, select):not([type="checkbox"]):not([type="radio"]) {
+  background: #1f1f22 !important; border-color: #36363a !important; color: #f1f1f3 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-conversation.selected {
+  background: #242427 !important; border-color: #3a3a40 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] [class*="avatar"] {
+  background: #2a2a2f !important; background-image: none !important; color: #e6e6ea !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .lounge-presence-chevron { stroke: #a8a8b0 !important; }
+
+/* Memory graph: charcoal panels; the 3D brain itself stays the only coloured element. */
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-hero-minimal,
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-toolbar.graph-controls {
+  background: #171719 !important; border: 1px solid #2d2d31 !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-hero-minimal {
+  padding: 10px 14px !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-hero-minimal h1 {
+  font-size: 20px !important; font-weight: 600 !important; color: #f1f1f3 !important; margin: 0 !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-stage-shell {
+  background: #111113 !important; border: 1px solid #2d2d31 !important; border-radius: 12px !important; box-shadow: none !important;
+}
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-brain-3d { background: none !important; }
+html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-brain-side-tags span {
+  background: #1b1b1e !important; border-color: #36363a !important; color: #d6d6dc !important;
+}
+
+/* Section titles across phone pages: sentence case, no tracking. */
+html[data-theme="charcoal"] .main .block-title,
+html[data-theme="charcoal"] .main[data-workspace] .block-title {
+  letter-spacing: 0 !important; text-transform: none !important;
+}
+
+/* Collapsed sections: the desktop accent bar at the left edge reads as a stray mark on phones. */
+html[data-theme="charcoal"] #dash .command-more::before { display: none !important; }
+
+/* Office tile: flat like the others on phones (hides the photographic art). */
+html[data-theme="charcoal"] #dash .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration{opacity:.2!important}
+
+
+/* Memory graph on phones: the top-down brain is slightly taller than wide; the stage matches it, with no dead band above. */
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] .main[data-workspace="memory"] #ug-canvas { height: min(66dvh, 490px) !important; }
+  html[data-theme="charcoal"] .main[data-workspace="memory"] .ug-stage-shell { padding-top: 44px !important; }
+}
+
+/* Phone workspace tiles (2026-11-05 redesign): one distinct picture per tile, live office hero. */
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace {
+    grid-template-rows: 1fr auto auto !important;
+    grid-template-areas: "icon cta" "kick kick" "title title" !important;
+    gap: 0 8px !important; min-height: 118px !important; padding: 12px !important;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-kicker {
+    display: block !important; grid-area: kick !important; position: relative !important; z-index: 3 !important;
+    margin: 0 0 2px !important; padding: 0 !important; font-size: 11px !important; font-weight: 500 !important;
+    letter-spacing: 0 !important; text-transform: none !important; color: rgba(236,236,239,.72) !important;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-content strong {
+    font-size: 16px !important; font-weight: 600 !important;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace .command-card-icon {
+    width: 32px !important; height: 32px !important; padding: 4px !important; border-radius: 9px !important;
+    background: rgba(11,11,12,.55) !important; border: 1px solid color-mix(in srgb, var(--tile-accent) 35%, transparent) !important;
+    box-sizing: border-box !important; display: flex !important; align-items: center; justify-content: center;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace .command-card-icon svg { width: 20px !important; height: 20px !important; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace .command-card-illustration {
+    opacity: 1 !important; background-size: cover !important; background-position: right center !important;
+    --scrim: linear-gradient(0deg, rgba(11,11,12,.92) 0%, rgba(11,11,12,.55) 42%, rgba(11,11,12,0) 78%);
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/kanban"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-kanban.svg') !important; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-bots.svg') !important; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/ghost"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-ghost.svg') !important; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-lounge.svg') !important; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] .command-card-illustration {
+    background-image: var(--scrim), url('/assets/mobile/office-live.webp') !important; background-position: center 35% !important;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] { --tile-accent: #a78bfa; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/kanban"] { --tile-accent: #7dd3a8; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/ghost"] { --tile-accent: #5eead4; }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"] { --tile-accent: #7cb7ff; }
+  /* Office is the hero: first, full width, the real scene. Memory graph is a full-width strip at the end. */
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] {
+    order: -1; grid-column: 1 / -1 !important; min-height: 176px !important;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/unified/graph"] {
+    grid-column: 1 / -1 !important; min-height: 104px !important;
+  }
+  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] .command-card-kicker::before {
+    content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: #4ade80; vertical-align: 1px;
+  }
+}
+
+/* OpenMausBot page on phones: only the embedded app, no bottom dock. */
+@media (max-width: 760px) {
+  html[data-theme="charcoal"][data-route="openmausbot"] #mobile-dock { display: none !important; }
+  html[data-theme="charcoal"][data-route="openmausbot"] .layout { padding-bottom: 0 !important; }
+  html[data-theme="charcoal"][data-route="openmausbot"] .main { padding: 0 !important; }
+  html[data-theme="charcoal"][data-route="openmausbot"] .main > .page-head { display: none !important; }
+  html[data-theme="charcoal"][data-route="openmausbot"] #omb-workspace { border: 0 !important; border-radius: 0 !important; min-height: 0 !important; box-shadow: none !important; background: transparent !important; }
+  html[data-theme="charcoal"][data-route="openmausbot"] #omb-workspace .native-panel-frame { height: calc(100dvh - 66px) !important; min-height: 0 !important; }
+}
+
+}
+
+/* ==== charcoal_office.css ==== */
+/* charcoal_office.css - 2026-11-05 professional redesign layer. Charcoal theme only: every rule scoped html[data-theme="charcoal"]. Loaded last. */
+
+/* Office tile icon container: role colour at 12% tint, 1px hairline, no glow. */
+html[data-theme="charcoal"] .command-workspace[data-accent="office"] .command-card-icon {
+  color: var(--role-office);
+  background: color-mix(in srgb, var(--role-office) 12%, #16171a);
+  border: 1px solid color-mix(in srgb, var(--role-office) 30%, #2a2a2e);
+  box-shadow: none;
+}
+
+
+/* ==== charcoal_global.css ==== */
+/* charcoal global layer: app shell, Command center (#/), and shared components
+   (cards, tables, pills, buttons, inputs, tabs, stat tiles, empty states).
+   Charcoal theme only. Desktop only (min-width 761px); phone layout is owned by
+   charcoal_mobile.css. Pages owned by other layers are excluded by page identity:
+   bot (Bot Operations), work (Kanban), office, memory (Memory graph and
+   Memory architecture) and reference (RepoQL cheat sheet).
+   Generated from the source in the redesign work folder; edit the source, not this file. */
+
+html[data-theme="charcoal"] {
+  --g-card: #151517;
+  --g-card-hi: #1b1b1e;
+  --g-well: #111113;
+  --g-line: #2a2a2e;
+  --g-line-2: #37373e;
+  --g-text: #ececef;
+  --g-text-2: #a8a8b0;
+  --g-text-3: #8f8f98;
+  --g-hover: #1f1f23;
+  --g-active: #27272c;
+  --g-radius: 12px;
+  --g-control-radius: 8px;
+}
+
+@media (min-width: 761px) {
+
+  /* ------------------------------------------------------------ app shell */
+  html[data-theme="charcoal"] .layout { grid-template-columns: 240px minmax(0, 1fr); }
+  html[data-theme="charcoal"] .sidebar { padding: 18px 14px 24px; }
+  html[data-theme="charcoal"] .brand { margin-bottom: 12px; }
+  html[data-theme="charcoal"] .brand-text strong { letter-spacing: .12em; font-size: 12px; }
+  html[data-theme="charcoal"] .brand-text span { letter-spacing: .06em; font-size: 10.5px; }
+  html[data-theme="charcoal"] .sidebar-search { padding: 10px 0 8px; }
+  html[data-theme="charcoal"] .sidebar-search label { font-size: 12px; font-weight: 500; color: var(--g-text-2); }
+  html[data-theme="charcoal"] .sidebar-search input { min-height: 34px; padding: 7px 10px; font-size: 13px; border-radius: var(--g-control-radius); }
+  html[data-theme="charcoal"] .nav-section { margin-top: 18px; }
+  html[data-theme="charcoal"] .nav-section h2 {
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0; color: var(--g-text-3); margin: 0 0 6px 10px;
+  }
+  html[data-theme="charcoal"] .nav-link {
+    min-height: 34px; padding: 6px 9px; margin-bottom: 2px; gap: 9px;
+    font-size: 13.5px; letter-spacing: 0; border-radius: var(--g-control-radius);
+  }
+  html[data-theme="charcoal"] .nav-link:hover { background: var(--g-hover); }
+  html[data-theme="charcoal"] .nav-more > summary { font-size: 12.5px; font-weight: 600; color: var(--g-text-2); }
+  html[data-theme="charcoal"] .sidebar-foot { margin-top: 18px; padding-top: 12px; }
+
+  /* ------------------------------------------------------------ page head */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) > .page-head.page-head {
+    align-items: flex-end; gap: 16px; padding: 4px 0 16px; margin: 0 0 20px;
+    background: none; border: 0; border-bottom: 1px solid var(--g-line); border-radius: 0; box-shadow: none;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) > .page-head.page-head::before,
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) > .page-head.page-head::after { content: none; display: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) > .page-head.page-head h1 {
+    font-size: 22px; line-height: 1.2; font-weight: 600; letter-spacing: 0;
+    color: var(--g-text); background: none; -webkit-background-clip: border-box; background-clip: border-box;
+    -webkit-text-fill-color: currentColor; text-shadow: none;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) > .page-head.page-head .sub {
+    font-size: 13px; line-height: 1.5; color: var(--g-text-2); margin-top: 4px; max-width: 80ch;
+  }
+  /* Programmatic focus on headings and the main region is not a control. */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) :is(h1, h2, [tabindex="-1"]):focus { outline: none; }
+
+  /* Connectors: neutral cards and a plain eyebrow instead of tinted gradients. */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .connector-card {
+    background: var(--g-card); border-color: var(--g-line); min-height: 0; box-shadow: none;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .connector-card:hover { border-color: var(--g-line-2); box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .connector-card h3 { font-size: 15px; font-weight: 600; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .conn-kicker { font: 500 12px/1.3 var(--sans); letter-spacing: 0; text-transform: none; color: var(--g-text-2); }
+
+  /* ----------------------------------------------------------- cards */
+  /* Page-identity stripes are decoration; status blocks (accent-*) keep theirs. */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block:not([class*="accent-"]) { border-inline-start: 1px solid var(--g-line); }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .usage-stat {
+    background: var(--g-card) !important; border-color: var(--g-line) !important;
+    border-inline-start: 1px solid var(--g-line) !important;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .unified-metric {
+    border: 0 !important; background: none !important; padding: 0 !important; box-shadow: none !important;
+    font-family: var(--mono); font-size: 26px; line-height: 1.2; font-weight: 600; color: var(--g-text);
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block {
+    background: var(--g-card); border: 1px solid var(--g-line); border-top: 1px solid var(--g-line);
+    border-radius: var(--g-radius); padding: 16px 18px; box-shadow: none;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block::after { box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block.link:hover,
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block.link:focus-visible { border-color: var(--g-line-2); box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block-title {
+    justify-content: flex-start; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none;
+    color: var(--g-text); margin-bottom: 12px;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block-title::first-letter { color: inherit; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block-title:empty { display: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .block-title .tag { margin-left: auto; font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--g-text-3); letter-spacing: 0; }
+
+  /* Stat tiles: the figure stands alone; the card is the only box. */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .metric { margin: 2px 0 0; padding: 0 !important; background: none !important; border: 0 !important; border-inline-start: 0 !important; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .metric .value { font-size: 26px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .metric .unit { font-size: 12.5px; color: var(--g-text-2); }
+
+  /* ------------------------------------------------- pills, buttons, inputs */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .pill {
+    min-height: 22px; padding: 2px 8px; font-size: 11.5px; line-height: 1.4; box-shadow: none;
+    background: transparent; border-color: var(--g-line-2); color: var(--g-text-2);
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .pill.green, html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .pill.cyan, html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .pill.amber, html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .pill.red, html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .pill.purple { box-shadow: none; }
+
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn {
+    min-height: 32px; padding: 6px 12px; font-size: 13px; font-weight: 500; line-height: 1.2;
+    border-radius: var(--g-control-radius); background: #1c1c1f; border-color: var(--g-line-2);
+    color: var(--g-text); box-shadow: none;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn:hover:not(:disabled) { background: var(--g-active); border-color: #4a4a53; color: #fff; box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn.small { min-height: 28px; padding: 4px 10px; font-size: 12.5px; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn.primary {
+    color: #fff; background: color-mix(in srgb, var(--pa) 24%, #1c1c1f);
+    border-color: color-mix(in srgb, var(--pa) 52%, var(--g-line-2));
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--pa) 32%, #1f1f23); box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn.danger { color: #f4d7dc; background: #1c1c1f; border-color: color-mix(in srgb, var(--red) 40%, var(--g-line-2)); }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn.ghost { background: transparent; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn.active { color: #fff; background: var(--g-active); border-color: #4a4a53; box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .btn:disabled { opacity: .5; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data .btn { min-height: 28px; padding: 4px 10px; font-size: 12.5px; }
+
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) :is(.input, .select, select, textarea, input[type="text"], input[type="search"], input[type="number"], input[type="date"], input:not([type])) {
+    min-height: 34px; padding: 6px 10px; font-size: 13px; line-height: 1.3;
+    border-radius: var(--g-control-radius); background: var(--g-well); border-color: var(--g-line-2); color: var(--g-text);
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) :is(.input, .select, input, textarea):focus { border-color: #5d5d67; box-shadow: none; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .input.wide { min-width: 260px; }
+
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .seg, html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .page-tabs {
+    background: var(--g-well); border: 1px solid var(--g-line); border-radius: 10px; box-shadow: none; padding: 3px; gap: 2px;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .seg { border-radius: var(--g-control-radius); }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .seg button { background: transparent; border: 0; border-radius: 6px; padding: 5px 11px; font-size: 13px; color: var(--g-text-2); }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .seg button.active { color: var(--g-text); background: var(--g-active); }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .page-tab {
+    min-height: 32px; padding: 6px 12px; font-size: 13px; font-weight: 500; color: var(--g-text-2);
+    border-radius: 7px; background: transparent;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .page-tab:hover { color: var(--g-text); background: var(--g-hover); }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .page-tab[aria-current="page"] {
+    color: var(--g-text); background: var(--g-active); border: 0; box-shadow: none;
+  }
+
+  /* -------------------------------------------------------------- tables */
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .table-wrap {
+    background: var(--g-card); border: 1px solid var(--g-line); border-radius: var(--g-radius); overflow: hidden;
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data { font-size: 13px; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data th {
+    font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--g-text-3);
+    background: #18181b; padding: 9px 12px; border-bottom: 1px solid var(--g-line);
+  }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data td { padding: 9px 12px; border-bottom: 1px solid #222226; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data tbody tr:hover td { background: #1b1b1e; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data td.mono, html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) table.data td .mono { font-size: 12px; }
+  html[data-theme="charcoal"] #app:not([data-page-identity="bot"],[data-page-identity="work"],[data-page-identity="office"],[data-page-identity="memory"],[data-page-identity="reference"]) .empty { color: var(--g-text-3); font-size: 13px; padding: 20px 12px; }
+
+  /* -------------------------------------------------- Command center (#/) */
+  html[data-theme="charcoal"] #app[data-page-route="/"] .stack { gap: 16px; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-heading { margin: 0 0 10px; align-items: center; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-heading h2 { font-size: 15px; font-weight: 600; color: var(--g-text); }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-heading span,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-actions { font-size: 12.5px; color: var(--g-text-3); }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-actions button {
+    min-height: 30px; padding: 4px 12px; font-size: 12.5px; font-weight: 500; color: var(--g-text);
+    border-radius: var(--g-control-radius); border: 1px solid var(--g-line-2); background: #1c1c1f;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-actions button:hover:not(:disabled) { background: var(--g-active); border-color: #4a4a53; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview { padding: 16px 18px; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card {
+    min-height: 0; gap: 4px; padding: 14px 16px; border-radius: 10px; overflow: visible;
+    background: var(--g-card-hi); border: 1px solid var(--g-line); box-shadow: none;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card::before { content: none; display: none; }
+  /* palette.css forces the per-card hue with !important on #dash; match it. */
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent] {
+    background: var(--g-card-hi) !important; border: 1px solid var(--g-line) !important;
+    border-inline-start: 1px solid var(--g-line) !important;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card:hover { border-color: var(--g-line-2); background: var(--g-active); }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card .command-overview-name { font-size: 12.5px; font-weight: 500; color: var(--g-text-2); }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card .command-overview-value {
+    font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: 0; color: var(--g-text);
+    font-variant-numeric: tabular-nums;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent] .command-overview-value,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent] strong { color: var(--g-text) !important; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card small { font-size: 12px; line-height: 1.4; color: var(--g-text-3); }
+
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 0; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace-feature {
+    display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px 14px; align-items: start;
+    grid-column: auto; min-height: 0; padding: 16px 18px; border-radius: var(--g-radius);
+    background: var(--g-card) !important; border: 1px solid var(--g-line) !important; box-shadow: none !important; overflow: hidden;
+    transform: none;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace::before,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace::after { content: none; display: none; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace:hover,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace:focus-visible {
+    background: var(--g-card-hi) !important; border-color: var(--g-line-2) !important; transform: none; box-shadow: none !important;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-illustration { opacity: .32; filter: none; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-icon {
+    position: static; top: auto; right: auto; width: 36px; height: 36px; border-radius: 9px;
+    display: grid; place-items: center; grid-row: 1 / span 1; grid-column: 1;
+    color: color-mix(in srgb, var(--tile-accent) 78%, #fff);
+    background: color-mix(in srgb, var(--tile-accent) 12%, #1b1b1e);
+    border: 1px solid color-mix(in srgb, var(--tile-accent) 24%, var(--g-line));
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-icon svg { width: 20px; height: 20px; }
+  /* app.css fixes the content column at 58% with !important; release it. */
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-content,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace-feature .command-card-content {
+    grid-column: 2; width: auto !important; max-width: none !important; gap: 4px; min-width: 0; position: static; z-index: auto;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-kicker {
+    font: 500 12px/1.3 var(--sans); letter-spacing: 0; text-transform: none; color: var(--g-text-3); width: auto;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-content strong {
+    font-size: 15px; font-weight: 600; letter-spacing: 0; line-height: 1.3; color: var(--g-text);
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-description {
+    display: block; overflow: visible; -webkit-line-clamp: none; max-width: none;
+    font-size: 13px; line-height: 1.5; color: var(--g-text-2);
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-card-cta {
+    margin-top: 6px; font-size: 12.5px; font-weight: 500; color: color-mix(in srgb, var(--tile-accent) 70%, #fff);
+  }
+
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more {
+    padding: 14px 18px; border-radius: var(--g-radius);
+    background: var(--g-card) !important; border: 1px solid var(--g-line) !important;
+    border-inline-start: 1px solid var(--g-line) !important;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more > summary > span { color: var(--g-text) !important; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more::before,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more::after { content: none; display: none; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more > summary {
+    display: flex; align-items: center; gap: 10px; padding: 0; background: none;
+    font-size: 13px; font-weight: 600; color: var(--g-text);
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more > summary > .muted { display: none; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-more-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-mini-chip {
+    display: inline-flex; align-items: center; min-height: 32px; padding: 5px 12px;
+    border-radius: var(--g-control-radius); border: 1px solid var(--g-line-2); background: var(--g-well);
+    color: var(--g-text); font-size: 13px; text-decoration: none;
+  }
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-mini-chip:hover,
+  html[data-theme="charcoal"] #app[data-page-route="/"] .command-mini-chip:focus-visible { background: var(--g-active); border-color: #4a4a53; color: #fff; }
+}
+
+
+
+
+/* ==== charcoal_tiles.css ==== */
+/* Command center tiles: one background image per tile, with a left scrim so text stays readable. */
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace { position: relative !important; overflow: hidden !important; isolation: isolate; }
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace[data-accent] .command-card-illustration {
+  position: absolute !important; inset: 0 !important; width: auto !important; height: auto !important;
+  right: 0 !important; top: 0 !important; left: 0 !important; bottom: 0 !important;
+  opacity: .95 !important; filter: none !important; z-index: 0 !important; pointer-events: none;
+  -webkit-mask-image: none !important; mask-image: none !important; transform: none !important;
+  background-repeat: no-repeat !important; background-size: cover !important; background-position: right center !important;
+}
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace .command-card-illustration svg { display: none !important; }
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace .command-card-content,
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace .command-card-icon { position: relative; z-index: 2 !important; }
+@media (min-width: 761px) {
+  html[data-theme="charcoal"] #app .command-links-visual .command-workspace .command-card-illustration {
+    --scrim: linear-gradient(90deg, #141415 0%, rgba(20,20,21,.88) 52%, rgba(20,20,21,.1) 100%);
+  }
+}
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] #dash .command-links-priority .command-workspace .command-card-illustration {
+    --scrim: linear-gradient(180deg, rgba(20,20,21,.05) 0%, rgba(20,20,21,.6) 40%, rgba(20,20,21,.9) 100%);
+    background-position: center !important;
+  }
+}
+html[data-theme="charcoal"] #app .command-workspace[href="#/kanban"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/kanban-pro.webp') !important; }
+html[data-theme="charcoal"] #app .command-workspace[href="#/bots"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/bots-pro.svg') !important; }
+html[data-theme="charcoal"] #app .command-workspace[href="#/ghost"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/house-pro.webp') !important; }
+html[data-theme="charcoal"] #app .command-workspace[href="#/agentchat"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/lounge-pro.webp') !important; }
+html[data-theme="charcoal"] #app .command-workspace[href="#/unified/graph"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/memory-graph-command-v11-1.webp') !important; }
+html[data-theme="charcoal"] #app .command-workspace[href="#/office"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/office-viewer-command-v11-1.webp') !important; }
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace .command-card-content,
+html[data-theme="charcoal"] #app .command-links-visual .command-workspace strong { text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+
+/* Collapsible sections on the command center: reference documents, system knowledge, diagnostics. */
+html[data-theme="charcoal"] #app details.command-more.block { position: relative; overflow: hidden; isolation: isolate; background-color: #141415 !important; background-repeat: no-repeat !important; background-size: cover !important; background-position: right center !important; }
+html[data-theme="charcoal"] #app details.command-more.block[data-accent="office"] { background-image: radial-gradient(ellipse at 85% 50%, rgba(176,132,255,.20), transparent 60%), linear-gradient(90deg, #141415 0%, rgba(20,20,21,.85) 40%, rgba(20,20,21,.1) 100%), url('/assets/mobile/section-docs.svg') !important; }
+html[data-theme="charcoal"] #app details.command-more.block[data-accent="memory"] { background-image: radial-gradient(ellipse at 85% 50%, rgba(80,210,190,.18), transparent 60%), linear-gradient(90deg, #141415 0%, rgba(20,20,21,.85) 40%, rgba(20,20,21,.1) 100%), url('/assets/mobile/section-knowledge.svg') !important; }
+html[data-theme="charcoal"] #app details.command-more.block[data-accent="attention"] { background-image: radial-gradient(ellipse at 85% 50%, rgba(240,170,80,.18), transparent 60%), linear-gradient(90deg, #141415 0%, rgba(20,20,21,.85) 40%, rgba(20,20,21,.1) 100%), url('/assets/mobile/section-diagnostics.svg') !important; }
+html[data-theme="charcoal"] #app details.command-more .command-mini-chip { background: rgba(20,20,21,.72) !important; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+@media (max-width: 760px) {
+  html[data-theme="charcoal"] #app details.command-more.block[data-accent] { background-position: center !important; background-image: none; }
+  html[data-theme="charcoal"] #app details.command-more.block[data-accent="office"] { background-image: radial-gradient(ellipse at 80% 50%, rgba(176,132,255,.20), transparent 65%), linear-gradient(180deg, rgba(20,20,21,.55), rgba(20,20,21,.9)), url('/assets/mobile/section-docs.svg') !important; }
+  html[data-theme="charcoal"] #app details.command-more.block[data-accent="memory"] { background-image: radial-gradient(ellipse at 80% 50%, rgba(80,210,190,.18), transparent 65%), linear-gradient(180deg, rgba(20,20,21,.55), rgba(20,20,21,.9)), url('/assets/mobile/section-knowledge.svg') !important; }
+  html[data-theme="charcoal"] #app details.command-more.block[data-accent="attention"] { background-image: radial-gradient(ellipse at 80% 50%, rgba(240,170,80,.18), transparent 65%), linear-gradient(180deg, rgba(20,20,21,.55), rgba(20,20,21,.9)), url('/assets/mobile/section-diagnostics.svg') !important; }
+}
+
+
+/* ==== charcoal_polish.css ==== */
+/* Cross-page polish (charcoal): health strip, numbers, loading, empty states, focus, contrast, dock. */
+html[data-theme="charcoal"] {
+  --p-text-2: #b4b4bc; --p-text-3: #9a9aa4;
+}
+/* Health strip */
+html[data-theme="charcoal"] .command-health { display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px; }
+html[data-theme="charcoal"] .command-health:empty { display:none; }
+html[data-theme="charcoal"] .health-chip { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; border:1px solid #2a2a2e; border-radius:999px; background:#17171a; color:#d8d8de; font-size:12.5px; text-decoration:none; }
+html[data-theme="charcoal"] .health-chip:hover { border-color:#45454c; background:#1d1d21; }
+html[data-theme="charcoal"] .health-chip i { width:8px; height:8px; border-radius:50%; background:#6b6b73; flex:none; }
+html[data-theme="charcoal"] .health-chip.up i { background:#4cc38a; }
+html[data-theme="charcoal"] .health-chip.down i { background:#e5645f; }
+html[data-theme="charcoal"] .health-chip.down { border-color:#5a2f2e; }
+html[data-theme="charcoal"] .health-chip b { font-weight:600; }
+html[data-theme="charcoal"] .health-chip span { color:var(--p-text-3); }
+/* One number style: normal font, tabular, smaller units */
+html[data-theme="charcoal"] .metric .value, html[data-theme="charcoal"] .metric-block .value,
+html[data-theme="charcoal"] #app .block .metric .value {
+  font-family: inherit !important; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; font-weight: 650; font-size: 28px;
+}
+html[data-theme="charcoal"] .metric .unit { color: var(--p-text-3); font-size: 12.5px; }
+/* Loading skeleton instead of a bare spinner */
+html[data-theme="charcoal"] .loading { display:block !important; min-height:72px; padding:0 !important; border-radius:10px; color:transparent !important; font-size:0 !important;
+  background: linear-gradient(90deg,#141415 0%,#1c1c1f 50%,#141415 100%); background-size:200% 100%; animation: p-shimmer 1.4s ease-in-out infinite; }
+html[data-theme="charcoal"] .loading::before { display:none !important; }
+@keyframes p-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+@media (prefers-reduced-motion: reduce) { html[data-theme="charcoal"] .loading { animation:none; } }
+/* Empty states */
+html[data-theme="charcoal"] .empty, html[data-theme="charcoal"] .chart-empty, html[data-theme="charcoal"] td.empty {
+  border:1px dashed #2f2f35 !important; background:#121214 !important; color:var(--p-text-2) !important; border-radius:10px; padding:20px 16px; text-align:center; }
+/* Focus rings */
+html[data-theme="charcoal"] a:focus-visible, html[data-theme="charcoal"] button:focus-visible,
+html[data-theme="charcoal"] summary:focus-visible, html[data-theme="charcoal"] select:focus-visible,
+html[data-theme="charcoal"] input:focus-visible { outline:2px solid #8ab4ff !important; outline-offset:2px !important; }
+/* Contrast on secondary text */
+html[data-theme="charcoal"] .muted, html[data-theme="charcoal"] .small.muted, html[data-theme="charcoal"] .command-card-description,
+html[data-theme="charcoal"] .command-card-kicker, html[data-theme="charcoal"] .command-overview-card small { color: var(--p-text-2) !important; }
+/* Phone dock: More button matches links */
+html[data-theme="charcoal"] #mobile-dock #dock-more { background:none; border:0; color:inherit; font:inherit; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; cursor:pointer; padding:0; }
+html[data-theme="charcoal"] #mobile-dock #dock-more svg { width:24px; height:24px; fill:currentColor; stroke:none; }
+html[data-theme="charcoal"] #mobile-dock #dock-more span { font-size:12px; }
+/* Operations overview: big, coloured counts */
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] { --stat:#8ab4ff; position:relative; padding:16px 18px 16px 22px !important; overflow:hidden; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href]::before { content:""; position:absolute; left:0; top:12px; bottom:12px; width:4px; border-radius:0 4px 4px 0; background:var(--stat); }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href][data-accent="work"] { --stat:#8ab4ff; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href][data-accent="chat"] { --stat:#f0aa50; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href][data-accent="memory"] { --stat:#b084ff; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href][data-accent="repoql"] { --stat:#4cc38a; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] .command-overview-name { color:#ececef; font-size:13px; font-weight:600; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] .command-overview-value { display:block; font-size:56px !important; line-height:1.05 !important; font-weight:700 !important; letter-spacing:-0.02em; color:var(--stat) !important; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href]:hover { border-color:var(--stat); }
+@media (max-width:760px) { html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] .command-overview-value { font-size:44px !important; } }
+
+/* ===== Subtle glow layer ===== */
+html[data-theme="charcoal"] { --glow-blue:#8ab4ff; --glow-amber:#f0aa50; --glow-purple:#b084ff; --glow-green:#4cc38a; }
+/* 1 + 6: lit counts, dim zeros */
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] .command-overview-value { text-shadow:0 0 18px color-mix(in srgb,var(--stat) 38%,transparent); transition:color .2s,text-shadow .2s,opacity .2s; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] .command-overview-value[data-zero="1"] { color:#6b6b73 !important; text-shadow:none; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href]::before { box-shadow:0 0 10px color-mix(in srgb,var(--stat) 55%,transparent); }
+/* 2: gradient hairline borders on cards */
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[href],
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-link {
+  border:1px solid transparent !important;
+  background-image:linear-gradient(#141415,#141415), linear-gradient(135deg,color-mix(in srgb,var(--stat,#8ab4ff) 55%,#2a2a2e) 0%,#2a2a2e 45%,#232326 100%);
+  background-origin:border-box; background-clip:padding-box,border-box;
+}
+/* 3: ambient wash */
+html[data-theme="charcoal"] #app[data-page-route="/"]::before { content:""; position:fixed; inset:0 0 auto 0; height:420px; pointer-events:none; z-index:0;
+  background:radial-gradient(60% 100% at 85% 0%,rgba(138,180,255,.07),transparent 70%), radial-gradient(45% 80% at 10% 0%,rgba(176,132,255,.05),transparent 70%); }
+html[data-theme="charcoal"] #app[data-page-route="/"] > * { position:relative; z-index:1; }
+/* 4: live pulse */
+html[data-theme="charcoal"] .health-chip.up i { box-shadow:0 0 0 0 rgba(76,195,138,.5); animation:p-pulse 2.4s ease-out infinite; }
+@keyframes p-pulse { 0%{box-shadow:0 0 0 0 rgba(76,195,138,.5)} 70%{box-shadow:0 0 0 7px rgba(76,195,138,0)} 100%{box-shadow:0 0 0 0 rgba(76,195,138,0)} }
+html[data-theme="charcoal"] #command-live-status.tick { animation:p-tick .9s ease-out; }
+@keyframes p-tick { 0%{color:#8ab4ff} 100%{color:inherit} }
+/* 5: hover lift */
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href],
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-link { transition:transform .18s ease, box-shadow .18s ease, border-color .18s; }
+html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href]:hover,
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-link:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.35), 0 0 0 1px color-mix(in srgb,var(--stat,#8ab4ff) 30%,transparent); }
+html[data-theme="charcoal"] .command-card-cta span { display:inline-block; transition:transform .18s; }
+html[data-theme="charcoal"] .command-link:hover .command-card-cta span { transform:translate(3px,-3px); }
+html[data-theme="charcoal"] .command-card-illustration { transition:opacity .25s; }
+html[data-theme="charcoal"] .command-link:hover .command-card-illustration { opacity:.55 !important; }
+/* 7: sparklines */
+html[data-theme="charcoal"] .p-spark { display:block; width:100%; height:26px; margin-top:6px; overflow:visible; }
+html[data-theme="charcoal"] .p-spark path { fill:none; stroke:var(--stat); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 0 3px color-mix(in srgb,var(--stat) 55%,transparent)); }
+html[data-theme="charcoal"] .p-spark .area { fill:color-mix(in srgb,var(--stat) 12%,transparent); stroke:none; filter:none; }
+/* 8: one accent ring for focus, selection, active nav */
+html[data-theme="charcoal"] :is(a,button,input,select,textarea,summary):focus-visible { outline:2px solid #8ab4ff !important; outline-offset:2px; box-shadow:0 0 0 4px rgba(138,180,255,.18); }
+html[data-theme="charcoal"] .nav-link.active, html[data-theme="charcoal"] .nav-link[aria-current="page"] { box-shadow:inset 2px 0 0 #8ab4ff, 0 0 14px rgba(138,180,255,.10); }
+html[data-theme="charcoal"] input:focus, html[data-theme="charcoal"] select:focus, html[data-theme="charcoal"] textarea:focus { border-color:#8ab4ff !important; box-shadow:0 0 0 3px rgba(138,180,255,.16); }
+html[data-theme="charcoal"] tr[aria-selected="true"], html[data-theme="charcoal"] tr.selected { box-shadow:inset 2px 0 0 #8ab4ff; background:rgba(138,180,255,.07); }
+@media (prefers-reduced-motion:reduce) {
+  html[data-theme="charcoal"] *, html[data-theme="charcoal"] *::before { animation:none !important; transition:none !important; }
+  html[data-theme="charcoal"] #app .command-overview-card:hover, html[data-theme="charcoal"] #app .command-link:hover { transform:none !important; }
+}
+
+/* ===== Mobile tightening ===== */
+@media (max-width:760px) {
+  html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] { padding:12px 14px 12px 18px !important; min-height:0 !important; }
+  html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href]::before { top:10px; bottom:10px; width:3px; }
+  html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] .command-overview-value { font-size:38px !important; margin:2px 0 2px; }
+  html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href] small { font-size:11.5px; line-height:1.3; }
+  html[data-theme="charcoal"] .command-overview-grid { gap:10px !important; }
+  html[data-theme="charcoal"] #command-live-refresh { min-height:36px !important; padding:0 12px !important; font-size:13px !important; }
+  html[data-theme="charcoal"] .command-overview-actions { gap:10px; flex-wrap:nowrap; align-items:center; }
+  html[data-theme="charcoal"] .command-health { flex-wrap:nowrap !important; overflow-x:auto; scrollbar-width:none; margin:0 -2px 10px; padding:2px; -webkit-overflow-scrolling:touch; }
+  html[data-theme="charcoal"] .command-health::-webkit-scrollbar { display:none; }
+  html[data-theme="charcoal"] .health-chip { flex:none; font-size:12.5px; padding:6px 10px; }
+  html[data-theme="charcoal"] #app[data-page-route="/"]::before { height:260px; }
+  html[data-theme="charcoal"] #mobile-dock a, html[data-theme="charcoal"] #mobile-dock button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
+  html[data-theme="charcoal"] #dock-more { font:inherit; line-height:1.1; }
+}
+
+@media (max-width:760px) {
+  /* metric blocks: no nested box around the number, compact cards */
+  html[data-theme="charcoal"] #app .metric-block, html[data-theme="charcoal"] #app .block.metric-block { padding:12px 14px !important; min-height:0 !important; }
+  html[data-theme="charcoal"] #app .metric-block .value, html[data-theme="charcoal"] #app .metric .value { border:0 !important; background:none !important; box-shadow:none !important; padding:0 !important; min-height:0 !important; height:auto !important; border-radius:0 !important; font-size:34px !important; line-height:1.1 !important; }
+  html[data-theme="charcoal"] #app .metric-block .sub, html[data-theme="charcoal"] #app .metric-block small { font-size:12px; }
+  html[data-theme="charcoal"] #command-live-refresh { height:34px !important; min-height:34px !important; width:auto !important; flex:none; padding:0 12px !important; }
+  html[data-theme="charcoal"] #mobile-dock a, html[data-theme="charcoal"] #mobile-dock button { height:100% !important; min-height:0 !important; margin:0 !important; padding-top:0 !important; padding-bottom:0 !important; }
+  html[data-theme="charcoal"] #ug-stage-caption { display:none !important; }
+}
+
+@media (max-width:760px) {
+  html[data-theme="charcoal"] #app #harness-body .grid, html[data-theme="charcoal"] #app #harness-body .metrics { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:10px !important; }
+  html[data-theme="charcoal"] #app .block > .metric, html[data-theme="charcoal"] #app .metric.cyan, html[data-theme="charcoal"] #app .metric.purple, html[data-theme="charcoal"] #app .metric.amber, html[data-theme="charcoal"] #app .metric.green, html[data-theme="charcoal"] #app .metric.red { border:0 !important; background:none !important; box-shadow:none !important; padding:0 !important; min-height:0 !important; border-radius:0 !important; }
+  html[data-theme="charcoal"] #app .block > .metric::before, html[data-theme="charcoal"] #app .block > .metric::after { display:none !important; }
+  html[data-theme="charcoal"] #app .block > .block-title { text-align:left !important; justify-content:flex-start !important; padding-left:0 !important; color:#b4b4bc !important; font-size:12.5px !important; }
+  html[data-theme="charcoal"] #app .block > .block-title::before { display:none !important; }
+  html[data-theme="charcoal"] #app .metric-block .value, html[data-theme="charcoal"] #app .metric .value { font-size:30px !important; }
+  html[data-theme="charcoal"] #app .block { padding:12px 14px !important; }
+}
+@media (max-width:760px) { html[data-theme="charcoal"] #app .metric .value.long { font-size:20px !important; overflow-wrap:normal !important; word-break:normal !important; } }
+@media (max-width:760px) {
+  html[data-theme="charcoal"] #app[data-page-route] .command-overview-card[href]::before { left:7px; border-radius:3px; }
+  html[data-theme="charcoal"] #app #command-live-overview #command-live-refresh { height:32px !important; min-height:32px !important; line-height:1 !important; font-size:12.5px !important; padding:0 10px !important; }
+}
+
+/* Memory graph: collapse secondary controls on phones so the graph starts higher */
+html[data-theme="charcoal"] .ug-filters-toggle { display:none; }
+@media (max-width:760px) {
+  html[data-theme="charcoal"] .ug-filters-toggle { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:40px; margin-top:8px; padding:0 12px; border:1px solid #2a2a2e; border-radius:8px; background:#18181a; color:#ececef; font:inherit; font-size:13px; }
+  html[data-theme="charcoal"] .ug-filters-toggle::after { content:"▾"; color:#8a8a92; transition:transform .18s; }
+  html[data-theme="charcoal"] .ug-filters-toggle[aria-expanded="true"]::after { transform:rotate(180deg); }
+  html[data-theme="charcoal"] .ug-toolbar-secondary:not(.open) { display:none !important; }
+}
+

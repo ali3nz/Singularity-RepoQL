@@ -1,6 +1,13 @@
 // Self-contained visualization utilities. No provider calls, credentials, CDN, or framework.
 // Pure layout/filter/series functions are exported for regression tests.
+import {BRAIN_MASK} from './brain_asset.js';
 const TAU = Math.PI * 2;
+// Charcoal skin: quieter hues, thinner glow and a slow idle float. Other themes keep the neon look.
+const isCalm = () => document.documentElement?.dataset?.theme === 'charcoal';
+const CALM = {bg:'#111113', dot:'rgba(200,200,210,.06)', active:'rgba(236,236,239,.9)',
+  rq:'#8fbfe6', rqMajor:'#d3e6f6', tx:'#b9a7e3', txMajor:'#e6def7', mem:'#9ad3b0', memMajor:'#deF2e6',
+  rqEdge:'127,176,220', txEdge:'168,150,214', cross:'214,170,112',
+  label:'#c9c9d0', labelBg:'rgba(14,14,16,.82)', caption:'#a8a8b0', captionBg:'rgba(20,20,23,.86)'};
 const COLORS = {repoql:'#50b8ff', tencent:'#bd98ff', cross:'#ffbb62'};
 const hash = text => {let h=2166136261;for(const c of String(text)){h=Math.imul(h^c.charCodeAt(0),16777619)}return h>>>0};
 const rand = key => (hash(key)%100000)/100000;
@@ -20,6 +27,35 @@ export function filterGraph(graph, opts={}) {
   const visible=new Set(matched);
   for(const e of edges)if(matched.has(e.source)||matched.has(e.target)){visible.add(e.source);visible.add(e.target)}
   return {nodes:nodes.filter(n=>visible.has(n.id)),edges:edges.filter(e=>visible.has(e.source)&&visible.has(e.target)),matches:matched};
+}
+
+// The overview is a deterministic *view* of real source records, not an
+// aggregated/synthetic knowledge graph. Its omissions are explicit in the UI.
+// Searching bypasses this projection so operators can still reach quiet nodes.
+export function focusGraph(graph, maxNodes=72) {
+  const nodes=graph?.nodes||[], edges=graph?.edges||[];
+  const limit=Math.max(1,Math.min(250,Math.floor(Number(maxNodes)||72)));
+  if(nodes.length<=limit)return {nodes:[...nodes],edges:[...edges],omitted:0};
+  const ids=new Set(nodes.map(n=>n.id)),degrees=new Map(nodes.map(n=>[n.id,0]));
+  for(const edge of edges)if(ids.has(edge.source)&&ids.has(edge.target)){
+    degrees.set(edge.source,degrees.get(edge.source)+1);
+    degrees.set(edge.target,degrees.get(edge.target)+1);
+  }
+  const rank=(a,b)=>(degrees.get(b.id)||0)-(degrees.get(a.id)||0)||String(a.id).localeCompare(String(b.id));
+  const groups=new Map();
+  for(const node of nodes){const name=node.source_system||'other';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(node);}
+  for(const group of groups.values())group.sort(rank);
+  const selected=new Set();
+  // Keep each available source represented even in strongly imbalanced indexes.
+  for(const group of groups.values())if(group.length&&selected.size<limit)selected.add(group[0].id);
+  // Round-robin across sources prevents one high-degree source from hiding others.
+  for(let i=1;selected.size<limit;i++){
+    let added=false;
+    for(const group of groups.values())if(group[i]&&selected.size<limit){selected.add(group[i].id);added=true;}
+    if(!added)break;
+  }
+  const viewNodes=nodes.filter(n=>selected.has(n.id));
+  return {nodes:viewNodes,edges:edges.filter(e=>selected.has(e.source)&&selected.has(e.target)),omitted:nodes.length-viewNodes.length};
 }
 
 export function layoutGraph(graph) {
@@ -89,35 +125,79 @@ export function brainRadius(theta) {
   const {a,b}=BRAIN, c=Math.cos(theta), s=Math.sin(theta);
   let r=(a*b)/Math.sqrt((b*c)**2+(a*s)**2);
   if(s>0)r*=1-.24*s*s;                 // flatter base
-  r*=1+.15*bump(theta,2.45,.34);        // temporal lobe, lower front
+  r*=1+.17*bump(theta,2.2,.3);          // temporal lobe, lower front
+  r*=1-.075*bump(theta,2.78,.11);       // notch between frontal base and temporal pole
   r*=1-.13*bump(theta,1.22,.26);        // notch above the cerebellum
   r*=1+.05*bump(theta,.18,.38);         // occipital pole
   r*=1+.04*bump(theta,-2.35,.5);        // frontal dome
   return r;
 }
 export function brainOutline(steps=180) {
-  return Array.from({length:steps},(_,i)=>{const t=-Math.PI+i/steps*TAU,r=brainRadius(t);return {x:Math.cos(t)*r,y:Math.sin(t)*r}});
+  // A faint lobulated edge makes the silhouette read as cortex rather than a smooth blob.
+  return Array.from({length:steps},(_,i)=>{const t=-Math.PI+i/steps*TAU,r=brainRadius(t)*(1+.009*Math.sin(t*21)+.005*Math.sin(t*37+1));return {x:Math.cos(t)*r,y:Math.sin(t)*r}});
+}
+
+// Brain mode uses a top-down render of a real cortex surface: left hemisphere RepoQL, right Tencent.
+// World units match BRAIN_MASK: the image is BRAIN_MASK.w x BRAIN_MASK.h, centred on the origin.
+const BUNDLE_BAND=64;
+// Cross-system links share channels and cross the midline together, as commissural fibres do.
+export function crossControls(a,b){
+  const by=v=>Math.max(-192,Math.min(192,Math.round(v/BUNDLE_BAND)*BUNDLE_BAND)),k=.72,s=.8;
+  return {c1:{x:a.x*(1-k),y:a.y+(by(a.y)-a.y)*s},c2:{x:b.x*(1-k),y:b.y+(by(b.y)-b.y)*s}};
+}
+const maskRows=BRAIN_MASK.hemis.map(rows=>new Map(rows.map(r=>[Math.round(r[0]/BRAIN_MASK.step),r])));
+// True when the point is inside the hemisphere, at least the mask margin from its edge.
+export function insideHemisphere(hemi,x,y){
+  const r=maskRows[hemi]?.get(Math.round(y/BRAIN_MASK.step));if(!r)return false;
+  for(let i=1;i<r.length;i+=2)if(x>=r[i]&&x<=r[i+1])return true;
+  return false;
+}
+// Even, slightly organic slots filling the whole hemisphere: a jittered hex grid whose
+// spacing is solved so it yields at least n points.
+function hemisphereSlots(hemi,n){
+  if(n<=0)return [];
+  const rows=BRAIN_MASK.hemis[hemi];
+  const grid=s=>{const out=[];const ys=rows[0][0],ye=rows[rows.length-1][0],dy=s*.866;let iy=0;
+    const xs=hemi?0:-BRAIN_MASK.w/2,xe=hemi?BRAIN_MASK.w/2:0;
+    for(let y=ys;y<=ye;y+=dy,iy++){let ix=0;
+      for(let x=xs+(iy%2?s/2:0);x<=xe;x+=s,ix++){
+        if(!insideHemisphere(hemi,x,y))continue;
+        const key=`${hemi}|${iy}|${ix}`,jx=x+(rand(key+'x')-.5)*s*.55,jy=y+(rand(key+'y')-.5)*s*.55;
+        out.push(insideHemisphere(hemi,jx,jy)?{x:jx,y:jy,key}:{x,y,key});
+      }}
+    return out};
+  let lo=2,hi=400;
+  for(let i=0;i<16;i++){const m=(lo+hi)/2;if(grid(m).length>=n)lo=m;else hi=m}
+  const slots=grid(lo);
+  // Trim any surplus evenly, never from one region.
+  return slots.map(p=>[rand(p.key+'t'),p]).sort((a,b)=>a[0]-b[0]).slice(0,n).map(v=>v[1]);
 }
 
 // Deterministic brain-shaped layout of the SAME real memory nodes and edges.
 // It changes coordinates only, never invents neural relationships or data.
-// Community structure from layoutGraph is preserved: the network layout is
-// normalised to a square, mapped to a disc, then into the brain silhouette.
+// Compared with the prior direct radial projection, this fills the silhouette
+// more evenly, keeps both hemispheres populated, and still preserves stable
+// cluster neighbourhoods from the source layout.
 export function layoutNeuralGraph(graph) {
   const original=layoutGraph(graph);
   if(!original.length)return [];
-  const xs=original.map(n=>n.x),ys=original.map(n=>n.y);
-  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
-  const sx=Math.max(1,maxX-minX)/2,sy=Math.max(1,maxY-minY)/2,mx=(minX+maxX)/2,my=(minY+maxY)/2;
-  return original.map(n=>{
-    // Tiny deterministic jitter keeps coincident community centres apart.
-    const u=Math.max(-1,Math.min(1,(n.x-mx)/sx+(rand(n.id+'|u')-.5)*.04));
-    const v=Math.max(-1,Math.min(1,(n.y-my)/sy+(rand(n.id+'|v')-.5)*.04));
-    const dx=u*Math.sqrt(1-v*v/2),dy=v*Math.sqrt(1-u*u/2);
-    const rho=Math.min(1,Math.hypot(dx,dy)),theta=Math.atan2(dy,dx);
-    const r=brainRadius(theta)*(.1+.8*rho);
-    return {...n,x:Math.cos(theta)*r,y:Math.sin(theta)*r,hemisphere:Math.cos(theta)*r<0?0:1};
-  });
+  // Hemispheres follow source ownership. Memories line the midline on both sides.
+  const left=[],right=[],middle=[];
+  for(const node of original)(node.source_system==='tencent'?right:node.source_system==='memories'?middle:left).push(node);
+  const byGroup=(a,b)=>String(a.community||'').localeCompare(String(b.community||''))||(a.y-b.y)||String(a.id).localeCompare(String(b.id));
+  middle.sort(byGroup);
+  const memL=middle.filter((_,i)=>i%2===0),memR=middle.filter((_,i)=>i%2===1);
+  const placed=new Map();
+  for(const [hemi,own,mem] of [[0,left,memL],[1,right,memR]]){
+    const slots=hemisphereSlots(hemi,own.length+mem.length).sort((a,b)=>Math.abs(a.x)-Math.abs(b.x));
+    const inner=slots.slice(0,mem.length).sort((a,b)=>a.y-b.y),outer=slots.slice(mem.length);
+    // Slots run around the hemisphere's centre, so each community becomes one contiguous patch.
+    const cx=outer.reduce((t,p)=>t+p.x,0)/Math.max(1,outer.length),cy=outer.reduce((t,p)=>t+p.y,0)/Math.max(1,outer.length);
+    outer.sort((a,b)=>Math.atan2(a.y-cy,a.x-cx)-Math.atan2(b.y-cy,b.x-cx));
+    [...own].sort(byGroup).forEach((node,i)=>placed.set(node.id,{...node,x:outer[i].x,y:outer[i].y,hemisphere:hemi,zone:hemi}));
+    mem.forEach((node,i)=>placed.set(node.id,{...node,x:inner[i].x,y:inner[i].y,hemisphere:hemi,zone:2}));
+  }
+  return original.map(node=>placed.get(node.id));
 }
 
 export function relationshipDetails(graph, nodeId) {
@@ -129,9 +209,15 @@ export function relationshipDetails(graph, nodeId) {
   }));
 }
 
-export function closestGraphEdge(edges, positions, point, tolerance=9) {
+export function closestGraphEdge(edges, positions, point, tolerance=9, bundled=false) {
   const map=new Map(positions.map(n=>[n.id,n]));let best=null,bestDistance=tolerance;
   for(const e of edges){const a=map.get(e.source),b=map.get(e.target);if(!a||!b)continue;
+    if(bundled&&e.source_system==='cross'){
+      const {c1,c2}=crossControls(a,b);
+      for(let i=0;i<=16;i++){const u=i/16,q=1-u,x=q*q*q*a.x+3*q*q*u*c1.x+3*q*u*u*c2.x+u*u*u*b.x,y=q*q*q*a.y+3*q*q*u*c1.y+3*q*u*u*c2.y+u*u*u*b.y;
+        const d=Math.hypot(point.x-x,point.y-y);if(d<bestDistance){best=e;bestDistance=d}}
+      continue;
+    }
     const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
     if(length<1)continue;
     const t=Math.min(1,Math.max(0,((point.x-a.x)*dx+(point.y-a.y)*dy)/length));
@@ -157,7 +243,7 @@ export function sparkChart(target, rows, series, {height=220, empty='No measured
   const keys=(series||[]).filter(s=>data.some(r=>numeric(r[s.key])!==null));
   if(!target)return;
   if(!data.length||!keys.length){target.innerHTML=`<div class="chart-empty">${empty}</div>`;return}
-  const width=900,top=20,bottom=height-31,left=52,right=width-16;
+  const width=Math.max(360,Math.round(target.clientWidth||900)),top=20,bottom=height-31,left=52,right=width-16;
   const ceiling=Math.max(1,...data.flatMap(r=>keys.map(k=>numeric(r[k.key])||0)))*1.14;
   const x=i=>left+(right-left)*(data.length===1?.5:i/(data.length-1));
   const y=n=>bottom-(bottom-top)*Math.max(0,Number(n))/ceiling;
@@ -174,156 +260,217 @@ export function sparkChart(target, rows, series, {height=220, empty='No measured
   target.innerHTML=`<div class="ob-chart-legend">${keys.map(k=>`<span><i style="background:${k.color}"></i>${k.label}</span>`).join('')}</div><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Measured historical trend chart">${hlines}${lines}${times}</svg>`;
 }
 
+
+// One decoded brain image is shared by every graph on the page.
+let brainImage=null;
+function getBrainImage(onload){
+  if(!brainImage){brainImage=new Image();brainImage.decoding='async';brainImage.src=new URL('./brain_top.webp',import.meta.url).href}
+  if(!brainImage.complete)brainImage.addEventListener('load',onload,{once:true});
+  return brainImage;
+}
+
 export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
-  const ctx=canvas.getContext('2d');
+  let ctx=canvas.getContext('2d');const mainCtx=ctx;
   let graph={nodes:[],edges:[]},positions=[],rendered={nodes:[],edges:[]};
   let selected=null,selectedEdge=null,hovered=null,hoveredEdge=null;
   let zoom=1,pan={x:0,y:0},drag=null,raf=0,disposed=false;
   let viewMode=mode==='neural'?'neural':'network',frameAt=0;
   const pointers=new Map();let pinch=null;
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)');
-  let opts={sources:['repoql','tencent'],cross:true,query:''};
-  const TAU=Math.PI*2;
-  function recalc(){rendered=filterGraph(graph,opts);const map=new Map(positions.map(p=>[p.id,p]));
+  let opts={sources:['repoql','tencent','memories'],cross:true,query:'',detail:'all',connections:'all'};
+  let renderVersion=0,counts={rq:0,tx:0,mem:0},fitZoom=1;
+  function recalc(){
+    const filtered=filterGraph(graph,opts);
+    const simplified=opts.detail==='overview'&&!String(opts.query||'').trim()
+      ? focusGraph(filtered,72):filtered;
+    renderVersion++;
+    rendered={...simplified,nodes:simplified.nodes,edges:simplified.edges,omitted:simplified.omitted||0,
+      totalVisibleBeforeProjection:filtered.nodes.length};
+    const map=new Map(positions.map(p=>[p.id,p]));
     rendered.nodes=rendered.nodes.map(n=>map.get(n.id)).filter(Boolean);
+    counts={rq:0,tx:0,mem:0};for(const n of rendered.nodes)counts[n.source_system==='tencent'?'tx':n.source_system==='memories'?'mem':'rq']++;
     if(selected&&!rendered.nodes.some(n=>n.id===selected.id))selected=null;
-    if(selectedEdge&&!rendered.edges.some(e=>e.id===selectedEdge.id))selectedEdge=null;
+    if(selectedEdge&&!rendered.edges.some(e=>e===selectedEdge||(e.id!=null&&e.id===selectedEdge.id)))selectedEdge=null;
     schedule();
   }
-  function schedule(){if(disposed||raf)return;raf=requestAnimationFrame((time)=>{
-    raf=0;if(disposed)return;
-    if(viewMode==='neural'&&!reduced?.matches&&!document.hidden){
-      if(time-frameAt>=32){frameAt=time;draw()}schedule();
-    }else draw();
-  })}
-  let brainCache=null;
-  function brainPath(){const path=new Path2D(),pts=brainOutline(220);
-    pts.forEach((p,i)=>i?path.lineTo(p.x,p.y):path.moveTo(p.x,p.y));path.closePath();return path}
-  function drawBrain(t){
-    // Stylised cortex, sulci and cerebellum are a navigation aid, not a claim
-    // that the backend contains an anatomical neural model.
-    brainCache||={outline:brainPath()};
-    const {outline}=brainCache,{cerebellum:cb}=BRAIN,breathe=.5+.5*Math.sin(t*.0012);
-    ctx.save();
-    // Brain stem and cerebellum sit behind the cerebrum.
-    ctx.beginPath();ctx.moveTo(78,150);ctx.bezierCurveTo(92,205,96,250,88,300);ctx.lineTo(132,300);ctx.bezierCurveTo(132,250,138,200,150,150);ctx.closePath();
-    const stem=ctx.createLinearGradient(0,150,0,300);stem.addColorStop(0,'rgba(64,92,190,.32)');stem.addColorStop(1,'rgba(64,92,190,0)');
-    ctx.fillStyle=stem;ctx.fill();ctx.strokeStyle='rgba(110,200,255,.22)';ctx.lineWidth=1.2;ctx.stroke();
-    ctx.beginPath();ctx.ellipse(cb.x,cb.y,cb.rx,cb.ry,cb.rot,0,TAU);
-    const cg=ctx.createRadialGradient(cb.x,cb.y,4,cb.x,cb.y,cb.rx);cg.addColorStop(0,'rgba(120,80,230,.30)');cg.addColorStop(1,'rgba(40,30,110,.12)');
-    ctx.fillStyle=cg;ctx.fill();ctx.strokeStyle='rgba(170,130,255,.42)';ctx.lineWidth=1.3;ctx.stroke();
-    ctx.save();ctx.clip();ctx.strokeStyle='rgba(190,160,255,.18)';ctx.lineWidth=1;
-    for(let k=-4;k<=4;k++){ctx.beginPath();ctx.ellipse(cb.x,cb.y+k*11,cb.rx*.98,10,cb.rot,0,Math.PI);ctx.stroke();}
-    ctx.restore();
-    // Cerebrum body.
-    const body=ctx.createRadialGradient(-60,-70,20,0,0,380);
-    body.addColorStop(0,'rgba(38,92,170,.30)');body.addColorStop(.55,'rgba(60,40,150,.20)');body.addColorStop(1,'rgba(20,14,60,.10)');
-    ctx.fillStyle=body;ctx.fill(outline);
-    // Gyri: sinuous folds clipped to the cortex.
-    ctx.save();ctx.clip(outline);ctx.lineWidth=1.1;
-    for(let j=0;j<17;j++){const y0=-240+j*30;ctx.beginPath();
-      for(let k=0;k<=56;k++){const x=-360+k*13;const y=y0+Math.sin(k*.55+j*1.7)*11+Math.sin(k*.21+j*.9)*16+Math.cos(k*1.3+j)*3;
-        k?ctx.lineTo(x,y):ctx.moveTo(x,y);}
-      ctx.strokeStyle=j%3===0?'rgba(170,120,255,.16)':'rgba(80,220,255,.10)';ctx.stroke();}
-    for(let j=0;j<12;j++){const x0=-330+j*58;ctx.beginPath();
-      for(let k=0;k<=30;k++){const y=-260+k*18;const x=x0+Math.sin(k*.6+j*2.1)*12+Math.sin(k*.23+j)*9;k?ctx.lineTo(x,y):ctx.moveTo(x,y);}
-      ctx.strokeStyle='rgba(80,220,255,.06)';ctx.stroke();}
-    // Inner rim light.
-    const rim=ctx.createRadialGradient(0,0,150,0,0,350);rim.addColorStop(0,'rgba(0,0,0,0)');rim.addColorStop(1,'rgba(90,200,255,.16)');
-    ctx.fillStyle=rim;ctx.fillRect(-400,-300,800,600);
-    // Major sulci: lateral (Sylvian) and central.
-    ctx.lineCap='round';ctx.strokeStyle='rgba(150,235,255,.34)';ctx.lineWidth=2.2;
-    ctx.beginPath();ctx.moveTo(-205,72);ctx.bezierCurveTo(-120,40,-40,30,40,-2);ctx.bezierCurveTo(75,-16,100,-30,118,-58);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(-12,-222);ctx.bezierCurveTo(-2,-170,22,-150,14,-110);ctx.bezierCurveTo(8,-80,30,-60,34,-30);ctx.stroke();
-    ctx.strokeStyle='rgba(190,150,255,.26)';ctx.lineWidth=1.6;
-    ctx.beginPath();ctx.moveTo(168,-150);ctx.bezierCurveTo(190,-110,200,-80,228,-58);ctx.stroke();
-    ctx.restore();
-    // Neon outline with a slow breathing glow.
-    ctx.shadowColor='#46e3ff';ctx.shadowBlur=14+10*breathe;ctx.lineWidth=2;
-    ctx.strokeStyle=`rgba(96,228,255,${.45+.2*breathe})`;ctx.stroke(outline);
-    ctx.shadowBlur=0;ctx.lineWidth=1;ctx.strokeStyle='rgba(200,170,255,.35)';ctx.stroke(outline);
-    ctx.restore();
+  const coarse=window.matchMedia?.('(pointer:coarse)')?.matches===true;
+  let onScreen=true,animTimer=0;
+  // Only the travelling pulses animate, and only while the graph is on screen.
+  const animating=()=>viewMode==='neural'&&!reduced?.matches&&!document.hidden&&onScreen&&pulseList.length>0;
+  function schedule(){
+    if(disposed||raf||document.hidden||canvas.hidden||!canvas.isConnected)return;
+    clearTimeout(animTimer);
+    raf=requestAnimationFrame(()=>{
+      raf=0;if(disposed||document.hidden||canvas.hidden||!canvas.isConnected)return;
+      draw();
+      if(animating())animTimer=setTimeout(schedule,coarse?80:50);
+    });
   }
-  function draw(){const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
-    const now=performance.now(),neural=viewMode==='neural';
-    ctx.clearRect(0,0,w,h);ctx.fillStyle='#02060c';ctx.fillRect(0,0,w,h);
-    const vignette=ctx.createRadialGradient(w*.5,h*.45,0,w*.5,h*.45,Math.max(w,h)*.7);
-    vignette.addColorStop(0,neural?'rgba(40,24,92,.55)':'rgba(10,40,64,.6)');vignette.addColorStop(.6,'rgba(5,16,30,.3)');vignette.addColorStop(1,'rgba(0,0,0,.6)');
-    ctx.fillStyle=vignette;ctx.fillRect(0,0,w,h);
-    // Fine dot grid anchors the eye while panning.
-    ctx.fillStyle='rgba(110,170,230,.08)';const g=26,ox=((pan.x%g)+g)%g,oy=((pan.y%g)+g)%g;
-    for(let x=ox;x<w;x+=g)for(let y=oy;y<h;y+=g)ctx.fillRect(x,y,1,1);
-    ctx.save();ctx.translate(w/2+pan.x,h/2+pan.y);ctx.scale(zoom,zoom);
-    if(neural)drawBrain(now);
+  // ---- Render caches. The whole scene (brain, links, nodes) is one bitmap, repainted only when
+  // the view, selection or data change. Dragging moves the bitmap. Nothing is sampled or dropped.
+  const spriteCache=new Map();
+  function glowSprite(color,end='rgba(0,0,0,0)'){const ck=color+'|'+end;let c=spriteCache.get(ck);if(c)return c;
+    c=document.createElement('canvas');c.width=c.height=48;const o=c.getContext('2d');
+    const g=o.createRadialGradient(24,24,0,24,24,24);g.addColorStop(0,color);g.addColorStop(1,end);
+    o.fillStyle=g;o.fillRect(0,0,48,48);spriteCache.set(ck,c);return c;}
+  function drawGlow(color,x,y,r,end){ctx.drawImage(glowSprite(color,end),x-r,y-r,r*2,r*2)}
+  let scene=null,sceneKey='',sceneView=null,interactAt=0,settleTimer=0,pulseList=[],userMoved=false;
+  function markInteract(){userMoved=true;interactAt=performance.now();clearTimeout(settleTimer);settleTimer=setTimeout(()=>schedule(),170)}
+  let bg=null,bgKey='';
+  function background(w,h,d,neural,calm){
+    const caption=`${rendered.nodes.length.toLocaleString()}${rendered.omitted?' of '+rendered.totalVisibleBeforeProjection.toLocaleString():''} topics · ${opts.connections==='focus'?'links on focus':rendered.edges.length.toLocaleString()+' links'} · ${neural?'brain view':'network view'}`;
+    const key=[w,h,d,neural,calm,caption,counts.rq,counts.tx,counts.mem,fitZoom].join('|');
+    if(bg&&bgKey===key)return bg;
+    bg||=document.createElement('canvas');bg.width=Math.round(w*d);bg.height=Math.round(h*d);bgKey=key;
+    const o=bg.getContext('2d');o.setTransform(d,0,0,d,0,0);
+    o.fillStyle=calm?CALM.bg:'#02060c';o.fillRect(0,0,w,h);
+    const v=o.createRadialGradient(w*.5,h*.45,0,w*.5,h*.45,Math.max(w,h)*.7);
+    v.addColorStop(0,calm?'rgba(38,38,46,.45)':neural?'rgba(40,24,92,.55)':'rgba(10,40,64,.6)');v.addColorStop(.6,calm?'rgba(20,20,24,.15)':'rgba(5,16,30,.3)');v.addColorStop(1,calm?'rgba(0,0,0,.4)':'rgba(0,0,0,.6)');
+    o.fillStyle=v;o.fillRect(0,0,w,h);
+    o.font='600 11px system-ui, sans-serif';const cw=o.measureText(caption).width+26;
+    o.fillStyle=calm?CALM.captionBg:'rgba(3,8,17,.78)';o.strokeStyle=calm?'rgba(255,255,255,.08)':'rgba(80,200,255,.25)';o.beginPath();o.roundRect?.(12,h-38,Math.min(cw,w-24),26,13);o.fill();o.stroke();
+    o.fillStyle=calm?CALM.caption:'#a9d8ea';o.fillText(caption,25,h-21);
+    if(neural){o.font='600 12px system-ui, sans-serif';o.textAlign='center';
+      const off=Math.max(118,Math.min(w/2-50,fitZoom*BRAIN_MASK.w*.34));
+      for(const [x,name,c,col] of [[-off,'RepoQL',counts.rq,calm?CALM.rqMajor:'#8fe9ff'],[0,'Memories',counts.mem,calm?CALM.memMajor:'#a8f5c8'],[off,'Tencent',counts.tx,calm?CALM.txMajor:'#d2bcff']]){
+        o.fillStyle=col;o.fillText(`${name} · ${c.toLocaleString()}`,w/2+x,21)}
+      o.textAlign='left';}
+    return bg;
+  }
+  // Links without an id must not all match an empty selection.
+  const edgeKeyOf=e=>e?(e.id??`${e.source}>${e.target}`):'';
+  const sameEdge=(x,e)=>!!x&&(x===e||(x.id!=null&&x.id===e.id));
+  function paintScene(w,h,neural,calm,activeId){
     const map=new Map(rendered.nodes.map(n=>[n.id,n]));
-    const activeId=selected?.id||hovered?.id;
-    const lw=1/Math.sqrt(Math.max(.4,zoom));
-    ctx.globalCompositeOperation='lighter';
+    const lw=1/Math.sqrt(Math.max(.4,zoom)),pulses=[];
+    if(neural){const img=getBrainImage(()=>{sceneKey='';schedule()});
+      if(img.complete&&img.naturalWidth)ctx.drawImage(img,-BRAIN_MASK.w/2,-BRAIN_MASK.h/2,BRAIN_MASK.w,BRAIN_MASK.h);}
+    ctx.globalCompositeOperation='lighter';ctx.lineCap='round';
+    // Parallel links between one pair fan out, so additive blending cannot stack them into a solid white line.
+    const pairSeen=new Map();
     for(const e of rendered.edges){const a=map.get(e.source),b=map.get(e.target);if(!a||!b)continue;
+      const pk=e.source<e.target?`${e.source}|${e.target}`:`${e.target}|${e.source}`,pi=pairSeen.get(pk)||0;pairSeen.set(pk,pi+1);
+      const fan=(pi%2?1:-1)*Math.ceil(pi/2);
       const connected=activeId&&(e.source===activeId||e.target===activeId);
-      const active=selectedEdge?.id===e.id||hoveredEdge?.id===e.id||connected;
+      const picked=sameEdge(selectedEdge,e)||sameEdge(hoveredEdge,e);
+      if(opts.connections==='focus'&&!connected&&!picked)continue;
+      const active=picked||connected;
       const faded=activeId&&!active;
       ctx.beginPath();ctx.moveTo(a.x,a.y);
-      // Gentle curvature reads as a mesh rather than a hairball.
-      const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,bend=(rand(e.id||e.source+e.target)-.5)*.35;
-      ctx.quadraticCurveTo(mx-(b.y-a.y)*bend,my+(b.x-a.x)*bend,b.x,b.y);
-      ctx.strokeStyle=active?'rgba(190,250,255,.95)':e.source_system==='cross'?`rgba(255,196,110,${faded?.10:.42})`:
-        e.source_system==='tencent'?`rgba(170,130,255,${faded?.06:.26})`:`rgba(70,215,250,${faded?.06:.26})`;
-      ctx.lineWidth=(active?1.8:e.source_system==='cross'?1.05:.75)*lw;ctx.stroke();
-      if(neural&&(active||hash(e.id||`${e.source}:${e.target}`)%9===0)){
-        const phase=(now*.00022+rand(e.id||e.source+e.target))%1,q=1-phase;
-        const cx=mx-(b.y-a.y)*bend,cy=my+(b.x-a.x)*bend;
-        const px=q*q*a.x+2*q*phase*cx+phase*phase*b.x,py=q*q*a.y+2*q*phase*cy+phase*phase*b.y;
-        const pg=ctx.createRadialGradient(px,py,0,px,py,active?9:6);
-        pg.addColorStop(0,active?'rgba(255,255,255,.95)':'rgba(120,255,240,.8)');pg.addColorStop(1,'rgba(60,240,230,0)');
-        ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,active?9:6,0,TAU);ctx.fill();
-      }
+      const isCross=e.source_system==='cross',bundle=neural&&isCross;
+      // Cross-system links are bundled into shared channels; others keep a slight curve.
+      const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,bend=(rand(e.id||e.source+e.target)-.5)*(neural?.12:.35)+fan*.035;
+      let k=bundle?crossControls(a,b):null;
+      if(k&&fan)k={c1:{x:k.c1.x,y:k.c1.y+fan*7},c2:{x:k.c2.x,y:k.c2.y+fan*7}};
+      if(k)ctx.bezierCurveTo(k.c1.x,k.c1.y,k.c2.x,k.c2.y,b.x,b.y);
+      else ctx.quadraticCurveTo(mx-(b.y-a.y)*bend,my+(b.x-a.x)*bend,b.x,b.y);
+      // Within-system links rest faint; cross-system links carry the visual weight.
+      if(calm){
+        ctx.strokeStyle=active?CALM.active:isCross?`rgba(${CALM.cross},${faded?.08:neural?.34:.34})`:
+          e.source_system==='tencent'?`rgba(${CALM.txEdge},${faded?.05:neural?.12:.2})`:`rgba(${CALM.rqEdge},${faded?.05:neural?.12:.2})`;
+      }else ctx.strokeStyle=active?'rgba(190,250,255,.95)':isCross?`rgba(255,196,110,${faded?.10:.42})`:
+        e.source_system==='tencent'?`rgba(170,130,255,${faded?.05:neural?.13:.26})`:`rgba(70,215,250,${faded?.05:neural?.13:.26})`;
+      ctx.lineWidth=(active?1.8:isCross?1.05:.7)*lw;ctx.stroke();
+      if(neural&&(active||(isCross&&hash(e.id||`${e.source}:${e.target}`)%(coarse?5:3)===0)))
+        pulses.push({a,b,k,cx:mx-(b.y-a.y)*bend,cy:my+(b.x-a.x)*bend,active,ph:rand(e.id||e.source+e.target)});
     }
+    pulseList=pulses;
     const linked=new Set();if(activeId)for(const e of rendered.edges){if(e.source===activeId)linked.add(e.target);if(e.target===activeId)linked.add(e.source)}
-    // Halos (additive), then solid cores, then labels.
+    // Importance sets size in Brain mode. Cores stay under the mask margin, so they cannot cross the outline.
+    const boost=Math.max(1,Math.min(1.9,.8/zoom));
+    const rr=n=>neural?Math.min(9.5,boost*(n.degree>8?Math.min(11,n.r*(1.15+Math.min(.6,(n.degree-8)/80))):Math.min(n.r,5)*.85)):n.r*boost;
     for(const n of rendered.nodes){const highlight=n.id===activeId,near=linked.has(n.id);
       if(activeId&&!highlight&&!near&&n.degree<=8)continue;
-      const tx=n.source_system==='tencent',mem=n.source_system==='memories',size=highlight?34:n.r*(n.degree>8?5:3.4);
-      const halo=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,size);
-      halo.addColorStop(0,highlight?'rgba(230,252,255,.55)':tx?'rgba(170,130,255,.30)':mem?'rgba(120,235,170,.32)':'rgba(60,220,255,.30)');halo.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=halo;ctx.beginPath();ctx.arc(n.x,n.y,size,0,TAU);ctx.fill();}
+      const tx=n.source_system==='tencent',mem=n.source_system==='memories';
+      const size=calm?(highlight?28:rr(n)*(n.degree>8?4.4:2.8)):(highlight?34:rr(n)*(n.degree>8?5.2:3.2));
+      drawGlow(calm?(highlight?'rgba(236,236,239,.35)':tx?`rgba(${CALM.txEdge},.16)`:mem?'rgba(154,211,176,.14)':`rgba(${CALM.rqEdge},.16)`)
+        :highlight?'rgba(230,252,255,.55)':tx?'rgba(170,130,255,.30)':mem?'rgba(120,235,170,.32)':'rgba(60,220,255,.30)',n.x,n.y,size);}
     ctx.globalCompositeOperation='source-over';
     const labels=[];
     for(const n of rendered.nodes){const highlight=n.id===activeId,near=linked.has(n.id),major=n.degree>8,tx=n.source_system==='tencent',mem=n.source_system==='memories';
-      ctx.globalAlpha=activeId&&!highlight&&!near?.35:1;
-      ctx.fillStyle=highlight?'#ffffff':major?(tx?'#e3d6ff':mem?'#d9f7e6':'#d5fbff'):(tx?'#b79bff':mem?'#8ef0b6':'#5fe3fb');
-      ctx.beginPath();ctx.arc(n.x,n.y,n.r+(highlight?3:0),0,TAU);ctx.fill();
-      if(highlight||major){ctx.lineWidth=1.2*lw;ctx.strokeStyle=tx?'rgba(190,160,255,.8)':mem?'rgba(150,240,190,.8)':'rgba(140,240,255,.8)';ctx.beginPath();ctx.arc(n.x,n.y,n.r+(highlight?7:3),0,TAU);ctx.stroke();}
+      ctx.globalAlpha=activeId&&!highlight&&!near?.35:(neural&&!major&&!highlight?.88:1);
+      ctx.fillStyle=calm?(highlight?'#ffffff':major?(tx?CALM.txMajor:mem?CALM.memMajor:CALM.rqMajor):(tx?CALM.tx:mem?CALM.mem:CALM.rq)):highlight?'#ffffff':major?(tx?'#e3d6ff':mem?'#d9f7e6':'#d5fbff'):(tx?'#b79bff':mem?'#8ef0b6':'#5fe3fb');
+      const nr=rr(n);
+      ctx.beginPath();ctx.arc(n.x,n.y,nr+(highlight?1.5:0),0,TAU);ctx.fill();
+      if(highlight||major){ctx.lineWidth=1.2*lw;ctx.strokeStyle=calm?'rgba(200,200,212,.3)':tx?'rgba(190,160,255,.8)':mem?'rgba(150,240,190,.8)':'rgba(140,240,255,.8)';ctx.beginPath();ctx.arc(n.x,n.y,nr+(highlight?4:1.5),0,TAU);ctx.stroke();}
       ctx.globalAlpha=1;
-      // Operator 2026-10-27: names appear only for the hovered/selected node.
-      if(highlight)labels.push([n,highlight,1e9]);
+      // Names appear for the hovered/selected node; once zoomed in, hub names appear too.
+      if(highlight)labels.push([n,highlight,1e9,nr]);
+      else if(major&&zoom>=fitZoom*2)labels.push([n,false,n.degree,nr]);
     }
-    // Priority-ordered, collision-free labels; budget grows as the user zooms in.
     labels.sort((a,b)=>b[2]-a[2]);const placedLabels=[];let budget=Math.round(10*Math.max(1,zoom*zoom));
-    const scale=1/Math.max(.5,Math.min(zoom,2.5));
-    for(const [n,highlight,prio] of labels){if(prio<1e6&&budget--<=0)break;const text=String(n.display_label||n.label||'').slice(0,30);
+    const scale=1/Math.max(.5,zoom);
+    for(const [n,highlight,prio,nr] of labels){if(prio<1e6&&budget--<=0)break;const text=String(n.display_label||n.label||'').slice(0,30);
       ctx.font=`${highlight?'600':'500'} ${((highlight?13:11)*scale).toFixed(1)}px system-ui, sans-serif`;const tw=ctx.measureText(text).width;
-      const lx=n.x+n.r+6*scale,ly=n.y-6*scale,box={x:lx-4*scale,y:ly-11*scale,w:tw+8*scale,h:16*scale};
+      // Flip to the node's left when the name would run off the panel.
+      let lx=n.x+nr+6*scale;const sx=w/2+pan.x+zoom*lx;
+      if(sx+(tw+8*scale)*zoom>w-4)lx=n.x-nr-6*scale-tw;
+      lx=Math.max((4-w/2-pan.x)/zoom+4*scale,lx);
+      const ly=n.y-6*scale,box={x:lx-4*scale,y:ly-11*scale,w:tw+8*scale,h:16*scale};
       if(!highlight&&placedLabels.some(o=>box.x<o.x+o.w&&o.x<box.x+box.w&&box.y<o.y+o.h&&o.y<box.y+box.h))continue;
       placedLabels.push(box);
-      ctx.fillStyle='rgba(2,8,16,.78)';ctx.beginPath();ctx.roundRect?.(box.x,box.y,box.w,box.h,4*scale);ctx.fill();
-      ctx.fillStyle=highlight?'#ffffff':'#bcd6e6';ctx.fillText(text,lx,ly+scale);}
-    if(selectedEdge){const a=map.get(selectedEdge.source),b=map.get(selectedEdge.target);if(a&&b){ctx.fillStyle='#ffe2a8';ctx.shadowColor='#ffc35a';ctx.shadowBlur=14;ctx.beginPath();ctx.arc((a.x+b.x)/2,(a.y+b.y)/2,4.5,0,TAU);ctx.fill();ctx.shadowBlur=0;}}
-    ctx.restore();
-    const caption=`${rendered.nodes.length.toLocaleString()} nodes · ${rendered.edges.length.toLocaleString()} links · ${neural?'neural view':'network view'}`;
-    ctx.font='600 11px system-ui, sans-serif';const cw=ctx.measureText(caption).width+26;
-    ctx.fillStyle='rgba(3,8,17,.78)';ctx.strokeStyle='rgba(80,200,255,.25)';ctx.beginPath();ctx.roundRect?.(12,h-38,Math.min(cw,w-24),26,13);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#a9d8ea';ctx.fillText(caption,25,h-21);
+      ctx.fillStyle=calm?CALM.labelBg:'rgba(2,8,16,.78)';ctx.beginPath();ctx.roundRect?.(box.x,box.y,box.w,box.h,4*scale);ctx.fill();
+      ctx.fillStyle=highlight?'#ffffff':calm?CALM.label:'#bcd6e6';ctx.fillText(text,lx,ly+scale);}
+    if(selectedEdge){const a=map.get(selectedEdge.source),b=map.get(selectedEdge.target);if(a&&b){let mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      if(neural&&selectedEdge.source_system==='cross'){const {c1,c2}=crossControls(a,b);mx=(a.x+3*c1.x+3*c2.x+b.x)/8;my=(a.y+3*c1.y+3*c2.y+b.y)/8}
+      drawGlow('rgba(255,195,90,.6)',mx,my,12);ctx.fillStyle='#ffe2a8';ctx.beginPath();ctx.arc(mx,my,4,0,TAU);ctx.fill();}}
   }
+  function draw(){const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
+    const now=performance.now(),neural=viewMode==='neural',calm=isCalm(),d=Math.min(window.devicePixelRatio||1,2);
+    const activeId=selected?.id||hovered?.id,m=Math.round(Math.min(w,h)*.3);
+    const nv=[renderVersion,w,h,d,calm,neural,activeId||'',edgeKeyOf(selectedEdge),edgeKeyOf(hoveredEdge),opts.connections].join('|');
+    const viewChanged=!sceneView||sceneView.zoom!==zoom||sceneView.px!==pan.x||sceneView.py!==pan.y;
+    if(!scene||nv!==sceneKey||(viewChanged&&now-interactAt>=150)){
+      scene||=document.createElement('canvas');
+      const lw0=Math.round((w+2*m)*d),lh0=Math.round((h+2*m)*d);
+      if(scene.width!==lw0||scene.height!==lh0){scene.width=lw0;scene.height=lh0}
+      const o=scene.getContext('2d');
+      o.setTransform(1,0,0,1,0,0);o.clearRect(0,0,scene.width,scene.height);
+      o.setTransform(d,0,0,d,0,0);o.translate(m+w/2+pan.x,m+h/2+pan.y);o.scale(zoom,zoom);
+      const prev=ctx;ctx=o;try{paintScene(w,h,neural,calm,activeId)}finally{ctx=prev}
+      sceneKey=nv;sceneView={zoom,px:pan.x,py:pan.y};
+    }
+    ctx.setTransform(d,0,0,d,0,0);ctx.globalCompositeOperation='source-over';
+    ctx.drawImage(background(w,h,d,neural,calm),0,0,w,h);
+    const sc=zoom/sceneView.zoom;
+    ctx.save();ctx.translate(w/2+pan.x,h/2+pan.y);ctx.scale(sc,sc);ctx.translate(-w/2-sceneView.px-m,-h/2-sceneView.py-m);
+    ctx.drawImage(scene,0,0,w+2*m,h+2*m);ctx.restore();
+    if(neural&&pulseList.length){
+      ctx.save();ctx.translate(w/2+pan.x,h/2+pan.y);ctx.scale(zoom,zoom);ctx.globalCompositeOperation='lighter';
+      const pr=Math.max(1,Math.min(1.9,.8/zoom));
+      for(const p of pulseList){
+        const phase=(now*(calm?.00014:.00022)+p.ph)%1,q=1-phase,{a,b}=p;let px,py;
+        if(p.k){const {c1,c2}=p.k;px=q*q*q*a.x+3*q*q*phase*c1.x+3*q*phase*phase*c2.x+phase*phase*phase*b.x;py=q*q*q*a.y+3*q*q*phase*c1.y+3*q*phase*phase*c2.y+phase*phase*phase*b.y}
+        else{px=q*q*a.x+2*q*phase*p.cx+phase*phase*b.x;py=q*q*a.y+2*q*phase*p.cy+phase*phase*b.y}
+        drawGlow(p.active?'rgba(255,255,255,.95)':calm?'rgba(226,232,240,.6)':'rgba(120,255,240,.8)',px,py,(p.active?9:6)*pr,calm?'rgba(226,232,240,0)':'rgba(60,240,230,0)');
+      }
+      ctx.restore();
+    }
+  }
+  function fitView(){if(!rendered.nodes.length)return;
+    if(viewMode==='neural'){
+      // Frame the brain itself, under the region names.
+      const narrow=canvas.clientWidth<520,pad=narrow?14:36,top=30;
+      zoom=Math.min(2.2,Math.max(.18,Math.min((canvas.clientWidth-pad)/BRAIN_MASK.w,(canvas.clientHeight-pad-top)/BRAIN_MASK.h)));
+      pan={x:0,y:top/2};
+    }else{
+      const xs=rendered.nodes.map(n=>n.x),ys=rendered.nodes.map(n=>n.y);
+      const pad=canvas.clientWidth<520?70:130,spanX=Math.max(...xs)-Math.min(...xs)+pad,spanY=Math.max(...ys)-Math.min(...ys)+pad;
+      zoom=Math.min(2.2,Math.max(.18,Math.min(canvas.clientWidth/spanX,canvas.clientHeight/spanY)));
+      pan={x:-(Math.min(...xs)+Math.max(...xs))/2*zoom,y:-(Math.min(...ys)+Math.max(...ys))/2*zoom};
+    }
+    fitZoom=zoom;userMoved=false;schedule()}
   function resize(){if(disposed)return;const d=Math.min(window.devicePixelRatio||1,2);
-    canvas.width=Math.max(1,Math.round(canvas.clientWidth*d));canvas.height=Math.max(1,Math.round(canvas.clientHeight*d));ctx.setTransform(d,0,0,d,0,0);schedule()}
+    canvas.width=Math.max(1,Math.round(canvas.clientWidth*d));canvas.height=Math.max(1,Math.round(canvas.clientHeight*d));ctx.setTransform(d,0,0,d,0,0);
+    // Until the user pans or zooms, keep the whole brain framed as the panel settles to its real size.
+    if(!userMoved&&canvas.clientWidth>0)fitView();else schedule()}
   function position(e){const rect=canvas.getBoundingClientRect();return {x:(e.clientX-rect.left-rect.width/2-pan.x)/zoom,y:(e.clientY-rect.top-rect.height/2-pan.y)/zoom}}
   function nearestNode(e){const p=position(e);let best=null,dist=12/zoom;for(const n of rendered.nodes){const d=Math.hypot(n.x-p.x,n.y-p.y);if(d<dist){dist=d;best=n}}return best}
-  function nearestEdge(e){return closestGraphEdge(rendered.edges,rendered.nodes,position(e),Math.min(15,7/zoom))}
+  function nearestEdge(e){return closestGraphEdge(rendered.edges,rendered.nodes,position(e),Math.min(15,7/zoom),viewMode==='neural')}
   function notify(){onSelect?.(selected,rendered.edges,selectedEdge)}
   const clampZoom=value=>Math.max(.12,Math.min(8,value));
   function zoomAt(next,clientX,clientY){
-    const p=position({clientX,clientY});zoom=clampZoom(next);
+    markInteract();const p=position({clientX,clientY});zoom=clampZoom(next);
     const r=canvas.getBoundingClientRect();
     pan.x=clientX-r.left-r.width/2-p.x*zoom;
     pan.y=clientY-r.top-r.height/2-p.y*zoom;
@@ -344,6 +491,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
     if(pointers.has(e.pointerId)){
       pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
       if(pointers.size>=2&&pinch){
+        markInteract();
         const [a,b]=[...pointers.values()],center=midOf(a,b);
         zoom=clampZoom(pinch.initialZoom*Math.hypot(a.x-b.x,a.y-b.y)/pinch.distance);
         const rect=canvas.getBoundingClientRect();
@@ -353,14 +501,15 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
       }
       if(drag&&drag.id===e.pointerId){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
         if(Math.abs(dx)+Math.abs(dy)>2)drag.moved=true;
-        pan.x+=dx;pan.y+=dy;drag.x=e.clientX;drag.y=e.clientY;schedule();return;
+        markInteract();pan.x+=dx;pan.y+=dy;drag.x=e.clientX;drag.y=e.clientY;schedule();return;
       }
     }
     const n=nearestNode(e),edge=n?null:nearestEdge(e);
-    if(n?.id!==hovered?.id||edge?.id!==hoveredEdge?.id){
+    if(n?.id!==hovered?.id||edgeKeyOf(edge)!==edgeKeyOf(hoveredEdge)){
       hovered=n;hoveredEdge=edge;canvas.style.cursor=n||edge?'pointer':'grab';schedule();
     }
   }
+  function leave(){if(!pointers.size){hovered=null;hoveredEdge=null;canvas.style.cursor='grab';schedule()}}
   function up(e){
     const tapped=drag&&drag.id===e.pointerId&&!drag.moved&&pointers.size===1;
     pointers.delete(e.pointerId);
@@ -376,33 +525,32 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
   function keys(e){if(e.key==='+'||e.key==='='){zoomAt(zoom*1.2,canvas.getBoundingClientRect().left+canvas.clientWidth/2,canvas.getBoundingClientRect().top+canvas.clientHeight/2);e.preventDefault()}
     if(e.key==='-'){zoomAt(zoom/1.2,canvas.getBoundingClientRect().left+canvas.clientWidth/2,canvas.getBoundingClientRect().top+canvas.clientHeight/2);e.preventDefault()}
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
-      const [dx,dy]={ArrowLeft:[35,0],ArrowRight:[-35,0],ArrowUp:[0,35],ArrowDown:[0,-35]}[e.key];pan.x+=dx;pan.y+=dy;schedule();e.preventDefault();
+      markInteract();const [dx,dy]={ArrowLeft:[35,0],ArrowRight:[-35,0],ArrowUp:[0,35],ArrowDown:[0,-35]}[e.key];pan.x+=dx;pan.y+=dy;schedule();e.preventDefault();
     }
     if(e.key==='Escape'){selected=null;selectedEdge=null;notify();schedule()}}
   function visibility(){if(!document.hidden)schedule()}
   canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);
   canvas.addEventListener('pointercancel',cancel);canvas.addEventListener('lostpointercapture',cancel);
-  canvas.addEventListener('wheel',wheel,{passive:false});canvas.addEventListener('keydown',keys);
+  canvas.addEventListener('wheel',wheel,{passive:false});canvas.addEventListener('keydown',keys);canvas.addEventListener('pointerleave',leave);
   document.addEventListener('visibilitychange',visibility);
   const watcher=new ResizeObserver(resize);watcher.observe(canvas);
+  const seen=window.IntersectionObserver?new IntersectionObserver(([en])=>{const was=onScreen;onScreen=en.isIntersecting;if(onScreen&&!was)schedule()}):null;seen?.observe(canvas);
   return {
     update(data){graph=data||{nodes:[],edges:[]};positions=viewMode==='neural'?layoutNeuralGraph(graph):layoutGraph(graph);recalc();},
     setMode(mode){const next=mode==='neural'?'neural':'network';if(viewMode===next)return;
       viewMode=next;positions=next==='neural'?layoutNeuralGraph(graph):layoutGraph(graph);recalc();this.fit();},
     getMode(){return viewMode},
+    redraw(){schedule()},
     zoomBy(factor){const r=canvas.getBoundingClientRect();zoomAt(zoom*factor,r.left+r.width/2,r.top+r.height/2);},
     filter(filter){opts={...opts,...filter};recalc();},
+    getOptions(){return {...opts}},
     focus(id){selected=rendered.nodes.find(n=>n.id===id)||null;selectedEdge=null;
-      if(selected){pan.x=-zoom*selected.x;pan.y=-zoom*selected.y;}notify();schedule()},
+      if(selected){userMoved=true;pan.x=-zoom*selected.x;pan.y=-zoom*selected.y;}notify();schedule()},
     focusEdge(id){selectedEdge=rendered.edges.find(e=>e.id===id)||null;selected=null;notify();schedule()},
-    fit(){if(rendered.nodes.length){const xs=rendered.nodes.map(n=>n.x),ys=rendered.nodes.map(n=>n.y);
-      if(viewMode==='neural'){xs.push(-BRAIN.a-20,BRAIN.a+20);ys.push(-BRAIN.b-10,300);}
-      const spanX=Math.max(...xs)-Math.min(...xs)+130,spanY=Math.max(...ys)-Math.min(...ys)+130;
-      zoom=Math.min(2.2,Math.max(.18,Math.min(canvas.clientWidth/spanX,canvas.clientHeight/spanY)));
-      pan={x:-(Math.min(...xs)+Math.max(...xs))/2*zoom,y:-(Math.min(...ys)+Math.max(...ys))/2*zoom};schedule();}},
+    fit(){fitView()},
     reset(){this.fit()},getVisible(){return rendered},
-    dispose(){disposed=true;pointers.clear();watcher.disconnect();cancelAnimationFrame(raf);
+    dispose(){disposed=true;clearTimeout(settleTimer);clearTimeout(animTimer);scene=null;bg=null;pointers.clear();watcher.disconnect();seen?.disconnect();cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange',visibility);
-      for(const [ev,fn] of [['pointerdown',down],['pointermove',move],['pointerup',up],['pointercancel',cancel],['lostpointercapture',cancel],['wheel',wheel],['keydown',keys]])canvas.removeEventListener(ev,fn)}
+      for(const [ev,fn] of [['pointerdown',down],['pointermove',move],['pointerup',up],['pointercancel',cancel],['lostpointercapture',cancel],['wheel',wheel],['keydown',keys],['pointerleave',leave]])canvas.removeEventListener(ev,fn)}
   };
 }

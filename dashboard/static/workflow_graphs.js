@@ -11,14 +11,36 @@ const MEMORY_LEGEND = {cyan:'Retrieval & index', purple:'Capture & review', gree
 const ORCHESTRA_LEGEND = {purple:'Operator & fabric', cyan:'Grounding & output', green:'Worker seats', amber:'Hooks & observability', red:'Gates', blue:'Pools'};
 
 const MEMORY_VIEWS = {
+  brain: {
+    label: 'Brain map',
+    title: 'Human-style memory map',
+    summary: 'A simplified, brain-inspired view of the memory system. The left side gathers experience, the center applies checks, and the right side returns useful recall. Use this for orientation before opening the denser flow diagrams.',
+    stats: [['2 stores', 'History + knowledge'], ['Checked', 'Before promotion'], ['Explicit', 'Recall only'], ['Operator', 'Still validates']],
+    lanes: ['Experience', 'Filter', 'Stores', 'Recall', 'Use'],
+    nodes: [
+      {id:'experience', col:0, tone:'blue', kicker:'Input', title:'Experience', sub:'Sessions, docs and code create raw memory material.', bullets:['Sessions explain what happened.', 'Docs and source explain what is true now.']},
+      {id:'capture', col:1, tone:'purple', kicker:'Encode', title:'Capture & review', sub:'Important history is captured; proposed lessons are reviewed.', bullets:['Each capture path must preserve its own single-writer policy.', 'Conversation review proposes but does not auto-promote.']},
+      {id:'memorycore', col:2, tone:'green', kicker:'Left memory', title:'Tencent MemoryCore', sub:'Temporal history: turns, records and summaries.', bullets:['Good for previous context and chronology.', 'Not the source of truth for code or runtime state.']},
+      {id:'concepts', col:2, tone:'green', kicker:'Right memory', title:'RepoQL concepts', sub:'Durable rules, principles and knowledge.', bullets:['Useful lessons are stored with category and evidence.', 'Lineage is kept when knowledge changes.']},
+      {id:'gates', col:3, tone:'red', kicker:'Decision', title:'Safety & relevance gates', sub:'Receipts, relevance, duplicate and reviewer checks.', bullets:['High-risk changes require extra gates.', 'Unresolved or duplicate concept writes are refused.']},
+      {id:'recall', col:3, tone:'cyan', kicker:'Recall', title:'RepoQL + explicit recall', sub:'Retrieve grounded code and only the memory that was asked for.', bullets:['RepoQL answers where and what.', 'MemoryCore answers what happened before.']},
+      {id:'agents', col:4, tone:'blue', kicker:'Output', title:'Agents & operator', sub:'Use retrieved knowledge, then create the next round of evidence.', bullets:['The loop closes with new sessions and new docs.']},
+    ],
+    edges: [['experience','capture','encode'],['capture','memorycore','history'],['capture','concepts','candidate lessons'],['memorycore','recall','history recall'],['concepts','recall','durable guidance'],['gates','recall','allowed context'],['recall','agents','grounded work'],['agents','experience','new evidence','loop']],
+    callouts: [
+      {tone:'blue', title:'Think of two memory systems', items:['MemoryCore is like episodic memory: what happened and when.', 'RepoQL concepts are like semantic memory: rules and durable knowledge.']},
+      {tone:'red', title:'Why the middle gates matter', items:['Helpful memory still needs evidence and scope before it becomes durable.', 'A recalled memory is context, not permission to skip current verification.']},
+      {tone:'cyan', title:'Use this page in order', items:['Start with this brain map.', 'Then open Flow or Recall paths for the exact source-defined mechanics.']},
+    ],
+  },
   overview: {
-    label: 'Overview',
+    label: 'Flow',
     title: 'End-to-end memory system',
     summary: 'How work becomes durable, governed knowledge — and how agents get it back. RepoQL is authoritative for code and documentation; MemoryCore is supplementary history that is recalled explicitly, never injected ambiently.',
-    stats: [['RepoQL', 'Authoritative retrieval'], ['MemoryCore', 'Temporal history'], ['Single writer', 'Capture timer'], ['Explicit', 'Recall model']],
+    stats: [['RepoQL', 'Authoritative retrieval'], ['MemoryCore', 'Temporal history'], ['Scoped', 'Capture writers'], ['Explicit', 'Recall model']],
     lanes: ['Sources', 'Capture & governance', 'Stores', 'Retrieval', 'Consumers'],
     nodes: [
-      {id:'sessions', col:0, tone:'blue', kicker:'Source', title:'Agent sessions', sub:'OpenChamber, Freebuff and kit run transcripts.', bullets:['Parent and child sessions are both read.','Delegated child-session user briefs are excluded from capture.','Assistant outcomes are retained.'], refs:['opencode.db','kit run logs']},
+      {id:'sessions', col:0, tone:'blue', kicker:'Source', title:'Agent sessions', sub:'Recorded agent and worker sessions. Each capture source must be verified from its own receipts.', bullets:['Parent and child sessions are both read.','Delegated child-session user briefs are excluded from capture.','Assistant outcomes are retained.'], refs:['opencode.db','kit run logs']},
       {id:'hub', col:0, tone:'blue', kicker:'Source', title:'Hub documentation', sub:'Canonical docs, issues, runbooks and the journal.', bullets:['Live state and runbooks are the operational truth.','The journal has one write path (fleet-log).'], refs:['documentation/','journal/events.jsonl']},
       {id:'code', col:0, tone:'blue', kicker:'Source', title:'Source & imports', sub:'Workspace tree plus registered GitHub and local imports.', bullets:['Indexed in place by the single production RepoQL host.','Watcher keeps changed files fresh.'], refs:['configured workspace root','rql import list']},
       {id:'capture', col:1, tone:'purple', kicker:'Capture', title:'MemoryCore capture', sub:'Single-writer timer: snapshot, filter, batch, write.', bullets:['WAL-safe read-only snapshot of the session database.','Admission filter excludes delegated child-session user directives.','Every tick emits a done receipt with written, repaired, failed and excluded counters.'], refs:['tencent-capture.timer','capture-consumer.mjs']},
@@ -30,7 +52,7 @@ const MEMORY_VIEWS = {
       {id:'rql', col:3, tone:'cyan', kicker:'Retrieve', title:'RepoQL retrieval', sub:'explore → read → query, with cited spans.', bullets:['Authoritative for code, configuration and documentation.','`rql concept hints <file>` returns bounded relevant capsules before an edit.'], refs:['rql explore','rql read','rql concept hints']},
       {id:'recall', col:3, tone:'purple', kicker:'Recall', title:'Explicit memory recall', sub:'Identity-scoped, bounded, on request only.', bullets:['L1 top 5, then L0 top 3 only when L1 has no hit (~1,500 tokens).','Via the agent-memory CLI or the kit’s stage-gated context pack.','No ambient MemoryCore injection into interactive sessions.'], refs:['agent-memory <id> recall']},
       {id:'gates', col:3, tone:'red', kicker:'Gate', title:'Receipt & reviewer gates', sub:'Lookup receipts, reviewer and credential checks on mutation.', bullets:['Source edits need a matching RepoQL lookup receipt; task reports are exempt.','Gated mutations need a fresh code-reviewer pass.','Credential-shaped values never enter tool calls or files.'], refs:['capability-profile.js']},
-      {id:'agents', col:4, tone:'blue', kicker:'Consumers', title:'Agents & operator', sub:'OpenChamber agents, kit workers, Ghost and this dashboard.', bullets:['Act on verified context within their gates.','Their outcomes become new sessions — the loop closes.'], refs:['OpenChamber','ai-orchestra kit','Ghost']},
+      {id:'agents', col:4, tone:'blue', kicker:'Consumers', title:'Agents & operator', sub:'Interactive agents, delegated workers, persistent bots and the dashboard.', bullets:['Act on verified context within their gates.','Their outcomes become new sessions — the loop closes.'], refs:['Agent sessions','Worker receipts','Bot identities']},
     ],
     edges: [
       ['sessions','capture','transcripts'], ['sessions','review','reviewed sessions'], ['hub','index','indexed'], ['code','index','indexed'],
@@ -47,12 +69,12 @@ const MEMORY_VIEWS = {
   capture: {
     label: 'Capture pipeline',
     title: 'MemoryCore capture pipeline',
-    summary: 'One timer, one writer. Each tick snapshots session history safely, admits only what should become memory, writes idempotently and publishes a receipt that can be audited.',
+    summary: 'One writer per capture path; the illustrated legacy tick snapshots session history safely, admits only what should become memory, writes idempotently and publishes a receipt that can be audited.',
     stats: [['1', 'Writer'], ['WAL-safe', 'Snapshot'], ['Idempotent', 'Rows'], ['Receipted', 'Every tick']],
     lanes: ['Trigger', 'Read', 'Admit', 'Persist', 'Verify'],
     nodes: [
       {id:'timer', col:0, tone:'amber', kicker:'Trigger', title:'Capture timer', sub:'Periodic tick; the only MemoryCore writer.', bullets:['No second writer, mirror or database.','Status and failures are read from the unit, not assumed.'], refs:['tencent-capture.timer']},
-      {id:'snapshot', col:1, tone:'blue', kicker:'Read', title:'Session snapshot', sub:'Read-only, WAL-safe copy of the session store.', bullets:['Never reads a half-written database page.','Parent and child sessions are both visible to the filter.'], refs:['opencode.db']},
+      {id:'snapshot', col:1, tone:'blue', kicker:'Read', title:'Session snapshot', sub:'WAL-safe read-only snapshot of the captured source store; other capture adapters have separate receipts.', bullets:['Never reads a half-written database page.','Parent and child sessions are both visible to the filter.'], refs:['legacy opencode.db']},
       {id:'admit', col:2, tone:'red', kicker:'Admission', title:'Admission filter', sub:'Excludes delegated child-session user directives.', bullets:['Child assistant outcomes are retained.','Legacy records already captured remain recallable.','Exclusion counters include rescans; they are not unique-message counts.']},
       {id:'redact', col:2, tone:'red', kicker:'Safety', title:'Redaction', sub:'Credential-shaped values never reach memory.', bullets:['Secrets are reported by shape and location only.']},
       {id:'batch', col:3, tone:'purple', kicker:'Write', title:'Batch & dedupe', sub:'Stable identities make every write idempotent.', bullets:['Re-running a tick repairs instead of duplicating.','Timestamps and references are preserved.']},
@@ -113,7 +135,7 @@ const MEMORY_VIEWS = {
       {id:'receipt', col:1, tone:'red', kicker:'Gate', title:'RepoQL receipt gate', sub:'Source edits require a matching lookup.', bullets:['Pure task reports under work/ are exempt and audited as such.','The exemption never forges a lookup receipt.']},
       {id:'reviewer', col:1, tone:'red', kicker:'Gate', title:'Reviewer gate', sub:'Fresh code-reviewer pass (≤ 90 min) naming exact paths.'},
       {id:'credential', col:1, tone:'red', kicker:'Gate', title:'Credential gate', sub:'Blocks secrets in tool calls, files and logs.'},
-      {id:'guard', col:2, tone:'amber', kicker:'Apply', title:'Guarded config writer', sub:'Defers while a chat is active; sanctioned restart after.', bullets:['Exit 2 means DEFERRED, not applied.','Restart uses openchamber-safe-restart, never a raw docker restart.'], refs:['orch-oc-config-mutate','openchamber-safe-restart']},
+      {id:'guard', col:2, tone:'amber', kicker:'Apply', title:'Guarded config writer', sub:'Configuration changes require the approved guarded writer and readback evidence.', bullets:['A deferred result is not an applied change.','Service restarts require the approved guarded procedure.'], refs:['Config change receipts','Guarded restart procedure']},
       {id:'capture', col:2, tone:'purple', kicker:'Apply', title:'Governed capture', sub:'concept_add · doc_edit · doc_append', refs:['knowledge_capture']},
       {id:'docs', col:3, tone:'cyan', kicker:'Record', title:'Hub runbook & issue', sub:'Behaviour, evidence and untested recovery noted.'},
       {id:'journal', col:3, tone:'cyan', kicker:'Record', title:'Journal OUTCOME / LESSON', sub:'One non-duplicate entry per outcome.', refs:['fleet-log']},
@@ -156,9 +178,9 @@ const ORCHESTRA_MODES = {
     ],
   },
   duo: {
-    label: 'Duo',
-    title: 'Dual mode (Duo)',
-    summary: 'Alpha and beta are two implementation seats under the coordinator. Review and consultation remain separate gated steps — they are not extra seats.',
+    label: 'Dual',
+    title: 'Dual worker mode',
+    summary: 'Two implementation workers operate under the coordinator. Review and consultation are separate evidence gates, not implementation seats. This is a source diagram, not live run health.',
     stats: [['2', 'Implementation seats'], ['Gated', 'Review lane'], ['Per-session', 'Mailboxes'], ['Dual', 'Mode name']],
     lanes: ['Brief', 'Ground', 'Implement', 'Coordinate', 'Guard', 'Deliver'],
     nodes: [
@@ -173,7 +195,7 @@ const ORCHESTRA_MODES = {
     ],
     edges: [['operator','retrieval','brief'],['retrieval','alpha','shared context'],['retrieval','beta','shared context'],['alpha','chat','delegate'],['beta','chat','reply'],['chat','hooks','events'],['chat','gates','risky action'],['hooks','output','telemetry'],['gates','output','approved path']],
     callouts: [
-      {tone:'purple', title:'Delivery', items:['Freebuff and standalone OpenChamber agents can coexist.','Immediate notification reduces waiting between turns.']},
+      {tone:'purple', title:'Delivery', items:['Agent sessions and worker sessions coordinate through verified delivery contracts.','Immediate notification reduces waiting between turns.']},
       {tone:'amber', title:'Hooks', items:['Task metadata and run telemetry.','Session registration and delivery mirroring.','Memory and docs capture after completion.']},
       {tone:'red', title:'Gates', items:['High-risk changes need more than the chat bus.','RepoQL stays the primary retrieval layer in every mode.']},
     ],
@@ -194,33 +216,54 @@ const ORCHESTRA_MODES = {
       {id:'chat', col:3, tone:'purple', kicker:'Fabric', title:'Agent Chat fabric', sub:'Cross-agent messaging and feed.'},
       {id:'hooks', col:4, tone:'amber', kicker:'Hooks', title:'Hooks', sub:'Wiring, telemetry, notifications, capture.'},
       {id:'gates', col:4, tone:'red', kicker:'Gates', title:'Gates', sub:'Lease, deploy intent, asset and doc gates.'},
-      {id:'pools', col:5, tone:'blue', kicker:'Pools', title:'Freebuff / OC pools', sub:'Concurrent Freebuff and OpenChamber agents.'},
+      {id:'pools', col:5, tone:'blue', kicker:'Pools', title:'Worker execution pools', sub:'Every requested seat requires a validated execution transport before it can run.'},
       {id:'output', col:5, tone:'cyan', kicker:'Output', title:'Approved result', sub:'Answer, audit trail and captured learning.'},
     ],
     edges: [['operator','retrieval','brief'],['retrieval','alpha','grounding'],['alpha','beta','delegate'],['beta','gamma','optional parallel work'],['gamma','delta','optional parallel work'],['beta','chat','updates'],['gamma','chat','findings'],['delta','chat','advice'],['chat','hooks','events'],['chat','gates','risky ops'],['hooks','pools','execute / notify'],['gates','output','approved changes'],['pools','output','results']],
     callouts: [
       {tone:'green', title:'Seat contract', items:['Alpha and beta have workspace write access.','Gamma and delta are reply-text seats, not dedicated reviewers.','Failed required assignments block; optional ones may degrade to findings.']},
       {tone:'amber', title:'Hooks & gates', items:['Hooks make the system observable.','Gates make it trustworthy.']},
-      {tone:'blue', title:'Pools', items:['Freebuff and OpenChamber pools share one orchestration fabric.','Maximum 8 kit seats, at most 2 Freebuff.']},
+      {tone:'blue', title:'Pools', items:['Verify every execution transport before enabling its assigned seats.','Custom mode is separate: up to ten implementation seats, at most four from the designated pool.']},
+    ],
+  },
+  custom: {
+    label: 'Custom',
+    title: 'Custom orchestra roster',
+    summary: 'Explicitly selected roster of up to ten implementation seats. At most four can be assigned to one designated worker pool. Other seats need verified execution transports. Fixed modes retain their own contracts.',
+    stats: [['10 max', 'Implementation seats'], ['4 max', 'Designated worker pool'], ['6', 'Other seats in a full roster'], ['Unchanged', 'Review gates']],
+    lanes: ['Request', 'Ground', 'Allocate', 'Implement', 'Review', 'Report'],
+    nodes: [
+      {id:'operator', col:0, tone:'purple', kicker:'Request', title:'Operator / Super', sub:'Requests a concrete custom roster; no invented workers.'},
+      {id:'retrieval', col:1, tone:'cyan', kicker:'Context', title:'RepoQL + relevant recall', sub:'Source and session-specific evidence before dispatch.'},
+      {id:'roster', col:2, tone:'amber', kicker:'Guard', title:'Roster validation', sub:'Hard maximum ten seats, four in the designated worker pool, with provider and budget checks.'},
+      {id:'pool-primary', col:3, tone:'green', kicker:'Pool', title:'Designated pool (0 to 4)', sub:'Explicitly requested workers, subject to existing lease and budget controls.'},
+      {id:'other', col:3, tone:'blue', kicker:'Pool', title:'Other seats (0 to 10)', sub:'Seats using other validated execution transports, within the overall ten-seat limit.'},
+      {id:'review', col:4, tone:'red', kicker:'Gate', title:'Existing planner, review and acceptance', sub:'Same premium/free model routing and approval stages as other modes.'},
+      {id:'output', col:5, tone:'cyan', kicker:'Evidence', title:'Status, results and memory', sub:'Verified delivery receipts, telemetry and governed learning.'},
+    ],
+    edges: [['operator','retrieval','task'],['retrieval','roster','grounded'],['roster','pool-primary','explicit seats'],['roster','other','supported seats'],['pool-primary','review','evidence'],['other','review','evidence'],['review','output','verdict']],
+    callouts: [
+      {tone:'red', title:'Hard limits', items:['At most ten implementation seats per custom run.','At most four workers from the designated pool; overrides do not raise the cap.','Unavailable execution transports block their seats rather than bypassing gates.']},
+      {tone:'amber', title:'Separate fixed modes', items:['Solo, Dual, Quad and fixed Super modes keep their existing contracts.','Larger custom rosters must be requested explicitly.','Direct dispatch requires a validated launch integration.']},
     ],
   },
   super: {
     label: 'Super',
     title: 'Super mode',
-    summary: 'An in-chamber director plans the work and coordinates one or two operator-selected managed seats. Gates, monitoring and memory are shared capabilities, not extra workers.',
+    summary: 'Fixed Super mode coordinates one or two managed seats. A separate custom roster supports up to ten when launch and worker transports are verified. Review gates and monitoring are not additional worker seats.',
     stats: [['1–2', 'Managed seats'], ['In-chamber', 'Director'], ['Not used', 'Gamma / delta'], ['Explicit', 'Selection']],
     embedMemory: true,
     lanes: ['Brief & ground', 'Direct', 'Seats & review', 'Fabric', 'Hooks & gates', 'Observe & deliver'],
     nodes: [
       {id:'operator', col:0, tone:'purple', kicker:'Input', title:'Operator', sub:'Starts a high-value or high-risk objective.'},
       {id:'retrieval', col:0, tone:'cyan', kicker:'Grounding', title:'RepoQL + memory', sub:'Unified knowledge plane with history.'},
-      {id:'coord', col:1, tone:'green', kicker:'Director', title:'In-chamber director', sub:'Plans, briefs, verifies — not a worker seat.', bullets:['Owns the plan and the final verdict.','Verifies what workers return; a claim is not evidence.']},
+      {id:'coord', col:1, tone:'green', kicker:'Director', title:'Coordinator / Super', sub:'Plans, briefs, verifies — not a worker seat.', bullets:['Owns the plan and the final verdict.','Verifies what workers return; a claim is not evidence.']},
       {id:'alpha', col:2, tone:'green', kicker:'Seat', title:'Alpha managed seat', sub:'Operator-selected implementation seat.'},
       {id:'beta', col:2, tone:'green', kicker:'Seat', title:'Beta (optional)', sub:'Second managed seat when selected.'},
       {id:'review', col:2, tone:'red', kicker:'Gate', title:'Review / consult', sub:'A capability, not a third worker.'},
       {id:'deploy', col:2, tone:'red', kicker:'Gate', title:'Deploy gate', sub:'Deployment preconditions.'},
       {id:'chat', col:3, tone:'purple', kicker:'Fabric', title:'Agent Chat fabric', sub:'Message bus, feed and delivery.'},
-      {id:'pools', col:3, tone:'blue', kicker:'Pools', title:'External pools', sub:'Freebuff / OpenChamber identities; roster stays α/β.'},
+      {id:'pools', col:3, tone:'blue', kicker:'Pools', title:'External pools', sub:'Legacy fixed Super mode has α/β only; a separate custom roster supports up to ten seats after cutover.'},
       {id:'hooks', col:4, tone:'amber', kicker:'Hooks', title:'Hooks', sub:'Pre/postflight, telemetry, capture, office sync.'},
       {id:'gates', col:4, tone:'red', kicker:'Gates', title:'Gates', sub:'Lease, deploy intent, asset and capture gates.'},
       {id:'ghost', col:5, tone:'cyan', kicker:'Persistent', title:'Ghost agent', sub:'Long-running monitoring and delegated tasks.'},
@@ -230,7 +273,7 @@ const ORCHESTRA_MODES = {
     ],
     edges: [['operator','retrieval','brief'],['retrieval','coord','grounding'],['coord','alpha','delegate'],['coord','beta','optional'],['coord','review','when needed'],['coord','deploy','deploy check'],['alpha','chat','work updates'],['beta','chat','updates'],['review','gates','verdict'],['deploy','gates','preconditions'],['pools','chat','identities'],['chat','hooks','events'],['hooks','ghost','persistent work'],['hooks','audit','telemetry'],['gates','audit','review trail'],['audit','memory','capture triggers'],['memory','output','durable context'],['ghost','output','live state']],
     callouts: [
-      {tone:'green', title:'Super as configured', items:['The director coordinates one or two managed seats.','Gamma and delta are not Super seats; no free split is allocated.','Consultation, gates, telemetry and memory are not counted as workers.']},
+      {tone:'green', title:'Super as configured', items:['Fixed Super mode supports one or two seats; custom mode supports a larger roster by explicit selection.','Gamma and delta are not Super seats; no free split is allocated.','Consultation, gates, telemetry and memory are not counted as workers.']},
       {tone:'purple', title:'Embedded memory', items:['Super depends on the same memory plane as every mode.','See the Memory architecture page for the full pipeline.']},
       {tone:'amber', title:'Hooks and gates', items:['Hooks = operational glue and observability.','Gates = mutation safety and policy enforcement.']},
     ],
@@ -534,16 +577,71 @@ function bindArchitecture(views, tabsId, defaultKey, legend) {
 }
 
 // ------------------------------------------------------------------ pages
+// Plain-language orientation precedes the interactive source diagrams. All links are
+// existing hash routes. These pages describe design, not live runtime health.
+const memoryGuide = `<section class="arch-guide" aria-label="Memory explained">
+  <h2>Why this matters</h2>
+  <p>Memory helps an agent recover relevant previous decisions without treating old conversations as current facts. RepoQL points to code, documents and verified concepts. Tencent MemoryCore holds supplementary conversation history. The two answer different questions.</p><p class="arch-note"><strong>Coverage note:</strong> Different session and bot sources may have separate capture adapters and memory identities. Verify each capture path with its own receipts; a registered identity alone does not prove that conversations were captured.</p>
+  <div class="arch-guide-grid">
+    <article><h3>What is stored?</h3><p><strong>L0</strong> holds individual turns. <strong>L1</strong> holds useful extracted records. <strong>L2 and L3</strong> provide broader summaries. A summary is context, not proof that a system still behaves the same way.</p></article>
+    <article><h3>What happens automatically?</h3><p>A scheduled capture process collects eligible session history. A separate review process can propose lasting RepoQL concepts. A proposed concept is not automatically accepted into the authoritative knowledge store.</p></article>
+    <article><h3>What do I control?</h3><p>Use the memory graph to explore relationships, Tencent Control to inspect memory records, Concepts for durable rules, and Harness for run evidence. Agent recall is requested explicitly when earlier history matters.</p></article>
+  </div>
+  <section class="memory-brain" aria-label="Brain style memory summary">
+    <div class="memory-brain-head"><div><h3>The memory system as a human-style brain</h3><p>The left side gathers experiences, the centre decides what is safe and durable, and the right side gives agents grounded recall. This is a simplified mental model first; the tabbed diagrams below show the exact source-defined flows.</p></div><span class="pill purple">Begin here</span></div>
+    <div class="memory-brain-shell">
+      <svg class="memory-brain-anatomy" aria-hidden="true" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" focusable="false">
+        <defs><radialGradient id="memory-brain-shade"><stop offset="0" stop-color="var(--purple)" stop-opacity=".09"/><stop offset="1" stop-color="var(--cyan)" stop-opacity=".018"/></radialGradient></defs>
+        <path class="memory-brain-half" d="M495 80 C435 33 342 30 275 69 C202 48 141 86 123 147 C65 164 50 222 81 270 C50 337 81 391 140 409 C151 470 206 513 268 505 C314 563 405 549 459 504 C490 469 503 412 489 365 Z"/>
+        <path class="memory-brain-half" d="M505 80 C565 33 658 30 725 69 C798 48 859 86 877 147 C935 164 950 222 919 270 C950 337 919 391 860 409 C849 470 794 513 732 505 C686 563 595 549 541 504 C510 469 497 412 511 365 Z"/>
+        <g class="memory-brain-folds">
+          <path d="M240 103 C208 134 263 173 212 207 C170 240 197 281 248 297"/>
+          <path d="M327 89 C290 131 354 173 322 213 C295 250 337 276 368 291"/>
+          <path d="M418 104 C389 151 432 199 401 239 C385 262 402 294 445 305"/>
+          <path d="M158 313 C212 306 198 369 250 385 C297 395 276 454 316 477"/>
+          <path d="M335 338 C286 363 331 399 379 409 C411 417 390 467 424 484"/>
+          <path d="M760 103 C792 134 737 173 788 207 C830 240 803 281 752 297"/>
+          <path d="M673 89 C710 131 646 173 678 213 C705 250 663 276 632 291"/>
+          <path d="M582 104 C611 151 568 199 599 239 C615 262 598 294 555 305"/>
+          <path d="M842 313 C788 306 802 369 750 385 C703 395 724 454 684 477"/>
+          <path d="M665 338 C714 363 669 399 621 409 C589 417 610 467 576 484"/>
+        </g>
+        <path class="memory-brain-fissure" d="M500 76 C483 130 517 185 498 248 C480 321 520 375 499 448 C487 481 503 501 499 527"/>
+      </svg>
+      <article class="memory-brain-node capture"><span class="label">Input + encoding</span><strong>Capture & review</strong><p>Sessions, docs and source are filtered into memory candidates.</p><ul><li>Single writer timer</li><li>Conversation review proposes lessons</li></ul></article>
+      <article class="memory-brain-node memorycore"><span class="label">Episodic memory</span><strong>Tencent MemoryCore</strong><p>Stores what happened before: turns, records and summaries.</p></article>
+      <article class="memory-brain-node concepts"><span class="label">Semantic memory</span><strong>RepoQL concepts</strong><p>Stores durable rules and reusable knowledge with lineage.</p></article>
+      <article class="memory-brain-node index"><span class="label">Current truth</span><strong>RepoQL index</strong><p>Grounds agents in live code, docs, symbols and relationships.</p></article>
+      <article class="memory-brain-node gates"><span class="label">Executive control</span><strong>Safety & relevance gates</strong><p>Receipts, relevance, duplicate detection and reviewer checks stop bad memory from spreading.</p></article>
+      <article class="memory-brain-node recall"><span class="label">Recall</span><strong>Explicit recall only</strong><p>Memory is requested when needed; it is never ambiently injected into every conversation.</p></article>
+      <article class="memory-brain-node output"><span class="label">Action</span><strong>Agents & operator</strong><p>Use grounded recall, then generate fresh evidence, docs and outcomes for the next cycle.</p></article>
+    </div>
+    <div class="memory-brain-paths">
+      <div class="memory-brain-path"><strong>Capture path</strong><p>Experience → filter → MemoryCore history or candidate durable knowledge.</p></div>
+      <div class="memory-brain-path"><strong>Governance path</strong><p>Every durable lesson is checked for scope, duplicates, evidence and policy before it can stick.</p></div>
+      <div class="memory-brain-path"><strong>Recall path</strong><p>RepoQL retrieves current truth first; MemoryCore history supplements only when earlier context matters.</p></div>
+    </div>
+  </section>
+  <p class="arch-note"><strong>Legend:</strong> Blue = source or consumer · Purple = capture or recall · Green = stores · Cyan = index or retrieval · Amber = lifecycle · Red = required checks. Diagram labels describe the captured source, not verified live availability.</p>
+  <nav class="arch-guide-links" aria-label="Memory actions"><a href="#/unified/graph">Live Memory Graph</a><a href="#/unified/tencent">Tencent Control Panel</a><a href="#/knowledge/all">Concepts</a><a href="#/harness">Harness</a></nav>
+</section>`;
+const orchestraGuide = `<section class="arch-guide" aria-label="Orchestration explained">
+  <h2>From request to acceptance</h2>
+  <p>A coordinator assigns work while specialist workers produce evidence. A reviewer judges actual changes and test results. The flow can pause or fail at any gate. A completed step does not automatically mean approval.</p><p class="arch-note"><strong>Availability note:</strong> The diagrams describe intended contracts, not live worker availability. Custom dispatch and all execution transports require independent validation.</p>
+  <ol class="arch-steps"><li><strong>Request</strong><span>Define the outcome and scope.</span></li><li><strong>Plan</strong><span>Choose workers and review requirements.</span></li><li><strong>Implement</strong><span>Workers change the authorized source.</span></li><li><strong>Validate</strong><span>Check code, tests and runtime evidence.</span></li><li><strong>Review</strong><span>Assess changes against the requirement.</span></li><li><strong>Accept</strong><span>Record the result or the remaining blocker.</span></li></ol>
+  <p class="arch-note"><strong>Modes:</strong> Solo has one implementation seat, Dual two, Quad four, and the explicit Custom roster has up to ten with at most four from the designated worker pool. Remaining seats require supported transports. Consultation and review are separate gates, not worker seats. These limits do not prove live capacity.</p>
+  <nav class="arch-guide-links" aria-label="Orchestration actions"><a href="#/harness">Harness Control Center</a><a href="#/harness/agents">Live Agents</a><a href="#/harness/runs">Execution History</a><a href="#/kanban">Kanban</a><a href="#/agentchat">Agent Chat</a></nav>
+</section>`;
 export function renderMemoryArchitecturePage() {
-  return pageHTML({eyebrow:'Architecture · Memory', title:'Memory architecture',
-    intro:'How the fleet turns work into durable, governed knowledge — and how agents retrieve it. Select any stage to see what it does, the real components behind it, and where its data flows.',
-    tabsId:'memory-view-mode', tabsLabel:'Memory view', views:MEMORY_VIEWS, defaultKey:'overview'});
+  return memoryGuide + pageHTML({eyebrow:'Architecture · Memory', title:'How memory works',
+    intro:'Follow capture, review and recall. The diagram shows the source-defined design; use the controls below for live observations.',
+    tabsId:'memory-view-mode', tabsLabel:'Memory view', views:MEMORY_VIEWS, defaultKey:'brain'});
 }
-export function bindMemoryArchitecturePage() { return bindArchitecture(MEMORY_VIEWS, 'memory-view-mode', 'overview', MEMORY_LEGEND); }
+export function bindMemoryArchitecturePage() { return bindArchitecture(MEMORY_VIEWS, 'memory-view-mode', 'brain', MEMORY_LEGEND); }
 
 export function renderOrchestraWorkflowPage() {
-  return pageHTML({eyebrow:'Architecture · Orchestration', title:'Harness & AI orchestra',
-    intro:'How each operating mode wires the operator, grounding, worker seats, the Agent Chat fabric, hooks and gates. Switch modes to compare seat contracts; select any stage for details.',
+  return orchestraGuide + pageHTML({eyebrow:'Architecture · Orchestration', title:'Harness & AI orchestra',
+    intro:'Explore worker modes and the gates between a request and acceptance. The diagrams are a source snapshot, not a view of live run state.',
     tabsId:'orchestra-mode', tabsLabel:'Operating mode', views:ORCHESTRA_MODES, defaultKey:'duo'});
 }
 export function bindOrchestraWorkflowPage() { return bindArchitecture(ORCHESTRA_MODES, 'orchestra-mode', 'duo', ORCHESTRA_LEGEND); }

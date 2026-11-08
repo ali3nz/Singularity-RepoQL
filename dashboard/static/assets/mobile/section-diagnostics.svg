@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240" preserveAspectRatio="xMaxYMid slice"><defs><linearGradient id="b" x1="0" x2="1"><stop offset="0" stop-color="#14171c"/><stop offset="1" stop-color="#2e2619"/></linearGradient></defs>
+<rect width="1200" height="240" fill="url(#b)"/>
+<g stroke="#ffffff" stroke-opacity=".07"><path d="M650 60h550M650 110h550M650 160h550M650 210h550"/></g>
+<path d="M650 170L730 140L800 160L880 90L960 120L1040 50L1120 100L1200 70" fill="none" stroke="#f0b35a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" stroke-opacity=".8"/>
+<path d="M650 200L740 185L820 195L900 160L980 175L1060 140L1140 150L1200 130" fill="none" stroke="#7aa8ff" stroke-width="2.5" stroke-linecap="round" stroke-opacity=".6"/>
+<g fill="#f0b35a"><circle cx="880" cy="90" r="6"/><circle cx="1040" cy="50" r="6"/></g></svg>
