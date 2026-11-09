@@ -51,10 +51,7 @@
       "path": "adapters/claude-code (agents/, agent-map.mjs, memory-hook.mjs, settings-merge.mjs) + scripts/install-claude-code.mjs",
       "source": "authored for this repository",
       "vendored": false,
-      "note": "native Claude Code definitions for all seventeen portable roles (eight subagent delegation targets and nine main-session surfaces incl. the Board of Advisors) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost ships only through installation options 2 and 4 (its backend is selected automatically) and is absent from options 1 and 3; standalone is a main-session surface, never a subagent"
-    },
-    "documentation_system": {
-      "path": "scripts/doc-policy.mjs + scripts/memory-doc-ingest.py + scripts/memory_client.py + adapters/claude-code/doc-hook.mjs",
+      "note": "native Claude Code definitions for all nine retained roles (five subagent delegation targets and four main-session coordination surfaces) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost, standalone, solo/orchestrator, free-mode, quality-fixer, fleet-reviewer and researcher-web are retired",
       "source": "authored for this repository",
       "vendored": false,
       "note": "shared documentation policy for OpenChamber and Claude Code: DOC_UPDATED / DOC_NOT_REQUIRED / DOC_BLOCKED outcomes, deterministic closure check (doc-policy.mjs assess|check), automatic MemoryCore ingestion of current runbook content (eligibility allowlist, secret rejection, heading chunking, hash-dedup chunk idempotency, verified retrieval, revision supersession tombstones, atomic flock ledger under data/doc-index/), dedicated shared docs-keeper scope, and Claude Code SessionStart guidance + Stop closeout hooks; details in docs/DOC-INGESTION.md"

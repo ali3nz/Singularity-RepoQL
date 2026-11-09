@@ -143,8 +143,14 @@ pub fn check(actual: Option<&str>, native_exe: bool) -> Value {
 }
 
 fn bounded_probe(path: &str) -> Option<String> {
-    let mut child = Command::new(path).arg("--version")
-        .stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let mut command = Command::new(path);
+    command.arg("--version").stdout(Stdio::piped()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let mut child = command.spawn().ok()?;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         match child.try_wait() {

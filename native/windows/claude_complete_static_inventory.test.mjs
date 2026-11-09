@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {inventory} from './claude_complete_static_inventory.mjs';
 const HOME='/home/example',WORKSPACE='/work/repo';
 const valid={home:HOME,workspace:WORKSPACE,
- verifyClaude:()=>({configured:true,variant:2,agentsExpected:15,skillsExpected:10,hookEventsExpected:13,issues:[]}),
+ verifyClaude:()=>({configured:true,variant:2,agentsExpected:9,skillsExpected:10,hookEventsExpected:13,issues:[]}),
  inspectRepoql:()=>({skillAssetsPresent:true,expected:17,present:17,issues:[]}),
  verifyMcp:()=>({installedConfigVerified:true,variant:2,registered:['kanzo','openmausbot']})};
 test('all static files and owned registrations verified never implies live acceptance',()=>{
@@ -21,7 +21,7 @@ test('missing RepoQL cache never counts as 17 loaded skills',()=>{
  assert.equal(r.staticInstallationComplete,false);assert.equal(r.officialRepoqlPlugin.presentSkills,10);
 });
 test('wrong variant and wrong ownership fail even if hooks and MCP exist',()=>{
- const r=inventory({...valid,verifyClaude:()=>({configured:true,variant:1,agentsExpected:15,skillsExpected:10,hookEventsExpected:11}),
+ const r=inventory({...valid,verifyClaude:()=>({configured:true,variant:1,agentsExpected:9,skillsExpected:10,hookEventsExpected:11}),
  verifyMcp:()=>({installedConfigVerified:true,variant:2,registered:['repoql','kanzo']})});
  assert.equal(r.staticInstallationComplete,false);
  assert.ok(r.kanzoProjectMcp.issues.includes('KANZO_REGISTRATION_INCOMPLETE'));

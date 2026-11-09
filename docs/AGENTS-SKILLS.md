@@ -11,9 +11,9 @@ Two directories are in scope:
 
 | Repo path | Lands at | Contents |
 | --- | --- | --- |
-| `openchamber/agents/` | `<config-dir>/agents/` | 17 agent definitions (9 primary, 8 subagent) |
+| `openchamber/agents/` | `<config-dir>/agents/` | 10 definitions (5 primary, 5 subagent), including the Linux-only Ghost companion |
 | `openchamber/skills/` | `<config-dir>/skills/` | 10 skills, one directory each with a `SKILL.md` |
-| `adapters/claude-code/agents/` | `~/.claude/agents/` | 15 `singularity-*` definitions — every portable role, see below |
+| `adapters/claude-code/agents/` | `~/.claude/agents/` | 9 `singularity-*` definitions (4 main-session agents, 5 subagents) |
 
 ## Agent roster
 
@@ -23,23 +23,20 @@ the operator selects; a `mode: subagent` agent is one another agent dispatches.
 
 | Agent | Mode | Role |
 | --- | --- | --- |
-| `standalone` | primary | unrestricted operator-driven agent — does the task directly, no mandatory delegation |
 | `super` | primary | full execution surface; plans, implements and delegates, and may open a `super` run whose coordinator may implement |
-| `orchestrator` | primary | planner, router and risk classifier; opens runs and verifies outcomes, never implements |
-| `solo-coordinator` | primary | coordinates a `solo` run — one worker, one reviewer; never implements |
 | `duel-coordinator` | primary | coordinates a `duo` run — two workers, one reviewer; allocates and never implements |
 | `quad-coordinator` | primary | coordinates a `quad` run — four workers, one reviewer, four is the ceiling |
 | `duo` | primary | implementation half of a two-seat pair; implements, the reviewer reviews |
-| `free-mode` | primary | standalone surface restricted to free or zero-cost routes; never silently upgrades to a paid model |
-| `ghost` | primary | optional persistent companion (installation options 2 and 4); keeps identity across sessions via the memory stack and runs a checkpointed dream cycle |
 | `general` | subagent | general-purpose research and multi-step execution with the full tool surface |
 | `explore` | subagent | fast codebase exploration; read-only |
-| `researcher-web` | subagent | evidence-driven web research |
 | `thinker` | subagent | deep reasoning for difficult decisions and diagnosis; read-only |
 | `code-reviewer` | subagent | implementation critic for significant changes; read-only, returns BLOCKING / NON-BLOCKING / APPROVE |
-| `fleet-reviewer` | subagent | read-only architecture planner and reviewer; never runs commands or modifies files |
-| `quality-fixer` | subagent | write-capable fixer scoped to its staged context directory; no network |
 | `board` | subagent | eight-seat advisory panel returning one ruling with per-seat positions and dissent |
+| `ghost` | primary | optional Linux companion runtime profile, excluded from the Windows Claude Code roster |
+
+Windows installs retain the nine roles above Ghost. The Linux companion runs
+OpenCode with `--agent ghost` and needs its shared source profile. Its memory
+profile remains managed by the separate Ghost setup flow.
 
 ### Orchestration vocabulary
 
@@ -105,12 +102,11 @@ guides, and the statusline widget fragments that `statusline-builder` reads via
 `help:///skills/...`. If it is not installed, those skills do not exist in the
 session, and no agent here may pretend otherwise.
 
-### Office and Ghost
+### Office
 
 Claude Office is a separate visualizer application (`github.com/ali3nz/claude-office`),
 installed by options 2 and 4; this repository carries the office plugin and compose
-file, not the visualizer source. Ghost ships here as an agent definition plus its
-`ghost/` runtime helpers and is enabled only by options 2 and 4.
+file, not the visualizer source. Ghost is retired from the Windows product.
 
 ## Native Windows Claude Code skills (Milestone 32)
 
@@ -126,15 +122,12 @@ RepoQL plugin skills, which are not bundled.
 
 ## Claude Code adapter
 
-`adapters/claude-code/agents/` ships the **15 selected Claude Code roles** as `singularity-*`
+`adapters/claude-code/agents/` ships the **9 selected Claude Code roles** as `singularity-*`
 definitions, mapped to their memory identities in
-`adapters/claude-code/agent-map.mjs`. Six delegation targets map a `subagent`-mode
-role; nine main-session surfaces map a `primary`-mode role, declare
+`adapters/claude-code/agent-map.mjs`. Five delegation targets map a `subagent`-mode
+role; four main-session surfaces map a `primary`-mode role, declare
 `claude --agent <name>` as their launch form, and refuse session authority when
 reached through the Agent tool.
-
-`ghost` is included, but owns its own companion profile (`ghost/setup-ghost.sh`);
-the adapter installs no second identity for it.
 
 Every mapped definition points at a real `openchamber/agents/` file and its surface
 mirrors that file's mode; `adapters/claude-code/integration.test.mjs` enforces both

@@ -33,8 +33,9 @@ with sync_playwright() as p:
    assert page.locator('.kn-column[data-stage="doing"]').count()==0
    assert page.locator('.kn-column[data-stage="review"]').count()==0
    assert page.locator('.kn-idle-activity').count()==1
-   summary=page.locator('.kn-board-summary').inner_text()
-   assert 'Work queue: 9 tasks' in summary,summary
+   assert page.locator('.kpi-all strong').inner_text()=='62'
+   assert page.locator('.kpi-doing strong').inner_text()=='0'
+   assert page.locator('.kpi-done').get_attribute('aria-label')=='Closed: 0 tasks. Show closed'
    for v in ('Work queue · 9','In progress · 0','Review · 0','Backlog · 53'):assert v in page.locator('.kn-lanes').inner_text(),v
    assert '602 older completed tasks excluded' in page.locator('.kn-status').inner_text()
    assert page.evaluate('window.writes.length')==0

@@ -1689,6 +1689,19 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/openmausbot/overview":
                 from native_openmausbot import overview
                 return overview(app.config.state_dir)
+            if path == "/api/openmausbot/ops":
+                import time as _time
+                from openmausbot_ops import build
+                try:
+                    now = int(_time.time() * 1000)
+                    start = int(params.get('from', now - 86_400_000))
+                    end = int(params.get('to', now + 7 * 86_400_000))
+                    if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
+                        from native_openmausbot import operations
+                        return operations(app.config.state_dir, start, end, now_ms=now)
+                    return build(start, end, now_ms=now)
+                except (ValueError, TypeError):
+                    return {'error': 'bad_request', 'message': 'Invalid operations window.'}
             if path == "/api/native/windows/readiness":
                 from native_readiness import report
                 return report(app.config)

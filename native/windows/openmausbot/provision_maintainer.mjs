@@ -91,7 +91,7 @@ export function maintainerRoutine({now=Date.now(),rcRoot=null}={}){
       'Report the exact status, on-disk readback and report path in chat, and say that a live bot reload is required before the repaired rules apply.',
       'If a step fails, report the failure instead of a fix.',
     ].join(' '),
-    schedule:{type:'interval',everyMinutes:360,anchorAt:new Date(now).toISOString()},
+    schedule:{type:'interval',everyMinutes:60,anchorAt:new Date(now).toISOString()},
     overlap:'skip',
   };
 }
@@ -162,7 +162,7 @@ function verifyAppliedBot(bots,before,source){
   return {configFieldsCompared:compared,otherBotsPreserved:true};
 }
 
-export function provisionMaintainer({source,rcRoot,apply=false,run=spawnSync,allowFixture=false,now=Date.now()}){
+export async function provisionMaintainer({source,rcRoot,apply=false,run=spawnSync,spawnChild,allowFixture=false,now=Date.now()}){
   if(apply&&process.platform!=='win32'&&!allowFixture)fail('WINDOWS_ONLY_MUTATION');
   const p=maintainerPlan({source,rcRoot,now,requireLivePid:process.platform==='win32'});
   const response={schema:p.schema,mode:apply?'APPLY':'READ_ONLY',
@@ -196,7 +196,7 @@ export function provisionMaintainer({source,rcRoot,apply=false,run=spawnSync,all
     // and is reported as unverified rather than assumed.
     let schedule;
     try{
-      schedule=ensureMaintainerRoutine({cli:p.vendorCli,port:p.port,routine:p.routine,run});
+      schedule=await ensureMaintainerRoutine({cli:p.vendorCli,port:p.port,routine:p.routine,...(spawnChild?{spawnChild}:{})});
     }catch(error){
       schedule={created:false,verified:false,reason:String(error?.message||error).slice(0,120)};
     }
@@ -214,13 +214,13 @@ export function provisionMaintainer({source,rcRoot,apply=false,run=spawnSync,all
 }
 
 /** Read-only: is the Maintainer's routine present, enabled and scheduled? */
-export function verifyMaintainerSchedule({rcRoot,run=spawnSync,now=Date.now()}){
+export async function verifyMaintainerSchedule({rcRoot,spawnChild,now=Date.now()}){
   const ins=instanceFor(safePath(rcRoot),{requireLivePid:process.platform==='win32'});
-  const result=readMaintainerRoutine({cli:ins.cli,port:ins.port,name:routineName,run,now});
+  const result=await readMaintainerRoutine({cli:ins.cli,port:ins.port,name:routineName,...(spawnChild?{spawnChild}:{}),now});
   return {schema:'singularity-omb-maintainer-schedule/v1',mode:'READ_ONLY',routine:routineName,...result};
 }
 
-function main(args){
+async function main(args){
   const kv={};let apply=false,verifySchedule=false;
   for(let i=0;i<args.length;i++){
     if(args[i]==='--apply'){if(apply)fail('USAGE');apply=true;continue}
@@ -230,18 +230,18 @@ function main(args){
   }
   if(verifySchedule){
     if(!kv['--rc-root'])fail('USAGE');
-    const v=verifyMaintainerSchedule({rcRoot:kv['--rc-root']});
+    const v=await verifyMaintainerSchedule({rcRoot:kv['--rc-root']});
     process.stdout.write(JSON.stringify(v)+NL);
     if(v.verified!==true)process.exitCode=1;
     return;
   }
   if(!kv['--source']||!kv['--rc-root'])fail('USAGE');
-  const r=provisionMaintainer({source:kv['--source'],rcRoot:kv['--rc-root'],apply});
+  const r=await provisionMaintainer({source:kv['--source'],rcRoot:kv['--rc-root'],apply});
   process.stdout.write(JSON.stringify(r)+NL);
   // A bot without its verified routine is not an installed Maintainer.
   if(apply&&r.scheduleVerified!==true)process.exitCode=1;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  try{main(process.argv.slice(2))}
+  try{await main(process.argv.slice(2))}
   catch(e){process.stderr.write('OMB_MAINTAINER_PROVISION_REFUSED: '+e.message+NL);process.exitCode=2}
 }

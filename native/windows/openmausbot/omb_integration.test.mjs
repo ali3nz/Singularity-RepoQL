@@ -29,7 +29,7 @@ test('modified owned file stops removal',()=>{
  }finally{rmSync(d,{recursive:true,force:true})}
 });
 test('symlink bot workspace is refused',()=>{
- const d=setup();try{rmSync(join(d,'data','bots'),{recursive:true});symlinkSync(d,join(d,'data','bots'),'dir');
+ const d=setup();try{rmSync(join(d,'data','bots'),{recursive:true});symlinkSync(d,join(d,'data','bots'),process.platform === 'win32' ? 'junction' : 'dir');
   assert.throws(()=>planRules(fixture(d)),/OPENMAUSBOT_BOTS_DIR_NOT_INSTALLED|REPARSE_PATH_REFUSED/);
  }finally{rmSync(d,{recursive:true,force:true})}
 });

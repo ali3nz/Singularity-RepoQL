@@ -327,8 +327,8 @@ test("a ledger entry under a different agent_id is re-verified, not reported pre
 });
 
 test("the shipped OpenChamber roster is fully provisionable, Ghost excepted", () => {
-  // Ghost owns its own companion profile, so it is the one role this seeder must
-  // skip. Every other shipped agent needs a profile of its own, or its memory scope
+  // Every shipped agent (nine; Ghost and the other retired roles are gone) needs a
+  // profile of its own, or its memory scope
   // silently falls back to somebody else's.
   const agentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "openchamber", "agents");
   assert.deepEqual(listAgents(agentsDir), [
@@ -337,15 +337,8 @@ test("the shipped OpenChamber roster is fully provisionable, Ghost excepted", ()
     "duel-coordinator",
     "duo",
     "explore",
-    "fleet-reviewer",
-    "free-mode",
     "general",
-    "orchestrator",
     "quad-coordinator",
-    "quality-fixer",
-    "researcher-web",
-    "solo-coordinator",
-    "standalone",
     "super",
     "thinker",
   ]);

@@ -502,7 +502,7 @@ export function applyBundle(plan, configDir, { dryRun, backupDir: backupDirOpt =
       const before = readFileSync(f.dst, "utf8");
       const merged = f.status === "merge-policy"
         ? mergeManagedBlock(before)
-        : mergeJsoncIntegration(before, bundleIntegrationKeys(f.rel));
+        : mergeJsoncIntegration(before, bundleIntegrationKeys(f.rel, dirname(f.src)));
       if (!merged.ok) { refused.push(`${f.rel} — ${merged.reason}`); continue; }
       if (merged.action === "unchanged") { log(`unchanged  ${f.rel} (integration already present; user values kept)`); continue; }
       if (dryRun) { log(`(dry run) merge    ${f.rel} (${f.status === "merge-policy" ? "managed block" : `keys ${merged.inserted.join(", ")}`})`); continue; }

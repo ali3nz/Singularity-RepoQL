@@ -15,22 +15,24 @@
         "memory": true,
         "repoql_mcp": true
       },
-      "rustOfficeFeature": false
+      "rustOfficeFeature": false,
+      "rustGhostFeature": false
     },
     "2": {
-      "name": "Claude Desktop Code Complete (+ Ghost, + Claude Office)",
+      "name": "Claude Desktop Code Complete (+ Claude Office)",
       "gui": "claude-desktop-code",
       "features": {
         "repoql_dashboard": true,
         "tencent_connector": true,
         "kanban": true,
         "agent_chat": true,
-        "ghost": true,
+        "ghost": false,
         "office": true,
         "memory": true,
         "repoql_mcp": true
       },
-      "rustOfficeFeature": true
+      "rustOfficeFeature": true,
+      "rustGhostFeature": false
     },
     "3": {
       "name": "OpenChamber Desktop + Tencent MemoryCore",
@@ -45,22 +47,24 @@
         "memory": true,
         "repoql_mcp": true
       },
-      "rustOfficeFeature": false
+      "rustOfficeFeature": false,
+      "rustGhostFeature": false
     },
     "4": {
-      "name": "OpenChamber Desktop Complete (+ Ghost, + Claude Office)",
+      "name": "OpenChamber Desktop Complete (+ Claude Office)",
       "gui": "openchamber-desktop",
       "features": {
         "repoql_dashboard": true,
         "tencent_connector": true,
         "kanban": true,
         "agent_chat": true,
-        "ghost": true,
+        "ghost": false,
         "office": true,
         "memory": true,
         "repoql_mcp": true
       },
-      "rustOfficeFeature": true
+      "rustOfficeFeature": true,
+      "rustGhostFeature": false
     }
   },
   "repoql": {

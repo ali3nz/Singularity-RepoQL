@@ -414,7 +414,7 @@ export function renderPanelInstances(config, token) {
     {
       instances: [
         {
-          id: "native-default",
+          id: "default",
           name: "Native scratch",
           gateway_endpoint: `http://127.0.0.1:${core.port}`,
           api_key: token,

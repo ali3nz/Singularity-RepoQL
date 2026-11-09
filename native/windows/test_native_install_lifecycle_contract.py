@@ -41,7 +41,12 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
         params = section(MANAGER, "param(", ")\nSet-StrictMode")
         self.assertNotIn("$Option", params)
         self.assertIn("$Option=2", MANAGER)
-        self.assertIn("$hasGhost=$true", MANAGER)
+        self.assertIn("$hasGhost=$false", MANAGER)
+        self.assertIn("if (-not $hasGhost -and ((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts))) { throw 'NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED' }", MANAGER)
+        self.assertNotIn("SINGULARITY_GHOST_CONTROL_CONFIG", DASHBOARD_HOST)
+        self.assertNotIn("SINGULARITY_NATIVE_BRIDGE_EXE", DASHBOARD_HOST)
+        self.assertIn("  if ((Get-Task $taskGhost)) { throw 'NATIVE_EXISTING_TASK_REQUIRES_OWNERSHIP_REVIEW' }", MANAGER)
+        self.assertIn("  if ((Test-GhostOwnershipArtifacts)) { throw 'NATIVE_EXISTING_RECEIPT_REQUIRES_OWNERSHIP_REVIEW' }", MANAGER)
         self.assertIn("if ($hasGhost) {", MANAGER)
         self.assertIn("if ($GuiExe) { $script:GuiExe=Assert-LocalPath", MANAGER)
         self.assertIn("claudeRequired=$false", MANAGER)
@@ -107,25 +112,35 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
         self.assertIn("NATIVE_SUPERVISOR_REMOVAL_UNVERIFIED", remove)
         self.assertIn("NATIVE_DASHBOARD_REMOVAL_UNVERIFIED", remove)
         self.assertIn("NATIVE_GHOST_REMOVAL_UNVERIFIED", remove)
-        self.assertIn("if ($Mode -eq 'Reinstall') {\n    Stop-Components $receipt\n    Remove-Components $receipt", MANAGER)
+        self.assertIn("Stop-Components $receipt\n    Remove-Components $receipt\n    if ((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts)) { throw 'NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED' }", MANAGER)
         self.assertIn("if ($Mode -eq 'Uninstall') {\n  if (-not $PSCmdlet.ShouldProcess", MANAGER)
+        uninstall = MANAGER[MANAGER.index("if ($Mode -eq 'Uninstall') {"):]
+        guard = "NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED"
+        first_guard = uninstall.index(guard)
+        self.assertLess(first_guard, uninstall.index("Stop-Components $receipt"))
+        second_guard = uninstall.index(guard, first_guard + 1)
+        self.assertLess(uninstall.index("Remove-Components $receipt"), second_guard)
+        self.assertLess(second_guard, uninstall.index("Remove-VerifiedStage $current"))
+        self.assertLess(uninstall.index("Remove-VerifiedStage $current"),
+                        uninstall.index("Remove-Item -LiteralPath $installReceiptPath"))
+        self.assertIn("legacyGhostResidue=[bool]((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts))", MANAGER)
         self.assertIn("userDataPreserved=$true;externalGuiSettingsModified=$false", MANAGER)
 
     def test_ghost_host_registers_before_dashboard_and_supplies_private_client_config(self):
         register = section(MANAGER, "function Register-Components", "function Get-SupervisorTask")
         self.assertLess(register.index("Invoke-Ghost 'Register'"), register.index("Invoke-Dashboard 'Register'"))
         invoke = section(MANAGER, "function Invoke-Dashboard", "function Invoke-Ghost")
-        self.assertIn("$childArgs.NativeBridgeExe=(Join-Path $current 'bin/singularity-desktop-bridge.exe')", invoke)
-        self.assertIn("$childArgs.GhostControlConfig=$ghostClientConfig", invoke)
+        # Ghost is removed from the Windows release: the dashboard registration must not carry Ghost paths.
+        self.assertNotIn("NativeBridgeExe", invoke)
+        self.assertNotIn("GhostControlConfig", invoke)
         self.assertIn("native-bridge-client.json", GHOST)
         self.assertIn("clientConfigSha256=$clientConfigHash", GHOST)
         self.assertIn("Set-PrivateFileAcl $clientConfigPendingPath", GHOST)
         self.assertIn("Assert-ClientConfig $config", GHOST)
         self.assertIn("clientConfigSha256", GHOST)
-        self.assertIn("SINGULARITY_NATIVE_BRIDGE_EXE", (HERE / "claude_complete_dashboard_host.py").read_text(encoding="utf-8"))
-        self.assertIn("SINGULARITY_GHOST_CONTROL_CONFIG", (HERE / "claude_complete_dashboard_host.py").read_text(encoding="utf-8"))
-        self.assertIn("$arguments='-B \"'+$entry", DASHBOARD)
-        self.assertIn("-B \"' + $script + '\" --config", GHOST_TASK_ADAPTER)
+        self.assertIn("do not inspect paths or load Ghost config", (HERE / "claude_complete_dashboard_host.py").read_text(encoding="utf-8"))
+        self.assertIn("--log \"'+(Join-Path $state 'dashboard-runtime.log')+'\" -- \"'+$entry", DASHBOARD)
+        self.assertIn("-- \"' + $script + '\" --config", GHOST_TASK_ADAPTER)
         self.assertIn("sys.dont_write_bytecode = True", DASHBOARD_HOST)
         self.assertIn("sys.dont_write_bytecode = True", GHOST_HOST)
         self.assertIn("PYTHONDONTWRITEBYTECODE", DASHBOARD_HOST)
@@ -162,7 +177,7 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
         self.assertIn("$hasGhost -and -not (Test-Path -LiteralPath $ghostManager", MANAGER)
         self.assertIn("if ($hasGhost) {\n    $null=Invoke-Ghost 'Plan' $false", MANAGER)
         self.assertIn("runnerArguments=@();", GHOST)
-        self.assertIn("$arguments='-B \"'+$HostScript+'\" --config \"'+$configPath+'\"'", GHOST)
+        self.assertIn("--log \"'+(Join-Path $privateRoot 'ghost-runtime.log')+'\" -- \"'+$HostScript+'\" --config \"'+$configPath+'\"'", GHOST)
         self.assertIn("$configPath", GHOST)
 
     def test_memory_and_supervisor_configs_are_generated_from_the_staged_install(self):
@@ -208,7 +223,7 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
         self.assertIn("NATIVE_GHOST_TASK_NOT_OWNED", MANAGER)
         self.assertIn("Invoke-Dashboard 'Remove' $true $true", MANAGER)
         self.assertIn("Test-GhostOwnershipArtifacts", MANAGER)
-        self.assertIn("$receipt.arguments -notmatch '^-B", GHOST)
+        self.assertIn("$receipt.arguments -notmatch '^(-B", GHOST)
         self.assertIn("function Test-GhostOwnershipArtifacts", MANAGER)
 
     def test_post_reboot_verifier_is_read_only_and_covers_owned_stack(self):
@@ -216,9 +231,10 @@ class NativeInstallLifecycleContracts(unittest.TestCase):
         self.assertIn("[switch]$Json", VERIFY)
         self.assertIn("Singularity-Rust-Native-Supervisor", VERIFY)
         self.assertIn("Singularity-ClaudeComplete-Dashboard", VERIFY)
-        self.assertIn("Singularity-Ghost-Scheduler", VERIFY)
+        self.assertNotIn("Singularity-Ghost-Scheduler", VERIFY)
+        self.assertNotIn("18473", VERIFY)
         self.assertIn("Singularity-ClaudeComplete-Office", VERIFY)
-        for port in ("18100", "18473", "18128"):
+        for port in ("18100", "18128"):
             self.assertIn(port, VERIFY)
         self.assertIn("http:18128", VERIFY)
         self.assertIn("memoryConfigPath", VERIFY)
@@ -379,8 +395,8 @@ class NativeWhatIfHashTests(unittest.TestCase):
                 rows.append(dict(path=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
             manifest = dict(schema=1, variant=2, release_status="SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER",
                             repoql=dict(requiredVersion="1.7.18", connectorContract="fetch-render"),
-                            features=dict(office=True, ghost=True), rustOfficeFeature=True,
-                            rustGhostFeature=True, gui="claude-desktop-code", files=rows)
+                            features=dict(office=True, ghost=False), rustOfficeFeature=True,
+                            rustGhostFeature=False, gui="claude-desktop-code", files=rows)
             (source / "NATIVE_WINDOWS_SOURCE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
             before = {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
             args = [POWERSHELL, "-NoLogo", "-NoProfile", "-NonInteractive", "-File",

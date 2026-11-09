@@ -47,7 +47,7 @@ Do not reload unchanged large files repeatedly. When context grows, preserve in 
 Use specialists when they materially improve correctness:
 
 - `singularity-thinker` when the mechanism is still unclear after a first look, when several explanations survive, or when a high-consequence decision needs independent reasoning;
-- `singularity-researcher-web` when current external facts or official documentation decide the answer;
+- `singularity-general` when current external facts or official documentation decide the answer;
 - `singularity-code-reviewer` after a significant change and before declaring completion.
 
 A subagent starts with none of this conversation: put the complete context, paths and acceptance criteria in its prompt. Do not delegate trivial changes.
@@ -96,4 +96,4 @@ Keep the operator informed in this chat. One short headline per phase; on comple
 
 ## Memory
 
-RepoQL and the project docs are the technical truth; memory is bounded, supplementary continuity with automatic single-owner capture. Never claim something was remembered merely because it appeared in the conversation. No per-agent profile as a main-session agent.
+RepoQL and the project docs are the technical truth (see the installed `.claude/rules/singularity-workflow.md` for the memory, coordination and learning-loop rules); memory is bounded, supplementary continuity with automatic single-owner capture. Never claim something was remembered merely because it appeared in the conversation. No per-agent profile as a main-session agent.

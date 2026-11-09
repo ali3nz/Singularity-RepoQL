@@ -5,6 +5,13 @@ from unittest.mock import patch, MagicMock
 import unified_bridge as bridge
 
 class GatewayLocalityTests(unittest.TestCase):
+    def setUp(self):
+        self.connection = MagicMock()
+        self.connection.__enter__.return_value.getsockname.return_value = ('127.0.0.1', 54321)
+        self.socket_patch = patch.object(bridge.socket, 'create_connection', return_value=self.connection)
+        self.socket_patch.start()
+        self.addCleanup(self.socket_patch.stop)
+
     def test_tunnel_ssh_listener_is_not_accepted(self):
         process = MagicMock(returncode=0, stdout='38028\nssh.exe\nC:\\Windows\\System32\\OpenSSH\\ssh.exe\n')
         with patch.dict(os.environ, {'SINGULARITY_WINDOWS_NATIVE':'1'}, clear=False), \
@@ -38,6 +45,17 @@ class GatewayLocalityTests(unittest.TestCase):
              patch.object(bridge.subprocess,'CREATE_NO_WINDOW',0x08000000,create=True):
             self.assertTrue(bridge._native_gateway_owner())
         self.assertEqual(runner.call_args.kwargs['creationflags'],0x08000000)
+        command = runner.call_args.args[0][-1]
+        self.assertIn('-RemotePort 54321 -State Established', command)
+        self.connection.__exit__.assert_called_once()
+
+    def test_unreachable_gateway_is_rejected_without_reading_credentials(self):
+        with patch.dict(os.environ, {'SINGULARITY_WINDOWS_NATIVE': '1'}), \
+             patch.object(bridge.sys, 'platform', 'win32'), \
+             patch.object(bridge.socket, 'create_connection', side_effect=OSError), \
+             patch.object(bridge.subprocess, 'run') as runner:
+            self.assertFalse(bridge._native_gateway_owner())
+            runner.assert_not_called()
 
     def test_failure_clears_previously_cached_graph(self):
         bridge._graph_cache_clear()

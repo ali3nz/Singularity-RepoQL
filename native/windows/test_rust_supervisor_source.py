@@ -17,10 +17,13 @@ class RustSupervisorSourceTests(unittest.TestCase):
             self.assertIn(token,LIB)
         self.assertNotIn('taskkill',LIB.lower())
         self.assertNotIn('std::process::Command::new("cmd")',LIB)
-    def test_denies_lean_option_extensions_and_bad_repoql(self):
-        for token in ('1.7.18','Office/Ghost forbidden in lean options','invalid component id',
+    def test_denies_lean_office_extensions_and_bad_repoql(self):
+        for token in ('1.7.18','Office forbidden in lean options','invalid component id',
                       'duplicate component id', 'credentials must come from an ACL-protected file'):
             self.assertIn(token,LIB)
+    def test_ghost_components_are_rejected_for_every_windows_option(self):
+        self.assertIn('Ghost components are forbidden in Windows supervisor stacks',LIB)
+        self.assertIn('ghost_components_are_rejected_in_every_windows_option',LIB)
     def test_no_wsl_and_no_unattended_tasks(self):
         self.assertIn('ShouldProcess',TASK)
         self.assertIn('if ($Apply -and $PSCmdlet.ShouldProcess',TASK)

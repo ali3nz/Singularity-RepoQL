@@ -4,6 +4,7 @@ Uses a deterministic fake RepoQL status and Rust probe; no Win32 claims.
 """
 import os
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -76,7 +77,7 @@ class CollectorLifecycle(unittest.TestCase):
         with self.assertRaises(StopIteration):
             run_collector(self.config,lambda **kw:reply(123),sampler=lambda _:probe(),
                           clock=lambda:next(ticks), sleep=sleep)
-        with sqlite3.connect(db_path(self.config)) as db:
+        with closing(sqlite3.connect(db_path(self.config))) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM win_cpu_samples').fetchone()[0],2)
         self.assertEqual(sleeps,[30,30])
     def test_four_variants_never_share_history(self):

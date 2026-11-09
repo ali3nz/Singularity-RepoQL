@@ -16,7 +16,7 @@ The previously observed `Singularity-Unified-Tunnel` scheduled task used `ssh.ex
 
 ## Bounded source build and task installation
 
-All commands are PowerShell run under the intended Windows account. The build and gateway tasks are independent of the product's existing desktop bridge and Ghost scheduler. Keep the ordinary dashboard process running until the candidate is verified.
+All commands are PowerShell run under the intended Windows account. The build and gateway tasks are independent of the product's existing desktop bridge. Keep the ordinary dashboard process running until the candidate is verified.
 
 From the staged source root:
 
@@ -34,7 +34,7 @@ The next script takes explicit **local paths**, **not secret contents**. Use you
 .\native\windows\manage_unified_gateway.ps1 -Mode Plan -StateDir $env:LOCALAPPDATA\Singularity\Dashboard -RepoqlTokenFile $env:LOCALAPPDATA\Singularity\Dashboard\token
 ```
 
-The paths above match the native Option 2 dashboard state. The gateway manager derives them by default and refuses a divergent state directory. Run without path overrides unless the installed dashboard is independently verified to use a different accepted configuration. If the current Windows RepoQL index contains a reviewed documentation import, add the **exact** `-HubDocUriPrefix` matching that import. Omit it to disable hub document cross-links; Dockerhost is never the implicit default. If Tencent is configured, supply `-TencentBase` as the verified exact `http://127.0.0.1:18431/` origin, with independently verified `-TencentServiceId`, `-TencentUserKeyFile`, and `-WikiIds` selected by the authorized Windows identity. Test the local Tencent gateway route before expecting graph nodes. Only proceed if ownership, ACL, binary, and both local API contracts pass.
+The paths above match the native Option 2 dashboard state. The gateway manager derives them by default and refuses a divergent state directory. Run without path overrides unless the installed dashboard is independently verified to use a different accepted configuration. If the current Windows RepoQL index contains a reviewed documentation import, add the **exact** `-HubDocUriPrefix` matching that import. Omit it to disable hub document cross-links; Dockerhost is never the implicit default. If Tencent is configured, supply `-TencentBase` as the verified exact `http://127.0.0.1:18431/` origin, with independently verified `-TencentServiceId`, `-TencentUserKeyFile`, and `-WikiIds` selected by the authorized Windows identity. Test the local Tencent gateway route before expecting graph nodes. **Wiki discovery:** when `-WikiIds` is omitted the gateway discovers this identity's own wikis, team first: `meta/team/list`, then `knowledge/wiki/list {team_id}`, then `knowledge/wiki/graph` for each wiki (capped at 10, read-only actions only). Discovery failures are reported in the Tencent source's `error` list, and an identity with no wikis reports `no_wikis_for_identity`; neither is hidden or replaced with fleet data. Only proceed if ownership, ACL, binary, and both local API contracts pass.
 
 ```powershell
 .\native\windows\manage_unified_gateway.ps1 -Mode Register -Apply -StateDir $env:LOCALAPPDATA\Singularity\Dashboard -RepoqlTokenFile $env:LOCALAPPDATA\Singularity\Dashboard\token
@@ -59,7 +59,7 @@ Registration does not start anything. The old project-owned tunnel must be indep
 ## Boundaries
 
 - No install script may reset Windows, kill arbitrary processes, change an unrelated SSH task or copy Dockerhost memory data, credentials or indexes. The reversible gateway task is per-user.
-- Windows native GUI, RepoQL 1.7.18 connector ABI, Tencent credentials, Claude parent/delegated memory, Ghost and Office all have **separate acceptance gates**. See `docs/WINDOWS-AGENT-MEMORY-POLICY.md` and the existing acceptance matrix.
+- Windows native GUI, RepoQL 1.7.18 connector ABI, Tencent credentials, Claude parent/delegated memory and Office all have **separate acceptance gates**. See `docs/WINDOWS-AGENT-MEMORY-POLICY.md` and the existing acceptance matrix.
 - This release is **SOURCE ONLY**, with no signed installer or verified Windows binary. Publishing reviewed code is not evidence of a functioning Windows installation.
 
 ### Kanzo status audit

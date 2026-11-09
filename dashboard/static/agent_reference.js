@@ -4,16 +4,13 @@
 const ROLES = {
   super: ['Director', 'Primary engineering director. Plans scoped tasks, verifies evidence and requests authorised orchestration.'],
   general: ['General', 'General-purpose helper for ordinary implementation. Escalates high-risk or complex work to the proper coordinator.'],
-  ghost: ['Companion', 'Continuity and persistent assistance, with its own memory identity.'],
   duo: ['Coordinator', 'Works with a senior partner on a two-worker approach, keeping the existing review discipline.'],
   'code-reviewer': ['Review', 'Reviews actual changes against requirements and evidence. Suggestions never turn a valid result into a blocker.'],
-  'quality-fixer': ['Quality', 'Applies narrowly scoped fixes inside the quality pipeline. Edits only its staged context directory.'],
   explore: ['Research', 'Finds relevant files, symbols, references and exact source spans for a task.'],
-  'researcher-web': ['Research', 'Finds and verifies external information with citations and bounded scope.'],
   thinker: ['Reasoning', 'Works through difficult decisions and names a discriminating test when evidence is incomplete.'],
   board: ['Advisory', 'Chairs the personal Board of Advisors for financial, legal, tax and other advisory decisions.'],
 };
-const ORDER = ['super', 'general', 'duo', 'ghost', 'board', 'explore', 'researcher-web', 'thinker', 'code-reviewer', 'quality-fixer'];
+const ORDER = ['super', 'general', 'duo', 'board', 'explore', 'thinker', 'code-reviewer'];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const card = (a) => {

@@ -213,7 +213,7 @@ export function sanitizeEvidence(evidence = {}) {
 export function collectWorkspaceEvidence(root, files = [], { execImpl = null } = {}) {
   const run = (args) => {
     if (execImpl) return execImpl("git", args, root);
-    try { return { status: 0, stdout: execFileSync("git", args, { cwd: root, encoding: "utf8", timeout: 15_000, maxBuffer: 8 * 1024 * 1024 }) }; }
+    try { return { status: 0, stdout: execFileSync("git", args, { windowsHide: true, cwd: root, encoding: "utf8", timeout: 15_000, maxBuffer: 8 * 1024 * 1024 }) }; }
     catch (e) { return { status: e?.status ?? 1, stdout: String(e?.stdout || "") }; }
   };
   const inside = run(["rev-parse", "--is-inside-work-tree"]);
@@ -446,7 +446,7 @@ export function dedupLesson(lesson, { root, env = process.env, runRql = null } =
   const findings = { surfaces: ["repoql-explore", "workspace-capsules"], rql: "not-run", checked: false, hits: [], duplicateOf: null, reason: null, capsulesConsidered: 0 };
   const probe = runRql || ((query) => {
     try {
-      const out = execFileSync("rql", ["explore", clip(query, 120), "--uri-glob", "**", "--token-budget", "600"], { cwd: resolve(root), encoding: "utf8", timeout: 60_000, maxBuffer: 4 * 1024 * 1024 });
+      const out = execFileSync("rql", ["explore", clip(query, 120), "--uri-glob", "**", "--token-budget", "600"], { windowsHide: true, cwd: resolve(root), encoding: "utf8", timeout: 60_000, maxBuffer: 4 * 1024 * 1024 });
       return { status: 0, stdout: out };
     } catch (e) {
       return { status: e?.status ?? 1, stdout: String(e?.stdout || ""), stderr: String(e?.stderr || e?.message || "") };

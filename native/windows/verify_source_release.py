@@ -28,7 +28,9 @@ def verify():
         if not all(f.get(k) is True for k in all_features - {"ghost", "office"}):
             errors.append(f"option {n}: missing core feature")
         want_office = n in (2, 4)
-        if f.get("office") is not want_office or f.get("ghost") is not want_office or row.get("rustOfficeFeature") is not want_office:
+        if (f.get("office") is not want_office or f.get("ghost") is not False
+                or row.get("rustOfficeFeature") is not want_office
+                or row.get("rustGhostFeature") is not False):
             errors.append(f"option {n}: optional payload mismatch")
         expected_gui = "claude-desktop-code" if n < 3 else "openchamber-desktop"
         if row.get("gui") != expected_gui:
@@ -90,7 +92,9 @@ def verify():
         errors.append("bundled RepoQL executable requires separate licence/provenance review")
     cargo = (ROOT / "native/desktop-bridge/Cargo.toml").read_text(encoding="utf-8")
     bridge = (ROOT / "native/desktop-bridge/src/main.rs").read_text(encoding="utf-8")
-    if 'default = []' not in cargo or 'office = []' not in cargo or '#[cfg(feature = "office")]' not in bridge:
+    if ('default = []' not in cargo or 'office = []' not in cargo
+            or 'ghost = []' in cargo or '#[cfg(feature = "ghost")]' in bridge
+            or 'Some("ghost-control")' in bridge or '#[cfg(feature = "office")]' not in bridge):
         errors.append("Rust Office exclusion is not enforced by feature gating")
     dashboard = (ROOT / "dashboard/server.py").read_text(encoding="utf-8")
     if 'variant_route_allowed(path, profile)' not in dashboard or '"/api/features"' not in dashboard:

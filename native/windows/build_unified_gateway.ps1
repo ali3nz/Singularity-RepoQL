@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
-Build the reviewed Dockerhost unified Rust graph gateway for native Windows.
+Build the reviewed unified Rust graph gateway for native Windows.
 Read-only preflight by default; -Apply compiles with the lockfile and stages
 ONLY the project-owned binary. No service or scheduled task is changed.
 #>

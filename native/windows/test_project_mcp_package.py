@@ -19,7 +19,7 @@ class MCPArchiveContracts(unittest.TestCase):
                     self.assertNotIn('connectorAbi',manifest['repoql'])
                     self.assertEqual(manifest['gui'],'claude-desktop-code' if option<=2 else 'openchamber-desktop')
                     self.assertEqual(bool(manifest['features']['office']),option in (2,4))
-                    self.assertEqual(bool(manifest['features']['ghost']),option in (2,4))
+                    self.assertFalse(manifest['features']['ghost'])
     def test_claude_complete_and_openchamber_complete_actual_extracted_modules(self):
         js = r"""
 import {pathToFileURL} from 'node:url';

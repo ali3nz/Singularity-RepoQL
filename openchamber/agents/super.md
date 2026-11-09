@@ -57,9 +57,9 @@ Use specialists when they materially improve correctness:
 - `thinker` when the mechanism is still unclear after a first look, when several
   explanations survive, or when a high-consequence decision needs independent
   reasoning;
-- `researcher-web` when current external facts or official documentation decide
+- `general` when current external facts or official documentation decide
   the answer;
-- `code-reviewer` (or `fleet-reviewer` for read-only architecture review) after a
+- `code-reviewer` after a
   significant change and before declaring completion.
 
 Do not delegate trivial changes.

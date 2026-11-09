@@ -32,29 +32,31 @@ class FakeHandler:
 
 class VariantHttp(unittest.TestCase):
     def test_disallowed_ghost_and_office_api_routes_are_rejected_pre_proxy(self):
-        for n in (1,3):
+        for n in (1,2,3,4):
             with self.subTest(option=n), patch.dict(os.environ, {'SINGULARITY_INSTALL_VARIANT':str(n), 'SINGULARITY_WINDOWS_NATIVE':'1'}):
-                for url in ('/api/ghost/status', '/api/ghost/control', '/api/embed/office/handshake', '/embed/office/index.html', '/api/harness/office'):
+                urls=['/api/ghost/status', '/api/ghost/control']
+                if n in (1,3):
+                    urls.extend(['/api/embed/office/handshake', '/embed/office/index.html', '/api/harness/office'])
+                for url in urls:
                     fake=FakeHandler(url)
                     Handler.route(fake,'GET')
                     self.assertEqual(fake.code,404,url)
                     self.assertEqual(fake.payload,{'error':'feature_not_in_install_variant'})
 
-    def test_no_ghost_asset_is_served_for_lean_variants(self):
-        for n in (1,3):
+    def test_no_ghost_asset_is_served_for_windows_variants(self):
+        for n in (1,2,3,4):
             with patch.dict(os.environ, {'SINGULARITY_INSTALL_VARIANT':str(n),'SINGULARITY_WINDOWS_NATIVE':'1'}):
                 fake=FakeHandler('/ghost/dashboard.js')
                 Handler.serve_static(fake, '/ghost/dashboard.js')
                 self.assertEqual(fake.code,404)
                 self.assertEqual(fake.wfile.getvalue(),b'')
 
-    def test_ghost_calendar_module_served_as_javascript_in_complete_variant(self):
+    def test_ghost_calendar_module_is_not_served_in_complete_windows_variant(self):
         with patch.dict(os.environ, {'SINGULARITY_INSTALL_VARIANT':'2','SINGULARITY_WINDOWS_NATIVE':'1'}):
             fake=FakeHandler('/ghost/schedule_model.mjs')
             Handler.serve_static(fake, '/ghost/schedule_model.mjs')
-            self.assertEqual(fake.code,200)
-            self.assertEqual(fake.sent_headers.get('Content-Type'),'application/javascript; charset=utf-8')
-            self.assertIn(b'export function weekDays',fake.wfile.getvalue())
+            self.assertEqual(fake.code,404)
+            self.assertEqual(fake.wfile.getvalue(),b'')
 
     def test_home_page_exposes_only_public_variant_flags(self):
         for n in (1,2,3,4):

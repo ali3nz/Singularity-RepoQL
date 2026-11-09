@@ -164,7 +164,7 @@ separate authenticated Agent Chat relay for agent messages. Verify tool
 registration and read-after-write for each; never fabricate a card, message,
 connector result or memory. The dashboard must attribute usage only to the
 installed GUI and report authoritative quota as unknown when unavailable.
-Ghost and Office are **required** only for variants 2/4; their process and
+Ghost is retired. Office is **required** only for variants 2/4; its process and
 integration health must be independently verified. A zero-Claude-worker state
 never authorizes a paid provider or a synthetic background worker.
 

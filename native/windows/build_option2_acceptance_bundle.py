@@ -111,7 +111,7 @@ def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: P
         manifest.get('repoql', {}).get('connectorContract') != 'fetch-render' or
         'connectorAbi' in manifest.get('repoql', {}) or
         manifest.get('features', {}).get('office') is not True or
-        manifest.get('features', {}).get('ghost') is not True):
+        manifest.get('features', {}).get('ghost') is not False):
         raise ValueError('SOURCE_OPTION2_PIN_OR_FEATURE_MISMATCH')
     # Bootstrap helpers are byte-identical copies from the already verified
     # nested source. The candidate is therefore usable after extracting only

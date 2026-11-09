@@ -130,7 +130,7 @@ function Test-BridgeBuildInfo([string]$PathValue,[bool]$Complete) {
         @($names | Where-Object { $_ -notin @('schema','packageVersion','featureOffice','featureGhost') }).Count -gt 0 -or
         $info.schema -cne 'singularity-native-build-info/v1' -or $info.packageVersion -notmatch '^\d+\.\d+\.\d+$' -or
         $info.featureOffice -isnot [bool] -or $info.featureGhost -isnot [bool]) { throw 'BRIDGE_BUILD_INFO_INVALID' }
-    if ([bool]$info.featureOffice -ne $Complete -or [bool]$info.featureGhost -ne $Complete) { throw 'BRIDGE_BUILD_FEATURE_MISMATCH' }
+    if ([bool]$info.featureOffice -ne $Complete -or [bool]$info.featureGhost) { throw 'BRIDGE_BUILD_FEATURE_MISMATCH' }
     return [pscustomobject]@{packageVersion=[string]$info.packageVersion;featureOffice=[bool]$info.featureOffice;featureGhost=[bool]$info.featureGhost}
   } catch {
     if ($started -and -not $process.HasExited) { try { $process.Kill(); $process.WaitForExit() } catch { } }
@@ -149,14 +149,18 @@ function Assert-Manifest([string]$Root, [int]$Selected) {
   if ($m.schema -ne 1 -or $m.variant -ne $Selected -or $m.release_status -ne 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER') { throw 'SOURCE_PROFILE_INVALID' }
   if ($m.repoql.requiredVersion -ne '1.7.18' -or $m.repoql.connectorContract -cne 'fetch-render') { throw 'REPOQL_VERSION_OR_CONTRACT_DRIFT' }
   $complete = $Selected -in @(2,4)
-  if ([bool]$m.features.office -ne $complete -or [bool]$m.features.ghost -ne $complete) { throw 'SOURCE_FEATURE_MISMATCH' }
-  if ([bool]$m.rustOfficeFeature -ne $complete -or [bool]$m.rustGhostFeature -ne $complete) { throw 'SOURCE_RUST_FEATURE_MISMATCH' }
+  if ($m.features.ghost -isnot [bool] -or [bool]$m.features.office -ne $complete -or [bool]$m.features.ghost) { throw 'SOURCE_FEATURE_MISMATCH' }
+  if ($m.rustGhostFeature -isnot [bool] -or [bool]$m.rustOfficeFeature -ne $complete -or [bool]$m.rustGhostFeature) { throw 'SOURCE_RUST_FEATURE_MISMATCH' }
   if ($m.gui -ne $(if ($Selected -le 2) { 'claude-desktop-code' } else { 'openchamber-desktop' })) { throw 'GUI_VARIANT_MISMATCH' }
   $seen = @{}
   $seenWindows = @{}
   $reserved = '^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9]|LPT[1-9])($|\.)'
   foreach ($row in $m.files) {
     $name = [string]$row.path
+    if ($name -match '^(ghost/|dashboard/static/ghost/|openchamber/plugins/product-ghost/|native/windows/(ghost_|manage_ghost_|test_ghost_))' -or
+        $name -in @('native/desktop-bridge/src/ghost.rs','dashboard/native_ghost.py','native/windows/test_native_ghost_client_config.py')) {
+      throw 'SOURCE_GHOST_COMPONENT_LEAK'
+    }
     if (-not $name -or $name.Contains('\') -or $name.Contains(':') -or $name.StartsWith('/') -or $name.Split('/') -contains '..' -or $name.Split('/') -contains '.' -or $name.Split('/') -contains '' -or $seen.ContainsKey($name)) { throw 'SOURCE_PATH_INVALID' }
     if ($name.Length -gt 240 -or $seenWindows.ContainsKey($name.ToUpperInvariant())) { throw 'WINDOWS_SOURCE_NAME_COLLISION' }
     $seenWindows[$name.ToUpperInvariant()] = $true
@@ -255,6 +259,20 @@ if ($Rollback) {
       throw 'ROLLBACK_SUPERVISOR_HASH_MISMATCH'
     }
   } elseif (Test-Path -LiteralPath $previousSupervisor) { throw 'ROLLBACK_UNRECORDED_SUPERVISOR_REFUSED' }
+  if ($receipt.PSObject.Properties['additionalBinaries']) {
+    $extraNames=@{}
+    if (@($receipt.additionalBinaries).Count -gt 2) { throw 'ROLLBACK_ADDITIONAL_BINARY_INVALID' }
+    foreach ($extra in @($receipt.additionalBinaries)) {
+      $relative=[string]$extra.path
+      if ($relative -cnotin @('bin/singularity-windows-supervisorw.exe','bin/unified-repoql-control.exe') -or
+          [string]$extra.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $extraNames.ContainsKey($relative)) { throw 'ROLLBACK_ADDITIONAL_BINARY_INVALID' }
+      $extraNames[$relative]=$true
+      $extraPath=Join-Path $previous $relative
+      Assert-LocalExistingFile $extraPath 'Previous additional product binary'
+      Assert-PortableExecutable $extraPath
+      if ((Get-FileSha256 $extraPath) -cne [string]$extra.sha256) { throw 'ROLLBACK_ADDITIONAL_BINARY_HASH_MISMATCH' }
+    }
+  }
 
   if ($PSCmdlet.ShouldProcess($current, 'Preserve active staged files, then restore previous snapshot')) {
     $heldCurrent = $false
@@ -309,6 +327,17 @@ if ($PrepareSource) {
 
 Assert-LocalExistingFile $BridgeExe 'Rust bridge'
 if ($SupervisorExe) { Assert-LocalExistingFile $SupervisorExe 'Rust supervisor'; Assert-PortableExecutable $SupervisorExe }
+$additionalInputs=@()
+if ($SupervisorExe) {
+  foreach ($name in @('singularity-windows-supervisorw.exe','unified-repoql-control.exe')) {
+    $extraPath=Join-Path (Split-Path -Parent $SupervisorExe) $name
+    if (Test-Path -LiteralPath $extraPath -PathType Leaf) {
+      Assert-LocalExistingFile $extraPath 'Additional product binary'
+      Assert-PortableExecutable $extraPath
+      $additionalInputs += [pscustomobject]@{path=('bin/'+$name);source=$extraPath}
+    }
+  }
+}
 Assert-LocalExistingFile $RepoqlExe 'RepoQL'
 if ($GuiExe) { Assert-LocalExistingFile $GuiExe 'GUI executable' }
 Assert-PortableExecutable $BridgeExe
@@ -374,6 +403,13 @@ try {
   New-Item -ItemType Directory -Path (Join-Path $staging 'bin') | Out-Null
   Copy-Item -LiteralPath $BridgeExe -Destination (Join-Path $staging 'bin/singularity-desktop-bridge.exe')
   if ($SupervisorExe) { Copy-Item -LiteralPath $SupervisorExe -Destination (Join-Path $staging 'bin/singularity-windows-supervisor.exe') }
+  $additionalBinaries=@()
+  foreach ($extra in $additionalInputs) {
+    $extraDestination=Join-Path $staging $extra.path
+    Copy-Item -LiteralPath $extra.source -Destination $extraDestination
+    if ((Get-FileSha256 $extraDestination) -cne (Get-FileSha256 $extra.source)) { throw 'STAGED_COPY_HASH_MISMATCH' }
+    $additionalBinaries += [ordered]@{path=$extra.path;sha256=(Get-FileSha256 $extraDestination)}
+  }
   $sourceDestination = Join-Path $staging 'source'
   New-Item -ItemType Directory -Path $sourceDestination | Out-Null
   foreach ($row in $manifest.files) {
@@ -390,6 +426,7 @@ try {
     sourceManifestSha256=(Get-FileSha256 (Join-Path $staging 'source/NATIVE_WINDOWS_SOURCE_MANIFEST.json'));
     bridgeSha256=(Get-FileSha256 (Join-Path $staging 'bin/singularity-desktop-bridge.exe'));
     supervisorSha256=$(if ($SupervisorExe) { (Get-FileSha256 (Join-Path $staging 'bin/singularity-windows-supervisor.exe')) } else { $null });
+    additionalBinaries=$additionalBinaries;
     guiExecutableProvided=[bool]$GuiExe; guiConfigured=$false; servicesInstalled=$false; acceptedOnWindows=$false }
   $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $staging 'STAGING_RECEIPT.json') -Encoding UTF8
   if (Test-Path -LiteralPath $current) {

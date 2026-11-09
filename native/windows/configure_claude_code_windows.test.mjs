@@ -42,7 +42,7 @@ function fixture(variant=2) {
   const checks=files.map(name=>({path:name,sha256:createHash('sha256').update(readFileSync(join(source,...name.split('/')))).digest('hex')}));
   writeFileSync(join(source,'NATIVE_WINDOWS_SOURCE_MANIFEST.json'),JSON.stringify({
     variant,gui:'claude-desktop-code',repoql:{requiredVersion:'1.7.18'},
-    features:{ghost:variant===2,office:variant===2},files:checks}));
+    features:{ghost:false,office:variant===2},files:checks}));
   writeFileSync(nodeExe,'fake-executable-fixture');writeFileSync(memoryConfig,'private-do-not-log');writeFileSync(officeConfig,JSON.stringify({endpoint:'http://127.0.0.1:8000',ingestKey:'do-not-log-office-key'}));
   const config={source,home,nodeExe,memoryConfig,officeConfig,variant};
   return {base,source,home,config,claude:join(home,'.claude'),cleanup(){rmSync(base,{recursive:true,force:true})}};
@@ -50,13 +50,13 @@ function fixture(variant=2) {
 function writeSettings(f,value){mkdirSync(f.claude,{recursive:true});writeFileSync(join(f.claude,'settings.json'),JSON.stringify(value,null,2)+'\n');}
 function getSettings(f){return JSON.parse(readFileSync(join(f.claude,'settings.json'),'utf8'));}
 
-test('complete Claude option writes four native hooks and 15 agents; reconfiguration requires explicit rollback',()=>{
+test('complete Claude option writes four native hooks and 9 agents; reconfiguration requires explicit rollback',()=>{
   const f=fixture();try {
     const p=prepareConfiguration(f.config);
-    assert.equal(p.agentWrites.filter(x=>x.create).length,15);
+    assert.equal(p.agentWrites.filter(x=>x.create).length,9);
     const a=applyConfiguration(f.config);
     assert.equal(a.state,'CONFIGURED_UNVERIFIED');
-    assert.equal(a.agentDefinitions,15);assert.equal(a.newlyCreatedAgents,15);
+    assert.equal(a.agentDefinitions,9);assert.equal(a.newlyCreatedAgents,9);
     assert.equal(a.skillsInstalled,10);
     for(const name of CLAUDE_SKILLS)assert.equal(existsSync(join(f.claude,'skills',name,'SKILL.md')),true);
     assert.equal(a.workflowRuleInstalled,true);

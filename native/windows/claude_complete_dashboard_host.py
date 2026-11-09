@@ -7,13 +7,11 @@ connector contract before issuing a capability or binding the loopback server.
 """
 from __future__ import annotations
 import argparse
-import base64
 import json
 import os
 from pathlib import Path
 import stat
 import sys
-from urllib.parse import urlsplit
 
 sys.dont_write_bytecode = True
 os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
@@ -30,61 +28,48 @@ def _assert_no_reparse(path: Path) -> None:
             raise ValueError('DASHBOARD_REPARSE_PATH_REFUSED')
 
 
-def _native_ghost_environment(source_root: Path, state_dir: Path,
-                              bridge_exe: Path | None, ghost_control_config: Path | None,
-                              *, windows: bool) -> dict[str, str]:
-    if not windows or bridge_exe is None or ghost_control_config is None:
-        raise ValueError('DASHBOARD_NATIVE_GHOST_CONFIG_REQUIRED')
-    if not bridge_exe.is_absolute() or bridge_exe.name.lower() != 'singularity-desktop-bridge.exe':
-        raise ValueError('DASHBOARD_NATIVE_BRIDGE_INVALID')
-    expected_bridge = source_root.parent / 'bin' / 'singularity-desktop-bridge.exe'
-    if os.path.normcase(os.path.abspath(bridge_exe)) != os.path.normcase(os.path.abspath(expected_bridge)):
-        raise ValueError('DASHBOARD_NATIVE_BRIDGE_NOT_FROM_STAGE')
-    if not ghost_control_config.is_absolute() or ghost_control_config.name.lower() != 'native-bridge-client.json':
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID')
-    expected_config = state_dir.parent / 'GhostScheduler' / 'native-bridge-client.json'
-    if os.path.normcase(os.path.abspath(ghost_control_config)) != os.path.normcase(os.path.abspath(expected_config)):
-        raise ValueError('DASHBOARD_GHOST_CONFIG_OUTSIDE_PRIVATE_ROOT')
-    _assert_no_reparse(bridge_exe)
-    _assert_no_reparse(ghost_control_config)
-    if not bridge_exe.is_file() or not ghost_control_config.is_file() or ghost_control_config.stat().st_size > 4096:
-        raise ValueError('DASHBOARD_NATIVE_GHOST_DEPENDENCY_MISSING')
+def _native_office_environment(source_root: Path, state_dir: Path) -> dict[str, str]:
+    # Current installs keep Office beside Dashboard. Older installs placed it
+    # below WindowsNative, so retain that layout only when no current receipt exists.
+    dashboard_root = state_dir.parent if state_dir.name == 'Option4' else state_dir
+    office_root = dashboard_root.parent / 'Office'
+    receipt_path = office_root / 'office-install.json'
     try:
-        def unique_object(pairs):
-            result = {}
-            for key, value in pairs:
-                if key in result:
-                    raise ValueError('DASHBOARD_GHOST_CONFIG_DUPLICATE_FIELD')
-                result[key] = value
-            return result
-        config = json.loads(ghost_control_config.read_text(encoding='utf-8'), object_pairs_hook=unique_object)
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID') from None
-    if not isinstance(config, dict) or set(config) != {'endpoint', 'controlKey'}:
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID')
-    endpoint = config.get('endpoint')
-    key = config.get('controlKey')
-    if not isinstance(endpoint, str) or not isinstance(key, str) or not key or len(key) > 1024 or any(ord(c) < 32 for c in key):
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID')
-    try:
-        parsed = urlsplit(endpoint)
-        port = parsed.port
-    except ValueError:
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID') from None
-    if (parsed.scheme != 'http' or parsed.hostname != '127.0.0.1' or parsed.username is not None or
-            parsed.password is not None or parsed.path not in ('', '/') or parsed.query or parsed.fragment or
-            port is None or not 1024 <= port <= 65535):
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID')
-    try:
-        decoded = base64.b64decode(key, validate=True)
-    except ValueError:
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID') from None
-    if len(decoded) != 48 or base64.b64encode(decoded).decode('ascii') != key:
-        raise ValueError('DASHBOARD_GHOST_CONFIG_INVALID')
-    return {
-        'SINGULARITY_NATIVE_BRIDGE_EXE': str(bridge_exe),
-        'SINGULARITY_GHOST_CONTROL_CONFIG': str(ghost_control_config),
+        _assert_no_reparse(receipt_path)
+        if not receipt_path.is_file():
+            office_root = source_root.parent.parent / 'office'
+            receipt_path = office_root / 'office-install.json'
+        config_path = office_root / 'service' / 'service.json'
+        _assert_no_reparse(receipt_path)
+        _assert_no_reparse(config_path)
+        receipt = json.loads(receipt_path.read_text(encoding='utf-8-sig'))
+        config = json.loads(config_path.read_text(encoding='utf-8-sig'))
+        port = config['port']
+        if (receipt['schema'] != 'singularity-windows-office/v1'
+                or Path(receipt['installRoot']) != office_root
+                or type(port) is not int or not 1024 <= port <= 65535
+                or type(receipt['port']) is not int or receipt['port'] != port):
+            return {}
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+        return {}
+    env = {
+        'CLAUDE_OFFICE_HEALTH_HOST': '127.0.0.1',
+        'CLAUDE_OFFICE_HEALTH_PORT': str(port),
+        'SINGULARITY_OFFICE_HOST': '127.0.0.1',
+        'SINGULARITY_OFFICE_PORT': str(port),
     }
+    if not any(os.environ.get(name, '').strip() for name in (
+            'SINGULARITY_OFFICE_NATIVE_AUTH_MODE', 'SINGULARITY_OFFICE_PANEL_KEY_FILE',
+            'SINGULARITY_OFFICE_EMBED_URL', 'CLAUDE_OFFICE_EMBED_URL')):
+        keys_path = office_root / 'state' / 'keys.json'
+        try:
+            _assert_no_reparse(keys_path)
+            if keys_path.is_file():
+                env.update(SINGULARITY_OFFICE_NATIVE_AUTH_MODE='service_keys',
+                           SINGULARITY_OFFICE_PANEL_KEY_FILE=str(keys_path))
+        except (OSError, ValueError):
+            pass
+    return env
 
 
 def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, port: int, *, variant=2, windows=True,
@@ -104,6 +89,7 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         raise ValueError('DASHBOARD_DEPENDENCY_MISSING')
     env = {
         'SINGULARITY_WINDOWS_NATIVE':'1',
+        'SINGULARITY_WINDOWS_OMB_PORT':'18211',
         'SINGULARITY_LOCAL_ACCOUNT_AUTH':'1',
         'PYTHONDONTWRITEBYTECODE':'1',
         'SINGULARITY_INSTALL_VARIANT':str(variant),
@@ -111,6 +97,8 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         'SINGULARITY_RQL_BIN':str(rql),
         'SINGULARITY_RQL_EXE':str(rql),
         'SINGULARITY_STATE_DIR':str(state_dir),
+        'REPOQL_NATIVE_EMBED_URL':'/embed/repoql',
+        'REPOQL_NATIVE_WORKSPACE':str(workspace),
         'SINGULARITY_BIND':'127.0.0.1',
         'SINGULARITY_ALLOW_PEERS':'127.0.0.1/32,::1/128',
         'SINGULARITY_PORT':str(port),
@@ -124,19 +112,18 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
     # The native MemoryCore provisioning process creates this existing owner
     # identity. Do not mint a parallel dashboard key or copy a secret into the UI.
     # The path is derived from the staged user-owned runtime, not user input.
+    owner_file = source_root.parent.parent / 'memory' / 'state' / 'secrets' / 'admin-user-key'
+    _assert_no_reparse(owner_file)
+    if owner_file.is_file():
+        env['SINGULARITY_TENCENT_OWNER_KEY_FILE'] = str(owner_file)
+    # MemoryPanel uses the native loopback port for every Windows variant.
+    env.update(SINGULARITY_TENCENT_HOST='127.0.0.1', SINGULARITY_TENCENT_PORT='18126',
+               SINGULARITY_TENCENT_SERVICE_ID='default',
+               TENCENT_PANEL_BASE='http://127.0.0.1:18126')
     if variant in (2, 4):
-        owner_file = state_dir.parent / 'WindowsNative' / 'memory' / 'state' / 'secrets' / 'admin-user-key'
-        _assert_no_reparse(owner_file)
-        if owner_file.is_file():
-            env['SINGULARITY_TENCENT_OWNER_KEY_FILE'] = str(owner_file)
-        # MemoryPanel listens on 18126 in the Windows-native stack, not the
-        # Dockerhost's historical 8125. Proxy authentication stays same-origin.
-        env['SINGULARITY_TENCENT_HOST'] = '127.0.0.1'
-        env['SINGULARITY_TENCENT_PORT'] = '18126'
-    if variant in (2,4):
-        env.update(_native_ghost_environment(source_root,state_dir,native_bridge_exe,ghost_control_config,windows=windows))
-    elif native_bridge_exe is not None or ghost_control_config is not None:
-        raise ValueError('DASHBOARD_NATIVE_GHOST_CONFIG_NOT_ALLOWED')
+        env.update(_native_office_environment(source_root, state_dir))
+    # Keep the legacy keyword arguments accepted for existing task callers.
+    # They are intentionally inert: do not inspect paths or load Ghost config.
     return env
 
 
@@ -146,12 +133,12 @@ def main(argv=None):
         p.add_argument('--'+arg,required=True,type=Path)
     p.add_argument('--port',type=int,default=18100)
     p.add_argument('--variant',type=int,choices=(1,2,3,4),default=2)
+    # Retained for older scheduled-task command lines; deliberately ignored.
     p.add_argument('--native-bridge-exe',type=Path)
     p.add_argument('--ghost-control-config',type=Path)
     p.add_argument('--mode',choices=('serve','check'),default='serve')
     a=p.parse_args(argv)
-    env=environment(a.source_root,a.rql_exe,a.workspace,a.state_dir,a.port,variant=a.variant,windows=(os.name=='nt'),
-                    native_bridge_exe=a.native_bridge_exe,ghost_control_config=a.ghost_control_config)
+    env=environment(a.source_root,a.rql_exe,a.workspace,a.state_dir,a.port,variant=a.variant,windows=(os.name=='nt'))
     os.environ.update(env)
     # Import only from the verified staged dashboard path, not from PATH or cwd.
     sys.path.insert(0,str(a.source_root/'dashboard'))

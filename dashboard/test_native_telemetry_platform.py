@@ -10,7 +10,7 @@ class NativeTelemetryTests(unittest.TestCase):
         root=default_telemetry_state_dir(platform='nt', env={'LOCALAPPDATA':'C:/Users/test/AppData/Local'},home='C:/Users/test')
         self.assertEqual(str(root).replace('\\','/'), 'C:/Users/test/AppData/Local/Singularity/Dashboard')
         override=default_telemetry_state_dir(platform='nt', env={'SINGULARITY_STATE_DIR':'D:/State'})
-        self.assertEqual(str(override),'D:/State')
+        self.assertEqual(str(override).replace(chr(92),'/'),'D:/State')
     def test_windows_nannies_do_not_claim_linux_units_or_alive_service(self):
         with tempfile.TemporaryDirectory() as d:
             h=Harness(d)

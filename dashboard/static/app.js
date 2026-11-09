@@ -1,11 +1,10 @@
-import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261105-graph';
+import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261109-windows-design';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
 import {openAvatarPicker, agentAvatar} from './agent_avatars.js';
-import {mountGhost} from './ghost/dashboard.js';
 import {viewOpenMausBot} from './openmausbot_panel.js';
-import {viewOpenMausOps} from './openmausbot_ops.js';
-import {mountNativeKanban} from './kanban_native.js';
-import {initNavigationUI, navPathFor} from './navigation_ui.js';
+import {viewOpenMausOps} from './openmausbot_ops.js?v=rq-20261109-windows-design';
+import {mountNativeKanban} from './kanban_native.js?v=rq-20261109-windows-design';
+import {initNavigationUI, navPathFor} from './navigation_ui.js?v=20261110c';
 import {renderRepoqlCheatSheet, bindRepoqlCheatSheet} from './repoql_cheatsheet.js';
 import {renderMemoryArchitecturePage, bindMemoryArchitecturePage, renderOrchestraWorkflowPage, bindOrchestraWorkflowPage} from './workflow_graphs.js';
 import {renderAgentReferencePage, bindAgentReferencePage} from './agent_reference.js';
@@ -288,7 +287,7 @@ function showSignpost(message) {
       <div class="card">
         <h1>Fresh dashboard link required</h1>
         <p>${esc(message || "This tab holds no valid dashboard key.")}</p>
-        <p>${nativeInstall ? 'Open the Singularity Dashboard shortcut for an authenticated local session.' : 'On dockerhost, run <code>repoql-dashboard link</code> and open the printed link. The key remains in the browser tab.'}</p>
+        <p>Open the Singularity Dashboard shortcut for an authenticated local session.</p>
       </div>
     </div>`;
   setConn("error", "locked");
@@ -335,7 +334,7 @@ function markNav(path) {
   links.forEach(link => link.classList.toggle('active', link === active));
   const mobileTitle=document.getElementById('mobile-page-title');
   if (mobileTitle) {
-    const names={'/':'Command Center','/kanban':'Kanban Board','/openmausbot':'Bot operations',
+    const names={'/':'Command Center','/kanban':'Kanban Board','/openmausbot':'Bot Operations','/openmausbot/chat':'OpenMausBot',
       '/agentchat':'Agent Lounge','/unified/graph':'Memory Graph','/office':'Office Viewer'};
     mobileTitle.textContent=names[target] || active?.textContent.trim() || 'RepoQL';
   }
@@ -489,36 +488,25 @@ async function route() {
     APP.innerHTML = '<div class="empty">This component is not included in the selected Singularity installation option.</div>';
     return;
   }
-  markNav(path.startsWith('/bots/') ? '/bots' : path.startsWith('/ghost') ? '/openmausbot' : path.startsWith('/openmausbot/') && path !== '/openmausbot/fleet' ? '/openmausbot' : path);
+  markNav(path.startsWith('/bots/') ? '/bots' : path.startsWith('/ghost') ? '/openmausbot' : path.startsWith('/openmausbot/') && !['/openmausbot/fleet','/openmausbot/calendar','/openmausbot/attention','/openmausbot/history'].includes(path) ? '/openmausbot/chat' : path);
   if (state.routeEpoch > 1) window.scrollTo(0, 0);
   try {
-    // Singularity install: OpenMausBot and Ghost are the local inventory and companion
-    // controls the product ships, not the Linux fleet operations API.
-    if (path === "/openmausbot" || path === "/ghost" || path === "/ghost/planner") {
-      if (path === "/ghost/planner") {
-        if (!nativeInstall) return await viewGhostPlanner();
-        APP.innerHTML = pageHead('Ghost planner', 'Not part of the verified native Windows source.') +
-          '<p class="empty">The household planner is not installed on this Windows product. Use the Ghost controls under OpenMausBot in supported options.</p>';
-        return;
-      }
-      if (path === "/ghost") {
-        if (!nativeInstall) return await viewGhostOperations();
-        const canonical = replaceRoute(href('/openmausbot', {tab:'ghost'}));
-        return await viewOpenMausBotWindows(canonical.params);
-      }
-      return await viewOpenMausBotWindows(params);
-    }
+    if (!nativeInstall && path === '/ghost/planner') return await viewGhostPlanner();
+    if (!nativeInstall && path === '/ghost') return await viewGhostOperations();
     // Shared bot operations (Now / Calendar / Needs attention / Run history).
     // The embedded native workspace (chat and routine management) moved to /openmausbot/chat.
     if (["/openmausbot", "/openmausbot/calendar", "/openmausbot/attention", "/openmausbot/history"].includes(path)) {
       return await viewOpenMausOps({
         app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
-        tab: path.split("/")[2] || "now", params, setCleanup: (fn) => { state.cleanup = fn; },
+        tab: path.split("/")[2] || "now", params, includeGhost: !nativeInstall,
+        workspaceHref: nativeInstall ? 'http://127.0.0.1:18211/' : '#/openmausbot/chat',
+        setCleanup: (fn) => { state.cleanup = fn; },
       });
     }
     if (path === "/openmausbot/chat") return await viewOpenMausBot({
       app: APP, api, pageHead, esc, toast, current: () => epoch === state.routeEpoch,
     });
+    if (path === "/openmausbot/fleet" && nativeInstall) return await viewNativeBotInventory();
     if (path === "/openmausbot/fleet") return await viewOpenMausBot({
       app: APP, api, pageHead, esc, toast, current: () => epoch === state.routeEpoch, mode: 'fleet',
     });
@@ -527,9 +515,11 @@ async function route() {
       // redirect. replaceState keeps a single history entry, like the other
       // consolidated routes.
       const canonical = replaceRoute(href("/openmausbot"));
-      return await viewOpenMausBot({
-        app: APP, api, pageHead, esc, toast, current: () => epoch === state.routeEpoch,
-        params: canonical.params,
+      return await viewOpenMausOps({
+        app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
+        params: canonical.params, includeGhost: !nativeInstall,
+        workspaceHref: nativeInstall ? 'http://127.0.0.1:18211/' : '#/openmausbot/chat',
+        setCleanup: (fn) => { state.cleanup = fn; },
       });
     }
     // Ghost is a bot inside the shared operations view now. Old bookmarks land on
@@ -542,7 +532,6 @@ async function route() {
       });
     }
     if (path === "/unified/graph") return await viewUnifiedGraph();
-    if (path === "/openmausbot") return await viewOpenMausBotWindows(params);
     if (path === "/claude/agents" && nativeInstall) {
       const mod = await import('./claude_agents_control.js');
       return await mod.mountClaudeAgentsControl(APP, api);
@@ -592,7 +581,7 @@ async function route() {
     if (path === "/harness/usage") { location.hash = '#/unified/usage'; return; }
     if (path === "/harness/events") return await viewHarnessEvents(params);
     if (path === "/harness/settings") return await viewHarnessSettings(params);
-    if (path === "/kanban") return await viewKanban(params);
+    if (path === "/kanban") return nativeInstall ? await viewKanbanNative() : await viewKanban(params);
     if (path === "/office") return await viewOffice();
     if (path === "/agentchat") return await viewAgentChat();
     if (path.startsWith("/knowledge/item")) return await viewKnowledgeItem(params);
@@ -607,29 +596,9 @@ async function route() {
   }
 }
 
-// This consolidates only existing Windows views. It does not import the Linux
-// OpenMausBot operations API or claim Ghost's jobs are an OMB bot execution.
-function windowsOmbIncludesGhost() {
-  // Fail closed: an unknown install variant must not advertise the Ghost tab.
-  return selectedFeatures?.ghost === true;
-}
-function windowsOmbTabStrip(active) {
-  return tabStrip([
-    {id:'bots', label:'Local bots', href:() => href('/openmausbot')},
-    ...(windowsOmbIncludesGhost() ? [{id:'ghost', label:'Ghost controls', href:() => href('/openmausbot', {tab:'ghost'})}] : []),
-  ], active, 'OpenMausBot workspace');
-}
-async function viewOpenMausBotWindows(params = {}) {
-  if (nativeInstall && params.tab === 'ghost') {
-    if (!windowsOmbIncludesGhost()) {
-      APP.innerHTML = pageHead('OpenMausBot', 'Windows-local agent workspace') + windowsOmbTabStrip('bots') +
-        '<p class="empty">Ghost is not included in this installation option.</p>';
-      return;
-    }
-    return await viewGhostOperations({insideOpenMausBot:true});
-  }
-  APP.innerHTML = pageHead('OpenMausBot', 'Windows-local bot inventory and companion controls. No Dockerhost dependency.') +
-    (nativeInstall ? windowsOmbTabStrip('bots') : '') +
+async function viewNativeBotInventory() {
+  APP.innerHTML = pageHead('Bot fleet status', 'Windows-local OpenMausBot inventory.',
+    '<a class="btn small" href="#/openmausbot">Operations</a>') +
     '<section class="block" id="windows-omb-status">Checking the local OpenMausBot service…</section>';
   const report = await api('/api/openmausbot/overview', {timeoutMs: 8000});
   const holder = document.getElementById('windows-omb-status');
@@ -643,11 +612,9 @@ async function viewOpenMausBotWindows(params = {}) {
   <div class="table-wrap"><table class="data"><thead><tr><th>Bot</th><th>Identity</th><th>Runtime</th><th>External integrations</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No bots in this workspace.</td></tr>'}</tbody></table></div>`;
 }
 
-async function viewGhostOperations({insideOpenMausBot=false} = {}) {
+async function viewGhostOperations() {
   const epoch=state.routeEpoch;
-  APP.innerHTML = (insideOpenMausBot
-      ? pageHead('OpenMausBot', 'Windows-local bot inventory and Ghost companion controls.') + windowsOmbTabStrip('ghost')
-      : pageHead('Ghost Protocol','')) +
+  APP.innerHTML = pageHead('Ghost Protocol','') +
     '<section id="ghost-integrated" aria-label="Ghost Protocol"><div class="loading">Loading Ghost controls…</div></section>';
   const heading = APP.querySelector('.page-head h1');
   heading.tabIndex = -1;
@@ -665,6 +632,8 @@ async function viewGhostOperations({insideOpenMausBot=false} = {}) {
   const shadow=host.attachShadow({mode:'open'});
   const css=document.createElement('style');css.textContent=style.textContent;
   shadow.append(css,document.importNode(shell,true));
+  const {mountGhost} = await import('./ghost/dashboard.js');
+  if (epoch !== state.routeEpoch) return;
   state.cleanup=mountGhost(shadow);
 }
 
@@ -837,8 +806,9 @@ function miniatureBrainGraph() {
 
 function dashboardSnapshot() {
   const destinations = [
+    ['OpenMausBot','/openmausbot/chat','Open the OpenMausBot workspace to chat with and manage your bots.','chat','Bot operations'],
+    ['Bot Operations','/openmausbot','See every bot\'s schedule, recent runs and anything needing attention.','ghost','Bot operations'],
     ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','Delivery'],
-    ['OpenMausBot','/openmausbot','View local bots and Ghost companion controls when installed.',nativeInstall?'ghost':'chat','Bots & companion'],
     ...(nativeInstall ? [] : [['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','Household & schedule']]),
     ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','Agent activity'],
     ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','Knowledge'],
@@ -849,7 +819,7 @@ function dashboardSnapshot() {
   const BRAIN_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>`;
   const iconBadges = {
     '/kanban': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="5.5" height="15" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="10.2" y="8" width="5.5" height="11.5" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="16.9" y="6" width="3.6" height="13.5" rx="1.6" stroke="currentColor" stroke-width="1.6"/></svg>`,
-    '/openmausbot': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="13" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor"/><path d="M12 7V4" stroke="currentColor" stroke-width="1.5"/></svg>`,
+    '/openmausbot/chat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="13" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor"/><path d="M12 7V4" stroke="currentColor" stroke-width="1.5"/></svg>`,
     '/ghost': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 18.5V9a4.5 4.5 0 1 1 9 0v9l-2.2-1.5-2.3 1.5-2.3-1.5-2.2 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10.2" r="1" fill="currentColor"/><circle cx="14" cy="10.2" r="1" fill="currentColor"/></svg>`,
     '/agentchat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H11l-4 3v-3.2A3.5 3.5 0 0 1 5 11.5v-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8.7h6M9 11.3h3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
     '/office': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M2.5 20.5h19"/><path d="M8.5 7.5h2M13.5 7.5h2M8.5 11.5h2M13.5 11.5h2"/><path d="M10.5 20.5v-2.5a1.5 1.5 0 0 1 3 0v2.5"/></svg>`,
@@ -865,7 +835,7 @@ function dashboardSnapshot() {
   // visually, but they never imply live counts or hidden state.
   const cardIllustrations = {
     '/kanban': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="17" y="19" width="266" height="152" rx="19" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".28"/><path d="M38 45H262" stroke="currentColor" stroke-opacity=".18"/><circle cx="42" cy="32" r="3" fill="currentColor" fill-opacity=".65"/><circle cx="53" cy="32" r="3" fill="currentColor" fill-opacity=".28"/><circle cx="64" cy="32" r="3" fill="currentColor" fill-opacity=".28"/><g fill="currentColor" fill-opacity=".075" stroke="currentColor" stroke-opacity=".35"><rect x="31" y="55" width="72" height="103" rx="9"/><rect x="114" y="55" width="72" height="103" rx="9"/><rect x="197" y="55" width="72" height="103" rx="9"/></g><g fill="currentColor" fill-opacity=".22"><rect x="39" y="64" width="36" height="5" rx="2.5"/><rect x="122" y="64" width="39" height="5" rx="2.5"/><rect x="205" y="64" width="44" height="5" rx="2.5"/></g><g fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".46"><rect x="39" y="79" width="56" height="25" rx="5"/><rect x="39" y="110" width="56" height="25" rx="5"/><rect x="122" y="79" width="56" height="25" rx="5"/><rect x="122" y="110" width="56" height="33" rx="5"/><rect x="205" y="79" width="56" height="36" rx="5"/></g><g stroke="currentColor" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"><path d="M47 88H74M47 94H63M130 88H162M130 94H148M213 88H246M213 94H234"/></g><circle cx="241" cy="136" r="13" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".55"/><path d="m235 136 4 4 8-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    '/openmausbot': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="86" y="52" width="128" height="92" rx="26" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".5" stroke-width="2"/><path d="M150 52V30" stroke="currentColor" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/><circle cx="150" cy="26" r="6" fill="currentColor" fill-opacity=".55"/><circle cx="123" cy="92" r="11" fill="currentColor" fill-opacity=".45"/><circle cx="177" cy="92" r="11" fill="currentColor" fill-opacity=".45"/><path d="M128 120h44" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/><path d="M60 98H44M256 98h-16M70 132 52 144M230 132l18 12" stroke="currentColor" stroke-opacity=".3" stroke-width="2" stroke-linecap="round"/></svg>`,
+    '/openmausbot/chat': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="86" y="52" width="128" height="92" rx="26" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".5" stroke-width="2"/><path d="M150 52V30" stroke="currentColor" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/><circle cx="150" cy="26" r="6" fill="currentColor" fill-opacity=".55"/><circle cx="123" cy="92" r="11" fill="currentColor" fill-opacity=".45"/><circle cx="177" cy="92" r="11" fill="currentColor" fill-opacity=".45"/><path d="M128 120h44" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/><path d="M60 98H44M256 98h-16M70 132 52 144M230 132l18 12" stroke="currentColor" stroke-opacity=".3" stroke-width="2" stroke-linecap="round"/></svg>`,
     '/ghost': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="151" cy="95" r="79" stroke="currentColor" stroke-opacity=".13"/><circle cx="151" cy="95" r="59" stroke="currentColor" stroke-opacity=".31"/><circle cx="151" cy="95" r="39" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="4 8"/><path d="M151 23V42M151 148V167M79 95H99M204 95H223" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round"/><path d="M133 121V80a18 18 0 0 1 36 0v41l-9-7-9 7-9-7-9 7Z" fill="currentColor" fill-opacity=".19" stroke="currentColor" stroke-opacity=".83" stroke-width="2" stroke-linejoin="round"/><circle cx="143" cy="88" r="3" fill="currentColor"/><circle cx="159" cy="88" r="3" fill="currentColor"/><circle cx="229" cy="43" r="5" fill="currentColor" fill-opacity=".8"/><circle cx="73" cy="138" r="3" fill="currentColor" fill-opacity=".45"/><path d="m217 46-19 12M84 133l18-10" stroke="currentColor" stroke-opacity=".38" stroke-dasharray="3 5"/></svg>`,
     '/agentchat': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="47" y="43" width="108" height="71" rx="26" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-opacity=".68"/><path d="M86 114 69 132l2-19" stroke="currentColor" stroke-opacity=".68" stroke-linecap="round" stroke-linejoin="round"/><rect x="146" y="78" width="107" height="60" rx="24" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".42"/><path d="M198 138 214 151l-1-13" stroke="currentColor" stroke-opacity=".42" stroke-linecap="round" stroke-linejoin="round"/><path d="M71 66h57M71 82h41M166 99h50M166 114h30" stroke="currentColor" stroke-opacity=".8" stroke-width="4" stroke-linecap="round"/></svg>`,
     '/office': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="44" y="31" width="212" height="118" rx="18" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/><rect x="58" y="45" width="184" height="89" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".22"/><path d="M111 162h79M132 149l-8 13M167 149l8 13" stroke="currentColor" stroke-opacity=".4" stroke-linecap="round"/><rect x="74" y="60" width="73" height="28" rx="8" fill="currentColor" fill-opacity=".13"/><rect x="155" y="60" width="70" height="53" rx="8" fill="currentColor" fill-opacity=".09"/><path d="M84 71h36M84 79h22M166 73h48M166 82h32M166 91h39" stroke="currentColor" stroke-opacity=".54" stroke-linecap="round"/></svg>`,
@@ -918,9 +888,9 @@ function dashboardSnapshot() {
   <section aria-labelledby="goto-heading">
     <div class="command-heading"><h2 id="goto-heading">Primary workspaces</h2></div>
     <div class="command-links command-links-priority command-links-visual">${destinations.map(([title,link,description,accent,kicker])=>`<a class="command-link command-workspace${featureCards.has(link)?' command-workspace-feature':''}" data-accent="${esc(accent)}" href="#${esc(link)}">
-      <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || REPOQL_ICON}</span>
+      <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || (link === '/openmausbot' ? iconBadges['/ghost'] : '') || REPOQL_ICON}</span>
       <span class="command-card-content"><span class="command-card-kicker">${esc(kicker)}</span><strong>${esc(title)}</strong><span class="command-card-description">${esc(description)}</span><span class="command-card-cta">Open workspace <span aria-hidden="true">↗</span></span></span>
-      <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || ''}</span>
+      <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || (link === '/openmausbot' ? cardIllustrations['/ghost'] : '') || ''}</span>
     </a>`).join('')}</div>
   </section>
   <details class="command-more block" data-accent="office" open>
@@ -1783,7 +1753,7 @@ async function mountRuntime(panel) {
     ['Harness collector', '/api/harness/health'],
     ['Run state authority', '/api/harness/rust'],
     ['Office viewer', '/api/harness/office'],
-    ['Ghost observer', '/api/ghost/status'],
+    ...(!nativeInstall ? [['Ghost observer', '/api/ghost/status']] : []),
   ];
   let sequence = 0;
   const render = async () => {
@@ -2461,9 +2431,9 @@ const selectedFeatures = window.__SINGULARITY_VARIANT__?.features || null;
 function featureAllowed(path) {
   if (nativeInstall && (path === "/architecture/orchestra" || path === "/harness" || path.startsWith("/harness/"))) return false;
   if (path === "/claude/agents") return nativeInstall;
-  // Fleet-only pages need operations APIs this product does not ship.
-  if (path === "/agents-control" || path === "/reference/agents" || path === "/bots" || path.startsWith("/bots/")
-    || path === "/openmausbot/fleet" || path === "/openmausbot/chat" || ["/openmausbot/calendar","/openmausbot/attention","/openmausbot/history"].includes(path)) return false;
+  if (nativeInstall && (path === '/ghost' || path.startsWith('/ghost/'))) return false;
+  // Fleet-only controls need APIs outside the Windows product.
+  if (nativeInstall && (path === "/agents-control" || path === "/reference/agents" || path === "/openmausbot/chat")) return false;
   if (!selectedFeatures) return true;
   if (path === "/ghost" || path.startsWith("/ghost/")) return selectedFeatures.ghost === true;
   if (path === "/office" || path.startsWith("/office/")) return selectedFeatures.office === true;
@@ -3257,8 +3227,7 @@ async function viewKanban(params = {}) {
 }
 
 async function viewOffice() {
-  APP.innerHTML = pageHead('Office Viewer', 'Live office scene through the protected dashboard session.') +
-    `<section id="office-body"><div class="loading">Checking Office availability…</div></section>`;
+  APP.innerHTML = `<section id="office-body" class="native-panel-shell"><div class="loading">Checking Office availability…</div></section>`;
   const body = document.getElementById('office-body');
   let st;
   try { st = await api('/api/harness/office'); }
@@ -3283,23 +3252,12 @@ async function viewOffice() {
     return;
   }
   if (!body.isConnected) return;
-  const frame = `<iframe class="office-view-embed" title="Claude Office live view" src="${esc(frame_src)}"
-      allow="clipboard-write" referrerpolicy="no-referrer" loading="lazy"></iframe>`;
-  body.innerHTML = `<div class="block">
-      <div class="block-title">Office
-        <span style="margin-left:auto"></span>
-        <a class="btn small" href="${esc(frame_src)}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
-      </div>
-      <p class="muted small" id="office-viewer-status" role="status" aria-live="polite">Loading the Office viewer…</p>
-      ${frame}
-      <details class="runtime-details"><summary>Viewer connection details</summary>
-        <p class="muted small" id="office-note">The viewer uses the authenticated dashboard session. No second Office login is required. Office service health and browser rendering remain separate checks.
-        <a href="#/diagnostics?tab=runtime">Open runtime diagnostics</a></p>
-      </details>
-      <button id="office-retry" class="btn small" type="button">Retry viewer</button>
-    </div>`;
+  const frame = `<iframe class="office-view-embed native-panel-frame" title="Claude Office live view" src="${esc(frame_src)}"
+      allow="clipboard-write" referrerpolicy="no-referrer" loading="eager"></iframe>`;
+  body.innerHTML = `${frame}
+      <p class="muted small" id="office-viewer-status" role="status" aria-live="polite" style="display:none">Loading the Office viewer…</p>
+      <a class="native-panel-open" href="${esc(frame_src)}" target="_blank" rel="noopener noreferrer">Open original panel in a separate tab</a>`;
   nativeViewerFrameState(body, '.office-view-embed', '#office-viewer-status');
-  body.querySelector('#office-retry')?.addEventListener('click', viewOffice);
 }
 
 // Unified Rust data plane UI, inherits authenticated api() and existing routing.
@@ -3534,7 +3492,7 @@ async function viewUnifiedGraph() {
 // URLs come only from authenticated server configuration (never query parameters).
 async function viewNativePanel(kind) {
   const tencent = kind === 'tencent';
-  const name = tencent ? 'Tencent Dashboard' : 'RepoQL Dashboard';
+  const name = tencent ? 'Tencent Dashboard' : kind === 'kanzo' ? 'Kanban Board' : 'RepoQL Dashboard';
   APP.innerHTML = pageHead(name, 'Original application embedded without modifying its controls or credentials.') +
     `<section id="native-panel-host" class="native-panel-shell"><div class="loading">Loading native panel configuration…</div></section>`;
   const host = document.getElementById('native-panel-host');
@@ -3546,7 +3504,7 @@ async function viewNativePanel(kind) {
       <p class="muted small">Configure the authenticated HTTPS or existing same-origin embed URL on the dashboard service. The original application and its login remain authoritative.</p></div>`;
     return;
   }
-  if (kind === 'repoql' || kind === 'tencent') {
+  if (kind === 'repoql' || kind === 'tencent' || kind === 'kanzo') {
     // Establish a short-lived HttpOnly navigation cookie through the existing
     // authenticated API call. An iframe cannot attach the sessionStorage bearer.
     try {
@@ -3608,6 +3566,7 @@ async function viewNativePanel(kind) {
 }
 async function viewTencentNative() { return viewNativePanel('tencent'); }
 async function viewRepoqlNative() { return viewNativePanel('repoql'); }
+async function viewKanbanNative() { return viewNativePanel('kanzo'); }
 
 // Live OpenChamber invocation coverage is intentionally not added to Orchestra
 // ledger totals: the same underlying model call may appear in both sources.
@@ -3617,7 +3576,13 @@ function renderOpenChamberCoverage(payload, selectedDays = 90) {
   const period=payload.windows?.[String(selectedDays)] || payload;
   const total=period.totals||{};
   const rows=Object.entries(period.by_provider||{}).sort((a,b)=>Number(b[1].tokens||0)-Number(a[1].tokens||0));
-  return `<p class="small">All OpenChamber assistant calls, including direct sessions. Independent coverage view, not added to Orchestra or Freebuff sums because overlapping calls are not independently identifiable.</p>
+  // The OpenCode Go rows in this database are the same calls the fleet ledger
+  // counts, so only the non-Go remainder is genuinely outside the fleet total.
+  const counted=rows.filter(([name])=>name==='opencode-go').reduce((n,[,r])=>n+Number(r.tokens||0),0);
+  const uncovered=Math.max(0,Number(total.tokens||0)-counted);
+  const short=n=>n>=1e9?(n/1e9).toFixed(2)+'B':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n);
+  return `<p class="small">Every OpenChamber assistant call, direct sessions included. This is a coverage view over the OpenChamber session database, not a fleet source: it overlaps the fleet total above and is never added to it.</p>
+    <p class="muted small">Of the ${short(Number(total.tokens||0))} tokens here, ${short(counted)} are OpenCode Go calls already counted in the fleet total (same session database); the remaining ${short(uncovered)} are OpenChamber providers that no fleet source measures, so they are outside the fleet total too.</p>
     <div class="grid cols-3">
       ${metricBlock('OpenChamber calls',fmt(total.calls),'',"cyan",`${fmt(total.missing_token_calls)} without exact primary receipts`)}
       ${metricBlock('Measured tokens',fmt(total.tokens),'',"purple",total.tokens == null ? `${fmt(total.measured_calls)} measured calls; token coverage unknown` : `${fmt(total.measured_calls)} measured calls; five OpenChamber components`)}
@@ -3794,13 +3759,22 @@ export const __editorTestSurface = {conceptMetadataCheck, validNativeEmbed, rows
   displayLabel, pill, statusPill, categoryChip, metricBlock, dashboardSnapshot, miniatureBrainGraph, fmt, renderOpenChamberCoverage,
   LIVENESS_STATES, livenessState, livenessLabel, livenessNote, sessionRow, sessionsBlock, seatPill, runBlock, runsBlock,
   diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS, architectureProbeState,
-  windowsOmbIncludesGhost, windowsOmbTabStrip, featureAllowed,
+  featureAllowed,
   debounceForRoute, sequencer, themeCatalog, themeModeOf, sanitizeThemeChoice, applyTheme,
   agentChatParticipants, agentChatThreads, agentChatTimeline, agentChatTime,
   get refreshMs(){return harnessRefreshMs;},
   get nativeUsageGui(){return nativeInstall ? guiUsageName() : null;},
   get cpuScale(){return {cores:CPU_QUOTA_CORES,label:CPU_QUOTA_LABEL};}};
 
+
+// Agent Chat encodes identity in the role token. The Lounge labels a person
+// with the name their identity owns - an OpenMausBot bot carries the same name
+// Claude Office draws - while the token stays the addressable form.
+function agentDisplayName(role, names) {
+  const key = String(role || '');
+  const name = names && typeof names === 'object' ? names[key] : '';
+  return typeof name === 'string' && name.trim() ? name.trim() : key;
+}
 
 // Conversation grouping is presentation only. No local-user identity or mailbox
 // ownership is inferred from the durable delivery envelopes.
@@ -3812,7 +3786,7 @@ function agentChatParticipants(message) {
   return [...new Set(names)].sort();
 }
 
-function agentChatThreads(messages) {
+function agentChatThreads(messages, displayName = (role) => role) {
   const threads = new Map();
   for (const message of messages) {
     const members = agentChatParticipants(message);
@@ -3820,7 +3794,7 @@ function agentChatThreads(messages) {
     const key = JSON.stringify(members);
     let thread = threads.get(key);
     if (!thread) {
-      thread = { key, title: members.map(member => member.startsWith('session:') ? `Session ${member.slice(-6)}` : member).join(' · '), members, messages: [], latest: message };
+      thread = { key, title: members.map(member => member.startsWith('session:') ? `Session ${member.slice(-6)}` : displayName(member)).join(' · '), members, messages: [], latest: message };
       threads.set(key, thread);
     }
     thread.messages.push(message);
@@ -3982,6 +3956,9 @@ async function viewAgentChat() {
   const expandedMessages = new Set();
   let presence = null;
   let agentAvatars = {};
+  // role -> display name (OpenMausBot bots resolve to their bot name). Loaded
+  // with the avatar roster; a role with no name renders as the role itself.
+  let agentNames = {};
   let lastPresencePoll = 0;
   let lastRosterKey = '';
   let selectedAgent = '';
@@ -4006,11 +3983,12 @@ async function viewAgentChat() {
       const task = recent && note.task && note.task !== 'none' ? note.task : null;
       const parts=task?.match(/^([a-z0-9_-]{1,60})#([1-9][0-9]{0,9})$/);
       const taskLink=parts ? `<a class="lounge-task-link" href="#/kanban?task=${encodeURIComponent(parts[2])}" title="Open reported task in Kanzo board">${esc(task)}</a>` : '';
+      const label = recent ? note.alias : agentDisplayName(a.role, agentNames);
       return `<div class="lounge-person${selectedAgent===a.role?' selected':''}" role="listitem" data-agent-role="${esc(a.role)}">
-        ${agentAvatar({role: a.role, name: recent ? note.alias : a.role,
+        ${agentAvatar({role: a.role, name: label,
           avatar: agentAvatars[a.role]?.avatar, avatar_default: agentAvatars[a.role]?.avatar_default},
           esc, {pickable: true})}
-        <div class="lounge-person-body"><button type="button" class="lounge-agent-select" data-select-agent="${esc(a.role)}" aria-pressed="${String(selectedAgent===a.role)}" aria-label="${selectedAgent===a.role?'Show all agents':'Focus on agent'} ${esc(recent ? note.alias : a.role)}"><strong>${esc(recent ? note.alias : a.role)}</strong></button>
+        <div class="lounge-person-body"><button type="button" class="lounge-agent-select" data-select-agent="${esc(a.role)}" aria-pressed="${String(selectedAgent===a.role)}" aria-label="${selectedAgent===a.role?'Show all agents':'Focus on agent'} ${esc(label)}"><strong>${esc(label)}</strong></button>
           <span><button type="button" class="lounge-copy-role" data-copy-role="${esc(a.role)}" title="Copy Agent Chat address">@${esc(a.role)}</button> · ${a.status==='working'?'Working':'Recently seen'}</span>
           ${recent&&note.work?`<small title="Self-reported task">${esc(note.work)}</small>`:''}
           ${taskLink}</div><span class="lounge-online-dot ${a.status}" aria-label="${a.status}"></span></div>`;
@@ -4020,7 +3998,7 @@ async function viewAgentChat() {
     const avatarButton = event.target.closest?.('button[data-agent-avatar]');
     if (avatarButton) {
       const role = avatarButton.dataset.agentAvatar || '';
-      if (!/^[a-z0-9_-]{1,32}$/.test(role)) return;
+      if (!/^[a-z0-9_-]{1,40}$/.test(role)) return;
       const current = agentAvatars[role] || {};
       openAvatarPicker({subject: {role, name: current.alias || role,
           avatar: current.avatar, avatar_default: current.avatar_default}, api, esc,
@@ -4033,7 +4011,7 @@ async function viewAgentChat() {
     const button=event.target.closest?.('button[data-copy-role]');
     if(button){
       const role=button.dataset.copyRole;
-      if(!/^[a-z0-9_-]{1,32}$/.test(role)) return;
+      if(!/^[a-z0-9_-]{1,40}$/.test(role)) return;
       try {
         await navigator.clipboard.writeText('@'+role);
         const prior=button.textContent;button.textContent='Copied';
@@ -4050,13 +4028,18 @@ async function viewAgentChat() {
     [...presenceList.querySelectorAll('button[data-select-agent]')].find(b => b.dataset.selectAgent === role)?.focus({preventScroll:true});
   });
   const loadAgentAvatars = async () => {
+    const known = JSON.stringify(agentNames);
     try {
       const reply = await api('/api/agentchat/avatars');
       const map = reply?.agents;
       agentAvatars = map && typeof map === 'object' ? map : {};
-    } catch { agentAvatars = {}; }
+      agentNames = reply?.names && typeof reply.names === 'object' ? reply.names : {};
+    } catch { agentAvatars = {}; agentNames = {}; }
     lastRosterKey = '';
     renderPresence();
+    // Senders, conversation titles and previews are labelled with these names,
+    // so repaint once the map arrives instead of waiting for the next message.
+    if (renderedFeed && JSON.stringify(agentNames) !== known) render({force:true});
   };
   const loadPresence = async () => {
     if (!presenceList.isConnected) return;
@@ -4076,7 +4059,13 @@ async function viewAgentChat() {
     latestButton.hidden = unreadCount === 0;
     latestButton.textContent = unreadCount ? `↓ ${unreadCount} new message${unreadCount===1?'':'s'} · Jump to latest` : '↓ New messages';
   };
-  const initials = (name) => (name || 'AL').trim().slice(0, 2).toUpperCase();
+  // Two words give their initials ("Model Scout" -> MS); one word gives its
+  // first two letters ("ghost" -> GH).
+  const initials = (name) => {
+    const words = String(name || 'AL').trim().split(/[\s·_\-]+/).filter(Boolean);
+    if (!words.length) return 'AL';
+    return (words.length > 1 ? words.slice(0, 2).map(word => word[0]).join('') : words[0].slice(0, 2)).toUpperCase();
+  };
   const tone = (name) => [...String(name || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % 5;
   const targetLabel = m => [...(m.recipients || []), ...(m.sessions || []).map(s => `session:${s}`)].join(', ');
   const renderKanzo = event => {
@@ -4093,6 +4082,7 @@ async function viewAgentChat() {
   const renderMessage = (m, alternate = false, continued = false) => {
     const to = targetLabel(m);
     const sender = m.from || 'Unknown sender';
+    const senderName = agentDisplayName(sender, agentNames);
     const announcement = parseLoungeAnnouncement(m);
     if (announcement) {
       const activity = announcement.kind === 'JOIN' ? 'joined the Lounge' : announcement.kind === 'EXIT' ? 'finished their task' : 'updated their work';
@@ -4110,10 +4100,10 @@ async function viewAgentChat() {
     const long = String(m.text || '').length > 320 || String(m.text || '').split('\n').length > 8;
     const open = mode === 'feed' || expandedMessages.has(Number(m.id));
     return `<article class="messenger-message messenger-agent-tone-${tone(sender)} ${alternate ? 'messenger-message-alt' : ''}${continued ? ' messenger-message-continued' : ''}">
-        ${agentAvatar({role: sender, name: sender, avatar: agentAvatars[sender]?.avatar,
+        ${agentAvatar({role: sender, name: senderName, avatar: agentAvatars[sender]?.avatar,
           avatar_default: agentAvatars[sender]?.avatar_default}, esc,
           {className: 'messenger-avatar messenger-avatar-small'})}
-        <div class="messenger-message-content"><div class="messenger-sender">${esc(sender)}</div>
+        <div class="messenger-message-content"><div class="messenger-sender">${esc(senderName)}</div>
           <div class="messenger-bubble ${long && !open ? 'messenger-bubble-collapsed' : ''}">${esc(m.text || '')}</div>
           ${long && mode !== 'feed' ? `<button type="button" class="messenger-expand" data-expand-message="${Number(m.id)}" aria-expanded="${open}">${open ? 'Show less' : 'Read full message'}</button>` : ''}
           <div class="messenger-message-meta">${esc(agentChatTime(m.created_at) || `#${m.id}`)}${to ? ` · To ${esc(to)}` : ''}</div>
@@ -4160,7 +4150,8 @@ async function viewAgentChat() {
     // silently filter the separate Activity feed when switching views.
     const term = (feedMode ? filter : chatSearch).value.toLowerCase().trim();
     if (!feedMode) {
-      const visible = threads.filter(t => !term || t.title.toLowerCase().includes(term) || t.messages.some(m =>
+      const visible = threads.filter(t => !term || t.title.toLowerCase().includes(term)
+        || t.members.some(member => member.toLowerCase().includes(term)) || t.messages.some(m =>
         [m.text, m.from_session, m.origin, ...(m.recipients || []), ...(m.sessions || [])].join(' ').toLowerCase().includes(term)));
       if (!visible.some(t => t.key === selected)) selected = visible[0]?.key || null;
       const listScroll = conversations.scrollTop;
@@ -4172,7 +4163,7 @@ async function viewAgentChat() {
             data-thread="${esc(t.key)}" aria-pressed="${t.key === selected}">
             <span class="messenger-avatar" aria-hidden="true">${esc(initials(t.title))}</span>
             <span class="messenger-conversation-info"><strong>${esc(t.title)}</strong>
-              <span class="messenger-preview">${esc(t.latest.from)}: ${esc(t.latest.text || 'Message')}</span></span>
+              <span class="messenger-preview">${esc(agentDisplayName(t.latest.from, agentNames))}: ${esc(t.latest.text || 'Message')}</span></span>
             <span class="messenger-conversation-time">${esc(agentChatTime(t.latest.created_at))}</span>
           </button>`).join('') : `<div class="messenger-empty-list"><p>${term ? 'No conversations match your search.' : 'No conversations yet.'}</p>${term ? '<button class="btn small" type="button" data-clear-conversation-search>Clear search</button>' : ''}</div>`;
         conversations.dataset.renderKey = listKey;
@@ -4186,9 +4177,9 @@ async function viewAgentChat() {
     const thread = threads.find(t => t.key === selected);
     shell.classList.toggle('messenger-open', !feedMode && mobileOpen && !!thread);
     const activeAnnouncement = selectedAgent ? loungeAnnouncements(records).get(selectedAgent) : null;
-    threadName.textContent = feedMode ? (selectedAgent ? (activeAnnouncement?.alias || selectedAgent) : 'Live Feed') : (thread?.title || 'Select a chat');
+    threadName.textContent = feedMode ? (selectedAgent ? (activeAnnouncement?.alias || agentDisplayName(selectedAgent, agentNames)) : 'Live Feed') : (thread?.title || 'Select a chat');
     threadDescription.textContent = feedMode ? (selectedAgent ? `Focused on @${selectedAgent}` : (kanzoAvailable ? 'Kanzo linked' : 'Kanzo unavailable')) : '';
-    threadAvatar.textContent = feedMode ? initials(selectedAgent ? (activeAnnouncement?.alias || selectedAgent) : 'AL') : initials(thread?.title);
+    threadAvatar.textContent = feedMode ? initials(selectedAgent ? (activeAnnouncement?.alias || agentDisplayName(selectedAgent, agentNames)) : 'AL') : initials(thread?.title);
     clearAgentButton.hidden = !(feedMode && selectedAgent);
     clearAgentButton.textContent = selectedAgent ? `Clear focus · @${selectedAgent}` : 'Clear focus';
     const previousScroll = stream.scrollTop;

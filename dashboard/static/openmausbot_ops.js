@@ -16,6 +16,11 @@ const OCC = {
   ran: ['Run recorded', 'green', 'OpenMausBot kept a completed run record for this occurrence.'],
   failed: ['Run failed', 'red', 'OpenMausBot kept a failed run record for this occurrence.'],
   running: ['In progress', 'amber', 'A run record exists and has not finished.'],
+  queued: ['Queued', 'blue', 'OpenMausBot recorded a queued run.'],
+  waiting: ['Waiting', 'amber', 'OpenMausBot recorded a waiting run.'],
+  cancelled: ['Cancelled', 'gray', 'OpenMausBot recorded a cancelled run.'],
+  missed: ['Missed', 'red', 'OpenMausBot recorded a missed run.'],
+  unknown_status: ['Unknown state', 'gray', 'The run record has an unrecognised state.'],
   no_record: ['No run record', 'amber', 'No matching record was kept. This is not proof the run was missed.'],
   unknown: ['Older than log', 'gray', 'Older than the run log OpenMausBot keeps, so it cannot be checked.'],
 };
@@ -65,10 +70,11 @@ function dur(a, b) {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m`;
 }
 
-export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = 'now', params = {}, setCleanup}) {
+export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = 'now', params = {}, setCleanup,
+  includeGhost = true, workspaceHref = '#/openmausbot/chat'}) {
   const tzChoices = [...new Set([LOCAL_TZ, 'Pacific/Auckland', 'UTC'])];
   const ui = {
-    bot: params.bot || 'all',
+    bot: !includeGhost && params.bot === 'ghost' ? 'all' : params.bot || 'all',
     tz: tzChoices.includes(params.tz) ? params.tz : LOCAL_TZ,
     view: params.view === 'day' ? 'day' : 'week',
     date: /^\d{4}-\d{2}-\d{2}$/.test(params.date || '') ? params.date : null,
@@ -88,11 +94,12 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
   const tabHref = (path) => '#' + path + (ui.bot !== 'all' ? '?bot=' + encodeURIComponent(ui.bot) : '')
     + (ui.tz !== LOCAL_TZ ? (ui.bot !== 'all' ? '&' : '?') + 'tz=' + encodeURIComponent(ui.tz) : '');
   const remember = () => { try { history.replaceState(null, '', '#' + baseRoute() + queryString()); } catch { /* ignore */ } };
+  if (!includeGhost && (params.bot === 'ghost' || params.tab === 'ghost')) remember();
 
   const botId = () => {
     if (!data) return null;
     if (ui.bot === 'all') return null;
-    if (ui.bot === 'ghost') return data.ghost_bot_id || null;
+    if (includeGhost && ui.bot === 'ghost') return data.ghost_bot_id || null;
     return ui.bot;
   };
   const bots = () => new Map((data?.bots || []).map((b) => [b.id, b]));
@@ -127,7 +134,7 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
       if (!current()) return;
       if (d.error) throw new Error(d.message || d.error);
       data = lastGood = d; loadError = null;
-      if (tab === 'now' && data.ghost_bot_id && (!botId() || botId() === data.ghost_bot_id)) {
+      if (includeGhost && tab === 'now' && data.ghost_bot_id && (!botId() || botId() === data.ghost_bot_id)) {
         try {
           const g = await api('/api/ghost/status', {timeoutMs: 8000});
           ghostSnap = g && typeof g === 'object' ? g : null;
@@ -144,13 +151,12 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
   // ---- shared chrome ----
   function chrome(body) {
     const opts = (data?.bots || []).slice().sort((a, b) => a.name.localeCompare(b.name));
-    const ghost = data?.ghost_bot_id;
+    const ghost = includeGhost ? data?.ghost_bot_id : null;
     const sel = ui.bot === 'ghost' && ghost ? ghost : ui.bot;
     const nav = TABS.map(([key, label, path]) =>
       `<a href="${esc(tabHref(path))}" ${key === tab ? 'aria-current="page"' : ''}>${esc(label)}${key === 'attention' && data ? attentionBadge() : ''}</a>`).join('');
-    return pageHead('OpenMausBot operations', 'Every bot in one place: what is running, what is scheduled, what needs you, and what ran.',
-      '<a class="btn small" href="#/openmausbot/fleet">Fleet status</a>')
-      + `<a class="omb-launch" href="#/openmausbot/chat"><span class="omb-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="7" width="16" height="13" rx="4"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor"/><path d="M9.5 17h5M12 7V4.2"/><circle cx="12" cy="3.3" r="1"/></svg></span><span class="omb-launch-text"><strong>Open OpenMausBots</strong><small>Chat with your bots and manage routines</small></span><span class="omb-launch-go" aria-hidden="true">&rsaquo;</span></a>`
+    return `<header class="omb-ops-head"><div class="omb-ops-title"><h1>OpenMausBot operations</h1><p class="muted">What is running, scheduled, needs you, and ran.</p></div>`
+      + `<a class="omb-open-btn" href="${esc(workspaceHref)}" aria-label="Open OpenMausBots: chat with your bots and manage routines"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="7" width="16" height="13" rx="4"/><circle cx="9" cy="13.5" r="1.2" fill="currentColor"/><circle cx="15" cy="13.5" r="1.2" fill="currentColor"/><path d="M12 7V4.5"/></svg><span>Open</span></a></header>`
       + `<nav class="ops-tabs" aria-label="Operations views">${nav}</nav>
       <div class="ops-toolbar">
         <label>Bot <select id="ops-bot" aria-label="Filter by bot">
@@ -161,7 +167,7 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
           ${tzChoices.map((z) => `<option ${z === ui.tz ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></label>
         <button class="btn small" id="ops-refresh" type="button">Refresh</button>
         <span class="muted small" id="ops-age">${data ? 'Updated ' + esc(fmt(data.generated_at, ui.tz, {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})) : ''}</span>
-      </div>` + sourceBanner() + body;
+      </div>` + sourceBanner() + body + `<p class="omb-ops-foot muted small"><a href="#/openmausbot/fleet">Bot fleet status</a> · also under Diagnostics</p>`;
   }
   function attentionBadge() {
     const n = (data.attention || []).filter((a) => wantBot(a.bot_id)).length;
@@ -175,7 +181,7 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
         if (s.state !== 'ok') out.push(`<div class="ops-note red" role="alert"><strong>${esc(s.label)} is unavailable.</strong> Nothing derived from it is shown as healthy.</div>`);
         else if (s.stale) out.push(`<div class="ops-note amber"><strong>${esc(s.label)} looks stale</strong> — not rewritten for ${Math.round(s.age_seconds / 60)} min.</div>`);
       }
-      if (ui.bot === 'ghost' && !data.ghost_bot_id) out.push('<div class="ops-note amber">Ghost\'s native bot id could not be read, so all bots are shown.</div>');
+      if (includeGhost && ui.bot === 'ghost' && !data.ghost_bot_id) out.push('<div class="ops-note amber">Ghost\'s native bot id could not be read, so all bots are shown.</div>');
     }
     return out.join('');
   }
@@ -189,15 +195,14 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
     const mine = (data.routines || []).filter((r) => wantBot(r.bot_id));
     const enabled = mine.filter((r) => r.enabled).length;
     const recent = (data.runs || []).filter((r) => wantBot(r.bot_id)).slice(0, 5);
-    const ghostId = data.ghost_bot_id;
+    const ghostId = includeGhost ? data.ghost_bot_id : null;
     const showGhost = ghostId && (!botId() || botId() === ghostId);
-    const runRow = (r) => `<li>${botChip(r.bot_id)}<span class="ops-main">${esc(r.routine_name || 'Run')}</span>
-      <span class="muted small">started ${esc(rel(r.started_at || r.created_at, now))} · ${esc(r.trigger)}</span></li>`;
-    const upRow = (u) => { const r = rmap.get(u.routine_id); return `<li>${botChip(u.bot_id)}<span class="ops-main">${esc(r?.name || u.routine_id)}</span>
-      <span class="muted small"><time datetime="${new Date(u.at).toISOString()}">${esc(dateTime(u.at, tz))}</time> · ${esc(rel(u.at, now))}</span></li>`; };
-    const recRow = (r) => `<li>${botChip(r.bot_id)}<span class="ops-main">${esc(r.routine_name || 'Run')}</span>
-      ${pill((RUNSTATE[r.status] || [])[1] || 'amber', (RUNSTATE[r.status] || [r.status || 'Unknown'])[0])}
-      <span class="muted small">${esc(dateTime(r.started_at || r.created_at, tz))}</span></li>`;
+    const runRow = (r) => `<li class="ops-row run">${botChip(r.bot_id)}<span class="ops-rel">${esc(rel(r.started_at || r.created_at, now))}</span>
+      <span class="ops-main">${esc(r.routine_name || 'Run')}</span><span class="ops-sub">Started ${esc(dateTime(r.started_at || r.created_at, tz))} · ${esc(r.trigger)}</span></li>`;
+    const upRow = (u) => { const r = rmap.get(u.routine_id); return `<li class="ops-row up">${botChip(u.bot_id)}<span class="ops-rel">${esc(rel(u.at, now))}</span>
+      <span class="ops-main">${esc(r?.name || u.routine_id)}</span><span class="ops-sub"><time datetime="${new Date(u.at).toISOString()}">${esc(dateTime(u.at, tz))}</time></span></li>`; };
+    const recRow = (r) => `<li class="ops-row rec">${botChip(r.bot_id)}<span class="ops-rel">${pill((RUNSTATE[r.status] || [])[1] || 'amber', (RUNSTATE[r.status] || [r.status || 'Unknown'])[0])}</span>
+      <span class="ops-main">${esc(r.routine_name || 'Run')}</span><span class="ops-sub">${esc(dateTime(r.started_at || r.created_at, tz))}</span></li>`;
     let ghost = '';
     if (showGhost) {
       let line;

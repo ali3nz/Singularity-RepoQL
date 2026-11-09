@@ -3,7 +3,7 @@ description: Supported per-user native Windows installation, lifecycle, and sour
 tags: [windows, native-installation, lifecycle, source-refresh, rollback]
 ---
 
-# Native Windows installation (Claude Code + Ghost + Office + RepoQL)
+# Native Windows installation (Claude Code + Office + RepoQL)
 
 This is the single supported install path for the native Windows build. It
 installs per user under `%LOCALAPPDATA%\Singularity\WindowsNative`; it does not
@@ -16,16 +16,23 @@ command from that directory in Windows PowerShell 5.1 or PowerShell 7.
 
 | Component | Runtime | Default port / task |
 | --- | --- | --- |
-| Dashboard (Ghost operations) | Python 3.12 + Node | `18100`, `Singularity-WindowsSupervisor` |
-| Claude Office (Ghost-only identity, Ben default layout) | Python 3.13 | `18128`, `Singularity-ClaudeComplete-Office` |
-| Ghost scheduler | Node (Codex runner) | `18473` / `18474` |
+| Dashboard (bot operations, auto sign-in) | Python 3.12 + Node | `18100`, `Singularity-WindowsSupervisor` |
+| Claude Office (Ben default layout) | Python 3.13 | `18128`, `Singularity-ClaudeComplete-Office` |
 | Tencent MemoryCore capture | Node / Docker as documented | see `docs/MEMORY-SETUP.md` |
 | RepoQL | `rql` 1.7.18, per user | `%LOCALAPPDATA%\rql\rql.exe` |
 
-Office is seeded with the Ghost-only office and the operator's *Ben* layout
+Office is seeded with the operator's *Ben* layout
 (`office\assets\ben-layout.json` and `ben-saved-layouts.json`). Desks are
-furniture: every authored desk is drawn even when its agent is absent. Ghost is
-the only seeded identity.
+furniture: every authored desk is drawn even when its agent is absent.
+Ghost is retired on Windows. A fresh Install refuses to proceed while a legacy
+`Singularity-Ghost-Scheduler` task or Ghost receipt exists; Start, Reinstall and
+Uninstall likewise refuse unverified Ghost residue. Remove the legacy task
+explicitly (it is not deleted silently), then re-run.
+
+The Tencent MemoryPanel instance is named `default` (it was `native-default` in
+earlier source). The live memory graph resolves the panel instance by this id, so
+an install made with the old id must be repaired (Repair/Reinstall regenerates the
+panel config and re-provisions its admin key) before the graph can load.
 
 ## Prerequisites
 
@@ -52,8 +59,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\native\windows\bootstrap_r
 
 `bootstrap_runtime.ps1`:
 
-1. resolves Python 3.12 (dashboard/Ghost), Python 3.13 (Office), Node (for
-   `scripts/native-memory-supervisor.mjs`), RepoQL 1.7.18 and the Ghost runner;
+1. resolves Python 3.12 (dashboard), Python 3.13 (Office), Node (for
+   `scripts/native-memory-supervisor.mjs`), RepoQL 1.7.18;
 2. installs missing runtimes per user from the pinned official sources in
    `runtime-pins.json`, verifying SHA256 (or the official signature where a
    hash is not published);
@@ -93,13 +100,13 @@ tasks are logon-triggered, not boot services.
 
 The first successful refresh stores the old source and exact receipt bytes in `source-refresh-snapshot`. That snapshot enables one rollback and blocks another refresh until rollback succeeds. Do not remove or rename the snapshot by hand.
 
-**Limit:** Static source identifies the supervisor, dashboard, and Ghost scheduler as consumers of `current\source`. Runtime consumer mapping has not been confirmed on Windows, so this procedure is not deployment authorization. Complete an independent review and native Windows validation before deployment.
+**Limit:** Static source identifies the supervisor and dashboard as consumers of `current\source`. Runtime consumer mapping has not been confirmed on Windows, so this procedure is not deployment authorization. Complete an independent review and native Windows validation before deployment.
 
 ### Prerequisites
 
 - Use a prepared source export with `NATIVE_WINDOWS_SOURCE_MANIFEST.json`; the manager checks the profile, complete file inventory, file sizes, and SHA256 hashes.
 - The install receipt must say `installed_not_started`. The current stage must pass its source, binary, and receipt checks.
-- Stop the supervisor, dashboard, and Ghost consumers before applying the refresh. The manager verifies task ownership and state and scans process metadata. It does not stop them for you.
+- Stop the supervisor and dashboard consumers before applying the refresh. The manager verifies task ownership and state and scans process metadata. It does not stop them for you.
 - Resolve any existing candidate, snapshot, reparse path, receipt mismatch, or unmanifested file before proceeding. The manager refuses unmanifested files, including `.pyc`; it never removes them.
 
 ### Refresh
@@ -256,29 +263,6 @@ tasks are `Running`; the source suite finishes with zero failures and zero
 errors. Do not treat a healthy listener or a built connector package as proof of
 a live connector index or readback; that remains an operator-consented step.
 
-## Ghost scheduler (A4)
-
-The default-root manager registers `Singularity-Ghost-Scheduler` as a logon
-task. It binds only `127.0.0.1:18473` in the current configuration; `18474` is
-not opened by the accepted stack. The control key lives in
-`%LOCALAPPDATA%\Singularity\GhostScheduler\config.json` and is never written to
-Task Scheduler arguments or status output.
-
-```powershell
-$g = '.\native\windows\manage_ghost_scheduler.ps1'
-powershell -NoProfile -ExecutionPolicy Bypass -File $g -Mode Plan
-powershell -NoProfile -ExecutionPolicy Bypass -File $g -Mode Register -Apply
-powershell -NoProfile -ExecutionPolicy Bypass -File $g -Mode Start -Apply
-powershell -NoProfile -ExecutionPolicy Bypass -File $g -Mode Status
-powershell -NoProfile -ExecutionPolicy Bypass -File $g -Mode Stop -Apply
-```
-
-The A4 lifecycle drives the same operations through
-`manage_native_windows.ps1`; use the child manager directly only when isolating
-Ghost. Keyed readback is `GET http://127.0.0.1:18473/state` with header
-`X-Ghost-Control-Key`; the expected response is `{ "ok": true, "state":
-"ready" }`. Do not print the key or pass it on a command line.
-
 ## Tencent MemoryCore and supervisor (A4)
 
 The default root is `%LOCALAPPDATA%\Singularity\WindowsNative`; memory data is
@@ -316,7 +300,7 @@ private ACL. A bounded L0 readback (no secret echoed) is:
 ```powershell
 $key = (Get-Content "$env:LOCALAPPDATA\Singularity\WindowsNative\memory\state\secrets\core-bearer" -Raw).Trim()
 $body = @{ team_id='openchamber-agents'; user_id='pilot-operator';
-           agent_id='singularity-orchestrator'; query='windows native release'; limit=1 } |
+           agent_id='singularity-code-reviewer'; query='windows native release'; limit=1 } |
         ConvertTo-Json -Compress
 Invoke-RestMethod http://127.0.0.1:18421/v3/atomic/search -Method Post `
   -Headers @{ Authorization="Bearer $key"; 'x-tdai-service-id'='default' } `
@@ -330,7 +314,7 @@ capture is enabled in the generated core config; startup logs are under
 
 ## Claude Code configuration (A4)
 
-The complete configurator installs 17 `singularity-*` agents, 10 skills, the
+The complete configurator installs 9 `singularity-*` agents (5 delegated, 4 main-session), 10 skills, the
 workflow rule, memory hooks on `SubagentStart`/`SubagentStop`/`SessionStart`/
 `Stop`, and the official RepoQL plugin (`repoql@repoql-plugins`). Back up
 `%USERPROFILE%\.claude\settings.json` and `.claude.json` before applying; the
@@ -375,9 +359,9 @@ login when a live model turn is required.
 
 ## Post-reboot verifier (A4)
 
-`native\windows\verify_after_reboot.ps1` is read-only. It checks the four
+`native\windows\verify_after_reboot.ps1` is read-only. It checks the three
 logon tasks and their action needles (supervisor, Claude dashboard, B7-owned
-Office, Ghost), the dashboard marker, keyed Ghost `/state`, Office `18128`
+Office), the dashboard marker, Office `18128`
 health, memory gateway/core/panel health, L0 readback, RepoQL 1.7.18, the
 Claude settings/agents/plugin registry and the CLI version, then writes a JSON
 receipt. It does not start or stop anything; Office is observed read-only.

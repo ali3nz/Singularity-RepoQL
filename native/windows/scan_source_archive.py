@@ -8,7 +8,7 @@ import hashlib
 import json
 import zipfile
 
-from windows_source_policy import linux_deployment_asset
+from windows_source_policy import linux_deployment_asset, windows_ghost_source
 
 FORBIDDEN_SUFFIXES = ('.db', '.sqlite', '.sqlite3', '.key', '.pem', '.pfx', '.p12', '.log', '.kdbx')
 FORBIDDEN_SEGMENTS = {'node_modules', '__pycache__', '.git', 'secrets', '.venv', 'runs'}
@@ -35,10 +35,6 @@ def windows_safe_member(name: str) -> bool:
 OPTIONAL_MODULES = {
     'office': ('office/', 'openchamber/plugins/product-office/', 'native/desktop-bridge/src/office.rs',
                'dashboard/office_bridge.py', 'native/gui-plugins/openchamber/singularity-office.mjs'),
-    'ghost': ('ghost/', 'openchamber/plugins/product-ghost/', 'native/desktop-bridge/src/ghost.rs',
-              'dashboard/native_ghost.py', 'native/windows/ghost_scheduler_host.py',
-              'native/windows/ghost_task_scheduler.ps1', 'native/windows/manage_ghost_scheduler.ps1',
-              'native/windows/test_ghost_scheduler_host.py'),
 }
 
 
@@ -92,11 +88,13 @@ def scan(path):
             issues.append('current fetch/render connector contract missing')
         complete = variant in (2, 4)
         feature = manifest.get('features', {})
-        if (feature.get('office') is not complete or feature.get('ghost') is not complete
+        if (feature.get('office') is not complete or feature.get('ghost') is not False
                 or manifest.get('rustOfficeFeature') is not complete
-                or manifest.get('rustGhostFeature') is not complete):
+                or manifest.get('rustGhostFeature') is not False):
             issues.append('variant feature leak')
         names = set(all_names) - {'NATIVE_WINDOWS_SOURCE_MANIFEST.json'}
+        if any(windows_ghost_source(name) for name in names):
+            issues.append('Ghost source leaked into Windows source package')
         if any(linux_deployment_asset(name) for name in names):
             issues.append('Linux/Docker deployment entrypoint in Windows source package')
         if manifest.get('no_wsl_required_for_intended_runtime') is True:
@@ -122,11 +120,8 @@ def scan(path):
                 if hashlib.sha256(z.read(name)).hexdigest() != digest:
                     issues.append('SHA256SUMS digest mismatch')
                     break
-        if not complete:
-            for optional_prefixes in OPTIONAL_MODULES.values():
-                if any(n.startswith(optional_prefixes) for n in all_names):
-                    issues.append('optional Ghost/Office module leaked into lean variant')
-                    break
+        if not complete and any(n.startswith(OPTIONAL_MODULES['office']) for n in all_names):
+            issues.append('optional Office module leaked into lean variant')
         for member in all_names:
             if member.lower().endswith(('.exe', '.dll', '.msi', '.msix')):
                 issues.append('binary executable in source-only package')

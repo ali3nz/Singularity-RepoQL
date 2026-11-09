@@ -21,6 +21,11 @@ catalog contracts while changing Windows origin policy and configuration.
   records. A passing check is **not** a healthy data source or a proof of
   Windows-local memory contents.
 
+When no wiki ids are configured the gateway discovers the identity's own wikis
+(`meta/team/list`, then `knowledge/wiki/list {team_id}`, then `knowledge/wiki/graph`;
+read-only actions, at most 10 wikis). Failures and an empty result are surfaced in the
+source's `error` list, never masked.
+
 Do not configure an SSH tunnel to a Dockerhost listener as a substitute. The
 current Windows Tencent skill gateway and memory core may not expose all the
 Dockerhost wiki graph endpoints. If `/api/v1/knowledge/wiki/graph` or the

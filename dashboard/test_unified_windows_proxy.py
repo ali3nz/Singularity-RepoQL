@@ -119,6 +119,7 @@ class ProxyTests(unittest.TestCase):
 
     def test_windows_graph_does_not_serve_stale_data_when_upstream_unavailable(self):
         with patch.dict('os.environ', {'SINGULARITY_WINDOWS_NATIVE': '1'}), \
+             patch.object(bridge, '_native_gateway_owner', return_value=True), \
              patch.object(bridge, '_now', return_value=100), \
              patch.object(bridge, '_fetch_upstream', return_value={'available': False, 'error': 'local_source_offline'}) as fetch:
             bridge._graph_cache[()] = (0, {'available': True, 'nodes': [{'id': 'previous-source'}]})

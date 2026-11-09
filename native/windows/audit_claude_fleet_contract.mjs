@@ -17,7 +17,7 @@ export function inspectFleet(){
     const model=declaredModel(content);
     return {name,role:x.memoryAgentId,surface:x.surface,
       modelSetting:model===null?'INHERITS_CURRENT_CLAUDE_SESSION':model,
-      memoryRoute:x.surface==='subagent'?'MAPPED_ROLE_TENCENT_HOOK':name==='singularity-ghost'?'GHOST_COMPANION': 'MAIN_SESSION_PROXY_SEPARATE'};
+      memoryRoute:x.surface==='subagent'?'MAPPED_ROLE_TENCENT_HOOK': 'MAIN_SESSION_PROXY_SEPARATE'};
   });
   const skillSources=CLAUDE_SKILLS.map(name=>{
     const content=read('openchamber/skills/'+name+'/SKILL.md');
@@ -34,7 +34,7 @@ export function inspectFleet(){
     liveRoleProfilesVerified:false,
     sharedConversationScope:false,
     sharedDocumentationScope:'singularity-docs/shared/docs-keeper',
-    ghostIsolated:true,
+    ghostRetired:true,
     docs:{tencentSourceConfigured:true,tencentLiveVerified:false,
       repoqlWatchesAttachedWorkspaceOnly:true,repoqlDocRootsVerified:false,
       bothSinksIndependentlyReadBack:false},

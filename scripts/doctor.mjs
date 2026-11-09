@@ -257,7 +257,7 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
   // ── RepoQL connection (read-only version probe of the real binary) ────────
   {
     const rqlPath = env.SINGULARITY_RQL_PATH || "rql";
-    const r = spawnSync(rqlPath, ["--version"], { encoding: "utf8", timeout: 15_000 });
+    const r = spawnSync(rqlPath, ["--version"], { windowsHide: true, encoding: "utf8", timeout: 15_000 });
     const version = r.status === 0 && !r.error && !r.signal ? readRqlVersion(r.stdout) : null;
     out.push(section("repoql", version === "1.7.18" ? "CONFIGURED" : (r.status === 0 ? "INCOMPLETE" : "NOT_CONFIGURED"),
       version === "1.7.18" ? "native RepoQL 1.7.18 version output pinned; indexing and MCP calls still NOT tested"
@@ -288,7 +288,7 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
     if (!existsSync(script)) {
       out.push(section("doc-ingestion", "DEGRADED", "the shipped ingestion helper is missing"));
     } else {
-      const r = spawnSync("python3", [script, "status"], { encoding: "utf8", timeout: 30_000, cwd: env.SINGULARITY_REPO_ROOT || ROOT });
+      const r = spawnSync("python3", [script, "status"], { windowsHide: true, encoding: "utf8", timeout: 30_000, cwd: env.SINGULARITY_REPO_ROOT || ROOT });
       let rows = null;
       try { rows = JSON.parse(r.stdout || "null"); } catch { /* not json */ }
       if (!Array.isArray(rows)) {

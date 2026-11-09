@@ -21,7 +21,7 @@ import { ensureMainMemoryIntegration, removeMainMemoryIntegration, detectProvide
 import { localWindowsPath } from './plan_claude_code_windows.mjs';
 
 const HASH = b => createHash('sha256').update(b).digest('hex');
-const NAMES = Object.keys(AGENT_MAP).sort();
+const NAMES = Object.keys(AGENT_MAP).sort(); // AGENT_MAP holds only the retained Windows roles; retired roles are not installed
 const PINS = fileURLToPath(new URL('./runtime-pins.json', import.meta.url));
 
 /** A hook command is part of the shipped product, not the build machine. Reject
@@ -225,7 +225,9 @@ export function renderClaudeSkill(name, sourceBytes) {
   if(name==='claude-office-visual') {
     const old="Deploy the way the project's office compose file does; do not restart the\n   primary application to apply an office change — they are separate containers.";
     const replacement='Deploy only through the verified native Windows Claude Office service lifecycle.\n   Never use Docker, WSL, Compose or Linux shell provisioning for this installation.';
-    if(text.includes(old)) text=text.replace(old,replacement);
+    const eol=text.includes('\r\n')?'\r\n':'\n';
+    const oldN=old.replace(/\n/g,eol);
+    if(text.includes(oldN)) text=text.replace(oldN,replacement.replace(/\n/g,eol));
     else if(/office compose file|Deploy.*Docker/i.test(text)) fail('OFFICE_SKILL_NATIVE_BOUNDARY_CHANGED');
   }
   return Buffer.from(text,'utf8');
@@ -345,7 +347,7 @@ function verifyRoot(source, variant) {
   const manifest = readObject(join(source, 'NATIVE_WINDOWS_SOURCE_MANIFEST.json'));
   if (manifest.variant !== variant || manifest.gui !== 'claude-desktop-code' ||
       manifest.repoql?.requiredVersion !== '1.7.18' ||
-      manifest.features?.ghost !== (variant === 2) ||
+      manifest.features?.ghost !== false ||
       manifest.features?.office !== (variant === 2)) fail('WRONG_OR_UNVERIFIED_SOURCE_VARIANT');
   if (!Array.isArray(manifest.files) || manifest.files.length < 19 + HOOK_IMPORT_CLOSURE.length) fail('MANIFEST_FILE_HASHES_REQUIRED');
   const checks = new Map(manifest.files.map(row=>[row.path,row.sha256]));
@@ -665,7 +667,7 @@ export function rollbackConfiguration({home}) {
     const j=readObject(receiptPath);
     if (j.schema!=='singularity-claude-native-config/v1' || !['PREPARED','APPLIED'].includes(j.state) ||
         ![1,2].includes(j.variant) || j.settingsPath!==join(claude,'settings.json') ||
-        !Array.isArray(j.agents) || j.agents.length>17) fail('JOURNAL_INVALID');
+        !Array.isArray(j.agents) || j.agents.length>17 /* legacy journals may list up to 17 */) fail('JOURNAL_INVALID');
     const agentsDir=join(claude,'agents');
     const rulesDir=join(claude,'rules');
     const skillsDir=join(claude,'skills');
@@ -893,7 +895,7 @@ export function verifyConfiguration({home}) {
   const j=readObject(journalPath);
   if (j.schema!=='singularity-claude-native-config/v1' || j.state!=='APPLIED' ||
       j.settingsPath!==join(claude,'settings.json') || ![1,2].includes(j.variant) ||
-      !Array.isArray(j.agents) || j.agents.length>17 ||
+      !Array.isArray(j.agents) || j.agents.length>17 /* legacy journals may list up to 17 */ ||
       !Array.isArray(j.skills) || j.skills.length>CLAUDE_SKILLS.length || !j.nodeExe || !j.memoryConfig) fail('INVALID_CONFIG_RECEIPT');
   const issues=[];
   if(j.rollbackMerge!==undefined){ownedRollbackMerge(j);issues.push('ROLLBACK_MERGE_IN_PROGRESS')}

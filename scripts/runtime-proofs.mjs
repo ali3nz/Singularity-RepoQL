@@ -54,7 +54,7 @@ export function runCommand(cmd, args, { env = process.env, cwd = undefined, time
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(cmd, args, { cwd, env });
+      child = spawn(cmd, args, { cwd, env, windowsHide: true });
     } catch (e) {
       resolve({ code: -1, out: "", err: String(e?.message || e) });
       return;
@@ -354,6 +354,7 @@ export async function runControlledFailoverProof({ root, mockPorts = null, overa
   const childErr = [];
   const routerChild = (port, inject) => {
     const c = spawn(process.execPath, [routerScript], {
+      windowsHide: true,
       env: {
         ...process.env,
         EXTRACTION_FAILOVER_SECRETS_DIR: secretsDir,

@@ -54,13 +54,13 @@ export function buildPlan({ variant, repoRoot, nodeExe, existingSettings = {} })
     // for the native Complete installer's Office and RepoQL plugin plan.
     memoryHookPreviewOnly:true, officeEventHooksInPreview:false,
     completeInstaller:'native/windows/configure_claude_code_windows.mjs',
-    officeIncludedByVariant:variant===2, ghostIncludedByVariant:variant===2,
+    officeIncludedByVariant:variant===2,
     unverified:[
-      'Existing settings and 15 agent definitions have not been installed',
+      'Existing settings and 9 agent definitions have not been installed',
       'This preview does not include Office handlers, skills or RepoQL plugin settings; use the Complete native installer plan',
       'Native Claude Desktop Code-tab hook and MCP acceptance remains untested',
       'Tencent memory.json and live capture/new-session recall are not provisioned or verified',
-      ...(variant===2 ? ['Claude Office application runtime is an external pinned fork, not present in this source ZIP','Ghost daemon and recovery are not native Windows accepted'] : []),
+      ...(variant===2 ? ['Claude Office application runtime is an external pinned fork, not present in this source ZIP'] : []),
       'Do not apply without Windows ACL/symlink checks, backup and explicit operator approval',
     ],
     // Deliberately omit full settings, foreign hook bodies, env values beyond

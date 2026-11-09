@@ -37,14 +37,15 @@ class NativeDashboardProfiles(unittest.TestCase):
                 loop.start()
                 try:
                     token=server.RequestHandlerClass.app.token
-                    def request(path):
+                    def request(path, *, authenticated=True):
                         conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=3)
                         try:
-                            conn.request('GET',path,headers={'Authorization':'Bearer '+token})
+                            conn.request('GET',path,headers={'Authorization':'Bearer '+token} if authenticated else {})
                             response=conn.getresponse()
                             return response.status,response.read()
                         finally:conn.close()
-                    with patch('unified_bridge._fetch_upstream',return_value=MOCK_USAGE):
+                    with patch('unified_bridge._fetch_upstream',return_value=MOCK_USAGE), \
+                            patch('unified_bridge._native_gateway_owner',return_value=True):
                         code,data=request('/api/unified/usage?days=30')
                         self.assertEqual(code,200,data[:300])
                         payload=json.loads(data)
@@ -64,8 +65,21 @@ class NativeDashboardProfiles(unittest.TestCase):
                     code,data=request('/api/native/windows/readiness')
                     self.assertEqual(code,200)
                     self.assertEqual(json.loads(data)['variant'],option)
+                    with patch('native_openmausbot.operations', return_value={'source': 'native_test'}) as operations:
+                        code,data=request('/api/openmausbot/ops?from=1000&to=2000', authenticated=False)
+                        self.assertEqual(code,401)
+                        operations.assert_not_called()
+                        code,data=request('/api/openmausbot/ops?from=1000&to=2000')
+                        self.assertEqual(code,200)
+                        self.assertEqual(json.loads(data),{'source':'native_test'})
+                        self.assertEqual(operations.call_args.args[1:],(1000,2000))
+                        operations.reset_mock()
+                        code,data=request('/api/openmausbot/ops?from=invalid&to=2000')
+                        self.assertEqual(code,200)
+                        self.assertEqual(json.loads(data)['error'],'bad_request')
+                        operations.assert_not_called()
                     code,data=request('/api/ghost/status')
-                    self.assertEqual(code,404 if option in (1,3) else 503)
+                    self.assertEqual(code,404)
                     code,data=request('/api/harness/office')
                     self.assertEqual(code,404 if option in (1,3) else 200)
                 finally:

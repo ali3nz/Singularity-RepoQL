@@ -36,14 +36,16 @@ an unverified `rql.exe`, or allow a plugin to bootstrap an unreviewed build.
 - `dashboard/server.py`, `dashboard/native_repoql_gate.py` — dashboard HTTP and pinned RepoQL gate
 - `native/windows/verify_option2_connectors.py` — separate read-only connector sweep inventory
 - `connectors/memorycore/manifest.yaml`, `connectors/kanzo/manifest.yaml` — connector ABI and scope
-- `native/windows/configure_claude_code_windows.mjs` — 17 agents, 10 Singularity skills, hooks
+- `native/windows/configure_claude_code_windows.mjs` — 9 agents (Ghost and seven other roles retired from Windows), 10 Singularity skills, hooks
 - `native/windows/refresh_installed_claude_rules.mjs` — narrowly refreshes the installer-owned Claude workflow rule on existing installations, with plan and crash recovery; does not overwrite foreign rules
 - `adapters/claude-code/singularity-workflow.md` — installed Claude rules
 - `native/windows/claude_complete_acceptance_matrix.py` — explicit missing/live evidence
 
-The source contains eight delegated MemoryCore roles and nine parent-session
-roles. Parent memory must use its separate approved proxy and **Ghost has a
-separate identity**. Never combine delegated, parent and Ghost namespaces.
+The source contains five delegated MemoryCore roles and four parent-session
+roles (nine agents in total). Ghost, standalone, solo/orchestrator, free-mode,
+quality-fixer, fleet-reviewer and researcher-web are retired from the Windows
+product. Parent memory must use its separate approved proxy. Never combine
+delegated and parent namespaces.
 There are 17 expected upstream RepoQL plugin skills; they are **not** bundled.
 The dashboard is a distinct, authentication-scoped per-user HTTP surface. Its
 file presence is not evidence of installation, a running listener, functioning
@@ -90,8 +92,8 @@ value.
 
 The release owner must independently verify native Rust build, binary provenance,
 RepoQL MCP and 17 plugin skills, Kanzo MCP, both RepoQL connector sweeps,
-all 17 agents and 10 local skills, 4 memory/documentation hook events,
-7 Office event types, delegated and fresh-session memory, Ghost isolation,
+all 9 agents and 10 local skills, 4 memory/documentation hook events,
+7 Office event types, delegated and fresh-session memory, absence of Ghost (new installs are Ghost-free; legacy removal verified),
 real authenticated dashboard UI, logon task, reboot, upgrade and uninstall.
 Do not claim publisher signing unless a trusted certificate was actually used.
 Use the evidence matrix to mark unrun items **NOT_RUN**, not PASS.

@@ -313,7 +313,7 @@ function Assert-FrontendNextBuild([string]$Source) {
 }
 function Assert-PatchedSource([string]$Source) {
   # The staged tree must already carry the release patch set (office\patches):
-  # Ghost-only seeds, the seeded Ben default layout, the unconditional desk
+  # Ghost-free identities, the seeded Ben default layout, the unconditional desk
   # set and the loopback WebSocket origin. Detect by markers rather than by
   # applying patches, so an already-patched tree is never double-patched.
   $checks = @(
@@ -321,12 +321,18 @@ function Assert-PatchedSource([string]$Source) {
     @{path='backend/app/main.py';marker='from app.api.routes.layout import seed_default_layouts'},
     @{path='backend/app/api/websocket.py';marker='if host in _LOCALHOST_HOSTS:'},
     @{path='frontend/src/components/game/OfficeDesks.tsx';marker='seats.map((seat, i)'},
-    @{path='frontend/src/systems/persistentIdentities.ts';marker='Ghost Protocol'}
+    @{path='frontend/src/systems/persistentIdentities.ts';marker='agent.id !== "ai-companion"'},
+    @{path='frontend/src/systems/idleSweep.ts';marker='agent.id === "ai-companion"'}
   )
   foreach ($check in $checks) {
     $full = Join-Path $Source $check.path
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "OFFICE_SOURCE_NOT_PATCHED: $($check.path) missing" }
     if (-not ((Get-Content -LiteralPath $full -Raw) -match [regex]::Escape($check.marker))) { throw "OFFICE_SOURCE_NOT_PATCHED: $($check.path) lacks $($check.marker)" }
+  }
+  $ghostSeed = '\{\s*name:\s*"Ghost Protocol",\s*id:\s*"ai-companion"\s*\}'
+  foreach ($relative in @('frontend/src/systems/persistentIdentities.ts','frontend/src/components/game/OfficeGame.tsx')) {
+    $body = Get-Content -LiteralPath (Join-Path $Source $relative) -Raw
+    if ($body -match $ghostSeed) { throw 'OFFICE_GHOST_SEED_PRESENT' }
   }
   $desks = Get-Content -LiteralPath (Join-Path $Source 'frontend/src/components/game/OfficeDesks.tsx') -Raw
   if ($desks -match [regex]::Escape('if (!occupied.has(i + 1))')) { throw 'OFFICE_SOURCE_NOT_PATCHED: occupancy draw gate still present' }

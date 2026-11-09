@@ -97,6 +97,7 @@ export function runClaudeSession({ workspace, prompt, env, timeoutMs }) {
   const args = ["-p", prompt, "--output-format", "json"];
   for (const t of String(env?.SINGULARITY_CC_ALLOWED_TOOLS || "").split(/[\s,]+/).filter(Boolean)) args.push("--allowedTools", t);
   const r = spawnSync("claude", args, {
+    windowsHide: true,
     cwd: workspace,
     env,
     encoding: "utf8",

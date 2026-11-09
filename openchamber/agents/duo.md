@@ -35,8 +35,8 @@ reviewer's name, and you never write code "as the reviewer" to save a round trip
   no tools, so requirements, file excerpts, diffs, command output, error text and
   acceptance criteria must all travel in the text.
 - Where the installation provides a consult path, use it and poll for the result.
-  Where it does not, use the local review surface (`code-reviewer`, or
-  `fleet-reviewer` for a read-only architecture pass) and say which one answered.
+  Where it does not, use the local review surface (`code-reviewer`) and say
+  that it answered.
 - A failed or unavailable consult is reported plainly. Never substitute another
   engine, never answer in the reviewer's place, and never treat "no answer" as
   approval.

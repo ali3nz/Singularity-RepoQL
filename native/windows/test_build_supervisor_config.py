@@ -31,14 +31,11 @@ class SupervisorConfigTests(unittest.TestCase):
         (self.memory / "stack.json").write_text("{}", encoding="utf-8")
         for path in (
             self.source / "native" / "windows" / "claude_complete_dashboard_host.py",
-            self.source / "native" / "windows" / "ghost_scheduler_host.py",
             self.bin / "singularity-desktop-bridge.exe",
             self.root / "python.exe",
             self.root / "office-python.exe",
             self.root / "node.exe",
             self.root / "rql.exe",
-            self.root / "ghost-config.json",
-            self.root / "ghost-client.json",
         ):
             path.write_text("fixture", encoding="utf-8")
         self.workspace = self.root / "workspace"
@@ -60,8 +57,6 @@ class SupervisorConfigTests(unittest.TestCase):
             "--workspace", str(self.workspace),
             "--office-source", str(self.office),
             "--office-python", str(self.root / "office-python.exe"),
-            "--ghost-config", str(self.root / "ghost-config.json"),
-            "--ghost-client-config", str(self.root / "ghost-client.json"),
             "--dashboard-state", str(self.dashboard_state),
             "--memory-root", str(self.memory),
             "--node", str(self.root / "node.exe"),
@@ -75,7 +70,10 @@ class SupervisorConfigTests(unittest.TestCase):
         self.assertEqual(stack["variant"], 2)
         self.assertEqual(stack["repoqlVersion"], "1.7.18")
         self.assertEqual([item["id"] for item in stack["components"]],
-                         ["office", "dashboard", "ghost", "memory"])
+                         ["office", "dashboard", "memory"])
+        self.assertNotIn("ghost", [item["id"] for item in stack["components"]])
+        dashboard = next(item for item in stack["components"] if item["id"] == "dashboard")
+        self.assertNotIn("--ghost-control-config", dashboard["args"])
         ports = [item["health"]["port"] for item in stack["components"] if "health" in item]
         self.assertEqual(len(ports), len(set(ports)))
         memory = [item for item in stack["components"] if item["id"] == "memory"][0]
@@ -95,7 +93,7 @@ class SupervisorConfigTests(unittest.TestCase):
         self.assertEqual(generator.main(self.args()), 0)
         stack = json.loads(self.output.read_text(encoding="utf-8"))
         self.assertEqual([item["id"] for item in stack["components"]],
-                         ["office", "dashboard", "ghost"])
+                         ["office", "dashboard"])
 
     def test_skip_office_emits_the_non_office_stack(self) -> None:
         args = self.args()
@@ -105,7 +103,7 @@ class SupervisorConfigTests(unittest.TestCase):
         self.assertEqual(generator.main(args), 0)
         stack = json.loads(self.output.read_text(encoding="utf-8"))
         self.assertEqual([item["id"] for item in stack["components"]],
-                         ["dashboard", "ghost", "memory"])
+                         ["dashboard", "memory"])
         self.assertNotIn("office", [item["id"] for item in stack["components"]])
 
     def test_credentials_are_refused_in_environment(self) -> None:

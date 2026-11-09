@@ -7,6 +7,7 @@ license = "MIT"
 
 # Optional Office is excluded from options 1 and 3. Build those with
 # --no-default-features; options 2 and 4 use --features office.
+# Ghost is available only for non-Windows builds.
 [features]
 default = []
 office = []

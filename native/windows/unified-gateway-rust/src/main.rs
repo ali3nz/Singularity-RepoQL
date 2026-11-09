@@ -305,6 +305,17 @@ fn inject_identity(action: &str, payload: &Value, key: &str) -> Value {
     }
     body
 }
+fn ids_from_list(data: &Value, id_keys: &[&str], list_keys: &[&str]) -> Vec<String> {
+    let rows: &[Value] = if let Some(a) = data.as_array() { a } else { selected(data, list_keys) };
+    let mut out: Vec<String> = Vec::new();
+    for r in rows {
+        if let Some(id) = str_field(r, id_keys) {
+            let id = id.trim();
+            if !id.is_empty() && id.len() <= 256 && !id.contains(',') && !out.iter().any(|x| x == id) {out.push(id.to_string());}
+        }
+    }
+    out
+}
 fn tencent(c: &Config, action: &str, payload: &Value) -> Result<Value, String> {
     if c.tencent_base.is_empty() || c.tencent_service.is_empty() {return Err("tencent_not_configured".into());}
     let key = read_secret(&c.tencent_key)?;
@@ -568,13 +579,33 @@ fn graph(c: &Config, query: &HashMap<String,String>) -> Value {
     }
     if query.get("tencent").map(|v|v!="false").unwrap_or(true) {
         let mut count=0; let mut errors=Vec::new();
-        for wiki_id in c.wiki_ids.iter().take(10) {
-            match tencent(c,"knowledge/wiki/graph",&json!({"wiki_id":wiki_id})) {
+        // Setup installs no explicit wiki ids: discover this identity's own wikis through the
+        // read-only list action instead of reporting a permanently empty graph source.
+        let mut discovered: Vec<(String,Option<String>)> = Vec::new();
+        if c.wiki_ids.is_empty() {
+            // The panel scopes wikis by team: list this identity's teams first, then each team's wikis.
+            match tencent(c,"meta/team/list",&json!({})) {
+                Ok(data) => for team in ids_from_list(&data,&["team_id","id"],&["teams","items","list","rows","data"]).into_iter().take(10) {
+                    match tencent(c,"knowledge/wiki/list",&json!({"team_id":team})) {
+                        Ok(w) => for id in ids_from_list(&w,&["wiki_id","id"],&["wikis","items","list","rows","data"]) {
+                            if !discovered.iter().any(|(x,_)| *x==id) {discovered.push((id,Some(team.clone())));}
+                        },
+                        Err(e) => errors.push(format!("wiki_list: {e}")),
+                    }
+                },
+                Err(e) => errors.push(format!("team_list: {e}")),
+            }
+        }
+        let targets: Vec<(String,Option<String>)> = if c.wiki_ids.is_empty() { discovered } else { c.wiki_ids.iter().map(|w|(w.clone(),None)).collect() };
+        for (wiki_id,team) in targets.iter().take(10) {
+            let mut payload=json!({"wiki_id":wiki_id});
+            if let Some(t)=team {payload["team_id"]=Value::String(t.clone());}
+            match tencent(c,"knowledge/wiki/graph",&payload) {
                 Ok(g) => {normalize_tencent(&g,wiki_id,&mut nodes,&mut edges);count+=1;},
                 Err(e) => errors.push(format!("{wiki_id}: {e}"))
             }
         }
-        sources.push(json!({"name":"tencent","available":count>0,"wiki_count":count,"error":if c.wiki_ids.is_empty(){vec!["no_wiki_ids_configured".to_owned()]}else{errors}}));
+        sources.push(json!({"name":"tencent","available":count>0,"wiki_count":count,"error":if targets.is_empty() && errors.is_empty(){vec!["no_wikis_for_identity".to_owned()]}else{errors}}));
     }
     // Cross-system edges require identical explicit source URI evidence; never infer from a label.
     let mut by_uri: HashMap<String, Vec<String>>=HashMap::new();
@@ -1256,6 +1287,7 @@ fn main() -> Result<(),Box<dyn std::error::Error + Send + Sync>> {
 mod tests {
     use super::*;
     #[test] fn no_cross_edge_from_matching_names(){let mut nodes=HashMap::new();add_node(&mut nodes,"repoql","local://a","same","file",Some("local://a"));add_node(&mut nodes,"tencent","w/id","same","memory",None);assert_ne!(nodes["repoql:local://a"]["canonical_uri"],nodes["tencent:w/id"]["canonical_uri"]);}
+    #[test] fn wiki_list_ids_are_extracted_defensively(){let k=["wiki_id","id"];let l=["wikis","items"];assert_eq!(ids_from_list(&json!({"wikis":[{"wiki_id":"a"},{"id":"b"},{"id":"a"},{"x":1}]}),&k,&l),vec!["a","b"]);assert!(ids_from_list(&json!(null),&k,&l).is_empty());assert_eq!(ids_from_list(&json!([{"team_id":"t"}]),&["team_id"],&l),vec!["t"]);}
     #[test] fn write_actions_are_not_reads(){assert!(!readonly_action("meta/agent/delete"));assert!(!readonly_action("chat-memory/clear"));assert!(readonly_action("knowledge/wiki/graph"));}
     #[test] fn repoql_graph_is_namespaced(){let mut n=HashMap::new();let mut e=Vec::new();normalize_repoql(&json!({"rows":[{"source_uri":"x","target_uri":"y","type":"REFERS_TO"}]}),&mut n,&mut e);assert_eq!(e.len(),1);assert_eq!(n.len(),2);assert_eq!(e[0]["source"],"repoql:x");}
     #[test] fn hub_doc_slug_follows_the_wiki_sync_rule(){

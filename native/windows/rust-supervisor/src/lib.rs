@@ -97,9 +97,11 @@ pub fn validate(stack: &Stack) -> Result<(), String> {
             return Err("invalid component id".into());
         }
         if !seen.insert(&c.id) { return Err("duplicate component id".into()); }
-        if (stack.variant == 1 || stack.variant == 3)
-            && (c.id.contains("office") || c.id.contains("ghost")) {
-            return Err("Office/Ghost forbidden in lean options".into());
+        if c.id.contains("ghost") {
+            return Err("Ghost components are forbidden in Windows supervisor stacks".into());
+        }
+        if (stack.variant == 1 || stack.variant == 3) && c.id.contains("office") {
+            return Err("Office forbidden in lean options".into());
         }
         if !local_absolute(&c.executable) || !local_absolute(&c.working_dir) {
             return Err("executable and working directory must be absolute".into());
@@ -420,9 +422,16 @@ mod tests {
     }
     #[test] fn valid_profiles() { for n in 1..=4 { assert!(validate(&fixture(n)).is_ok()); } }
     #[test] fn exact_pin() { let mut f=fixture(1); f.repoql_version="1.7.17".into(); assert!(validate(&f).is_err()); f.repoql_version="1.7.15".into(); assert!(validate(&f).is_err()); }
-    #[test] fn optional_components_are_rejected_in_lean_mode() {
+    #[test] fn office_is_rejected_only_in_lean_mode() {
         let mut f=fixture(1); f.components[0].id="claude-office".into(); assert!(validate(&f).is_err());
         f.variant=2; assert!(validate(&f).is_ok());
+    }
+    #[test] fn ghost_components_are_rejected_in_every_windows_option() {
+        for variant in 1..=4 {
+            let mut f=fixture(variant);
+            f.components[0].id="ghost".into();
+            assert!(validate(&f).is_err());
+        }
     }
     #[test] fn duplicate_identity_rejected() { let mut f=fixture(3); let exe = f.components[0].executable.clone(); let cwd = f.components[0].working_dir.clone(); f.components.push(Component { id: "tencent-core".into(), executable:exe, args:vec![], working_dir:cwd, env:BTreeMap::new(), health:None }); assert!(validate(&f).is_err()); }
     #[test] fn plaintext_secret_rejected() { let mut f=fixture(2); f.components[0].env.insert("API_KEY".into(), "secret".into()); assert!(validate(&f).is_err()); }

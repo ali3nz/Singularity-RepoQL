@@ -13,11 +13,10 @@ const script = fileURLToPath(new URL('./plan_claude_code_windows.mjs',import.met
 
 test('Option 2 includes 15 roles, 4 native exec-form hooks and all optional feature flags',()=>{
   const p=buildPlan({variant:2,repoRoot:root,nodeExe:exe});
-  assert.equal(p.agentDefinitions.length,15);
+  assert.equal(p.agentDefinitions.length,9);
   assert.deepEqual(p.managedHooks.map(h=>h.event),['SubagentStart','SubagentStop','SessionStart','Stop']);
   assert.ok(p.managedHooks.every(h=>h.command===exe && h.args.length===2 && h.args[0].startsWith(root)));
   assert.equal(p.officeIncludedByVariant,true);
-  assert.equal(p.ghostIncludedByVariant,true);
   assert.equal(p.releaseReady,false);
   assert.equal(p.memoryHookPreviewOnly,true);
   assert.equal(p.officeEventHooksInPreview,false);
@@ -28,7 +27,6 @@ test('Option 2 includes 15 roles, 4 native exec-form hooks and all optional feat
 test('Option 1 excludes Ghost/Office while preserving four hooks',()=>{
   const p=buildPlan({variant:1,repoRoot:root,nodeExe:exe});
   assert.equal(p.officeIncludedByVariant,false);
-  assert.equal(p.ghostIncludedByVariant,false);
   assert.equal(p.managedHooks.length,4);
 });
 
@@ -59,7 +57,7 @@ test('CLI emits no existing secret and never writes settings',()=>{
     writeFileSync(settings,existing);
     const run=spawnSync(process.execPath,[script,'--variant','2','--repo-root',root,'--node-exe',exe,'--existing-settings',settings],{encoding:'utf8',timeout:3000});
     assert.equal(run.status,0,run.stderr);
-    assert.equal(JSON.parse(run.stdout).agentDefinitions.length,15);
+    assert.equal(JSON.parse(run.stdout).agentDefinitions.length,9);
     assert.ok(!run.stdout.includes('VERY_PRIVATE_TEST_SECRET'));
     assert.equal(readFileSync(settings,'utf8'),existing);
     const bad=spawnSync(process.execPath,[script,'--variant','3','--repo-root',root,'--node-exe',exe],{encoding:'utf8',timeout:3000});

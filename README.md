@@ -14,7 +14,6 @@ You don't need to set up each part yourself. Give Claude Code the prompt below a
 - **Keep useful context.** Save conversations and project notes so your agent can look them up when you return to your work.
 - **Find the right code.** Help Claude search your project and understand how its files fit together.
 - **Keep track of tasks.** Give your agent a place to record work and check what still needs doing.
-- **Schedule work.** Set up jobs for your agent to run later using Ghost, the built-in scheduler.
 - **See what's happening.** Use the dashboard to manage scheduled work, and Claude Office to view agent activity in a virtual office.
 
 ## Get started
@@ -30,7 +29,7 @@ Install Singularity RepoQL from https://github.com/ali3nz/Singularity-RepoQL on 
 
 Read DETAILS-FOR-NERDS.md and docs/NATIVE-WINDOWS-INSTALLATION.md, then follow the supported native installation. Check my computer, install all missing dependencies from the documented official sources, and build anything required. Build and install the two bundled RepoQL connectors, Kanzo and MemoryCore, through the product's supported setup. Do the setup work for me.
 
-Connect all included tools to Claude Code in my chosen project: code search, memory, task tracking, Ghost scheduling, the dashboard, and Claude Office. Configure startup when I sign in. Preserve my existing files, settings, and other apps. Keep passwords and API keys private; ask before adding paid services or making system-wide changes.
+Connect all included tools to Claude Code in my chosen project: code search, memory, task tracking, the dashboard, and Claude Office. Configure startup when I sign in. Preserve my existing files, settings, and other apps. Keep passwords and API keys private; ask before adding paid services or making system-wide changes.
 
 Test the connections in a fresh Claude Code session, including saving and finding a harmless memory and running a harmless scheduled job. For Memory Graph, build and configure the local Windows Rust unified gateway per docs/WINDOWS-LOCAL-UNIFIED-GATEWAY.md; never reuse Dockerhost tokens or an SSH-tunneled graph. Apply the port ownership and unique-local-fixture tests before claiming it works. Fix setup problems yourself. Only ask me for permissions, account sign-ins, or choices you cannot make for me. Tell me clearly if anything could not be tested.
 

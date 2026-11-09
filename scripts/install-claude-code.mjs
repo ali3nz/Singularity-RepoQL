@@ -121,14 +121,14 @@ export function integrationEnv(repoRoot, extra = {}) {
 }
 
 function claudeBinary() {
-  return spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0 ? "claude" : null;
+  return spawnSync("claude", ["--version"], { windowsHide: true, encoding: "utf8" }).status === 0 ? "claude" : null;
 }
 
 function resolveRqlCommand(candidate) {
-  const probe = spawnSync(candidate, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(candidate, ["--version"], { windowsHide: true, encoding: "utf8" });
   if (probe.status !== 0) return null;
   if (candidate === "rql") {
-    const which = spawnSync("which", ["rql"], { encoding: "utf8" });
+    const which = spawnSync("which", ["rql"], { windowsHide: true, encoding: "utf8" });
     return which.status === 0 && which.stdout.trim() ? which.stdout.trim() : "rql";
   }
   return candidate;
@@ -537,13 +537,13 @@ export function repoqlMcpPlan({ rqlPath, claudeBin, dryRun, log }) {
     log(`  claude mcp add --scope user --transport stdio ${MCP_SERVER_NAME} -- ${rqlPath} mcp`);
     return null;
   }
-  const check = spawnSync(claudeBin, ["mcp", "get", MCP_SERVER_NAME], { encoding: "utf8" });
+  const check = spawnSync(claudeBin, ["mcp", "get", MCP_SERVER_NAME], { windowsHide: true, encoding: "utf8" });
   if (check.status === 0 && (check.stdout + check.stderr).includes(MCP_SERVER_NAME)) {
     log("RepoQL MCP already configured");
     return { name: MCP_SERVER_NAME, present: true };
   }
   if (!dryRun) {
-    const add = spawnSync(claudeBin, ["mcp", "add", "--scope", "user", "--transport", "stdio", MCP_SERVER_NAME, "--", rqlPath, "mcp"], { encoding: "utf8" });
+    const add = spawnSync(claudeBin, ["mcp", "add", "--scope", "user", "--transport", "stdio", MCP_SERVER_NAME, "--", rqlPath, "mcp"], { windowsHide: true, encoding: "utf8" });
     if (add.status !== 0) {
       log(`claude mcp add failed (rc=${add.status}): ${(add.stderr || add.stdout || "").trim()}`);
       return null;
@@ -743,7 +743,7 @@ function runProbe(cmd, args, { env, timeout = 25000 } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(cmd, args, { cwd: ROOT, env: env || process.env });
+      child = spawn(cmd, args, { windowsHide: true, cwd: ROOT, env: env || process.env });
     } catch (e) {
       resolve({ code: -1, out: "", err: String(e?.message || e) });
       return;
@@ -1067,7 +1067,7 @@ export async function verifyOptionTarget(v, flags, ctx, target) {
         : (dream.detail || "no dream journal for today"));
 
     let daemon = false;
-    const ps = spawnSync("docker", ["ps", "--format", "{{.Names}}"], { encoding: "utf8" });
+    const ps = spawnSync("docker", ["ps", "--format", "{{.Names}}"], { windowsHide: true, encoding: "utf8" });
     if (ps.status === 0) daemon = String(ps.stdout || "").split("\n").includes("singularity-ghost-dream");
     checked.push(`${daemon ? "ok" : "note"}: Ghost dream daemon ${daemon ? "running" : "not running — a one-shot dream still counts if the journal is complete"}`);
 
@@ -1545,7 +1545,7 @@ export function runUninstall(flags) {
 
   // 3. RepoQL MCP (only when this install registered it)
   if (record.mcp?.name && !flags.dryRun && claudeBinary()) {
-    const r = spawnSync("claude", ["mcp", "remove", record.mcp.name, "--scope", record.mcp.scope || "user"], { encoding: "utf8" });
+    const r = spawnSync("claude", ["mcp", "remove", record.mcp.name, "--scope", record.mcp.scope || "user"], { windowsHide: true, encoding: "utf8" });
     log(r.status === 0
       ? `  repoql: removed ${record.mcp.name}`
       : `  repoql: remove failed rc=${r.status} (remove manually: claude mcp remove ${record.mcp.name})`);

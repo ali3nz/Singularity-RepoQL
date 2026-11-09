@@ -20,8 +20,9 @@ ROOT = Path(__file__).resolve().parents[2]
 ZIP_DATE = (2026, 1, 1, 0, 0, 0)
 
 from windows_source_policy import (
-    WINDOWS_GHOST_ONLY_FILES,
     linux_deployment_asset,
+    windows_ghost_source,
+    windows_office_source,
     windows_variant_excludes,
 )
 
@@ -58,18 +59,22 @@ def build(variant: int, output: Path):
     parts = component_files()
     if parts["unclassified"]:
         raise ValueError("unclassified source cannot enter release source archive: " + ", ".join(parts["unclassified"][:8]))
-    complete = variant in (2, 4)
-    selected = set(parts["core"] + parts["dashboard"] + (parts["ghost"]+parts["office"] if complete else [])) - {"SHA256SUMS"}
+    office_enabled = variant in (2, 4)
+    features = policy["variants"][str(variant)]["features"]
+    if features.get("ghost") is not False:
+        raise ValueError("Ghost must be disabled in every native Windows source variant")
+    if features.get("office") is not office_enabled:
+        raise ValueError("Office must be enabled only in options 2 and 4")
+    selected = set(parts["core"] + parts["dashboard"] + (parts["office"] if office_enabled else [])) - {"SHA256SUMS"}
     paths = sorted(name for name in selected
                    if not linux_deployment_asset(name)
                    and not windows_variant_excludes(name, variant))
+    if any(windows_ghost_source(name) for name in paths):
+        raise ValueError("Ghost source leaked into native Windows archive")
     if not paths:
         raise ValueError("empty source set")
-    if not complete:
-        assert not (WINDOWS_GHOST_ONLY_FILES & set(paths))
-        assert not any(n.startswith(('ghost/','office/','dashboard/static/ghost/','openchamber/plugins/product-office/')) or n in ("dashboard/office_bridge.py", "dashboard/ghost_bridge.py", "native/desktop-bridge/src/office.rs", "native/desktop-bridge/src/ghost.rs", "dashboard/native_ghost.py", "dashboard/test_native_ghost.py") for n in paths)
-    else:
-        assert WINDOWS_GHOST_ONLY_FILES <= set(paths)
+    if not office_enabled:
+        assert not any(windows_office_source(name) for name in paths)
     output.parent.mkdir(parents=True,exist_ok=True)
     receipts = []
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=7) as dest:
@@ -93,8 +98,8 @@ def build(variant: int, output: Path):
             'schema':1,'product':'Singularity RepoQL native Windows SOURCE review',
             'variant':variant,'gui':policy['variants'][str(variant)]['gui'],
             'features':policy['variants'][str(variant)]['features'],
-            'rustOfficeFeature':complete,
-            'rustGhostFeature':complete,
+            'rustOfficeFeature':office_enabled,
+            'rustGhostFeature':False,
             'repoql':policy['repoql'],
             'release_status':'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER',
             'no_wsl_required_for_intended_runtime':'UNVERIFIED_NATIVE_ACCEPTANCE_REQUIRED',

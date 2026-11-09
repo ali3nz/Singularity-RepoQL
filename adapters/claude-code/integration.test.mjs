@@ -62,17 +62,17 @@ test("read/write boundaries are preserved per agent", () => {
   const toolsFor = (file) => parseFrontmatter(readFileSync(join(HERE, "agents", file), "utf8")).tools || "";
   // reviewer: read-only during the review (no Edit/Write)
   assert.equal(/Edit|Write/.test(toolsFor("singularity-code-reviewer.md")), false);
-  // explorer and researcher are read-only
-  for (const f of ["singularity-explore.md", "singularity-researcher-web.md"]) {
+  // explorer is read-only
+  for (const f of ["singularity-explore.md"]) {
     assert.equal(/Edit|Write|Bash/.test(toolsFor(f)), false, f);
   }
   // non-implementing main surfaces cannot write files through their own tools
-  for (const name of ["singularity-orchestrator", "singularity-solo-coordinator", "singularity-duel-coordinator", "singularity-quad-coordinator"]) {
+  for (const name of ["singularity-duel-coordinator", "singularity-quad-coordinator"]) {
     assert.equal(/Edit|Write/.test(toolsFor(`${name}.md`)), false, `${name}: coordinator may not write`);
     assert.match(toolsFor(`${name}.md`), /Agent/, `${name}: must be able to dispatch`);
   }
   // full-surface roles can implement directly and can delegate
-  for (const name of ["singularity-super", "singularity-standalone", "singularity-free-mode", "singularity-duo", "singularity-ghost"]) {
+  for (const name of ["singularity-super", "singularity-duo"]) {
     assert.match(toolsFor(`${name}.md`), /Edit, Write/, `${name}: full execution surface`);
     assert.match(toolsFor(`${name}.md`), /Agent/, `${name}: delegation available`);
   }
@@ -137,17 +137,16 @@ test("surface mirrors the source definition's mode for every mapped agent", () =
   }
   const mainRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "main").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
   const subRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "subagent").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
-  // Claude's roster is a documented subset of OpenChamber's: these two roles are
-  // intentionally not delegated from a Claude session. Pin both directions — the
-  // exclusion must stay meaningful, so the upstream roles must still exist.
-  const CLAUDE_EXCLUDED_SUBAGENTS = Object.freeze(["quality-fixer", "fleet-reviewer"]);
-  for (const excluded of CLAUDE_EXCLUDED_SUBAGENTS) {
-    assert.equal(openchamberFilesByMode("subagent").includes(excluded), true,
-      `${excluded} must still exist upstream, or the Claude exclusion is vacuous`);
+  // Claude's roster is a documented subset of OpenChamber's: the Windows product
+  // retired these roles, so they are intentionally not installed from Claude.
+  const RETIRED = Object.freeze(["quality-fixer", "fleet-reviewer", "researcher-web", "orchestrator", "solo-coordinator", "standalone", "free-mode", "ghost"]);
+  for (const retired of RETIRED) {
+    assert.equal(Object.keys(AGENT_MAP).includes(`singularity-${retired}`), false, `${retired} is retired`);
+    assert.equal(AGENT_FILES.includes(`singularity-${retired}.md`), false, `${retired} definition is not shipped`);
   }
-  assert.deepEqual(subRoles, openchamberFilesByMode("subagent").filter(n => !CLAUDE_EXCLUDED_SUBAGENTS.includes(n)), "every subagent-mode role is a delegation target");
-  assert.deepEqual(mainRoles, openchamberFilesByMode("primary"),
-    "every portable primary-mode role is a main-session surface");
+  assert.deepEqual(subRoles, openchamberFilesByMode("subagent").filter((n) => !RETIRED.includes(n)), "every retained subagent-mode role is a delegation target");
+  assert.deepEqual(mainRoles, openchamberFilesByMode("primary").filter((n) => !RETIRED.includes(n)),
+    "every retained primary-mode role is a main-session surface");
 });
 
 test("every main-surface definition states its launch form and refuses delegated authority", () => {
@@ -159,15 +158,15 @@ test("every main-surface definition states its launch form and refuses delegated
   }
 });
 
-test("standalone ships as a main-session surface, not as a delegation twin", () => {
-  assert.equal(AGENT_MAP["singularity-standalone"]?.surface, "main");
-  assert.equal(AGENT_MAP["singularity-standalone"]?.memoryAgentId, null);
-  assert.ok(AGENT_FILES.includes("singularity-standalone.md"));
+test("super ships as a main-session surface, not as a delegation twin", () => {
+  assert.equal(AGENT_MAP["singularity-super"]?.surface, "main");
+  assert.equal(AGENT_MAP["singularity-super"]?.memoryAgentId, null);
+  assert.ok(AGENT_FILES.includes("singularity-super.md"));
 });
 
-test("roster scope: selected Claude Code roles only, excluding fleet and quality specialist", () => {
-  assert.equal(Object.keys(AGENT_MAP).length, 15);
-  assert.equal(AGENT_FILES.length, 15);
+test("roster scope: nine retained Claude Code roles only", () => {
+  assert.equal(Object.keys(AGENT_MAP).length, 9);
+  assert.equal(AGENT_FILES.length, 9);
   for (const name of [...AGENT_FILES, ...Object.keys(AGENT_MAP)]) {
     assert.doesNotMatch(name, /pentest|redamon/i, `${name}: pentest roles are out of scope`);
   }

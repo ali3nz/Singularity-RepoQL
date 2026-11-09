@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate the native Windows ``singularity-rust-supervisor/v1`` config.
 
-The installer passes the staged paths; this module produces the exact four
-component entries the Rust supervisor accepts (office, dashboard, ghost and
-memory). It never writes a credential into the launcher: the memory bearer and
+The installer passes the staged paths; this module produces the Office,
+dashboard, and optional memory entries. Windows Ghost components are forbidden.
+It never writes a credential into the launcher: the memory bearer and
 any upstream provider key stay in ACL-protected files owned by their process.
 """
 from __future__ import annotations
@@ -80,10 +80,7 @@ def build(args: argparse.Namespace) -> dict:
     workspace = require_dir(args.workspace, "--workspace")
     dashboard_script = require_file(str(source_root / "native/windows/claude_complete_dashboard_host.py"),
                                     "dashboard host")
-    ghost_script = require_file(str(source_root / "native/windows/ghost_scheduler_host.py"), "ghost host")
     bridge = require_file(str(bin_dir / "singularity-desktop-bridge.exe"), "desktop bridge")
-    ghost_config = require_file(args.ghost_config, "--ghost-config")
-    ghost_client = require_file(args.ghost_client_config, "--ghost-client-config")
     dashboard_state = require_dir(args.dashboard_state, "--dashboard-state")
 
     components = []
@@ -101,16 +98,10 @@ def build(args: argparse.Namespace) -> dict:
                   ["-B", str(dashboard_script), "--source-root", str(source_root),
                    "--rql-exe", str(repoql), "--workspace", str(workspace),
                    "--state-dir", str(dashboard_state), "--port", str(args.dashboard_port),
-                   "--variant", "2", "--native-bridge-exe", str(bridge),
-                   "--ghost-control-config", str(ghost_client)],
+                   "--variant", "2", "--native-bridge-exe", str(bridge)],
                   source_root,
                   {"port": args.dashboard_port, "path": "/.well-known/singularity-health",
                    "readyTimeoutMs": 60000}))
-    if not args.skip_ghost:
-        components.append(component("ghost", python,
-                  ["-B", str(ghost_script), "--config", str(ghost_config)],
-                  source_root))
-
     memory_root = local_absolute(args.memory_root, "--memory-root")
     memory_build_root = local_absolute(args.memory_build_root, "--memory-build-root") if args.memory_build_root else memory_root / "build"
     memory_stack = local_absolute(args.memory_stack_config, "--memory-stack-config") if args.memory_stack_config else memory_root / "stack.json"
@@ -175,10 +166,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="emit the non-Office stack")
     parser.add_argument("--skip-dashboard", action="store_true",
                         help="omit dashboard (it is a separate scheduled task)")
-    parser.add_argument("--skip-ghost", action="store_true",
-                        help="omit ghost (it is a separate scheduled task)")
-    parser.add_argument("--ghost-config", required=True)
-    parser.add_argument("--ghost-client-config", required=True)
+    # Accepted only for old callers during source migration. These values are
+    # never read or emitted and no Ghost component is ever generated.
+    parser.add_argument("--skip-ghost", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--ghost-config", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ghost-client-config", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--dashboard-state", required=True)
     parser.add_argument("--memory-root", default=None)
     parser.add_argument("--memory-build-root", default=None)

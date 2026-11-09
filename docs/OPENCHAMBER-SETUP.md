@@ -46,18 +46,14 @@ runtime bundle isolated from the Windows Electron app and any existing
 `~/.config/opencode/` configuration; do not overwrite those files. For native
 installs the config dir is `~/.config/opencode/`.
 
-The shipped agents (`standalone` and `ghost` are primary; the rest are subagents):
+The shipped agents (the four coordination roles are primary; the rest are subagents):
 
 | Agent | Role |
 |---|---|
-| `standalone` | unrestricted operator-driven primary agent — does the task directly |
-| `ghost` | persistent companion agent that dreams — maintains 3-tier memory (`ghost/ghost-memory.mjs`) and consolidates daily reflections (`ghost/dream.mjs`; see [`GHOST-SETUP.md`](GHOST-SETUP.md)) |
 | `thinker` | deep reasoning for difficult technical decisions and diagnosis |
 | `general` | general-purpose research and multi-step execution |
 | `explore` | fast codebase exploration (patterns, symbols, questions) |
-| `researcher-web` | evidence-driven web research |
 | `code-reviewer` | implementation critic for significant changes |
-| `quality-fixer` | write-capable fixer scoped to its staged context directory |
 | `board` | Board of Advisors — eight-persona strategic judgment panel (financial officer, tax strategist, attorney, corporate strategist, investment advisor, real estate advisor, estate planner, insurance & risk advisor) |
 
 ### 2a. What the attach never overwrites
@@ -128,7 +124,7 @@ secrets and create `secrets/openchamber.env` with mode 0600; keep the UI
 password value out of the shell transcript. Then run:
 
 ```bash
-python3 scripts/provision-secrets.py --variant 3   # option 4: --variant 4 --with-ghost
+python3 scripts/provision-secrets.py --variant 3   # option 4: --variant 4
 scripts/start.sh    # creates bind dirs/network, attaches memory-core, then attaches the EXISTING OpenChamber (container or native) — never creates a second one; rql inside an attached container is verified with node scripts/attach-openchamber.mjs --container
 ```
 

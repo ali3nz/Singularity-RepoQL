@@ -14,8 +14,11 @@ class NativeReadinessTests(unittest.TestCase):
                 self.assertEqual(data['variant'],variant)
                 self.assertFalse(data['release_ready'])
                 self.assertEqual(data['repoql_required_version'],'1.7.18')
-                for feature in ('claude_office_http','ghost_control_http','claude_office_event_delivery','ghost_prompt_editing'):
+                for feature in ('claude_office_http','claude_office_event_delivery'):
                     self.assertEqual(data['services'][feature]['state']=='excluded',variant in (1,3))
+                # Ghost is retired from the Windows product: excluded in every variant.
+                for feature in ('ghost_control_http','ghost_prompt_editing'):
+                    self.assertEqual(data['services'][feature]['state'],'excluded')
                 self.assertEqual(data['services']['native_gui_session']['state'],'unverified')
                 self.assertEqual(data['services']['harness_rust_coordinator']['state'],'reachable')
                 self.assertEqual(data['services']['claude_office_event_delivery']['verified'], False)

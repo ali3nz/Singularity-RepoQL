@@ -23,6 +23,9 @@ def default_state_root(*, platform=None, env=None, home=None):
 ROOT = Path(os.environ.get('SINGULARITY_AGENTCHAT_STATE_DIR')
             or os.environ.get('RQLDASH_AGENTCHAT_STATE_DIR')
             or default_state_root())
+# Agent Chat roles are `[a-z0-9_-]` tokens; the 40-char cap matches the relay role
+# grammar so a derived `omb-<32 hex>` OpenMausBot role (36 chars) stays readable.
+PRESENCE_RE = re.compile(r'^[a-z0-9_-]{1,40}$')
 FILE_RE = re.compile(r'^[a-z0-9_-]{1,90}\.jsonl$')
 MAX_FILES = 160
 TAIL_BYTES = 128 * 1024
@@ -132,7 +135,7 @@ def read_presence(*, root: Path | None = None, now=None) -> dict:
             try:
                 row = json.loads(line)
                 role = str(row.get('from') or '')
-                if not re.fullmatch(r'[a-z0-9_-]{1,32}', role):
+                if not PRESENCE_RE.fullmatch(role):
                     continue
                 when = datetime.fromisoformat(str(row.get('createdAt') or '').replace('Z', '+00:00'))
                 if when.tzinfo is None:

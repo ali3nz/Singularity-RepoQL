@@ -22,8 +22,8 @@ const remote=(calls,seeded=new Set())=>async (url,init)=>{
  seeded.add(body.agent_id);
  return new Response(JSON.stringify({code:0,data:{accepted_ids:['one']}}));
 };
-test('roster is six delegated and nine excluded main roles',()=>{
- assert.equal(DELEGATED_ROLES.length,6);assert.equal(MAIN_ROLES.length,9);
+test('roster is five delegated and four excluded main roles',()=>{
+ assert.equal(DELEGATED_ROLES.length,5);assert.equal(MAIN_ROLES.length,4);
  assert.equal(validateDelegatedMap(map()).identityMapValidated,true);
  assert.ok(!DELEGATED_ROLES.includes('ghost'));
  // V4 removed these two subagents; their memory identities must not come back.

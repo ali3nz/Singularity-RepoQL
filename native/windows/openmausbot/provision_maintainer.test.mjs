@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
+import {EventEmitter} from 'node:events';
+import {PassThrough} from 'node:stream';
 import {tmpdir} from 'node:os';
 import {maintainerPlan,provisionMaintainer,maintainerRoutine} from './provision_maintainer.mjs';
 
@@ -17,7 +19,7 @@ function fixture(){
  writeFileSync(join(rcRoot,'stage','omb','cli.js'),'vendor CLI fixture');
  writeFileSync(join(rcRoot,'state','omb','instance.json'),JSON.stringify({
   payload:join(rcRoot,'stage','omb'),data_dir:join(rcRoot,'state','omb'),
-  mode:'headless-no-pair-task',task:'Fleet893-RC-OpenMausBot',pid:12345,port:18211}));
+  mode:'headless-no-pair-task',task:'Fleet893-RC-OpenMausBot',pid:process.pid,port:18211}));
  return {root,source,rcRoot};
 }
 /** Vendor stub: CLI verbs plus the MCP session the routine wiring uses.
@@ -59,7 +61,18 @@ function vendorRun({source,observeRoutine=true,drift=null,drop=false}={}){
  };
  return {run,calls,state};
 }
-test('maintainer plan is read-only and only provisions one named bot without pruning',()=>{
+
+function fakeChild(vendor){
+ return ()=>{
+  const child=new EventEmitter();child.stdout=new PassThrough();child.stdin=new PassThrough();child.killed=false;
+  let buf='';
+  child.stdin.on('data',d=>{buf+=d.toString();let i;
+   while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);if(!line.trim())continue;
+    const out=vendor('node',['cli.js','mcp'],{input:line+'\n',env:{OMB_PORT:'18211'}});if(out.stdout)child.stdout.write(out.stdout)}});
+  child.kill=()=>{child.killed=true;child.stdout.end();setImmediate(()=>child.emit('close'))};
+  return child;
+ };
+}test('maintainer plan is read-only and only provisions one named bot without pruning',async()=>{
  const x=fixture();try{
   const plan=maintainerPlan(x);const team=JSON.parse(plan.team);
   assert.deepEqual(team.teams,[{name:'Singularity Maintenance',prune:false}]);
@@ -68,16 +81,16 @@ test('maintainer plan is read-only and only provisions one named bot without pru
   assert.equal(team.bots[0].model,undefined);
   assert.equal(plan.scheduledChecksConfigured,false,'the plan creates no schedule');
   assert.equal(plan.routine.name,'Singularity maintenance sweep');
-  assert.equal(plan.routine.schedule.everyMinutes,360);
-  const result=provisionMaintainer(x);assert.equal(result.mode,'READ_ONLY');
+  assert.equal(plan.routine.schedule.everyMinutes,60);
+  const result=await provisionMaintainer(x);assert.equal(result.mode,'READ_ONLY');
   assert.equal(result.runtimeAgentVerified,false);assert.equal(result.scheduleVerified,false);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
-test('maintainer apply uses vendor dryrun and readback and permits no duplicate provisioning',()=>{
+test('maintainer apply uses vendor dryrun and readback and permits no duplicate provisioning',async()=>{
  const x=fixture(),v=vendorRun({source:x.source});
  try{
-  const options={...x,apply:true,run:v.run,allowFixture:true};
-  const first=provisionMaintainer(options);
+  const options={...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true};
+  const first=await provisionMaintainer(options);
   assert.equal(first.botRegistrationVerified,true);
   assert.equal(first.botConfigVerified,true);
   assert.deepEqual(first.botConfigFieldsCompared,['cwd','approval','computer']);
@@ -86,7 +99,7 @@ test('maintainer apply uses vendor dryrun and readback and permits no duplicate 
   assert.equal(first.scheduleCreated,true);
   assert.equal(first.liveRulesLoadedVerified,false);
   assert.equal(first.reloadRequired,true);
-  const second=provisionMaintainer(options);
+  const second=await provisionMaintainer(options);
   assert.equal(second.botRegistrationVerified,true);
   assert.equal(second.scheduleCreated,false,'an existing routine is not created twice');
   assert.equal(v.state.creates,1);
@@ -99,36 +112,39 @@ test('maintainer apply uses vendor dryrun and readback and permits no duplicate 
   assert.equal(JSON.parse(readFileSync(f,'utf8')).bots.length,1);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
-test('a bot with the right name but drifted configuration is refused',()=>{
+test('a bot with the right name but drifted configuration is refused',async()=>{
  const x=fixture(),v=vendorRun({source:x.source,drift:{approval:'full'}});
  try{
-  assert.throws(()=>provisionMaintainer({...x,apply:true,run:v.run,allowFixture:true}),/OMB_BOT_APPROVAL_MISMATCH/);
+  await assert.rejects(()=>provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true}),/OMB_BOT_APPROVAL_MISMATCH/);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
-test('removing an unrelated bot during apply is refused',()=>{
+test('removing an unrelated bot during apply is refused',async()=>{
  const x=fixture(),v=vendorRun({source:x.source,drop:true});
  try{
-  assert.throws(()=>provisionMaintainer({...x,apply:true,run:v.run,allowFixture:true}),/OMB_UNRELATED_BOT_REMOVED/);
+  await assert.rejects(()=>provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true}),/OMB_UNRELATED_BOT_REMOVED/);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
-test('a concurrent provisioning run is refused by the exclusive lock',()=>{
+test('a concurrent provisioning run is refused by the exclusive lock',async()=>{
  const x=fixture(),v=vendorRun({source:x.source});
  try{
   const state=join(x.rcRoot,'state','maintainer-provision');
   mkdirSync(state,{recursive:true});
   writeFileSync(join(state,'.lock'),JSON.stringify({pid:process.pid,at:new Date().toISOString()}));
-  assert.throws(()=>provisionMaintainer({...x,apply:true,run:v.run,allowFixture:true}),/OMB_MAINTAINER_PROVISION_BUSY/);
+  await assert.rejects(()=>provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true}),/OMB_MAINTAINER_PROVISION_BUSY/);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
 test('a recorded pid that is not running is refused on the target platform',()=>{
  const x=fixture();try{
+  // 12345 can be a live pid on a busy Windows host; use one no OS allocates.
+  const f=join(x.rcRoot,'state','omb','instance.json');
+  writeFileSync(f,JSON.stringify({...JSON.parse(readFileSync(f,'utf8')),pid:2147483000}));
   assert.throws(()=>maintainerPlan({source:x.source,rcRoot:x.rcRoot,requireLivePid:true}),/OMB_INSTANCE_PID_NOT_RUNNING/);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
-test('a routine that is not observed keeps scheduleVerified false with a precise reason',()=>{
+test('a routine that is not observed keeps scheduleVerified false with a precise reason',async()=>{
  const x=fixture(),v=vendorRun({source:x.source,observeRoutine:false});
  try{
-  const r=provisionMaintainer({...x,apply:true,run:v.run,allowFixture:true});
+  const r=await provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true});
   assert.equal(r.botRegistrationVerified,true);
   assert.equal(r.scheduleVerified,false);
   assert.equal(r.scheduleReason,'OMB_ROUTINE_NOT_OBSERVED');
@@ -144,12 +160,12 @@ test('the routine definition is a bounded interval with judgement in its instruc
  assert.match(r.instructions,/never start another scheduler/);
  assert.match(r.instructions,/reload/);
 });
-test('maintainer provisioning refuses unowned or drifted files',()=>{
+test('maintainer provisioning refuses unowned or drifted files',async()=>{
  const x=fixture(),v=vendorRun({source:x.source});
  try{
   const state=join(x.rcRoot,'state','maintainer-provision');mkdirSync(state,{recursive:true});
   writeFileSync(join(state,'team.json'),'unowned');
-  assert.throws(()=>provisionMaintainer({...x,apply:true,run:v.run,allowFixture:true}),/MAINTAINER_PROVISION_FOREIGN_FILES/);
+  await assert.rejects(()=>provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true}),/MAINTAINER_PROVISION_FOREIGN_FILES/);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
 test('maintainer refuses foreign OMB state or missing source markers',()=>{

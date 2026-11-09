@@ -70,7 +70,8 @@ function New-FixtureSource([string]$SourceRoot,[string]$BuildId,[string]$IndexTe
   New-FixtureText (Join-Path $SourceRoot 'backend/app/api/routes/layout.py') "async def seed_default_layouts():`n    return None`n"
   New-FixtureText (Join-Path $SourceRoot 'backend/app/api/websocket.py') "if host in _LOCALHOST_HOSTS:`n    pass`n"
   New-FixtureText (Join-Path $SourceRoot 'frontend/src/components/game/OfficeDesks.tsx') "export const desks = seats.map((seat, i) => seat);`n"
-  New-FixtureText (Join-Path $SourceRoot 'frontend/src/systems/persistentIdentities.ts') "export const label = 'Ghost Protocol';`n"
+  New-FixtureText (Join-Path $SourceRoot 'frontend/src/systems/persistentIdentities.ts') 'export const PERSISTENT_SEEDS = [{ name: "Sol Docker", id: "gateway-dockerhost" }]; const visible = real.filter((agent) => agent.id !== "ai-companion" && agent.name !== "Ghost Protocol");'
+  New-FixtureText (Join-Path $SourceRoot 'frontend/src/systems/idleSweep.ts') 'if (agent.id === "ai-companion") return false;'
   New-FixtureText (Join-Path $SourceRoot 'frontend/src/components/game/OfficeGame.tsx') $OfficeGameText
   New-FixtureText (Join-Path $SourceRoot 'backend/static/index.html') $IndexText
   New-FixtureText (Join-Path $SourceRoot 'frontend/out/index.html') $IndexText

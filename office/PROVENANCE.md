@@ -68,29 +68,31 @@ What the live deployment proves and the product keeps:
 - The deployed image itself and its build cache.
 - The Access tenant, tunnel route and DNS records of the fleet experiment.
 
-## Windows Ghost-only patch
+## Windows Ghost-free Office patch
 
-The Windows product ships Claude Office with one persistent identity, Ghost
-Protocol. The deviation from the pinned upstream revision is recorded as a patch
-rather than a vendored tree: the repository ships the deployment, not the
-application source.
+The Windows product keeps Claude Office and its Sol Docker and Sol Webserver
+identities, while removing Ghost Protocol from default seeds, incoming live
+identities, and idle-sweep retention. This is a source patch on the pinned
+upstream revision rather than a vendored tree: the repository ships deployment
+configuration, not the application source. It does not alter Office layout,
+room behavior, saved preferences, or other Office functionality.
 
 | Field | Value |
 |---|---|
 | Patch | `office/patches/windows-ghost-only.patch` (unified diff, `-p1` from the Office repo root) |
 | Applies to | `claude-office` fork pinned at `95d8bdc5728b23bcf0fee4c371b35e071c44f642` (MIT, © 2026 Paul Robello) |
 | Files changed | 3 |
-| Lines | 7 removed, 6 added (net -1) |
-| Reason | Sol Docker (`gateway-dockerhost`) and Sol Webserver (`gateway-webserver`) must not be seeded, always-present or idle-swept desks in the Windows product |
-| Behaviour change | identity seeding and filtering only; geometry, rooms and event rendering untouched |
+| Lines | 5 removed, 5 added (net 0) |
+| Reason | Ghost Protocol (`ai-companion`) must not be seeded, reintroduced from live data, or kept visible by idle-sweep handling in the Windows product |
+| Behaviour change | removes Ghost identity seeding and filtering only; Sol identities, layout, rooms and event rendering remain intact |
 
 ### Files touched
 
 | File | Change |
 |---|---|
-| `frontend/src/systems/persistentIdentities.ts` | remove both Sol seeds from `PERSISTENT_SEEDS`; filter `gateway-dockerhost` / `gateway-webserver` by id **and** name before stand-ins are built |
-| `frontend/src/components/game/OfficeGame.tsx` | remove both Sol seeds from the component's seed list; the remaining fixed desk is Ghost Protocol (`ai-companion`) |
-| `frontend/src/systems/idleSweep.ts` | drop `Sol Docker` / `Sol Webserver` from `ALWAYS_PRESENT`; `isRecentlyActive()` returns false for either gateway id or name |
+| `frontend/src/systems/persistentIdentities.ts` | remove the Ghost seed; filter `ai-companion`, `Ghost Protocol`, and `Ghost` by id/name before stand-ins are built |
+| `frontend/src/components/game/OfficeGame.tsx` | remove the Ghost seed from the component's list while keeping both Sol seeds |
+| `frontend/src/systems/idleSweep.ts` | remove `Ghost` / `Ghost Protocol` from `ALWAYS_PRESENT`; `isRecentlyActive()` returns false for the Ghost id or name |
 
 ### How to verify
 
@@ -102,7 +104,7 @@ git -C <office-source> apply --check -p1 office\patches\windows-ghost-only.patch
 native\windows\apply_office_static.ps1 -OfficeRoot <office-source> -Apply
 #    the receipt shows one build id and identical index.html sha256 for out/ and static/
 
-# 3. automated check: applied seeds and served build parity
+# 3. automated check: Ghost-free seeds and served build parity
 $env:SINGULARITY_OFFICE_SOURCE = '<office-source>'
 python native\windows\test_office_ghost_only_patch.py -v
 ```
@@ -112,16 +114,17 @@ both are expected on the live tree and are not failures of the product build.
 
 ### Known gaps
 
-- `office/patches/windows-ghost-only.patch` is still untracked in the candidate
-  as of 2026-10-30; `SHA256SUMS` does not cover it.
-- Desk and seat constants in `OfficeGame.tsx` (`PINNED_SEATS`, the Sol desk name
-  mapping) still name Sol; only identity seeds, the merge filter and the idle
-  sweep are patched. The served bundle contains no Sol seed objects, but those
-  desk labels remain.
-- Visual sign-off: the operator opened the Windows Office UI on 2026-10-30 and
-  confirmed the Ghost-only identity list is correct.
+- The patch filename remains `windows-ghost-only.patch` for continuity with
+  existing Office staging records; its current content removes Ghost.
+- Desk and seat constants in `OfficeGame.tsx` still describe the authored floor,
+  including the Ghost reporting desk as furniture. The identity patch does not
+  change desk geometry, seats, or saved layout data.
+- The Ghost-free roster has not received a new visual sign-off.
 
 ## Windows B5 view and WebSocket fixes
+
+The incident notes below describe the earlier Ghost-only trial. Their identity
+assumptions are historical and are superseded by the Ghost-free patch above.
 
 Operator review of the first Windows Office build (2026-10-30) found three
 defects: the floor rendered **no desks** (the desk layer only drew occupied
@@ -151,8 +154,8 @@ container), captured 2026-10-30:
 
 ### Behaviour change
 
-- Identity seeding is unchanged: Ghost Protocol remains the only persistent
-  identity; no Sol identities or avatars are introduced.
+- Sol Docker and Sol Webserver remain persistent Office identities; Ghost
+  Protocol is filtered from default seeds and incoming live data.
 - First boot seeds the Ben view; an existing `office_layout` or
   `office_saved_layouts` preference is never overwritten.
 - WebSocket loopback origins are accepted regardless of port; non-loopback
@@ -182,7 +185,7 @@ through `POST /api/v1/events` with the ingest key, the room client received
   mapping) still name Sol; only identity seeds, the merge filter and the idle
   sweep are patched.
 - Visual sign-off of the restored desk set and Ben view is with the operator;
-  Ghost-only identity display was visually confirmed on 2026-10-30.
+  the Ghost-free identity display still needs review.
 
 ### B6 exact live seed (supersedes the layout row above)
 
@@ -202,8 +205,8 @@ unchanged.
 
 Desk rendering correction: `SolDesks` now draws the full pinned desk set
 unconditionally (`desk-sol-webserver`, `desk-ghostreporting`) instead of only
-when the owner identity is present. Desks are furniture; identity seeding stays
-Ghost-only. Expected rendered desk ids: `desk-1`..`desk-10`, `boss-desk`,
+when the owner identity is present. Desks are furniture; Ghost-free identity
+seeding does not change the authored floor. Expected rendered desk ids: `desk-1`..`desk-10`, `boss-desk`,
 `desk-ghostreporting`, `desk-sol-webserver`.
 
 ## Windows B8 boss-desk fix
@@ -215,15 +218,16 @@ Ghost pinned desks); its saved layout override places it at `(1004, 740)`.
 
 Root cause: `OfficeGame.tsx` rendered `<BossDesk />` only when the Sol Docker
 identity was present (`presentPinned.has("Sol Docker") && <BossDesk />`). The
-Windows product seeds Ghost Protocol only, so the boss desk never rendered. The
-live deployment has Sol Docker present, which is why its view shows the desk.
+earlier Windows trial removed Sol identities, so the boss desk never rendered.
+The Windows Office roster now retains Sol identities, and the desk stays
+unconditional so furniture remains independent of future roster changes.
 
 | Field | Value |
 |---|---|
 | Patch | `office/patches/boss-desk-unconditional.patch` (unified diff, `-p1` from the Office repo root) |
 | Applies to | `frontend/src/components/game/OfficeGame.tsx` at pin `95d8bdc5728b23bcf0fee4c371b35e071c44f642` |
 | Change | replace the `presentPinned.has("Sol Docker") && <BossDesk />` gate with an unconditional `<BossDesk />`; identity seeding is untouched |
-| Why | desks are furniture; a Ghost-only roster must still show the operator's full floor |
+| Why | desks are furniture; the authored floor stays visible as the identity roster changes |
 
 Verification on `.241`: source built with Next 16.3.5 (build id
 `tnlvkQbMxQGcWEiOKRlMg`), applied with `apply_office_static.ps1`

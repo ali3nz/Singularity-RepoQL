@@ -26,7 +26,10 @@ def features(variant=None, *, native_windows=None):
     row = policy["variants"].get(str(variant))
     if row is None:
         raise ValueError("install variant must be one of 1, 2, 3, 4")
-    return {"variant": int(variant), "gui": row["gui"], "features": dict(row["features"])}
+    selected = dict(row["features"])
+    if native_windows:
+        selected["ghost"] = False
+    return {"variant": int(variant), "gui": row["gui"], "features": selected}
 
 
 def route_allowed(path, profile):

@@ -24,7 +24,7 @@ GATES = (
     'windows_rust_binaries',
     'windows_candidate_preparation',
     'native_claude_desktop_code_tab',
-    'singularity_agents_17',
+    'singularity_agents_9',
     'singularity_skills_10',
     'official_repoql_skills_17',
     'repoql_1_7_18_plugin_mcp',

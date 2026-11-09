@@ -255,7 +255,7 @@ export async function runGate({
   try { mkdirSync(root, { recursive: true }); } catch { /* root exists */ }
   let rql = rqlAvailable;
   if (rql === null) {
-    const w = spawnSync(process.platform === "win32" ? "where" : "which", ["rql"], { encoding: "utf8", timeout: 5000 });
+    const w = spawnSync(process.platform === "win32" ? "where" : "which", ["rql"], { encoding: "utf8", timeout: 5000, windowsHide: true });
     rql = w.status === 0;
   }
 

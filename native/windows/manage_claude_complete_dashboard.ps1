@@ -20,6 +20,10 @@ $writes=$Mode -in @('Register','Remove','Start','Stop')
 if ($writes -and -not $Apply) { throw 'DASHBOARD_EXPLICIT_APPLY_REQUIRED' }
 if (-not $writes -and $Apply) { throw 'DASHBOARD_READ_ONLY_REFUSES_APPLY' }
 if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA_REQUIRED' }
+# New registrations must not depend on the retired native Ghost client. Keep
+# accepting the old parameters for Stop/Remove compatibility, but reject any
+# non-empty values when creating a new task.
+if ($Mode -eq 'Register' -and ($NativeBridgeExe -or $GhostControlConfig)) { throw 'DASHBOARD_NATIVE_GHOST_PATH_NOT_ALLOWED' }
 $taskName=if ($Variant -eq 2) { 'Singularity-ClaudeComplete-Dashboard' } else { "Singularity-WindowsNative-Option$Variant-Dashboard" }
 $stateRelative=if ($Variant -eq 2) { 'Singularity\Dashboard' } else { "Singularity\Dashboard\Option$Variant" }
 $state=Join-Path $env:LOCALAPPDATA $stateRelative
@@ -67,13 +71,24 @@ function Get-OwnedReceipt {
       $receipt.option -ne $Variant -or $receiptVariant -ne $Variant) {
     throw 'DASHBOARD_OWNERSHIP_RECEIPT_INVALID'
   }
-  if ($Variant -in @(2,4)) {
+  $legacyNativeBridgeExe=''
+  $legacyGhostControlConfig=''
+  if ($receipt.PSObject.Properties['nativeBridgeExe']) {
+    $legacyNativeBridgeExe=[string]$receipt.PSObject.Properties['nativeBridgeExe'].Value
+  }
+  if ($receipt.PSObject.Properties['ghostControlConfig']) {
+    $legacyGhostControlConfig=[string]$receipt.PSObject.Properties['ghostControlConfig'].Value
+  }
+  if ($legacyNativeBridgeExe -or $legacyGhostControlConfig) {
+    if ($Variant -notin @(2,4) -or -not $legacyNativeBridgeExe -or -not $legacyGhostControlConfig) {
+      throw 'DASHBOARD_NATIVE_GHOST_RECEIPT_INVALID'
+    }
     $expectedGhostConfig=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Singularity/GhostScheduler/native-bridge-client.json'))
-    if (-not $receipt.nativeBridgeExe -or [IO.Path]::GetFileName([string]$receipt.nativeBridgeExe) -ine 'singularity-desktop-bridge.exe' -or
-        -not ([IO.Path]::IsPathRooted([string]$receipt.nativeBridgeExe)) -or
-        -not ([string]$receipt.ghostControlConfig).Equals($expectedGhostConfig,[StringComparison]::OrdinalIgnoreCase)) { throw 'DASHBOARD_NATIVE_GHOST_RECEIPT_INVALID' }
-    $null=Assert-Path ([string]$receipt.nativeBridgeExe) 'NATIVE_BRIDGE'
-    $null=Assert-Path ([string]$receipt.ghostControlConfig) 'GHOST_CLIENT_CONFIG'
+    if ([IO.Path]::GetFileName($legacyNativeBridgeExe) -ine 'singularity-desktop-bridge.exe' -or
+        -not ([IO.Path]::IsPathRooted($legacyNativeBridgeExe)) -or
+        -not $legacyGhostControlConfig.Equals($expectedGhostConfig,[StringComparison]::OrdinalIgnoreCase)) { throw 'DASHBOARD_NATIVE_GHOST_RECEIPT_INVALID' }
+    $null=Assert-Path $legacyNativeBridgeExe 'NATIVE_BRIDGE'
+    $null=Assert-Path $legacyGhostControlConfig 'GHOST_CLIENT_CONFIG'
   }
   return $receipt
 }
@@ -155,14 +170,6 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   $PythonExe=Assert-Path $PythonExe 'PYTHON'
   $RepoqlExe=Assert-Path $RepoqlExe 'REPOQL'
   $Workspace=Assert-Path $Workspace 'WORKSPACE' $true
-  if ($Variant -in @(2,4)) {
-    $NativeBridgeExe=Assert-Path $NativeBridgeExe 'NATIVE_BRIDGE'
-    $GhostControlConfig=Assert-Path $GhostControlConfig 'GHOST_CLIENT_CONFIG'
-    $expectedBridge=[IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $StagedSource) 'bin/singularity-desktop-bridge.exe'))
-    $expectedGhostConfig=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Singularity/GhostScheduler/native-bridge-client.json'))
-    if (-not $NativeBridgeExe.Equals($expectedBridge,[StringComparison]::OrdinalIgnoreCase) -or
-        -not $GhostControlConfig.Equals($expectedGhostConfig,[StringComparison]::OrdinalIgnoreCase)) { throw 'DASHBOARD_NATIVE_GHOST_PATH_INVALID' }
-  } elseif ($NativeBridgeExe -or $GhostControlConfig) { throw 'DASHBOARD_NATIVE_GHOST_PATH_NOT_ALLOWED' }
   if ([IO.Path]::GetFileName($PythonExe) -notin @('python.exe','python3.exe')) { throw 'DASHBOARD_PYTHON_EXE_REQUIRED' }
   if ([IO.Path]::GetFileName($RepoqlExe) -ne 'rql.exe' -or $Port -lt 1024 -or $Port -gt 65535) { throw 'DASHBOARD_DEPENDENCY_INVALID' }
   $entry=Assert-Path (Join-Path $StagedSource 'native/windows/claude_complete_dashboard_host.py') 'DASHBOARD_ENTRY'
@@ -178,9 +185,8 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   $pythonw=Assert-Path (Join-Path (Split-Path -Parent $PythonExe) 'pythonw.exe') 'DASHBOARD_PYTHONW'
   $silentHost=Assert-Path (Join-Path $StagedSource 'native/windows/silent_python_host.py') 'DASHBOARD_SILENT_HOST'
   $arguments='-B "'+$silentHost+'" --log "'+(Join-Path $state 'dashboard-runtime.log')+'" -- "'+$entry+'" --source-root "' +$StagedSource+'" --rql-exe "'+$RepoqlExe+'" --workspace "'+$Workspace+'" --state-dir "'+$state+'" --port '+$Port+' --variant '+$Variant
-  if ($Variant -in @(2,4)) { $arguments+=' --native-bridge-exe "'+$NativeBridgeExe+'" --ghost-control-config "'+$GhostControlConfig+'"' }
   $arguments+=' --mode serve'
-  foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state,$NativeBridgeExe,$GhostControlConfig)) {
+  foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state)) {
     if ($value.Contains('"') -or $value.Contains([char]10) -or $value.Contains([char]13)) {
       throw 'DASHBOARD_ARGUMENTS_INVALID'
     }

@@ -4,6 +4,7 @@ These are NOT live Win32 process-identity tests.
 """
 import os
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -51,7 +52,7 @@ class NativeWindowsCpuHistory(unittest.TestCase):
         row=record(self.config,state,sampler=lambda _:sample(created=changed),now=NOW)
         self.assertEqual(row['state'],'identity_mismatch')
         self.assertIsNone(row['cpu_pct'])
-        with sqlite3.connect(db_path(self.config)) as db:
+        with closing(sqlite3.connect(db_path(self.config))) as db:
             value=db.execute('SELECT cpu_pct FROM win_cpu_samples').fetchone()[0]
         self.assertIsNone(value)
         data=series(self.config,'1h',PERIODS,now=NOW)
@@ -71,7 +72,7 @@ class NativeWindowsCpuHistory(unittest.TestCase):
 
     def test_variants_isolated_and_old_linux_db_ignored(self):
         record(self.config,{'host':{'pid':123,'startedAt':START}},sampler=lambda _:sample(),now=NOW)
-        with sqlite3.connect(self.config.state_dir/'cpu.db') as db:
+        with closing(sqlite3.connect(self.config.state_dir/'cpu.db')) as db:
             db.execute('CREATE TABLE cpu_samples(ts INTEGER,cpu_pct REAL)')
             db.execute('INSERT INTO cpu_samples VALUES (?,?)',(NOW,9999))
         with patch.dict(os.environ,{'SINGULARITY_INSTALL_VARIANT':'3'}):
@@ -90,7 +91,7 @@ class NativeWindowsCpuHistory(unittest.TestCase):
     def test_retention_and_missing_sample_gaps(self):
         record(self.config,{'host':{'pid':123,'startedAt':START}},sampler=lambda _:sample(),now=NOW-86400*31)
         record(self.config,{'host':{'pid':123,'startedAt':START}},sampler=lambda _:sample(),now=NOW)
-        with sqlite3.connect(db_path(self.config)) as db:
+        with closing(sqlite3.connect(db_path(self.config))) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM win_cpu_samples').fetchone()[0],1)
         record(self.config,{},now=NOW+30)
         data=series(self.config,'1h',PERIODS,now=NOW+30)

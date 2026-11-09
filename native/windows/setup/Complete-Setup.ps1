@@ -336,7 +336,7 @@ function Invoke-GatewayRegistration {
     $gatewayConfig=Join-Path $dashboardState 'windows-unified-gateway.json'
     $needsReconcile=$true
     if (Test-Path -LiteralPath $gatewayConfig -PathType Leaf) {
-      try { $currentGateway=Get-Content -LiteralPath $gatewayConfig -Raw -Encoding UTF8 | ConvertFrom-Json; $needsReconcile=([string]$currentGateway.tencentBase -ne 'http://127.0.0.1:18126') } catch {}
+      try { $currentGateway=Get-Content -LiteralPath $gatewayConfig -Raw -Encoding UTF8 | ConvertFrom-Json; $needsReconcile=([string]$currentGateway.tencentBase -ne 'http://127.0.0.1:18126' -or [string]$currentGateway.tencentServiceId -ne 'default') } catch {}
     }
     if ($needsReconcile) {
       try { Stop-ScheduledTask -TaskName 'Singularity-Windows-Unified-Gateway' -ErrorAction Stop } catch {}
@@ -383,28 +383,20 @@ function Invoke-ProjectMcp {
     foreach ($line in $rollback) { if ($line) { Write-Host ('  '+[string]$line) } }
     if ($LASTEXITCODE -ne 0) { throw 'PROJECT_MCP_ROLLBACK_FAILED' }
   }
-  $apply=@(& $nodeExe $helper --apply --variant 2 --workspace $workspace --rql-exe $repoqlExe --kanzo-exe $kanzoExe 2>&1)
+  $ombCli=Join-Path $runtimeRoot 'openmausbot\cli.js'
+  $apply=@(& $nodeExe $helper --apply --variant 2 --workspace $workspace --rql-exe $repoqlExe --kanzo-exe $kanzoExe --omb-cli $ombCli --omb-port 18211 --node-exe $nodeExe 2>&1)
   foreach ($line in $apply) { if ($line) { Write-Host ('  '+[string]$line) } }
   if ($LASTEXITCODE -ne 0) { throw 'PROJECT_MCP_CONFIGURATION_FAILED' }
   Add-Result 'project_mcp' 'ok' 'kanzo.exe mcp at installed runtime path'
 }
-function Ensure-Autostart {
-  # Headless product tasks must survive a reboot before any interactive login.
-  # Preserve each task's action and add an S4U boot trigger.
-  Write-Step 'configure_autostart'
-  $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
-  foreach ($taskName in @('Singularity-ClaudeComplete-Dashboard','Singularity-Rust-Native-Supervisor','Singularity-Ghost-Scheduler','Singularity-Windows-Unified-Gateway')) {
-    $task=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if (-not $task) { throw ('AUTOSTART_TASK_MISSING '+$taskName) }
-    if ([string]$task.TaskPath -ne '\') { throw ('AUTOSTART_TASK_PATH_MISMATCH '+$taskName) }
-    $triggers=@($task.Triggers)
-    if (-not ($triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' })) { $triggers += New-ScheduledTaskTrigger -AtStartup }
-    $principal=New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType S4U -RunLevel Limited
-    Set-ScheduledTask -TaskName $taskName -Trigger $triggers -Principal $principal -ErrorAction Stop | Out-Null
-    $after=Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    if ([string]$after.Principal.LogonType -ne 'S4U') { throw ('AUTOSTART_PRINCIPAL_READBACK_FAILED '+$taskName) }
-  }
-  Add-Result 'autostart' 'ok' 'S4U boot triggers for headless tasks'
+function Invoke-OpenMausBot([string]$Action) {
+  $manager=Join-Path $current 'source\native\windows\manage_openmausbot.ps1'
+  if (-not (Test-Path -LiteralPath $manager -PathType Leaf)) { throw 'OPENMAUSBOT_MANAGER_MISSING' }
+  $argv=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$manager,'-Mode',$Action)
+  if ($Action -in @('Install','Start','Stop','Unregister')) { $argv += '-Apply' }
+  & powershell @argv
+  if ($LASTEXITCODE -ne 0) { throw ('OPENMAUSBOT_'+$Action.ToUpperInvariant()+'_FAILED') }
+  Add-Result 'openmausbot' 'ok' $Action
 }
 function Invoke-Shortcut {
   $shortcut=Join-Path $current 'source\native\windows\manage_dashboard_shortcut.ps1'
@@ -425,57 +417,6 @@ function Backup-UserState {
   }
   Add-Result 'backup' 'ok' $backup
 }
-function Reset-InstallStage {
-  # A repair must be able to recover when the staged receipt and the staged
-  # source have drifted (for example after an operator source refresh). Stop
-  # only this product's exact tasks, preserve data, then let Install rebuild.
-  Write-Step 'repair_reset_stage'
-  $watchdog=Get-ScheduledTask -TaskName 'Singularity-Dashboard-Watchdog' -ErrorAction SilentlyContinue
-  if ($watchdog) { try { Stop-ScheduledTask -TaskName 'Singularity-Dashboard-Watchdog' -ErrorAction Stop } catch {}; try { Disable-ScheduledTask -TaskName 'Singularity-Dashboard-Watchdog' -ErrorAction Stop | Out-Null } catch {} }
-  foreach ($task in @('Singularity-ClaudeComplete-Dashboard','Singularity-Ghost-Scheduler','Singularity-Rust-Native-Supervisor','Singularity-Windows-Unified-Gateway')) {
-    $existing=Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
-    if ($existing) {
-      if ([string]$existing.TaskPath -ne '\') { throw ('FOREIGN_TASK_REFUSED '+$task) }
-      try { Stop-ScheduledTask -TaskName $task -ErrorAction Stop } catch {}
-      Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction Stop
-    }
-  }
-  # Task Scheduler can report Stopped while the child process is still exiting.
-  # Give the owned gateway and dashboard a moment, then terminate only the
-  # exact product process names if they still hold current\bin.
-  Start-Sleep -Seconds 2
-  foreach ($procName in @('unified-repoql-control','singularity-desktop-bridge','singularity-windows-supervisor')) {
-    Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  }
-  Start-Sleep -Seconds 1
-  $memorySupervisor=Join-Path $current 'source\scripts\native-memory-supervisor.mjs'
-  if ((Test-Path -LiteralPath $memoryConfig -PathType Leaf) -and (Test-Path -LiteralPath $memorySupervisor -PathType Leaf)) {
-    & $nodeExe $memorySupervisor stop --config $memoryConfig --json 2>$null | Out-Null
-  }
-  $ghost=Join-Path $base 'GhostScheduler'
-  if (Test-Path -LiteralPath $ghost -PathType Container) {
-    $ghostBackup=Join-Path $setupState ('backup-ghost-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'))
-    $rc=robocopy $ghost $ghostBackup /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1
-    if ($LASTEXITCODE -ge 8) { throw 'GHOST_BACKUP_FAILED' }
-    Remove-Item -LiteralPath $ghost -Recurse -Force
-  }
-  foreach ($p in @((Join-Path $dashboardState 'task-ownership.json'),$installReceipt,(Join-Path $installRoot 'supervisor.json'))) { if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force } }
-  foreach ($p in @($current,$previous,(Join-Path $installRoot 'held-current'))) {
-    if (Test-Path -LiteralPath $p) {
-      $removed=$false
-      for ($attempt=1; $attempt -le 5 -and -not $removed; $attempt++) {
-        try { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop; $removed=$true }
-        catch { Start-Sleep -Seconds 2 }
-      }
-      if (-not $removed) { throw ('STAGE_REMOVE_FAILED '+$p) }
-    }
-  }
-  Add-Result 'repair_reset' 'ok'
-}
-function Restore-Watchdog {
-  $watchdog=Get-ScheduledTask -TaskName 'Singularity-Dashboard-Watchdog' -ErrorAction SilentlyContinue
-  if ($watchdog) { try { Enable-ScheduledTask -TaskName 'Singularity-Dashboard-Watchdog' -ErrorAction Stop | Out-Null; Start-ScheduledTask -TaskName 'Singularity-Dashboard-Watchdog' -ErrorAction Stop } catch { Add-Result 'watchdog' 'warning' 'restore_failed' } }
-}
 function Invoke-Install {
   if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) { throw 'PAYLOAD_SOURCE_MISSING' }
   if (-not (Test-Path -LiteralPath $workspace -PathType Container)) { New-Item -ItemType Directory -Force -Path $workspace | Out-Null }
@@ -485,11 +426,7 @@ function Invoke-Install {
   if ($hasReceipt) { Backup-UserState }
   $action=if ($hasReceipt) {'Reinstall'} else {'Install'}
   if (-not $hasReceipt) {
-    # A receipt-less install root can still hold product leftovers from an
-    # interrupted setup. Reset only product-owned stage files before the
-    # manager's strict fresh-install ownership check.
-    if (Test-Path -LiteralPath $current -PathType Container) { Backup-UserState }
-    Reset-InstallStage
+    if ((Test-Path -LiteralPath $current) -or (Test-Path -LiteralPath $previous)) { throw 'EXISTING_STAGE_REQUIRES_VERIFIED_OWNERSHIP' }
   }
   $args=@('-Mode',$action,'-SourceRoot',$sourceRoot,
     '-BridgeExe',(Join-Path $binRoot 'singularity-desktop-bridge.exe'),
@@ -498,26 +435,20 @@ function Invoke-Install {
     '-RunnerExe',$codexExe,'-Workspace',$workspace,'-NodeExe',$nodeExe,
     '-MemoryRoot',$memoryRoot,'-MemorySourceRoot',(Join-Path $runtimeRoot 'memory-source'),
     '-MemoryBuildRoot',(Join-Path $runtimeRoot 'build'),'-SkipOffice','-Apply')
-  try { Invoke-Manage $args 'install_product' }
-  catch {
-    $failure=[string]$_.Exception.Message
-    if ($failure -notmatch 'NATIVE_STAGE_MANIFEST_HASH_MISMATCH|NATIVE_STAGE_|NATIVE_REINSTALL_STAGE_MISSING|NATIVE_UNOWNED_OR_EXISTING_STAGE_REFUSED') { throw }
-    Reset-InstallStage
-    $args[1]='Install'
-    Invoke-Manage $args 'install_product'
-  }
+  Invoke-Manage $args 'install_product'
   Invoke-Manage @('-Mode','Start','-Apply','-SourceRoot',$sourceRoot,'-BridgeExe',(Join-Path $binRoot 'singularity-desktop-bridge.exe'),'-SupervisorExe',(Join-Path $binRoot 'singularity-windows-supervisor.exe'),'-InstallRoot',$installRoot,'-RepoqlExe',$repoqlExe,'-PythonExe',$pythonExe,'-RunnerExe',$codexExe,'-Workspace',$workspace,'-NodeExe',$nodeExe,'-MemoryRoot',$memoryRoot,'-MemorySourceRoot',(Join-Path $runtimeRoot 'memory-source'),'-MemoryBuildRoot',(Join-Path $runtimeRoot 'build'),'-SkipOffice') 'start_product'
-  Restore-Watchdog
   $null=Ensure-UnifiedBinary
   Ensure-Kanzo
   Invoke-GatewayRegistration
-  Ensure-Autostart
+  Invoke-OpenMausBot 'Install'
+  Invoke-OpenMausBot 'Start'
   Invoke-ProjectMcp
   Invoke-ClaudeConfiguration
   Invoke-Shortcut
   Invoke-DashboardVerification
 }
 function Invoke-Uninstall {
+  Invoke-OpenMausBot 'Unregister'
   Remove-RemoteTunnels
   Remove-KanzoTask
   if (Test-Path -LiteralPath $installReceipt -PathType Leaf) {
@@ -540,7 +471,7 @@ function Invoke-Verify {
   $null=Ensure-UnifiedBinary
   Ensure-Kanzo
   Invoke-GatewayRegistration
-  Ensure-Autostart
+  Invoke-OpenMausBot 'Verify'
   Invoke-ProjectMcp
   Invoke-DashboardVerification
   Invoke-ClaudeConfiguration
@@ -561,7 +492,6 @@ try {
   if (-not $message) { $message='UNKNOWN_SETUP_FAILURE' }
   Add-Result 'failure' 'error' $message
   Write-Step 'failed' $message
-  try { Restore-Watchdog } catch {}
   try { Write-SetupReceipt 'failed' $message } catch {}
   exit 1
 }

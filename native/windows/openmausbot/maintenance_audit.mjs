@@ -5,10 +5,11 @@
  *
  * Composition (all read-only):
  * - static inventory (agents, hooks, RepoQL plugin, Kanzo/OMB MCP presence)
+ * - Windows Ghost execution applicability (retired, so no execution is attempted)
  * - OMB shared rules on disk
  * - memory profiles in plan mode (no credentials, no live calls)
  * - documentation reconciliation plan when a manifest is supplied
- * - Tencent recovery / Ghost scope / dashboard: live probes are injected by the
+ * - Tencent recovery / dashboard: live probes are injected by the
  *   caller; without them the component is NOT_VERIFIED, never assumed healthy
  * - product-owned maintenance state: a lock left by a dead pid and pending chat
  *   are reported from the repair module's own files. Nothing is killed or edited.
@@ -87,39 +88,6 @@ async function kanzoProbe({workspace, run = spawnSync, platform = process.platfo
     '-File', script, '-SourceRoot', workspace]);
   if (result?.status !== 0) return {status: 'NOT_VERIFIED', issues: [failureCode(result, 'KANZO_BOARD_AUDIT_FAILED')]};
   return {status: 'CONFIGURED', issues: []};
-}
-
-/** One non-secret path value Configure already wrote into Claude's settings env.
- *  Returned to the caller only: it is never printed or placed in a report. */
-function settingsEnvValue(home, key) {
-  if (!home) return null;
-  const settings = readJson(join(home, '.claude', 'settings.json'));
-  const value = settings && typeof settings.env === 'object' && settings.env ? settings.env[key] : null;
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-/** The existing Ghost scope probe in its read-only `--live` mode. */
-async function ghostProbe({run = spawnSync, platform = process.platform, env = {}, home = null}) {
-  if (platform !== 'win32') return {status: 'NOT_VERIFIED', issues: ['WINDOWS_ONLY']};
-  const probeFile = env.probeFile ?? process.env.SINGULARITY_GHOST_PROBE_FILE;
-  // Configure owns the memory config path and records it in Claude's settings env,
-  // so the scheduled audit reuses that value instead of demanding a second copy.
-  // The value is a path, never a credential, and is never emitted.
-  const memoryConfig = env.memoryConfig ?? process.env.SINGULARITY_MEMORY_CONFIG
-    ?? settingsEnvValue(home, 'SINGULARITY_MEMORY_CONFIG');
-  if (!probeFile || !memoryConfig) return {status: 'NOT_VERIFIED', issues: ['GHOST_PROBE_CONFIG_MISSING']};
-  const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'claude_complete_ghost_scope_probe.mjs');
-  const result = external(run, process.execPath,
-    [script, '--live', '--probe-file', probeFile, '--memory-config', memoryConfig]);
-  if (result?.status !== 0) return {status: 'NOT_VERIFIED', issues: [failureCode(result, 'GHOST_SCOPE_PROBE_FAILED')]};
-  try {
-    const receipt = JSON.parse(String(result.stdout));
-    const issues = bounded(receipt?.issues);
-    if (receipt?.searchSeparationObserved === true && issues.length === 0) return {status: 'CONFIGURED', issues: []};
-    return {status: 'NEEDS_ATTENTION', issues: issues.length ? issues : ['GHOST_SCOPE_SEPARATION_NOT_OBSERVED']};
-  } catch {
-    return {status: 'NOT_VERIFIED', issues: ['GHOST_SCOPE_RECEIPT_UNREADABLE']};
-  }
 }
 
 /** The existing dashboard launcher's read-only `--mode check` preflight. */
@@ -203,6 +171,10 @@ export async function audit({home, workspace, dataDir, manifest = null, now = Da
         ...(c.kanzoProjectMcp?.issues ?? []), ...(c.openMausBotProjectMcp?.issues ?? [])]);
   } catch { push('claude-hooks-agents-repoql-kanzo', 'NOT_VERIFIED', ['INVENTORY_CHECK_FAILED']); }
 
+  // Ghost is retired from the Windows product; absence is the intended state.
+  // This records applicability only and never executes or reinstalls Ghost.
+  push('windows-ghost-execution', 'NOT_APPLICABLE', ['WINDOWS_GHOST_RETIRED']);
+
   try {
     const r = checkRules({dataDir});
     push('openmausbot-shared-rules', r.verified === true ? 'CONFIGURED' : 'NEEDS_ATTENTION',
@@ -260,7 +232,6 @@ export async function audit({home, workspace, dataDir, manifest = null, now = Da
     status: 'NOT_VERIFIED',
     issues: ['TENCENT_RECOVERY_MUTATING_ONLY'],
   }));
-  await probeOrDefault('ghost-scheduling', 'GHOST_PROBE_CONFIG_MISSING', () => ghostProbe({run, env: probes.env, platform, home}));
   await probeOrDefault('dashboard-agents-control', 'DASHBOARD_CHECK_INPUTS_MISSING', () => dashboardProbe({workspace, run, probes, platform}));
 
   // Ingestion backlog: the product's own doc-ingest ledger is a plain read-only
@@ -293,7 +264,9 @@ export async function audit({home, workspace, dataDir, manifest = null, now = Da
     maintenanceIssues,
     {pendingChats: maintenance.pendingChats, lock: maintenance.lock});
 
-  result.healthy = result.checks.every((c) => c.status === 'CONFIGURED');
+  result.healthy = result.checks.every((c) => c.status === 'CONFIGURED' ||
+    (c.component === 'windows-ghost-execution' && c.status === 'NOT_APPLICABLE' &&
+      c.issues.length === 1 && c.issues[0] === 'WINDOWS_GHOST_RETIRED'));
   return result;
 }
 

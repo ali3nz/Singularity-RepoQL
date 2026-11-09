@@ -15,7 +15,7 @@ Legacy Windows users following this page run Linux Claude Code and RepoQL in WSL
 
 | Piece | Where | What it does |
 |---|---|---|
-| 15 agent definitions | `~/.claude/agents/` (user) or `<project>/.claude/agents/` (project) | six delegation targets + nine main-session agents (below) |
+| 9 agent definitions | `~/.claude/agents/` (user) or `<project>/.claude/agents/` (project) | five delegation targets + four main-session agents (below) |
 | `SubagentStart` / `SubagentStop` hooks | `~/.claude/settings.json` (merged — never replacing your settings; a timestamped backup is written first) | hook the agents into the memory loop |
 | MemoryCore profiles | your Singularity installation's memory stack | the agents' persistent identities |
 | `singularity-repoql` MCP server | Claude Code user-level MCP config | RepoQL code intelligence (when `rql` is installed) |
@@ -36,7 +36,6 @@ Claude Code twin **share the same profile** — no duplicate identity is created
 | Claude Code agent | MemoryCore `agent_id` | Role |
 |---|---|---|
 | `singularity-code-reviewer` | `code-reviewer` | implementation critic; read-only checks; BLOCKING/NON-BLOCKING/APPROVE verdicts; no automatic concept writes |
-| `singularity-researcher-web` | `researcher-web` | evidence-driven web research with cited sources |
 | `singularity-thinker` | `thinker` | deep reasoning/diagnosis; reason and recommend only |
 | `singularity-explore` | `explore` | fast read-only codebase exploration |
 | `singularity-general` | `general` | full-surface execution worker |
@@ -50,18 +49,10 @@ duplicate it).
 
 | Claude Code agent | Launch | Role |
 |---|---|---|
-| `singularity-orchestrator` | `claude --agent singularity-orchestrator` | front door: risk classification, planning, delegation, verification; never implements |
-| `singularity-solo-coordinator` | `claude --agent singularity-solo-coordinator` | SOLO seat plan: one worker, one reviewer |
 | `singularity-duel-coordinator` | `claude --agent singularity-duel-coordinator` | DUO seat plan: two workers, one reviewer |
 | `singularity-quad-coordinator` | `claude --agent singularity-quad-coordinator` | QUAD seat plan: four workers, one reviewer |
 | `singularity-duo` | `claude --agent singularity-duo` | DUO implementer working against an independent reviewer |
 | `singularity-super` | `claude --agent singularity-super` | SUPER mode: full surface, may implement inside its own run |
-| `singularity-standalone` | `claude --agent singularity-standalone` | unrestricted operator-driven agent, no mandatory delegation |
-| `singularity-free-mode` | `claude --agent singularity-free-mode` | full surface restricted to free or zero-cost routes |
-| `singularity-ghost` | `claude --agent singularity-ghost` | persistent companion (options 2 and 4 only) |
-
-Ghost keeps its own `ghost-companion` memory profile and its own setup
-([`GHOST-SETUP.md`](GHOST-SETUP.md)); no second Ghost identity is created.
 
 Claude Code has no frontmatter field that hides a definition from the Agent tool,
 so the nine main-session definitions are also visible to delegation. Each body

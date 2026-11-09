@@ -11,6 +11,9 @@ const NAV_ALIASES = {
   // Bot Operations retired (fleet#832): the view redirects, so a stale link must
   // mark the surviving OpenMausBot entry.
   "/bots": "/openmausbot",
+  "/openmausbot/calendar": "/openmausbot",
+  "/openmausbot/attention": "/openmausbot",
+  "/openmausbot/history": "/openmausbot",
   "/cpu": "/diagnostics",
   "/errors": "/diagnostics",
   "/excluded": "/diagnostics",
@@ -72,11 +75,10 @@ export function initNavigationUI() {
   const feedback = document.getElementById('nav-search-status');
   const pageTitle = document.getElementById('mobile-page-title');
   const main = document.getElementById('app');
-  if (!sidebar || !toggle || !close || !scrim || !search || !main) return () => {};
+  if (!sidebar || !toggle || !close || !scrim || !main) return () => {};
 
   const mobile = window.matchMedia('(max-width: 940px)');
   const links = [...sidebar.querySelectorAll('[data-nav]')];
-  const dockLinks = [...document.querySelectorAll('[data-dock]')];
   const groups = [...sidebar.querySelectorAll('.nav-section')];
   let opened = false;
   const currentPath = () => (location.hash.replace(/^#/, '').split('?')[0] || '/');
@@ -96,9 +98,13 @@ export function initNavigationUI() {
     sidebar.setAttribute('aria-hidden', mobile.matches && !opened ? 'true' : 'false');
     scrim.hidden = !opened;
     if (opened) {
-      search.value = '';
-      filterLinks('');
-      search.focus();
+      if (search) {
+        search.value = '';
+        filterLinks('');
+        search.focus();
+      } else {
+        close.focus();
+      }
     } else if (restoreFocus && mobile.matches) {
       toggle.focus();
     }
@@ -119,7 +125,7 @@ export function initNavigationUI() {
       group.hidden = !showGroup;
     }
     if (term && matches) sidebar.querySelector('#nav-more')?.setAttribute('open', '');
-    feedback.textContent = term ? `${matches} navigation item${matches === 1 ? '' : 's'} found` : '';
+    if (feedback) feedback.textContent = term ? `${matches} navigation item${matches === 1 ? '' : 's'} found` : '';
   }
 
   function updateCurrent() {
@@ -127,23 +133,19 @@ export function initNavigationUI() {
     const target = sectionFor(path);
     if (pageTitle) pageTitle.textContent = target?.textContent.trim() || 'RepoQL Dashboard';
     if (target?.closest('#nav-more')) sidebar.querySelector('#nav-more')?.setAttribute('open', '');
-    dockLinks.forEach(link => {
-      if (link.dataset.dock === navPathFor(path, dockLinks.map(item => item.dataset.dock))) link.setAttribute('aria-current', 'page');
-      else link.removeAttribute('aria-current');
-    });
     links.forEach(link => {
       if (link === target) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
     if (opened) setOpened(false);
-    if (search.value) { search.value = ''; filterLinks(''); }
+    if (search && search.value) { search.value = ''; filterLinks(''); }
   }
 
   toggle.addEventListener('click', () => setOpened(!opened, opened));
   close.addEventListener('click', () => setOpened(false, true));
   scrim.addEventListener('click', () => setOpened(false, true));
-  search.addEventListener('input', () => filterLinks(search.value));
-  search.addEventListener('keydown', event => {
+  search?.addEventListener('input', () => filterLinks(search.value));
+  search?.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       const visible = links.find(link => !link.hidden && !link.closest('[hidden]'));
       if (visible) { event.preventDefault(); visible.click(); }
@@ -175,7 +177,7 @@ export function initNavigationUI() {
         !['INPUT','TEXTAREA','SELECT'].includes(el?.tagName) && !el?.isContentEditable) {
       event.preventDefault();
       if (mobile.matches && !opened) setOpened(true);
-      else search.focus();
+      else if (search) search.focus();
     }
   });
 

@@ -31,6 +31,7 @@ function Assert-PrivatePath([string]$Value) {
   return $full
 }
 $exe=Assert-PrivatePath $SupervisorExe
+$runtimeExe=Assert-PrivatePath (Join-Path (Split-Path -Parent $exe) 'singularity-windows-supervisorw.exe')
 $config=Assert-PrivatePath $ConfigPath
 if ([IO.Path]::GetFileName($exe) -ine 'singularity-windows-supervisor.exe') { throw 'TASK_EXE_IDENTITY_INVALID' }
 $taskName='Singularity-Rust-Native-Supervisor'
@@ -44,8 +45,9 @@ if ($task.Count -eq 0) {
 $t=$task[0]
 $expectedArgs='run "' + $config + '"'
 $actions=@($t.Actions)
-$filesPresent=([IO.File]::Exists($exe) -and [IO.File]::Exists($config))
-$correctAction=($actions.Count -eq 1 -and $actions[0].Execute -ieq $exe -and $actions[0].Arguments -ceq $expectedArgs)
+$filesPresent=([IO.File]::Exists($exe) -and [IO.File]::Exists($config) -and
+  ($actions.Count -eq 1 -and ($actions[0].Execute -ieq $exe -or [IO.File]::Exists($runtimeExe))))
+$correctAction=($actions.Count -eq 1 -and ($actions[0].Execute -ieq $runtimeExe -or $actions[0].Execute -ieq $exe) -and $actions[0].Arguments -ceq $expectedArgs)
 $correctPrincipal=($userIds -contains [string]$t.Principal.UserId)
 $limited=($t.Principal.RunLevel -eq 'Limited')
 # Scheduled-task logon trigger is a distinct requirement from TaskName or

@@ -13,7 +13,7 @@ export function inventory({home,workspace,verifyClaude=verifyConfiguration,inspe
   if(!home||!workspace||typeof home!=='string'||typeof workspace!=='string'||
     !isAbsolute(home)||!isAbsolute(workspace))throw Error('ABSOLUTE_HOME_AND_WORKSPACE_REQUIRED');
   const receipt={schema:'singularity-option2-static-installed-inventory/v1',option:2,
-    claudeConfiguration:{ownedConfigurationVerified:false,agentsExpected:15,skillsExpected:10,
+    claudeConfiguration:{ownedConfigurationVerified:false,agentsExpected:9,skillsExpected:10,
       ownedHooksExpected:11,issues:[]},
     officialRepoqlPlugin:{assetsPresent:false,expectedSkills:17,presentSkills:0,issues:[]},
     kanzoProjectMcp:{ownedRegistrationVerified:false,issues:[]},
@@ -25,7 +25,7 @@ export function inventory({home,workspace,verifyClaude=verifyConfiguration,inspe
     const c=verifyClaude({home});
     receipt.claudeConfiguration.issues=issueCodes(c?.issues);
     receipt.claudeConfiguration.ownedConfigurationVerified=c?.configured===true && c?.variant===2 &&
-      c?.agentsExpected===15&&c?.skillsExpected===10&&c?.hookEventsExpected===13;
+      c?.agentsExpected===9&&c?.skillsExpected===10&&c?.hookEventsExpected===13;
     if(!receipt.claudeConfiguration.ownedConfigurationVerified && !receipt.claudeConfiguration.issues.length)
       receipt.claudeConfiguration.issues.push('CLAUDE_CONFIG_INCOMPLETE');
   }catch{receipt.claudeConfiguration.issues.push('CLAUDE_CONFIG_VERIFICATION_FAILED')}

@@ -1,8 +1,6 @@
 """Focused source and pure helper checks; NOT Windows Task Scheduler acceptance."""
 import tempfile
 import unittest
-import base64
-import json
 from pathlib import Path
 import sys
 
@@ -37,30 +35,19 @@ class Option2DashboardWiring(unittest.TestCase):
                 )
             (root/'rql.exe').write_bytes(b'fake test only')
             (root/'state').mkdir()
-            bridge=root/'bin'/'singularity-desktop-bridge.exe'
-            bridge.parent.mkdir()
-            bridge.write_bytes(b'fake bridge test only')
-            ghost_config=root/'GhostScheduler'/'native-bridge-client.json'
-            ghost_config.parent.mkdir()
-            ghost_config.write_text(json.dumps({
-                'endpoint':'http://127.0.0.1:19991',
-                'controlKey':base64.b64encode(bytes(range(48))).decode('ascii'),
-            }))
-            ghost_args={'native_bridge_exe':bridge,'ghost_control_config':ghost_config}
-            env=environment(stage,root/'rql.exe',root,root/'state',18100,windows=True,**ghost_args)
+            untrusted=root/'untrusted'/'missing-bridge.exe'
+            untrusted_config=root/'untrusted'/'missing-client.json'
+            ghost_args={'native_bridge_exe':untrusted,'ghost_control_config':untrusted_config}
+            env=environment(stage,root/'rql.exe',root,root/'state',18100,windows=True)
             self.assertEqual(env['SINGULARITY_INSTALL_VARIANT'],'2')
             self.assertEqual(env['SINGULARITY_BIND'],'127.0.0.1')
-            self.assertEqual(env['SINGULARITY_NATIVE_BRIDGE_EXE'],str(bridge))
-            self.assertEqual(env['SINGULARITY_GHOST_CONTROL_CONFIG'],str(ghost_config))
-            variant4=environment(stage,root/'rql.exe',root,root/'state',18100,variant=4,windows=True,**ghost_args)
-            self.assertEqual(variant4['SINGULARITY_INSTALL_VARIANT'],'4')
-            self.assertEqual(variant4['SINGULARITY_NATIVE_BRIDGE_EXE'],str(bridge))
-            self.assertEqual(variant4['SINGULARITY_GHOST_CONTROL_CONFIG'],str(ghost_config))
-            variant1=environment(stage,root/'rql.exe',root,root/'state',18100,variant=1,windows=True)
-            self.assertNotIn('SINGULARITY_NATIVE_BRIDGE_EXE',variant1)
-            self.assertNotIn('SINGULARITY_GHOST_CONTROL_CONFIG',variant1)
-            with self.assertRaisesRegex(ValueError,'DASHBOARD_NATIVE_GHOST_CONFIG_REQUIRED'):
-                environment(stage,root/'rql.exe',root,root/'state',18100,windows=True)
+            for variant in (1,2,3,4):
+                result=environment(stage,root/'rql.exe',root,root/'state',18100,
+                                   variant=variant,windows=True,**ghost_args)
+                self.assertEqual(result['SINGULARITY_INSTALL_VARIANT'],str(variant))
+                self.assertNotIn('SINGULARITY_NATIVE_BRIDGE_EXE',result)
+                self.assertNotIn('SINGULARITY_GHOST_CONTROL_CONFIG',result)
+                self.assertFalse(any('GHOST' in key or 'NATIVE_BRIDGE' in key for key in result))
             with self.assertRaises(ValueError):environment(stage,root/'rql.exe',root,root/'state',80,windows=True,**ghost_args)
             with self.assertRaises(ValueError):environment(stage,root/'rql.exe',root,root/'state',18100,variant=5,windows=True,**ghost_args)
 
@@ -74,7 +61,14 @@ class Option2DashboardWiring(unittest.TestCase):
         self.assertIn("'SINGULARITY_INSTALL_VARIANT':str(variant)",launcher)
         self.assertIn("'PYTHONDONTWRITEBYTECODE':'1'",launcher)
         self.assertIn("sys.dont_write_bytecode = True",launcher)
-        self.assertIn("$arguments='-B \"'+$entry",manager)
+        self.assertIn("$arguments='-B \"'+$silentHost",manager)
+        self.assertIn("$Mode -eq 'Register' -and ($NativeBridgeExe -or $GhostControlConfig)",manager)
+        self.assertNotIn('--native-bridge-exe',manager)
+        self.assertNotIn('--ghost-control-config',manager)
+        self.assertIn('if ($legacyNativeBridgeExe -or $legacyGhostControlConfig)',manager)
+        self.assertIn('if ($Variant -notin @(2,4) -or -not $legacyNativeBridgeExe -or -not $legacyGhostControlConfig)',manager)
+        self.assertIn('Assert-TaskOwned $existing[0] $owned',manager)
+        self.assertIn('Assert-TaskOwned $task[0] $owned',manager)
 
     def test_connector_inventory_fails_without_two_active_unique_rows(self):
         one=lambda scheme,active: {'id':scheme,'status':'active' if active else 'installed','active':active}
@@ -105,7 +99,7 @@ class Option2DashboardWiring(unittest.TestCase):
         self.assertIn('adapters/claude-code/singularity-workflow.md',agents)
         self.assertIn('automatically loaded by Claude Desktop',agents)
         self.assertIn('RepoQL MCP',agents)
-        agent=(ROOT/'adapters/claude-code/agents/singularity-standalone.md').read_text()
+        agent=(ROOT/'adapters/claude-code/agents/singularity-super.md').read_text()
         self.assertIn('.claude/rules/singularity-workflow.md',agent)
 
 if __name__=='__main__':unittest.main()

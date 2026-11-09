@@ -317,7 +317,8 @@ def build_adapters(env: dict | None = None) -> dict[str, Adapter]:
         if not node:
             raise RuntimeError("no Node runtime for the memory supervisor")
         result = subprocess.run([node, supervisor, "start", "--config", config, "--json"],
-                                capture_output=True, text=True, timeout=600)
+                                capture_output=True, text=True, timeout=600,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if result.returncode != 0:
             raise RuntimeError("memory supervisor start failed: "
                                + (result.stderr or result.stdout).strip()[:200])

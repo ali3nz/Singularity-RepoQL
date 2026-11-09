@@ -22,7 +22,7 @@ consult spends someone's budget and must be requested.
 This skill requires a consultant endpoint and a broker configured in the
 installation — an environment variable, a config key, or a documented command that
 the installation provides. **If no consultant is configured, stop here:** say so
-plainly and fall back to local review (`code-reviewer`, `fleet-reviewer`). Do not
+plainly and fall back to local review (`code-reviewer`). Do not
 invent a broker, do not call an endpoint you found somewhere else, and do not
 answer in the consultant's name.
 

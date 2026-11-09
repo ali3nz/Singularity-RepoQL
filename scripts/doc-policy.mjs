@@ -88,7 +88,7 @@ export function isDocsOnlyChange(files) {
 // revision verified, chunks accounted for, no newer unresolved revision.
 import { ingestFile as ingestFileInNode, verifyFile as verifyFileInNode } from "./doc-ingest-node.mjs";
 
-const DEFAULT_EXEC = (file, args, opts, cb) => execFile(file, args, { encoding: "utf8", ...(opts || {}) }, cb);
+const DEFAULT_EXEC = (file, args, opts, cb) => execFile(file, args, { encoding: "utf8", windowsHide: true, ...(opts || {}) }, cb);
 
 function runPython(args, cwd, execImpl, timeoutMs = 60_000) {
   const impl = execImpl || DEFAULT_EXEC;

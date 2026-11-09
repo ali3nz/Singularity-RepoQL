@@ -143,8 +143,8 @@ test("SubagentStop: different agents never cross-attribute (own identity per age
   assert.ok(boardQuery, "reconciliation queried board's own scope");
   // recall for one agent must filter by that agent's identity only
   const mem2 = stubMemoryCore();
-  await runMemoryHook(["subagent-start"], { env: env(), stdin: startPayload("singularity-researcher-web"), fetchImpl: mem2.fetchImpl, now: NOW });
-  for (const c of mem2.calls) assert.equal(c.body.agent_id, "researcher-web");
+  await runMemoryHook(["subagent-start"], { env: env(), stdin: startPayload("singularity-explore"), fetchImpl: mem2.fetchImpl, now: NOW });
+  for (const c of mem2.calls) assert.equal(c.body.agent_id, "explore");
 });
 
 test("SubagentStop: trivial, interrupted or empty output is never captured", async () => {
@@ -158,7 +158,7 @@ test("SubagentStop: trivial, interrupted or empty output is never captured", asy
 test("SubagentStop: secret-shaped values are redacted before persistence", async () => {
   const mem = stubMemoryCore();
   const payload = JSON.stringify({
-    agent_type: "singularity-researcher-web", session_id: "s",
+    agent_type: "singularity-explore", session_id: "s",
     last_assistant_message: "Configured the client with sk-abcdef1234567 endpoints and long " + "context ".repeat(30),
   });
   await runMemoryHook(["subagent-stop"], { env: env(), stdin: payload, fetchImpl: mem.fetchImpl, now: NOW });

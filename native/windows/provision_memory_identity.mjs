@@ -70,7 +70,7 @@ export const DEFAULT_INSTANCE_ID = 'default';
 export const DEFAULT_AGENTS = Object.freeze([
   'claude-code-main',
   'code-reviewer',
-  'researcher-web',
+  
   'thinker',
   'explore',
   'general',

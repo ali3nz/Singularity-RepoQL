@@ -4,7 +4,7 @@ Last updated: 2026-10-29. Status: **NOT RELEASE READY**. This is a Codex/native-
 
 ## Scope and prerequisites
 
-Variant 2 must include the installed Claude Code Desktop **Code tab** integration; all 17 `singularity-*` agents; four hook events (SubagentStart, SubagentStop, SessionStart and Stop); Tencent MemoryCore capture, recall, extract, promotion and durable recovery; RepoQL and Kanzo MCP servers plus both RepoQL connector manifests; Agent Chat and Kanzo board/task tools; Ghost service and edit/restart path; Claude Office visualizer; authentication-isolated dashboard with usage/CPU history; native Windows persistence, reboot, backup and uninstall. No Ubuntu, WSL, Docker, SSH workers or Claude free-worker quota required for core service operation.
+Variant 2 must include the installed Claude Code Desktop **Code tab** integration; all 9 `singularity-*` agents; four hook events (SubagentStart, SubagentStop, SessionStart and Stop); Tencent MemoryCore capture, recall, extract, promotion and durable recovery; RepoQL and Kanzo MCP servers plus both RepoQL connector manifests; Agent Chat and Kanzo board/task tools; Claude Office visualizer; authentication-isolated dashboard with usage/CPU history; native Windows persistence, reboot, backup and uninstall. No Ubuntu, WSL, Docker, SSH workers or Claude free-worker quota required for core service operation.
 
 The *complete* source ZIP currently does **not** contain a compiled Windows installer, the external pinned Claude Office app, or verified native Tencent/RepoQL/Kanzo/Ghost daemons. Never tell an end user it is ready to run from its archive alone. For `-Apply` use a test Windows account and explicit operator approval; never change a working production installation.
 

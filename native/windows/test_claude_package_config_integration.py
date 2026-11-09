@@ -30,10 +30,10 @@ const prior={foreignCredential:'SECRET-NEVER-PRINT',hooks:{Stop:[{matcher:'only-
 writeFileSync(join(settingsDir,'settings.json'),JSON.stringify(prior));
 const conf={source,home,nodeExe,memoryConfig,officeConfig:Number(variant)===2?officeConfig:undefined,variant:Number(variant)};
 const plan=mod.prepareConfiguration(conf);
-if (plan.agentWrites.length!==15 || plan.skillWrites.length!==(Number(variant)===2?10:9)) throw Error('missing agent/skill definitions');
+if (plan.agentWrites.length!==9 || plan.skillWrites.length!==(Number(variant)===2?10:9)) throw Error('missing agent/skill definitions');
 const apply=mod.applyConfiguration(conf);
 const verified=mod.verifyConfiguration({home});
-if (!verified.configured || verified.runtimeVerified || apply.agentDefinitions!==15 || apply.skillsInstalled!==(Number(variant)===2?10:9)) throw Error('bad config result');
+if (!verified.configured || verified.runtimeVerified || apply.agentDefinitions!==9 || apply.skillsInstalled!==(Number(variant)===2?10:9)) throw Error('bad config result');
 if(Number(variant)===2 && (!apply.officeEventHooksConfigured || !verified.officeEventHooksConfigured || verified.hookEventsExpected!==13))throw Error('Office event hooks not configured');
 const rollback=mod.rollbackConfiguration({home});
 const after=JSON.parse(readFileSync(join(settingsDir,'settings.json')));
@@ -69,7 +69,7 @@ class ClaudePackageToSettingsIntegration(unittest.TestCase):
                 details = json.loads(result.stdout)
                 self.assertTrue(details['configured'])
                 self.assertEqual(details['rollback'], 'CLAUDE_CONFIGURATION_ROLLED_BACK')
-                self.assertEqual(details['agentDefinitions'], 15)
+                self.assertEqual(details['agentDefinitions'], 9)
                 self.assertEqual(details['skillsInstalled'], 10 if option==2 else 9)
                 self.assertTrue(details['realHookImportsExecuted'])
                 self.assertNotIn('SECRET-NEVER-PRINT', result.stdout + result.stderr)

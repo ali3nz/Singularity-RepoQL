@@ -53,7 +53,8 @@ class StageNativeContracts(unittest.TestCase):
         self.assertIn("$info.schema -cne 'singularity-native-build-info/v1'", SRC)
         self.assertIn("throw 'BRIDGE_BUILD_FEATURE_MISMATCH'", SRC)
         self.assertIn("$m.rustOfficeFeature -ne $complete", SRC)
-        self.assertIn("$m.rustGhostFeature -ne $complete", SRC)
+        self.assertIn("[bool]$m.rustGhostFeature) { throw 'SOURCE_RUST_FEATURE_MISMATCH'", SRC)
+        self.assertIn("[bool]$info.featureGhost) { throw 'BRIDGE_BUILD_FEATURE_MISMATCH'", SRC)
 
     def test_no_reparse_and_credential_copy(self):
         self.assertIn('REPARSE_PATH_REFUSED',SRC)

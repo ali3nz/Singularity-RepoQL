@@ -25,43 +25,32 @@ const MODES_FILE = join(ROOT, "orchestration", "modes.mjs");
 
 // --- the contract this bundle is required to satisfy ------------------------
 
-// Every non-pentesting live role, with the mode it must ship as. The two
+// The nine Windows roles, with the mode each must ship as. Linux also needs
+// the optional Ghost profile used by its companion runtime. The two
 // pentesting roles are absent on purpose: this repository has no red-team or
 // offensive-security agent, and adding one is a product decision, not drift.
 const EXPECTED_ROSTER = Object.freeze({
   primary: [
     "duel-coordinator",
     "duo",
-    "free-mode",
-    "ghost",
-    "orchestrator",
     "quad-coordinator",
-    "solo-coordinator",
-    "standalone",
     "super",
   ],
   subagent: [
     "board",
     "code-reviewer",
     "explore",
-    "fleet-reviewer",
     "general",
-    "quality-fixer",
-    "researcher-web",
     "thinker",
   ],
 });
 
-// The nine coordination-family roles. They are the reason the bundle carries
+// The four coordination-family roles. They are the reason the bundle carries
 // orchestration at all, so losing one is a regression even when the count holds.
 const ORCHESTRATION_ROLES = Object.freeze([
   "duel-coordinator",
   "duo",
-  "free-mode",
-  "orchestrator",
   "quad-coordinator",
-  "solo-coordinator",
-  "standalone",
   "super",
 ]);
 
@@ -142,10 +131,13 @@ function shippedTextFiles() {
 
 // --- roster ----------------------------------------------------------------
 
-test("roster is exactly the seventeen shipped roles, each in its declared mode", () => {
+test("the shared roster preserves the nine Windows roles and the Linux Ghost profile", () => {
   const expected = [...EXPECTED_ROSTER.primary, ...EXPECTED_ROSTER.subagent].sort();
-  assert.equal(expected.length, 17, "the contract itself must name 17 roles");
-  assert.deepEqual(agentFiles().map((f) => f.replace(/\.md$/, "")), expected);
+  assert.equal(expected.length, 9, "the contract itself must name 9 roles");
+  assert.deepEqual(agentFiles().map((f) => f.replace(/\.md$/, "")), [...expected, "ghost"].sort());
+  assert.equal(parseFrontmatter(agentText("ghost")).fm.mode, "primary");
+  assert.equal(Object.hasOwn(AGENT_MAP, "singularity-ghost"), false,
+    "the Linux Ghost profile must not reintroduce a Windows Claude Code agent");
 
   for (const name of EXPECTED_ROSTER.primary) {
     const { fm } = parseFrontmatter(agentText(name));
@@ -157,9 +149,9 @@ test("roster is exactly the seventeen shipped roles, each in its declared mode",
   }
 });
 
-test("the eight coordination roles are all present", () => {
+test("the four coordination roles are all present", () => {
   const shipped = new Set(agentFiles().map((f) => f.replace(/\.md$/, "")));
-  assert.equal(ORCHESTRATION_ROLES.length, 8);
+  assert.equal(ORCHESTRATION_ROLES.length, 4);
   for (const role of ORCHESTRATION_ROLES) assert.ok(shipped.has(role), `coordination role ${role} must ship`);
 });
 
@@ -205,7 +197,7 @@ test("agent frontmatter stays native and free of entitlements", () => {
 
 test("coordinator roles drive the shipped engine and never a private broker", () => {
   const known = modeNames();
-  const engineRoles = ["orchestrator", "solo-coordinator", "duel-coordinator", "quad-coordinator", "super", "free-mode"];
+  const engineRoles = ["duel-coordinator", "quad-coordinator", "super"];
 
   for (const role of engineRoles) {
     const text = agentText(role);
@@ -219,20 +211,15 @@ test("coordinator roles drive the shipped engine and never a private broker", ()
   }
 
   // The two seat-plan coordinators that must not own the reviewer seat say so.
-  for (const role of ["solo-coordinator", "duel-coordinator", "quad-coordinator"]) {
+  for (const role of ["duel-coordinator", "quad-coordinator"]) {
     assert.match(agentText(role), /reviewer seat/i, `${role}: must name the reviewer seat's authority`);
     assert.match(agentText(role), /never implement|do not implement|not the implementation/i, `${role}: must state that it does not implement`);
   }
-
-  // free_only is a policy, and the free-mode agent must not offer a paid fallback.
-  assert.match(agentText("free-mode"), /never switch to a paid model/i);
-  assert.ok(agentText("free-mode").includes("free_only"));
 });
 
 test("consultation is opt-in everywhere it is mentioned", () => {
   // An implicit consult is a spend and a dependency. Each surface that mentions a
   // consultant must gate it on the operator asking or on a configured endpoint.
-  assert.match(agentText("orchestrator"), /only when the operator asks/i);
   assert.match(agentText("super"), /only when the operator asks/i);
   assert.match(skillText("consult-dispatch"), /if no consultant is configured/i);
   assert.match(skillText("consult-dispatch"), /never substitute/i);
@@ -333,7 +320,9 @@ test("the Claude Code adapter mirrors the portable roster, each role on its decl
 
   // Every portable role ships except the one documented private-environment mode.
   const shipped = new Set(adapterFiles.map((f) => f.replace(/\.md$/, "")));
-  const missing = [...EXPECTED_ROSTER.primary, ...EXPECTED_ROSTER.subagent].filter((r) => !shipped.has(`singularity-${r}`));
+  // The Windows product retired these portable roles; they are intentionally not installed.
+  const RETIRED = ["free-mode", "ghost", "orchestrator", "solo-coordinator", "standalone", "fleet-reviewer", "quality-fixer", "researcher-web"];
+  const missing = [...EXPECTED_ROSTER.primary, ...EXPECTED_ROSTER.subagent].filter((r) => !RETIRED.includes(r) && !shipped.has(`singularity-${r}`));
   assert.deepEqual(missing, [], "every portable role ships in the adapter");
 });
 

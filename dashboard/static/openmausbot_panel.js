@@ -60,7 +60,7 @@ export async function viewOpenMausBot({app, api, pageHead, esc, toast, current, 
       if (!current()) return;
       holder.innerHTML = `<div class="block accent-amber"><div class="block-title">OpenMausBot is not connected to the dashboard</div>
         <p class="muted small">The embedded workspace needs the dashboard's OpenMausBot session (${esc(error.message || 'unavailable')}).
-        Fleet status (Diagnostics) still works. To reconnect, run <span class="mono">python3 openmausbot_launch.py bootstrap --recreate</span> on dockerhost.</p></div>`;
+        Fleet status (Diagnostics) still works. To reconnect, re-open the Singularity Dashboard shortcut.</p></div>`;
       return;
     }
     if (!current()) return;
@@ -91,7 +91,7 @@ async function renderFleet({app, api, esc, toast, current}) {
         + `<span class="muted">${info.seamless
           ? 'Signs you in automatically: no code or token to type.'
           : (info.url_kind === 'lan' ? 'LAN address, plain HTTP (no public URL is configured).' : 'Signed-in address.')
-            + ' Automatic sign-in is not connected yet (run openmausbot_launch.py bootstrap on dockerhost).'}</span>`
+            + ' Automatic sign-in is not connected yet (re-open the Singularity Dashboard shortcut).'}</span>`
       : '<span>No launch address is configured. Use the paired LAN address of the OpenMausBot server.</span>';
     const hint = `<p class="muted">${esc(info.create_hint || 'Create the bot inside OpenMausBot. It registers itself through omb-bot-registry.path; do not register it again here.')}</p>`;
     const bots = Array.isArray(info.bots) ? info.bots : [];

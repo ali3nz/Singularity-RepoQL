@@ -34,7 +34,7 @@ mod tests {
             assert_eq!(p["features"]["agent_chat"], true);
             assert_eq!(p["features"]["office"], id == "2" || id == "4");
             assert_eq!(p["rustOfficeFeature"], id == "2" || id == "4");
-            assert_eq!(p["features"]["ghost"], id == "2" || id == "4");
+            assert_eq!(p["features"]["ghost"], false);
             assert_eq!(p["gui"], if id == "1" || id == "2" { "claude-desktop-code" } else { "openchamber-desktop" });
         }
         assert!(profile("0").is_err());

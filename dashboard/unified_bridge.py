@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import http.client
 import os
+import socket
 import sys
 import subprocess
 import threading
@@ -162,21 +163,26 @@ def _native_gateway_owner():
     name = Path(expected).name.casefold()
     if name not in ('unified-repoql-control.exe',):
         return False
-    command = (
-        '$ErrorActionPreference = "Stop"; '
-        f'$listeners = @(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort {port} -State Listen -ErrorAction Stop); '
-        'if ($listeners.Count -ne 1) { exit 2 }; '
-        '$p = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listeners[0].OwningProcess); '
-        'if ($null -eq $p) { exit 3 }; '
-        '[Console]::Out.WriteLine($p.ProcessId); '
-        '[Console]::Out.WriteLine($p.Name); '
-        '[Console]::Out.WriteLine($p.ExecutablePath)'
-    )
     try:
-        result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive',
-                                 '-Command', command], capture_output=True,
-                                text=True, timeout=9, check=False,
-                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        # Some Windows builds expose listening sockets with state Unknown.
+        # Hold a real connection and verify its server-side owner instead.
+        with socket.create_connection((host, port), timeout=2) as connection:
+            client_port = connection.getsockname()[1]
+            command = (
+                '$ErrorActionPreference = "Stop"; '
+                f'$connections = @(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort {port} '
+                f'-RemoteAddress 127.0.0.1 -RemotePort {client_port} -State Established -ErrorAction Stop); '
+                'if ($connections.Count -ne 1) { exit 2 }; '
+                '$p = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $connections[0].OwningProcess); '
+                'if ($null -eq $p) { exit 3 }; '
+                '[Console]::Out.WriteLine($p.ProcessId); '
+                '[Console]::Out.WriteLine($p.Name); '
+                '[Console]::Out.WriteLine($p.ExecutablePath)'
+            )
+            result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive',
+                                     '-Command', command], capture_output=True,
+                                    text=True, timeout=9, check=False,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     except (OSError, subprocess.TimeoutExpired):
         return False
     if result.returncode != 0:

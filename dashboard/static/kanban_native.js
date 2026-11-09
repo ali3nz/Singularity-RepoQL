@@ -32,7 +32,12 @@ export function mountNativeKanban(root, api, options={}) {
   state.setAttribute('role','status'); state.setAttribute('aria-live','polite');
   const toolbar = el('div','kn-toolbar');
   const results = el('div','kn-results');
-  const summary = el('p','kn-board-summary'); summary.setAttribute('aria-live','off');
+  const kpiNav = el('nav','kn-kpis'); kpiNav.setAttribute('aria-label','Jump to a stage');
+  const filterToggle = makeButton('Filters','kn-button kn-quiet kn-filter-toggle',()=>{
+    const open = root.classList.toggle('kn-filters-open');
+    filterToggle.setAttribute('aria-expanded',String(open));
+  });
+  filterToggle.setAttribute('aria-expanded','false');
   const laneNav = el('nav','kn-lanes'); laneNav.setAttribute('aria-label','Task stage shortcuts');
   const actions = el('div','kn-actions');
   const projectSelect = el('select','kn-select'); projectSelect.setAttribute('aria-label','Project');
@@ -47,11 +52,11 @@ export function mountNativeKanban(root, api, options={}) {
   const newTask = makeButton('+ New task','kn-button kn-primary',()=>openNew());
   const original = el('a','kn-button kn-quiet','Full Kanzo'); original.href='/embed/kanzo/'; original.target='_blank'; original.rel='noopener noreferrer';
   toolbar.append(projectSelect,searchField,stageSelect,doneLabel,clearFilters);
-  actions.append(newTask,refresh,original);
+  actions.append(newTask,refresh,original,filterToggle);
   const head = el('div','kn-head');
   const heading = el('div','kn-heading'); heading.append(el('h2',null,'Task board'),state);
   head.append(heading,actions);
-  root.replaceChildren(head,toolbar,laneNav,summary,results);
+  root.replaceChildren(kpiNav,head,toolbar,laneNav,results);
   const modal = el('dialog','kn-dialog');
   modal.setAttribute('aria-label','Kanzo task editor');
   root.append(modal);
@@ -104,6 +109,17 @@ export function mountNativeKanban(root, api, options={}) {
     } catch(error) { if(active) status(readError(error),true); }
     finally { movingTasks.delete(t.id); }
   }
+  function commentCount(n) {
+    const wrap=el('span','kn-comment-count');
+    const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    icon.setAttribute('viewBox','0 0 16 16'); icon.setAttribute('aria-hidden','true'); icon.setAttribute('focusable','false');
+    const bubble=document.createElementNS('http://www.w3.org/2000/svg','path');
+    bubble.setAttribute('d','M3 3.5h10a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H7.2L4.6 13v-2.4H3a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z');
+    bubble.setAttribute('fill','none'); bubble.setAttribute('stroke','currentColor'); bubble.setAttribute('stroke-width','1.3'); bubble.setAttribute('stroke-linejoin','round');
+    icon.append(bubble);
+    wrap.append(icon,document.createTextNode(`${n} comment${n===1?'':'s'}`));
+    return wrap;
+  }
   function taskCard(t) {
     const wrapper=el('div','kn-task-row');
     const card=makeButton('','kn-task',()=>openTask(t.id));
@@ -121,7 +137,7 @@ export function mountNativeKanban(root, api, options={}) {
     card.dataset.stage=t.status;
     const summary=el('p','kn-task-description',t.description||'');
     const bottom=el('div','kn-task-bottom');
-    if(t.comments) bottom.append(el('span',null,`${t.comments} comment${t.comments===1?'':'s'}`));
+    if(t.comments) bottom.append(commentCount(t.comments));
     (Array.isArray(t.tags)?t.tags:[]).slice(0,2).forEach(tag=>bottom.append(el('span','kn-tag',tag)));
     card.append(top,title,summary,bottom);
     wrapper.append(card);
@@ -142,9 +158,14 @@ export function mountNativeKanban(root, api, options={}) {
     const hiddenDone=Math.max(0,Number(board.done_hidden)||0);
     const scoped=allTasks.filter(t=>(project==='all'||t.project===project)&&(!search||[t.title,t.description,t.project,t.id,...(Array.isArray(t.tags)?t.tags:[])].join(' ').toLocaleLowerCase().includes(search)));
     const count=s=>scoped.filter(t=>t.status===s).length;
-    summary.textContent = stage==='queue'
-      ? `Work queue: ${rows.length} task${rows.length===1?'':'s'} in To do, In progress or Review. Backlog and completed tasks stay available in the filters.`
-      : `${rows.length} matching task${rows.length===1?'':'s'} in this view. Status changes update Kanzo, not agent ownership.`;
+    const kpiDefs=[['all','Total',scoped.length,'kpi-all'],['doing','In progress',count('doing'),'kpi-doing'],['review','Review',count('review'),'kpi-review'],['done','Closed',count('done'),'kpi-done']];
+    kpiNav.replaceChildren(...kpiDefs.map(([value,name,n,cls])=>{
+      const b=makeButton('',`kn-kpi ${cls}`+(stage===value?' selected':''),()=>{stage=value;userSelectedStage=true;visibleLimit.clear();render();results.scrollIntoView({block:'start',behavior:'smooth'});});
+      b.append(el('strong',null,n),el('span',null,name));
+      b.setAttribute('aria-pressed',String(stage===value));
+      b.setAttribute('aria-label',`${name}: ${n} task${n===1?'':'s'}. Show ${name.toLowerCase()}`);
+      return b;
+    }));
     clearFilters.hidden = project==='all' && stage==='queue' && !search;
     results.replaceChildren();
     const activeCount=rows.filter(t=>['doing','review'].includes(t.status)).length;
@@ -186,7 +207,9 @@ export function mountNativeKanban(root, api, options={}) {
       const title=el('header','kn-column-head');
       const textWrap=el('div','kn-column-title');
       textWrap.append(el('h3',null,label(s)),el('span','kn-count',tasks.length));
-      title.append(textWrap);column.append(title);
+      title.append(textWrap);
+      if(!results.querySelector('.kn-column-new')){const nb=makeButton('+','kn-column-new',()=>openNew());nb.setAttribute('aria-label','New task');nb.append(el('span',null,'New'));title.append(nb);}
+      column.append(title);
       const list=el('div','kn-cards');
       const pageSize=matchMedia('(max-width:760px)').matches?20:40;
       const limit=visibleLimit.get(s)||pageSize;
@@ -384,7 +407,14 @@ export function mountNativeKanban(root, api, options={}) {
   refreshBoard({quiet:false});
   const onVisibility=()=>{if(!document.hidden&&!modal.open) refreshBoard();};
   document.addEventListener('visibilitychange',onVisibility);
-  const poll=()=>{if(!active||!root.isConnected)return;if(!document.hidden&&!modal.open)refreshBoard();timer=setTimeout(poll,20000);};
+  // A background refresh re-renders the cards and snaps the scroll position back. Doing that
+  // while a finger is still scrolling (momentum included) makes the sticky header and stage
+  // tiles shudder on iOS, so refreshes wait until scrolling has been quiet for a moment.
+  let lastScroll=0;
+  const onScroll=()=>{lastScroll=Date.now();};
+  window.addEventListener('scroll',onScroll,{passive:true});
+  const scrolling=()=>Date.now()-lastScroll<1500;
+  const poll=()=>{if(!active||!root.isConnected)return;if(!document.hidden&&!modal.open&&!scrolling())refreshBoard();timer=setTimeout(poll,scrolling()?2000:20000);};
   timer=setTimeout(poll,20000);
-  return ()=>{active=false;requestSerial++;clearTimeout(timer);if(modal.open)modal.close();root.removeEventListener('keydown',onKey);document.removeEventListener('visibilitychange',onVisibility);};
+  return ()=>{active=false;requestSerial++;clearTimeout(timer);if(modal.open)modal.close();root.removeEventListener('keydown',onKey);document.removeEventListener('visibilitychange',onVisibility);window.removeEventListener('scroll',onScroll);};
 }

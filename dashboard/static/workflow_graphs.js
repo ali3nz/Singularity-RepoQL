@@ -104,8 +104,8 @@ const MEMORY_VIEWS = {
       {id:'explore', col:1, tone:'cyan', kicker:'Discover', title:'Explore & vocabulary', sub:'Ranked candidates and the repo’s real names.', refs:['rql explore','discover_vocabulary']},
       {id:'read', col:1, tone:'cyan', kicker:'Confirm', title:'Read & query', sub:'Exact spans, structure and SQL over the graph.', refs:['rql read','rql query']},
       {id:'hints', col:1, tone:'cyan', kicker:'Guide', title:'Concept hints', sub:'Bounded relevant capsules for an exact target.', refs:['rql concept hints']},
-      {id:'probe', col:1, tone:'amber', kicker:'Verify', title:'Live probes', sub:'Service, host and config state checked directly.', refs:['ssh <dashboard host>','systemctl','docker inspect']},
-      {id:'recall', col:1, tone:'purple', kicker:'History', title:'Memory recall', sub:'Only when history matters; identity-scoped.', refs:['agent-memory recall']},
+      {id:'probe', col:1, tone:'amber', kicker:'Verify', title:'Live probes', sub:'Service, host and config state checked directly.', refs:['Get-ScheduledTask','service health endpoints']},
+      {id:'recall', col:1, tone:'purple', kicker:'History', title:'Memory recall', sub:'Only when history matters; identity-scoped.', refs:['SubagentStart recall hook']},
       {id:'index', col:2, tone:'cyan', kicker:'Source', title:'RepoQL index', sub:'Workspace and imports.'},
       {id:'concepts', col:2, tone:'green', kicker:'Source', title:'Concept store', sub:'Invariants with verification spans.'},
       {id:'live', col:2, tone:'amber', kicker:'Source', title:'Running systems', sub:'The deployed truth.'},
@@ -425,6 +425,13 @@ function pageHTML({eyebrow, title, intro, tabsId, tabsLabel, views, defaultKey})
 let activeBinding = null;
 
 function bindArchitecture(views, tabsId, defaultKey, legend) {
+  if (window.__SINGULARITY_VARIANT__?.variant) {
+    views = Object.fromEntries(Object.entries(views).map(([key, view]) => [key, {
+      ...view,
+      nodes: view.nodes.filter(node => node.id !== 'ghost'),
+      edges: view.edges.filter(edge => edge[0] !== 'ghost' && edge[1] !== 'ghost'),
+    }]));
+  }
   activeBinding?.dispose();
   const root = document;
   const tabs = root.getElementById(tabsId);

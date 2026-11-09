@@ -1,33 +1,32 @@
 --- a/frontend/src/systems/persistentIdentities.ts
 +++ b/frontend/src/systems/persistentIdentities.ts
-@@ -18,8 +18,6 @@
+@@ -18,8 +18,7 @@
  
  /** The three identities, with the backend's stable agent ids. */
  export const PERSISTENT_SEEDS: readonly { name: string; id: string }[] = [
--  { name: "Sol Docker", id: "gateway-dockerhost" },
--  { name: "Sol Webserver", id: "gateway-webserver" },
-   { name: "Ghost Protocol", id: "ai-companion" },
+   { name: "Sol Docker", id: "gateway-dockerhost" },
+   { name: "Sol Webserver", id: "gateway-webserver" },
+-  { name: "Ghost Protocol", id: "ai-companion" },
  ] as const;
  
-@@ -70,5 +68,8 @@
+@@ -70,5 +69,7 @@
    cache: Map<string, T>,
    makeSeed: (name: string, id: string) => T,
  ): T[] {
 -  return [...real, ...buildStandIns(real, cache, makeSeed)];
 +  const visible = real.filter((agent) =>
-+    agent.id !== "gateway-dockerhost" && agent.id !== "gateway-webserver" &&
-+    agent.name !== "Sol Docker" && agent.name !== "Sol Webserver");
++    agent.id !== "ai-companion" && agent.name !== "Ghost Protocol" && agent.name !== "Ghost");
 +  return [...visible, ...buildStandIns(visible, cache, makeSeed)];
  }
 --- a/frontend/src/components/game/OfficeGame.tsx
 +++ b/frontend/src/components/game/OfficeGame.tsx
-@@ -441,8 +441,6 @@
+@@ -441,8 +441,7 @@
   * gives the fixed desk. A live state, when it arrives, replaces the seed.
   */
  const PERSISTENT_SEEDS: { name: string; id: string }[] = [
--  { name: "Sol Docker", id: "gateway-dockerhost" },
--  { name: "Sol Webserver", id: "gateway-webserver" },
-   { name: "Ghost Protocol", id: "ai-companion" },
+   { name: "Sol Docker", id: "gateway-dockerhost" },
+   { name: "Sol Webserver", id: "gateway-webserver" },
+-  { name: "Ghost Protocol", id: "ai-companion" },
  ];
  
 --- a/frontend/src/systems/idleSweep.ts
@@ -36,17 +35,17 @@
  export const IDLE_CLOCK_MS = 30_000;
  
  const ALWAYS_PRESENT = new Set([
--  "Sol Docker",
--  "Sol Webserver",
-   "Ghost",
-   "Ghost Protocol",
+   "Sol Docker",
+   "Sol Webserver",
+-  "Ghost",
+-  "Ghost Protocol",
  ]);
 @@ -30,6 +28,8 @@
  }
  
  export function isRecentlyActive(agent: SweepableAgent, now: number): boolean {
-+  if (agent.id === "gateway-dockerhost" || agent.id === "gateway-webserver" ||
-+      agent.name === "Sol Docker" || agent.name === "Sol Webserver") return false;
++  if (agent.id === "ai-companion" || agent.name === "Ghost Protocol" ||
++      agent.name === "Ghost") return false;
    if (agent.name && ALWAYS_PRESENT.has(agent.name)) return true;
    // Issue 226 R6h: robust persistent-identity detection - the ai-agents and
    // the two gateway sessions never leave the floor even when their feed goes

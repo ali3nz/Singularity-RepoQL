@@ -18,12 +18,10 @@ import threading
 _LOCK = threading.Lock()
 _NAME = re.compile(r"singularity-[a-z0-9][a-z0-9_-]{0,78}\Z")
 _OWNED_NAMES = {
-    "singularity-code-reviewer", "singularity-researcher-web", "singularity-thinker",
+    "singularity-code-reviewer", "singularity-thinker",
     "singularity-explore", "singularity-general", "singularity-board",
-    "singularity-orchestrator", "singularity-solo-coordinator",
     "singularity-duel-coordinator", "singularity-quad-coordinator",
-    "singularity-duo", "singularity-super", "singularity-standalone",
-    "singularity-free-mode", "singularity-ghost",
+    "singularity-duo", "singularity-super",
 }
 _MAX_BYTES = 65536
 # Values Claude Code reads from subagent frontmatter that this editor may write.

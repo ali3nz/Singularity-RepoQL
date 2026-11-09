@@ -265,8 +265,8 @@ test('readLayout rejects a serviceId that could escape the metadata root', () =>
 
 test('the default roster covers the parent session and every delegated role', () => {
   assert.ok(DEFAULT_AGENTS.includes('claude-code-main'));
-  for (const role of ['code-reviewer', 'researcher-web', 'thinker', 'explore', 'general', 'board']) {
+  for (const role of ['code-reviewer', 'thinker', 'explore', 'general', 'board']) {
     assert.ok(DEFAULT_AGENTS.includes(role), `${role} must be provisioned`);
   }
-  assert.equal(DEFAULT_AGENTS.length, 7);
+  assert.equal(DEFAULT_AGENTS.length, 6);
 });

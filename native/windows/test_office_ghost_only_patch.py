@@ -1,4 +1,4 @@
-"""Draft release gate: Claude Office Ghost-only patch provenance and applied build.
+"""Draft release gate: Claude Office Ghost-free patch provenance and applied build.
 
 Three layers:
 
@@ -46,7 +46,7 @@ EXPECTED_FILES = (
 SEED_RE = re.compile(r"PERSISTENT_SEEDS[^=]*=\s*\[(.*?)\]\s*(?:as\s+const\s*)?;", re.S)
 ID_RE = re.compile(r'id:\s*"([^"]+)"')
 NAME_RE = re.compile(r'name:\s*"([^"]+)"')
-SEED_OBJECT_RE = re.compile(r'name:\s*"Sol (?:Docker|Webserver)"\s*,\s*id:')
+GHOST_SEED_RE = re.compile(r'name:\s*"Ghost Protocol"\s*,\s*id:')
 # sha256 of the layout bundled in the live claude-office container
 # (/app/app/assets/default_layout.json), captured 2026-10-30.
 LIVE_LAYOUT_SHA256 = "4fc64eeab169901bd447fff63ac35d28986180d778a50d1252b9b4b671210d99"
@@ -91,24 +91,27 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-class OfficeGhostOnlyPatchRepo(unittest.TestCase):
+class OfficeGhostFreePatchRepo(unittest.TestCase):
     def test_patch_exists_and_targets_exactly_the_three_files(self):
         self.assertTrue(PATCH.is_file(), f"missing patch: {PATCH}")
         self.assertEqual(_headers(PATCH), list(EXPECTED_FILES))
 
-    def test_patch_removes_sol_seeds_and_adds_filters(self):
+    def test_patch_removes_ghost_seeds_and_adds_filters(self):
         body = _text(PATCH)
         removed = _removed(body)
         added = _added(body)
-        self.assertTrue(any('name: "Sol Docker"' in line for line in removed.splitlines()))
-        self.assertTrue(any('name: "Sol Webserver"' in line for line in removed.splitlines()))
-        # No seed object may be re-added: the only Sol references left are filters.
+        self.assertIn('name: "Ghost Protocol"', removed)
+        self.assertIn('id: "ai-companion"', removed)
+        self.assertNotIn('name: "Sol Docker"', removed)
+        self.assertNotIn('name: "Sol Webserver"', removed)
+        # Sol identities remain; no Ghost seed object may be re-added.
         for line in added.splitlines():
-            self.assertIsNone(SEED_OBJECT_RE.search(line), f"seed object re-added: {line!r}")
-        self.assertIn('agent.id !== "gateway-dockerhost"', added)
-        self.assertIn('agent.id !== "gateway-webserver"', added)
-        self.assertIn('agent.name !== "Sol Docker"', added)
-        self.assertIn('agent.name !== "Sol Webserver"', added)
+            self.assertIsNone(GHOST_SEED_RE.search(line), f"Ghost seed object re-added: {line!r}")
+        self.assertIn('agent.id !== "ai-companion"', added)
+        self.assertIn('agent.name !== "Ghost Protocol"', added)
+        self.assertIn('agent.name !== "Ghost"', added)
+        self.assertNotIn('gateway-dockerhost', added)
+        self.assertNotIn('gateway-webserver', added)
 
     def test_provenance_documents_the_patch(self):
         self.assertTrue(PROVENANCE.is_file(), f"missing provenance: {PROVENANCE}")
@@ -189,7 +192,7 @@ class OfficeBenDefaultLayoutRepo(unittest.TestCase):
             self.assertIn(patch, body)
 
 
-class OfficeGhostOnlyPatchSourceTree(unittest.TestCase):
+class OfficeGhostFreePatchSourceTree(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         value = os.environ.get("SINGULARITY_OFFICE_SOURCE", "").strip()
@@ -201,28 +204,36 @@ class OfficeGhostOnlyPatchSourceTree(unittest.TestCase):
         if not (cls.office / "frontend").is_dir():
             raise AssertionError(f"SINGULARITY_OFFICE_SOURCE has no frontend/: {cls.office}")
 
-    def _assert_only_ghost(self, relative: str) -> None:
+    def _assert_no_ghost(self, relative: str) -> None:
         body = _text(self.office / relative)
         match = SEED_RE.search(body)
         self.assertIsNotNone(match, f"PERSISTENT_SEEDS not found in {relative}")
         block = match.group(1)
-        self.assertEqual(ID_RE.findall(block), ["ai-companion"], f"{relative}: seeds must be Ghost only")
-        self.assertEqual(NAME_RE.findall(block), ["Ghost Protocol"], f"{relative}: seeds must be Ghost only")
-        self.assertNotIn("gateway-dockerhost", block)
-        self.assertNotIn("gateway-webserver", block)
+        self.assertEqual(ID_RE.findall(block), ["gateway-dockerhost", "gateway-webserver"],
+                         f"{relative}: Office seed identities must remain intact")
+        self.assertEqual(NAME_RE.findall(block), ["Sol Docker", "Sol Webserver"],
+                         f"{relative}: Office seed identities must remain intact")
+        self.assertNotIn("ai-companion", block)
+        self.assertNotIn("Ghost Protocol", block)
 
-    def test_persistent_identities_seeds_are_ghost_only(self):
-        self._assert_only_ghost("frontend/src/systems/persistentIdentities.ts")
+    def test_persistent_identities_keep_sol_and_exclude_ghost(self):
+        self._assert_no_ghost("frontend/src/systems/persistentIdentities.ts")
+        body = _text(self.office / "frontend/src/systems/persistentIdentities.ts")
+        self.assertIn('agent.id !== "ai-companion"', body)
+        self.assertIn('agent.name !== "Ghost Protocol"', body)
+        self.assertIn('agent.name !== "Ghost"', body)
 
-    def test_office_game_seeds_are_ghost_only(self):
-        self._assert_only_ghost("frontend/src/components/game/OfficeGame.tsx")
+    def test_office_game_keeps_sol_and_excludes_ghost(self):
+        self._assert_no_ghost("frontend/src/components/game/OfficeGame.tsx")
 
-    def test_idle_sweep_never_keeps_gateway_sessions(self):
+    def test_idle_sweep_keeps_sol_and_retires_ghost(self):
         body = _text(self.office / "frontend/src/systems/idleSweep.ts")
-        self.assertNotIn('"Sol Docker",', body)
-        self.assertNotIn('"Sol Webserver",', body)
-        self.assertIn('agent.id === "gateway-dockerhost"', body)
-        self.assertIn('agent.id === "gateway-webserver"', body)
+        self.assertIn('"Sol Docker"', body)
+        self.assertIn('"Sol Webserver"', body)
+        self.assertNotIn('"Ghost",', body)
+        self.assertNotIn('"Ghost Protocol",', body)
+        self.assertIn('agent.id === "ai-companion"', body)
+        self.assertIn('agent.name === "Ghost Protocol"', body)
 
     def test_ben_layout_is_seeded_and_active_on_first_boot(self):
         layout = _text(self.office / "backend/app/api/routes/layout.py")
@@ -246,16 +257,16 @@ class OfficeGhostOnlyPatchSourceTree(unittest.TestCase):
         self.assertIn("seats.map((seat, i)", body)
 
     def test_pinned_desks_render_without_an_owner(self):
-        # B6: desks are furniture. The pinned (Sol Webserver / Ghost) desks must
-        # render even when their owner identity is absent; identity stays Ghost-only.
+        # B6: desks are furniture. The pinned desks render even without their
+        # owner identity; removing Ghost does not change the authored floor.
         body = _text(self.office / "frontend/src/components/game/OfficeDesks.tsx")
         self.assertIn("export function SolDesks", body)
         self.assertNotIn("present.has(PINNED_DESK_OWNERS", body)
 
     def test_boss_desk_renders_without_sol_docker(self):
         # B8 (operator): the desk by the printer is boss-desk, not a Sol desk.
-        # It used to disappear in a Ghost-only roster because it was gated on
-        # Sol Docker being present. Desks are furniture and render regardless.
+        # It used to disappear when Sol Docker was absent. Desks are furniture
+        # and render regardless of the active Office identity set.
         body = _text(self.office / "frontend/src/components/game/OfficeGame.tsx")
         self.assertNotIn('presentPinned.has("Sol Docker") && <BossDesk />', body)
         self.assertIn("<BossDesk />", body)

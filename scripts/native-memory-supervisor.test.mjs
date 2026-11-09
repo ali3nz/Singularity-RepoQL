@@ -179,6 +179,7 @@ test("generated core config and panel metadata stay on loopback", async () => {
     assert.match(yaml, new RegExp(`port: ${config.components.core.port}`));
     assert.match(yaml, /embedding:\n\s+provider: none/);
     const panel = JSON.parse(renderPanelInstances(config, "test-token-value"));
+    assert.equal(panel.instances[0].id, "default");
     assert.equal(panel.instances[0].gateway_endpoint, `http://127.0.0.1:${config.components.core.port}`);
     assert.equal(panel.instances[0].api_key, "test-token-value");
   } finally {

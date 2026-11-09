@@ -1,7 +1,7 @@
 //! Minimal native stdio MCP surface shared by Claude Desktop's Code tab and
 //! OpenChamber Desktop. The GUI starts this process, not a terminal or CLI.
 //! Memory writes, hooks, orchestration, and provider routing are NOT implemented.
-#[cfg(feature = "ghost")]
+#[cfg(all(feature = "ghost", not(windows)))]
 mod ghost;
 mod gui_plan;
 #[cfg(feature = "office")]
@@ -29,7 +29,7 @@ fn build_info() -> Value {
         "schema": "singularity-native-build-info/v1",
         "packageVersion": env!("CARGO_PKG_VERSION"),
         "featureOffice": cfg!(feature = "office"),
-        "featureGhost": cfg!(feature = "ghost"),
+        "featureGhost": cfg!(all(feature = "ghost", not(windows))),
     })
 }
 
@@ -297,7 +297,7 @@ fn main() {
         Some("cpu-sample") => std::process::exit(windows_cpu::run(&env::args().skip(2).collect::<Vec<_>>())),
         #[cfg(feature = "office")]
         Some("office-auth-check") => std::process::exit(office::auth_check()),
-        #[cfg(feature = "ghost")]
+        #[cfg(all(feature = "ghost", not(windows)))]
         Some("ghost-control") => std::process::exit(ghost::run(env::args().nth(2).as_deref().unwrap_or(""))),
         #[cfg(feature = "office")]
         Some("office-claude") => office::run("claude", env::args().nth(2).as_deref()),
@@ -328,7 +328,7 @@ mod tests {
         assert_eq!(info["schema"], "singularity-native-build-info/v1");
         assert_eq!(info["packageVersion"], env!("CARGO_PKG_VERSION"));
         assert_eq!(info["featureOffice"], cfg!(feature = "office"));
-        assert_eq!(info["featureGhost"], cfg!(feature = "ghost"));
+        assert_eq!(info["featureGhost"], cfg!(all(feature = "ghost", not(windows))));
         assert_eq!(info.as_object().unwrap().len(), 4);
     }
 

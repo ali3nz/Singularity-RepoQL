@@ -2,7 +2,7 @@
 <#
 Read-only post-reboot acceptance for the default-root native Windows stack.
 
-Checks the logon-triggered Rust supervisor, dashboard, Ghost scheduler and
+Checks the logon-triggered Rust supervisor, dashboard and
 Office service, the loopback health endpoints and task actions, RepoQL 1.7.18,
 and the installed Claude Code settings (memory hooks + RepoQL plugin). Writes
 one JSON receipt under <InstallRoot>\state\receipts and exits 1 when any
@@ -98,7 +98,6 @@ $ClaudeHome = [IO.Path]::GetFullPath($ClaudeHome)
 $receiptPath = Join-Path $InstallRoot 'INSTALLATION_RECEIPT.json'
 $supervisorPath = Join-Path $InstallRoot 'supervisor.json'
 $memoryConfigPath = Join-Path $InstallRoot 'memory\stack.json'
-$ghostRoot = Join-Path $env:LOCALAPPDATA 'Singularity\GhostScheduler'
 
 $installReceipt = Get-Json $receiptPath
 if ($null -eq $installReceipt) {
@@ -113,7 +112,6 @@ if ($null -eq $installReceipt) {
 $supervisor = Test-Task 'Singularity-Rust-Native-Supervisor' @('singularity-windows-supervisor.exe', $supervisorPath)
 $dashboard = Test-Task 'Singularity-ClaudeComplete-Dashboard' @('claude_complete_dashboard_host.py', '--port 18100', '--variant 2')
 $office = Test-Task 'Singularity-ClaudeComplete-Office' @('run_office.py', '--config')
-$ghost = Test-Task 'Singularity-Ghost-Scheduler' @('ghost_scheduler_host.py', '--config')
 
 # The supervisor owns the memory stack; verify its generated config and the
 # exact component health paths the supervisor was asked to manage.
@@ -145,21 +143,6 @@ $officeMarker = $officeHealth.ok -and $officeHealth.status -eq 200 -and $officeH
 Add-Check 'port:18128' $(if (Test-LoopbackPort 18128) { 'pass' } else { 'fail' }) 'Office loopback listener' "status=$($officeHealth.status)"
 Add-Check 'http:18128' $(if ($officeMarker) { 'pass' } else { 'fail' }) "Office health ok=$officeMarker" "status=$($officeHealth.status); error=$($officeHealth.error)"
 
-$ghostConfig = Get-Json (Join-Path $ghostRoot 'config.json')
-$ghostState = [pscustomobject]@{ ok = $false; state = 'unavailable'; schedules = 0; error = 'config missing' }
-if ($ghostConfig -and $ghostConfig.controlKey) {
-  $ghostHeaders = @{ 'X-Ghost-Control-Key' = [string]$ghostConfig.controlKey }
-  $ghostResponse = Invoke-Health 'http://127.0.0.1:18473/state' $ghostHeaders
-  if ($ghostResponse.ok) {
-    try {
-      $parsed = $ghostResponse.body | ConvertFrom-Json
-      $ghostState = [pscustomobject]@{ ok = [bool]$parsed.ok; state = [string]$parsed.state; schedules = @($parsed.schedules).Count; error = '' }
-    } catch { $ghostState = [pscustomobject]@{ ok = $false; state = 'invalid-json'; schedules = 0; error = $_.Exception.Message } }
-  } else { $ghostState = [pscustomobject]@{ ok = $false; state = 'http-error'; schedules = 0; error = $ghostResponse.error } }
-}
-Add-Check 'port:18473' $(if (Test-LoopbackPort 18473) { 'pass' } else { 'fail' }) 'Ghost loopback listener'
-Add-Check 'ghost:state' $(if ($ghostState.ok -and $ghostState.state -eq 'ready') { 'pass' } else { 'fail' }) "state=$($ghostState.state); schedules=$($ghostState.schedules)" "error=$($ghostState.error)"
-
 foreach ($component in $memoryPorts) {
   $healthPath = if ($component.health) { $component.health } else { '/health' }
   $health = Invoke-Health ("http://127.0.0.1:{0}{1}" -f $component.port, $healthPath)
@@ -180,7 +163,7 @@ $coreBearer = Get-Text (Join-Path $InstallRoot 'memory\state\secrets\core-bearer
 if ($coreBearer) {
   try {
     $headers = @{ Authorization = "Bearer $($coreBearer.Trim())"; 'x-tdai-service-id' = 'default' }
-    $body = @{ team_id = 'openchamber-agents'; user_id = 'pilot-operator'; agent_id = 'singularity-orchestrator'; query = 'windows native release'; limit = 1 } | ConvertTo-Json -Compress
+    $body = @{ team_id = 'openchamber-agents'; user_id = 'pilot-operator'; agent_id = 'singularity-code-reviewer'; query = 'windows native release'; limit = 1 } | ConvertTo-Json -Compress
     $readback = Invoke-RestMethod -Uri 'http://127.0.0.1:18421/v3/atomic/search' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 20
     $ok = ([int]$readback.code -eq 0)
     Add-Check 'memory:l0-readback' $(if ($ok) { 'pass' } else { 'fail' }) "code=$($readback.code); items=$(@($readback.data.items).Count)" "requestId=$($readback.request_id)"
@@ -214,7 +197,7 @@ if ($null -eq $claudeSettings) {
 }
 $agentsDir = Join-Path $ClaudeHome 'agents'
 $agentCount = if (Test-Path -LiteralPath $agentsDir) { @(Get-ChildItem -LiteralPath $agentsDir -File -Filter 'singularity-*.md').Count } else { 0 }
-Add-Check 'claude:agents' $(if ($agentCount -ge 17) { 'pass' } else { 'fail' }) "agents=$agentCount expected>=17"
+Add-Check 'claude:agents' $(if ($agentCount -ge 9) { 'pass' } else { 'fail' }) "agents=$agentCount expected>=9"
 $pluginRegistry = Join-Path $ClaudeHome 'plugins\installed_plugins.json'
 if (Test-Path -LiteralPath $pluginRegistry) {
   $registryText = Get-Text $pluginRegistry

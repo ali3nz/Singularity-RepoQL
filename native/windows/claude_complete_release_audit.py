@@ -14,12 +14,8 @@ from scan_source_archive import scan
 
 AGENTS = (
     'singularity-board', 'singularity-code-reviewer', 'singularity-duel-coordinator',
-    'singularity-duo', 'singularity-explore',
-    'singularity-free-mode', 'singularity-general', 'singularity-ghost',
-    'singularity-orchestrator', 'singularity-quad-coordinator',
-    'singularity-researcher-web',
-    'singularity-solo-coordinator', 'singularity-standalone',
-    'singularity-super', 'singularity-thinker',
+    'singularity-duo', 'singularity-explore', 'singularity-general',
+    'singularity-quad-coordinator', 'singularity-super', 'singularity-thinker',
 )
 SKILLS = ('board','claude-office-visual','consult-dispatch','handoff','hub-doc-update','implementation-review','issue-closeout','mcp-builder','retro','statusline-builder')
 # Official plugin inventory reviewed at M34. Not redistributed in the source archive.
@@ -40,7 +36,6 @@ REQUIRED = (
     'native/windows/claude_complete_gui_acceptance_plan.py',
     'native/windows/claude_complete_doc_reconciliation.mjs',
     'native/windows/claude_complete_tencent_recovery.mjs',
-    'native/windows/claude_complete_ghost_scope_probe.mjs',
     'native/windows/build_option2_acceptance_bundle.py',
     'native/windows/prepare_option2_candidate.py',
     'native/windows/verify_prepared_option2_candidate.py',
@@ -69,26 +64,9 @@ REQUIRED = (
     'native/windows/test_rust_lock_release_gate.py',
     'dashboard/native_gui_usage.py',
     'dashboard/office_bridge.py',
-    'dashboard/native_ghost.py',
-    'dashboard/ghost_schedule_plans.py',
-    'dashboard/test_ghost_activation_handoff_contract.py',
-    'docs/WINDOWS-NATIVE-M86-GHOST-ACTIVATION-HANDOFF.md',
-    'docs/WINDOWS-NATIVE-M87-GHOST-DST-PREFLIGHT.md',
-    'dashboard/test_ghost_plan_origin_boundary.py',
-    'docs/WINDOWS-NATIVE-M88-GHOST-DRAFT-ORIGIN.md',
-    'docs/WINDOWS-NATIVE-M89-GHOST-DRAFT-LOCK.md',
-    'docs/WINDOWS-NATIVE-M90-GHOST-IDEMPOTENCY-HISTORY.md',
-    'docs/WINDOWS-NATIVE-M91-GHOST-REQUEST-RETIREMENT.md',
-    'dashboard/static/ghost/index.html',
-    'dashboard/static/ghost/dashboard.js',
-    'dashboard/static/ghost/tasks.js',
-    'dashboard/static/ghost/schedule_model.mjs',
-    'ghost/ghost-gateway.mjs',
-    'ghost/prompt-store/prompt_store.py',
     'office/PROVENANCE.md',
     'office/README.md',
     'native/desktop-bridge/src/office.rs',
-    'native/desktop-bridge/src/ghost.rs',
     'connectors/memorycore/connector.ts',
     'connectors/kanzo/connector.ts',
 )
@@ -106,8 +84,8 @@ def inspect(archive: Path) -> dict:
             issues.append('Option 2 Claude Code complete source profile required')
         if manifest.get('repoql',{}).get('requiredVersion') != '1.7.18':
             issues.append('RepoQL 1.7.18 pin missing')
-        if manifest.get('features',{}).get('office') is not True or manifest.get('features',{}).get('ghost') is not True:
-            issues.append('Complete Ghost/Office feature flags missing')
+        if manifest.get('features',{}).get('office') is not True or manifest.get('features',{}).get('ghost') is not False:
+            issues.append('Complete Office-only feature flags missing (Ghost must be retired)')
         missing=[p for p in (*REQUIRED,*(f'adapters/claude-code/agents/{a}.md' for a in AGENTS),*(f'openchamber/skills/{name}/SKILL.md' for name in SKILLS)) if p not in names]
         if missing:issues.append(f'{len(missing)} required Claude Code source assets absent')
         office_app=any(p.startswith(('office/frontend/','office/backend/')) for p in names)
@@ -118,7 +96,6 @@ def inspect(archive: Path) -> dict:
             'Windows CI now has an Option 2 AMD64 bridge/supervisor build and guarded preparation candidate workflow; no CI execution receipt, signed installer or installed service stack is verified',
             'Claude Code settings/agents now have an opt-in native config installer, but actual Windows CLI/Desktop Code-tab execution, MCP and hooks remain untested',
             'Pinned Claude Office frontend/backend is external, not included or verified on Windows',
-            'Windows Ghost daemon/prompt editing/restart recovery not accepted',
             'Tencent MemoryCore, RepoQL connectors and complete self-learning parity not accepted',
             'Option 2 now has opt-in delegated profile seed and live readback tooling; actual Tencent live readbacks, main-session proxy capture and Ghost isolation not yet demonstrated',
             'Read-only dual-doc readback tool included; real Windows Tencent and RepoQL indexing, exact revision and supersession acceptance not yet demonstrated',

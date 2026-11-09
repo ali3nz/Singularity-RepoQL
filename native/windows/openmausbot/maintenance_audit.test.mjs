@@ -9,7 +9,7 @@ const base = {home: '/test/user', workspace: '/test/work', dataDir: '/test/omb'}
 const configuredInventory = () => ({staticInstallationComplete: true, claudeConfiguration: {issues: []},
   officialRepoqlPlugin: {issues: []}, kanzoProjectMcp: {issues: []}, openMausBotProjectMcp: {issues: []}});
 const allProbes = {memory: () => ({status: 'CONFIGURED'}), kanzo: () => ({status: 'CONFIGURED'}),
-  tencent: () => ({status: 'CONFIGURED'}), ghost: () => ({status: 'CONFIGURED'}),
+  tencent: () => ({status: 'CONFIGURED'}),
   dashboard: () => ({status: 'CONFIGURED'}),
   dashboardQueue: () => ({status: 'CONFIGURED'}), productRun: () => ({status: 'CONFIGURED'})};
 
@@ -32,9 +32,21 @@ test('read-only audit composes the verifiers and reports configuration only', as
   assert.equal(report.repairVerified, false);
   assert.equal(report.healthy, true);
   const byComponent = Object.fromEntries(report.checks.map((c) => [c.component, c]));
+  assert.deepEqual(byComponent['windows-ghost-execution'], {component: 'windows-ghost-execution',
+    status: 'NOT_APPLICABLE', issues: ['WINDOWS_GHOST_RETIRED']});
   assert.equal(byComponent['documentation-reconciliation'].status, 'CONFIGURED');
   assert.equal(byComponent['memorycore-profiles-capture-recall'].status, 'CONFIGURED');
   assert.equal(byComponent['maintenance-own-state'].status, 'CONFIGURED');
+});
+
+test('NOT_APPLICABLE is accepted only for the retired Windows Ghost component', async () => {
+  const report = await audit({...base, checkInventory: configuredInventory,
+    checkRules: () => ({verified: true}),
+    probes: {...allProbes, memory: () => ({status: 'NOT_APPLICABLE', issues: ['WINDOWS_GHOST_RETIRED']})}});
+  const byComponent = Object.fromEntries(report.checks.map((c) => [c.component, c]));
+  assert.equal(byComponent['windows-ghost-execution'].status, 'NOT_APPLICABLE');
+  assert.equal(byComponent['memorycore-profiles-capture-recall'].status, 'NOT_VERIFIED');
+  assert.equal(report.healthy, false);
 });
 
 test('missing rule, inventory or live probe returns bounded codes, not details', async () => {
@@ -47,7 +59,7 @@ test('missing rule, inventory or live probe returns bounded codes, not details',
   assert.equal(byComponent['claude-hooks-agents-repoql-kanzo'].status, 'NOT_VERIFIED');
   assert.equal(byComponent['openmausbot-shared-rules'].status, 'NOT_VERIFIED');
   // Live probers are NOT_VERIFIED without evidence, never assumed healthy.
-  for (const component of ['kanzo-board', 'tencent-recovery', 'ghost-scheduling', 'dashboard-agents-control']) {
+  for (const component of ['kanzo-board', 'tencent-recovery', 'dashboard-agents-control']) {
     assert.equal(byComponent[component].status, 'NOT_VERIFIED');
   }
   assert.equal(byComponent['documentation-reconciliation'].issues[0], 'DOC_MANIFEST_NOT_SHIPPED');
@@ -104,45 +116,19 @@ test('the scheduled audit executes the existing read-only CLIs by default', asyn
   const run = (command, args) => {
     calls.push([command, ...args].join(' '));
     if (command === 'powershell.exe') return {status: 0, stdout: '{"tasks":3}', stderr: ''};
-    if (args.includes('--live')) return {status: 0, stdout: JSON.stringify({searchSeparationObserved: true, issues: []}), stderr: ''};
     if (args.includes('--mode')) return {status: 0, stdout: '', stderr: ''};
     return {status: 1, stdout: '', stderr: 'UNEXPECTED' };
   };
   const report = await audit({home: root, workspace: root, dataDir: join(root, 'omb'), platform: 'win32', run,
     checkInventory: configuredInventory, checkRules: () => ({verified: true}),
-    probes: {memory: () => ({status: 'CONFIGURED'}), env: {probeFile: '/p.json', memoryConfig: '/m.json'},
-      rqlExe: '/rql.exe', dashboardStateDir: '/state'}});
+    probes: {memory: () => ({status: 'CONFIGURED'}), rqlExe: '/rql.exe', dashboardStateDir: '/state'}});
   const byComponent = Object.fromEntries(report.checks.map((c) => [c.component, c]));
   assert.equal(byComponent['kanzo-board'].status, 'CONFIGURED');
-  assert.equal(byComponent['ghost-scheduling'].status, 'CONFIGURED');
   assert.equal(byComponent['dashboard-agents-control'].status, 'CONFIGURED');
   assert.equal(byComponent['tencent-recovery'].status, 'NOT_VERIFIED');
   assert.deepEqual(byComponent['tencent-recovery'].issues, ['TENCENT_RECOVERY_MUTATING_ONLY']);
   assert.ok(calls.some((c) => c.includes('audit_kanzo_board.ps1') && c.includes('-SourceRoot')));
-  assert.ok(calls.some((c) => c.includes('--live') && c.includes('--probe-file')));
   assert.ok(calls.some((c) => c.includes('--mode check')));
-});
-
-test('the Ghost probe reuses the memory config Configure recorded, without printing it', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'singularity-audit-ghost-'));
-  mkdirSync(join(root, 'native', 'windows'), {recursive: true});
-  mkdirSync(join(root, '.claude'), {recursive: true});
-  writeFileSync(join(root, 'native', 'windows', 'audit_kanzo_board.ps1'), '');
-  writeFileSync(join(root, '.claude', 'settings.json'), JSON.stringify({
-    env: {SINGULARITY_MEMORY_CONFIG: '/private/memory.json'}}));
-  const calls = [];
-  const run = (command, args) => {
-    calls.push([command, ...args].join(' '));
-    if (args.includes('--live')) return {status: 0, stdout: JSON.stringify({searchSeparationObserved: true, issues: []}), stderr: ''};
-    return {status: 1, stdout: '', stderr: 'UNEXPECTED'};
-  };
-  const report = await audit({home: root, workspace: root, dataDir: join(root, 'omb'), platform: 'win32', run,
-    checkInventory: configuredInventory, checkRules: () => ({verified: true}),
-    probes: {memory: () => ({status: 'CONFIGURED'}), env: {probeFile: '/probe.json'}}});
-  const ghost = report.checks.find((c) => c.component === 'ghost-scheduling');
-  assert.equal(ghost.status, 'CONFIGURED');
-  assert.ok(calls.some((c) => c.includes('--memory-config /private/memory.json')));
-  assert.doesNotMatch(JSON.stringify(report), /memory\.json/);
 });
 
 test('doc ingestion backlog is read from the product ledger as counts only', async () => {

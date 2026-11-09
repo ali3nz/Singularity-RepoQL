@@ -1,5 +1,6 @@
 """Never serve Linux CPU history or quota semantics as native Windows data."""
 import os
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,7 +16,7 @@ class DashboardCpuHistory(unittest.TestCase):
                 app=App(cfg)
                 try:
                     # An old Linux fixture must not appear on the native UI.
-                    with app.cpu_conn() as db:
+                    with closing(app.cpu_conn()) as db:
                         db.execute('CREATE TABLE IF NOT EXISTS cpu_samples (ts INTEGER, cpu_pct REAL, host_pct REAL, state TEXT, pid INTEGER)')
                         db.execute('INSERT INTO cpu_samples VALUES (2000000000,400,40,"ok",42)')
                     result=app.cpu_series('24h')

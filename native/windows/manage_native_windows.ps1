@@ -69,7 +69,7 @@ $memoryConfig=Join-Path $memoryRoot 'stack.json'
 $memoryBuilder=Join-Path $PSScriptRoot 'build_memory_stack_config.py'
 $supervisorBuilder=Join-Path $PSScriptRoot 'build_supervisor_config.py'
 # --- end A3 paths ---
-$hasGhost=$true
+$hasGhost=$false
 if (-not $RepoqlExe) {
   $repoqlCandidate=Join-Path $env:LOCALAPPDATA 'rql\rql.exe'
   if (Test-Path -LiteralPath $repoqlCandidate -PathType Leaf) { $RepoqlExe=$repoqlCandidate }
@@ -196,7 +196,7 @@ function Get-FileSha256([string]$PathValue) {
     finally { $stream.Dispose() }
   } finally { $sha.Dispose() }
 }
-function Read-Stage([string]$StagePath,[int]$ExpectedOption) {
+function Read-Stage([string]$StagePath,[int]$ExpectedOption,[switch]$AllowLegacyGhost) {
   if (-not (Test-Path -LiteralPath $StagePath -PathType Container)) { return $null }
   $null=Assert-LocalPath $StagePath 'NATIVE_STAGE_PATH_INVALID' $true $true
   $receiptPath=Join-Path $StagePath 'STAGING_RECEIPT.json'
@@ -204,19 +204,26 @@ function Read-Stage([string]$StagePath,[int]$ExpectedOption) {
   if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf) -or -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'NATIVE_STAGE_RECEIPT_OR_MANIFEST_MISSING' }
   try { $stageReceipt=Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json; $manifest=Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json }
   catch { throw 'NATIVE_STAGE_RECEIPT_OR_MANIFEST_INVALID' }
-  if ($stageReceipt.schema -ne 1 -or $stageReceipt.state -ne 'STAGED_UNVERIFIED' -or [int]$stageReceipt.option -ne $ExpectedOption -or $stageReceipt.repoqlVersion -ne '1.7.18' -or
+  $legacyGhost=$AllowLegacyGhost -and $ExpectedOption -in @(2,4) -and
+    $manifest.features.ghost -eq $true -and $manifest.rustGhostFeature -eq $true -and $stageReceipt.bridgeFeatureGhost -eq $true
+  if ($manifest.features.ghost -isnot [bool] -or $manifest.rustGhostFeature -isnot [bool] -or $stageReceipt.bridgeFeatureGhost -isnot [bool] -or
+      $stageReceipt.schema -ne 1 -or $stageReceipt.state -ne 'STAGED_UNVERIFIED' -or [int]$stageReceipt.option -ne $ExpectedOption -or $stageReceipt.repoqlVersion -ne '1.7.18' -or
       $stageReceipt.sourceManifestSha256 -notmatch '^[0-9a-f]{64}$' -or $manifest.schema -ne 1 -or [int]$manifest.variant -ne $ExpectedOption -or
       $manifest.release_status -ne 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER' -or $manifest.repoql.requiredVersion -ne '1.7.18' -or $manifest.repoql.connectorContract -cne 'fetch-render' -or
-      [bool]$manifest.features.ghost -ne ($ExpectedOption -in @(2,4)) -or [bool]$manifest.features.office -ne ($ExpectedOption -in @(2,4)) -or
-      [bool]$manifest.rustGhostFeature -ne ($ExpectedOption -in @(2,4)) -or [bool]$manifest.rustOfficeFeature -ne ($ExpectedOption -in @(2,4)) -or
+      [bool]$manifest.features.ghost -ne $legacyGhost -or [bool]$manifest.features.office -ne ($ExpectedOption -in @(2,4)) -or
+      [bool]$manifest.rustGhostFeature -ne $legacyGhost -or [bool]$manifest.rustOfficeFeature -ne ($ExpectedOption -in @(2,4)) -or
       $stageReceipt.bridgePackageVersion -notmatch '^\d+\.\d+\.\d+$' -or
-      [bool]$stageReceipt.bridgeFeatureGhost -ne ($ExpectedOption -in @(2,4)) -or [bool]$stageReceipt.bridgeFeatureOffice -ne ($ExpectedOption -in @(2,4))) {
+      [bool]$stageReceipt.bridgeFeatureGhost -ne $legacyGhost -or [bool]$stageReceipt.bridgeFeatureOffice -ne ($ExpectedOption -in @(2,4))) {
     throw 'NATIVE_STAGE_IDENTITY_OR_PIN_INVALID'
   }
   if ((Get-FileSha256 $manifestPath) -cne [string]$stageReceipt.sourceManifestSha256) { throw 'NATIVE_STAGE_MANIFEST_HASH_MISMATCH' }
   $expected=@{}
   foreach ($row in @($manifest.files)) {
     $relative=[string]$row.path
+    if (-not $legacyGhost -and ($relative -match '^(ghost/|dashboard/static/ghost/|openchamber/plugins/product-ghost/|native/windows/(ghost_|manage_ghost_|test_ghost_))' -or
+        $relative -in @('native/desktop-bridge/src/ghost.rs','dashboard/native_ghost.py','native/windows/test_native_ghost_client_config.py'))) {
+      throw 'NATIVE_STAGE_GHOST_COMPONENT_LEAK'
+    }
     if (-not $relative -or $relative.Contains('\\') -or $relative.Contains(':') -or $relative.StartsWith('/') -or $relative.Split('/') -contains '..' -or $relative.Split('/') -contains '') { throw 'NATIVE_STAGE_MANIFEST_PATH_INVALID' }
     if ($row.sha256 -notmatch '^[0-9a-f]{64}$' -or [long]$row.bytes -lt 0) { throw 'NATIVE_STAGE_MANIFEST_ENTRY_INVALID' }
     $path=Join-Path (Join-Path $StagePath 'source') ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
@@ -243,6 +250,21 @@ function Read-Stage([string]$StagePath,[int]$ExpectedOption) {
     $expected[('bin/'+(Split-Path -Leaf $pair[0])).ToUpperInvariant()]=$pair[0]
   }
   $expected['STAGING_RECEIPT.JSON']=$receiptPath
+  if ($stageReceipt.PSObject.Properties['additionalBinaries']) {
+    $extras=@($stageReceipt.additionalBinaries)
+    if ($extras.Count -gt 2) { throw 'NATIVE_STAGE_ADDITIONAL_BINARY_INVALID' }
+    foreach ($extra in $extras) {
+      $relative=[string]$extra.path
+      if ($relative -cnotin @('bin/singularity-windows-supervisorw.exe','bin/unified-repoql-control.exe') -or
+          [string]$extra.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $expected.ContainsKey($relative.ToUpperInvariant())) {
+        throw 'NATIVE_STAGE_ADDITIONAL_BINARY_INVALID'
+      }
+      $extraPath=Join-Path $StagePath ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+      $null=Assert-LocalPath $extraPath 'NATIVE_STAGE_ADDITIONAL_BINARY_INVALID' $true $false
+      if ((Get-FileSha256 $extraPath) -cne [string]$extra.sha256) { throw 'NATIVE_STAGE_ADDITIONAL_BINARY_HASH_MISMATCH' }
+      $expected[$relative.ToUpperInvariant()]=$extraPath
+    }
+  }
   $actual=@(); $stack=New-Object 'System.Collections.Generic.Stack[string]'; $stack.Push($StagePath)
   while ($stack.Count -gt 0) {
     $directory=$stack.Pop()
@@ -282,7 +304,7 @@ function Assert-ExactFileInventory([string]$Root,[string[]]$Expected,[string]$Fa
   $diff=Compare-Object -ReferenceObject @($Expected | ForEach-Object { ([string]$_).Replace('\','/').ToUpperInvariant() } | Sort-Object) -DifferenceObject @($actual | Sort-Object)
   if ($diff) { throw $FailureCode }
 }
-function Get-SourceTree([string]$Root,[int]$ExpectedOption) {
+function Get-SourceTree([string]$Root,[int]$ExpectedOption,[switch]$AllowLegacyGhost) {
   $full=Assert-LocalPath $Root 'NATIVE_SOURCE_ROOT_INVALID' $true $true
   $full=[IO.Path]::GetFullPath($full).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
   $manifestPath=Join-Path $full 'NATIVE_WINDOWS_SOURCE_MANIFEST.json'
@@ -290,15 +312,21 @@ function Get-SourceTree([string]$Root,[int]$ExpectedOption) {
   try { $manifest=Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
   catch { throw 'NATIVE_SOURCE_MANIFEST_INVALID' }
   $complete=$ExpectedOption -in @(2,4)
+  $legacyGhost=$AllowLegacyGhost -and $complete -and $manifest.features.ghost -eq $true -and $manifest.rustGhostFeature -eq $true
   $expectedGui=if ($ExpectedOption -le 2) {'claude-desktop-code'} else {'openchamber-desktop'}
-  if ($manifest.schema -ne 1 -or [int]$manifest.variant -ne $ExpectedOption -or $manifest.release_status -cne 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER' -or
+  if ($manifest.features.ghost -isnot [bool] -or $manifest.rustGhostFeature -isnot [bool] -or
+      $manifest.schema -ne 1 -or [int]$manifest.variant -ne $ExpectedOption -or $manifest.release_status -cne 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER' -or
       $manifest.repoql.requiredVersion -cne '1.7.18' -or $manifest.repoql.connectorContract -cne 'fetch-render' -or $manifest.gui -cne $expectedGui -or
-      [bool]$manifest.features.office -ne $complete -or [bool]$manifest.features.ghost -ne $complete -or
-      [bool]$manifest.rustOfficeFeature -ne $complete -or [bool]$manifest.rustGhostFeature -ne $complete) { throw 'NATIVE_SOURCE_PIN_OR_PROFILE_INVALID' }
+      [bool]$manifest.features.office -ne $complete -or [bool]$manifest.features.ghost -ne $legacyGhost -or
+      [bool]$manifest.rustOfficeFeature -ne $complete -or [bool]$manifest.rustGhostFeature -ne $legacyGhost) { throw 'NATIVE_SOURCE_PIN_OR_PROFILE_INVALID' }
   $seen=@{}; $seenWindows=@{}; $expectedFiles=@('NATIVE_WINDOWS_SOURCE_MANIFEST.json')
   $reserved='^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9]|LPT[1-9])($|\.)'
   foreach ($row in @($manifest.files)) {
     $relative=[string]$row.path
+    if (-not $legacyGhost -and ($relative -match '^(ghost/|dashboard/static/ghost/|openchamber/plugins/product-ghost/|native/windows/(ghost_|manage_ghost_|test_ghost_))' -or
+        $relative -in @('native/desktop-bridge/src/ghost.rs','dashboard/native_ghost.py','native/windows/test_native_ghost_client_config.py'))) {
+      throw 'NATIVE_SOURCE_GHOST_COMPONENT_LEAK'
+    }
     if (-not $relative -or $relative.Contains('\') -or $relative.Contains(':') -or $relative.StartsWith('/') -or
         $relative.Split('/') -contains '..' -or $relative.Split('/') -contains '.' -or $relative.Split('/') -contains '' -or
         $seen.ContainsKey($relative.ToUpperInvariant())) { throw 'NATIVE_SOURCE_MANIFEST_PATH_INVALID' }
@@ -666,7 +694,7 @@ function Invoke-SourceRollbackTransaction($Snapshot,$InstallReceipt) {
     binariesPreserved=$true;taskConfigurationPreserved=$true;userStatePreserved=$true;rollbackAvailable=$false;releaseReady=$false}
 }
 function Remove-VerifiedStage([string]$StagePath,[int]$ExpectedOption) {
-  $stage=Read-Stage $StagePath $ExpectedOption
+  $stage=Read-Stage $StagePath $ExpectedOption -AllowLegacyGhost
   if (-not $stage) { return }
   foreach ($file in $stage.files) { Remove-Item -LiteralPath $file -Force -ErrorAction Stop }
   $directories=@(Get-ChildItem -LiteralPath $StagePath -Directory -Recurse -Force | Sort-Object { $_.FullName.Length } -Descending)
@@ -732,7 +760,6 @@ function Invoke-Dashboard([string]$ChildMode,[bool]$Mutate,[bool]$DryRun=$false)
   if ($DryRun) { $childArgs.WhatIf=$true }
   if ($ChildMode -eq 'Register') {
     $childArgs.StagedSource=(Join-Path $current 'source');$childArgs.PythonExe=$PythonExe;$childArgs.RepoqlExe=$RepoqlExe;$childArgs.Workspace=$Workspace
-    if ($hasGhost) { $childArgs.NativeBridgeExe=(Join-Path $current 'bin/singularity-desktop-bridge.exe');$childArgs.GhostControlConfig=$ghostClientConfig }
   }
   return Invoke-JsonScript $dashboardManager $childArgs 'NATIVE_DASHBOARD_MANAGER_FAILED'
 }
@@ -828,7 +855,7 @@ function Invoke-MemoryStack([string]$Verb) {
   if ($Verb -eq 'verify' -and $result.ok -ne $true) { throw 'NATIVE_MEMORY_VERIFY_FAILED' }
   return $result
 }
-# First-start identity provisioning. The docker stack performs the equivalent in
+# First-start identity provisioning. The reference stack performs the equivalent in
 # memory/upstream/start-memory-core.sh (init-admin -> admin user + default team),
 # but the native lifecycle only generated stack.json, so a fresh install shipped
 # a MemoryCore with 0 users / 0 teams / 0 agents. Every consumer then wrote under
@@ -898,10 +925,10 @@ function Assert-CleanInstallScope([bool]$AllowRootReceipt) {
   $dashboardTaskNow=Get-Task $taskDashboard
   $supervisorTaskNow=Get-Task $taskSupervisor
   if ($dashboardTaskNow -or $supervisorTaskNow) { throw 'NATIVE_EXISTING_TASK_REQUIRES_OWNERSHIP_REVIEW' }
-  if ($hasGhost -and (Get-Task $taskGhost)) { throw 'NATIVE_EXISTING_TASK_REQUIRES_OWNERSHIP_REVIEW' }
+  if ((Get-Task $taskGhost)) { throw 'NATIVE_EXISTING_TASK_REQUIRES_OWNERSHIP_REVIEW' }
   if ($dashboardReceipt -and (Test-Path -LiteralPath $dashboardReceipt)) { throw 'NATIVE_EXISTING_RECEIPT_REQUIRES_OWNERSHIP_REVIEW' }
   if ($hasOffice -and ((Test-Path -LiteralPath $officeRoot) -or (Test-Path -LiteralPath $officeReceipt) -or (Get-Task $taskOffice))) { throw 'NATIVE_EXISTING_RECEIPT_REQUIRES_OWNERSHIP_REVIEW' }
-  if ($hasGhost -and (Test-GhostOwnershipArtifacts)) { throw 'NATIVE_EXISTING_RECEIPT_REQUIRES_OWNERSHIP_REVIEW' }
+  if ((Test-GhostOwnershipArtifacts)) { throw 'NATIVE_EXISTING_RECEIPT_REQUIRES_OWNERSHIP_REVIEW' }
   if ((Test-Path -LiteralPath $installReceiptPath) -and -not $AllowRootReceipt) { throw 'NATIVE_ALREADY_INSTALLED_USE_REINSTALL' }
 }
 function Assert-InstallInputs {
@@ -1102,16 +1129,28 @@ if ($Mode -in @('Install','Reinstall')) {
   if ($Mode -eq 'Install') { Assert-CleanInstallScope $false }
   else {
     if ([int]$receipt.option -ne $Option -or $receipt.state -notin @('installed_not_started','partial','reinstalling')) { throw 'NATIVE_REINSTALL_OWNERSHIP_OR_STATE_INVALID' }
-    if (-not (Read-Stage $current $Option) -and $receipt.state -notin @('partial','reinstalling')) { throw 'NATIVE_REINSTALL_STAGE_MISSING' }
+    if (Test-Path -LiteralPath (Join-Path $installRoot 'source-refresh-snapshot')) { throw 'NATIVE_REINSTALL_SOURCE_SNAPSHOT_EXISTS' }
+    $oldStage=Read-Stage $current $Option -AllowLegacyGhost
+    if (-not $oldStage -and $receipt.state -notin @('partial','reinstalling')) { throw 'NATIVE_REINSTALL_STAGE_MISSING' }
+    if ($oldStage) {
+      $oldTree=Get-SourceTree (Join-Path $current 'source') $Option -AllowLegacyGhost
+      Assert-SourceStageCoherence $oldStage $receipt $oldTree
+    }
     if (Test-Path -LiteralPath $previous) { throw 'NATIVE_REINSTALL_PREVIOUS_SNAPSHOT_EXISTS' }
   }
   if (-not $PSCmdlet.ShouldProcess($installRoot,"$Mode native Windows option $Option (tasks registered, services not started)")) {
     Emit-Result ([ordered]@{schema='singularity-native-windows-lifecycle/v1';option=$Option;state='operation_planned';changed=$false;releaseReady=$false}); return
   }
   if ($Mode -eq 'Reinstall') {
+    $script:hasGhost=[bool]($oldStage -and $oldStage.manifest.features.ghost)
+    if ($hasGhost) { $script:ghostManager=Assert-LocalPath (Join-Path $current 'source/native/windows/manage_ghost_scheduler.ps1') 'NATIVE_LEGACY_GHOST_MANAGER_MISSING' $true $false }
+    if (-not $hasGhost -and ((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts))) { throw 'NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED' }
     Stop-Components $receipt
     Remove-Components $receipt
+    if ((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts)) { throw 'NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED' }
     Remove-VerifiedStage $current $Option
+    $script:hasGhost=$false
+    $script:ghostManager=Join-Path $PSScriptRoot 'manage_ghost_scheduler.ps1'
     $receipt.state='reinstalling';$receipt.supervisorTaskRegistered=$false;$receipt.dashboardTaskRegistered=$false;$receipt.ghostTaskRegistered=$false;$receipt.officeTaskRegistered=$false
     $receipt.sourceRoot=$SourceRoot;$receipt.bridgeInput=$BridgeExe;$receipt.supervisorInput=$SupervisorExe;$receipt.repoqlExe=$RepoqlExe
     $receipt.pythonExe=$PythonExe;$receipt.runnerExe=$(if ($hasGhost) {$RunnerExe} else {''});$receipt.workspace=$Workspace
@@ -1169,7 +1208,9 @@ if ($Mode -eq 'Status') {
   }
   $selected=[int]$receipt.option
   if ($Option -eq 0) { $script:Option=$selected;$script:hasGhost=($selected -in @(2,4));$script:taskDashboard=if ($selected -eq 2) {'Singularity-ClaudeComplete-Dashboard'} else {"Singularity-WindowsNative-Option$selected-Dashboard"};$script:dashboardState=if($selected -eq 2){Join-Path $base 'Dashboard'}else{Join-Path $base "Dashboard\Option$selected"};$script:dashboardReceipt=Join-Path $dashboardState 'task-ownership.json' }
-  $stageInfo=Read-Stage $current $selected
+  $stageInfo=Read-Stage $current $selected -AllowLegacyGhost
+  $script:hasGhost=[bool]($stageInfo -and $stageInfo.manifest.features.ghost)
+  if ($hasGhost) { $script:ghostManager=Assert-LocalPath (Join-Path $current 'source/native/windows/manage_ghost_scheduler.ps1') 'NATIVE_LEGACY_GHOST_MANAGER_MISSING' $true $false }
   $s=Get-SupervisorStatus (Join-Path $current 'bin/singularity-windows-supervisor.exe') ([string]$receipt.supervisorConfig)
   $supTask=Get-Task $taskSupervisor
   if ($supTask -and [string]$supTask.TaskPath -cne '\') { throw 'NATIVE_SUPERVISOR_TASK_PATH_MISMATCH' }
@@ -1285,7 +1326,10 @@ $receipt=Read-InstallReceipt $true
 $selected=[int]$receipt.option
 if ($Option -eq 0) { $script:Option=$selected;$script:hasGhost=($selected -in @(2,4));$script:taskDashboard=if ($selected -eq 2) {'Singularity-ClaudeComplete-Dashboard'} else {"Singularity-WindowsNative-Option$selected-Dashboard"};$script:dashboardState=if($selected -eq 2){Join-Path $base 'Dashboard'}else{Join-Path $base "Dashboard\Option$selected"};$script:dashboardReceipt=Join-Path $dashboardState 'task-ownership.json' }
 if ([int]$receipt.option -ne $selected) { throw 'NATIVE_OPTION_RECEIPT_MISMATCH' }
-$stageInfo=Read-Stage $current $selected
+$stageInfo=Read-Stage $current $selected -AllowLegacyGhost
+$script:hasGhost=[bool]($stageInfo -and $stageInfo.manifest.features.ghost)
+if ($Mode -eq 'Start' -and ($hasGhost -or (Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts))) { throw 'NATIVE_LEGACY_GHOST_STAGE_REQUIRES_REINSTALL' }
+if ($hasGhost) { $script:ghostManager=Assert-LocalPath (Join-Path $current 'source/native/windows/manage_ghost_scheduler.ps1') 'NATIVE_LEGACY_GHOST_MANAGER_MISSING' $true $false }
 $receiptBridge=if ($receipt.PSObject.Properties['bridgeSha256']) { [string]$receipt.bridgeSha256 } else { '' }
 $receiptSupervisor=if ($receipt.PSObject.Properties['supervisorSha256']) { [string]$receipt.supervisorSha256 } else { '' }
 $noStageCleanup=$Mode -in @('Stop','Uninstall','Reinstall') -and $receipt.state -in @('installing','partial','reinstalling')
@@ -1355,15 +1399,18 @@ if ($Mode -eq 'Stop') {
   }
   Stop-Components $receipt
   $taskState=Get-RegisteredTaskState
-  Emit-Result ([ordered]@{schema='singularity-native-windows-lifecycle/v1';option=$selected;state='stopped';
+  Emit-Result ([ordered]@{schema='singularity-native-windows-lifecycle/v1';option=$selected;state='stopped';legacyGhostResidue=[bool]((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts));
     supervisorTaskRegistered=$taskState.supervisorTaskRegistered;dashboardTaskRegistered=$taskState.dashboardTaskRegistered;ghostTaskRegistered=$taskState.ghostTaskRegistered;officeTaskRegistered=$taskState.officeTaskRegistered;releaseReady=$false}); return
 }
 if ($Mode -eq 'Uninstall') {
   if (-not $PSCmdlet.ShouldProcess($installRoot,'Remove exact owned tasks and source-manifest-owned files; preserve user state')) {
     Emit-Result ([ordered]@{schema='singularity-native-windows-lifecycle/v1';option=$selected;state='uninstall_planned';changed=$false;releaseReady=$false}); return
   }
+  # Legacy Ghost residue must never be orphaned by deleting the receipt that tracks it.
+  if (-not $hasGhost -and ((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts))) { throw 'NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED' }
   Stop-Components $receipt
   Remove-Components $receipt
+  if ((Get-Task $taskGhost) -or (Test-GhostOwnershipArtifacts)) { throw 'NATIVE_LEGACY_GHOST_REMOVAL_UNVERIFIED' }
   Remove-VerifiedStage $current $selected
   if (Test-Path -LiteralPath $previous) { Remove-VerifiedStage $previous $selected }
   Remove-Item -LiteralPath $installReceiptPath -Force -ErrorAction Stop

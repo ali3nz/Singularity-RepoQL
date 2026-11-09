@@ -31,8 +31,6 @@ KNOWN = [
      'Windows Job Object process supervisor remains uncompiled, with process containment spawn race.'),
     ('P0','agent_chat_dispatch', 'scripts/orch-chat',
      'Windows local mailbox CLI has guarded compatibility code, but consult dispatch/relay and restart delivery remain unverified.'),
-    ('P0','ghost_native_service', 'ghost/ghost-gateway.mjs',
-     'Complete variants still need native Windows Ghost backend, prompt mutations and dream recovery.'),
     ('P0','office_native_service', 'office/office.compose.yml',
      'Office frontend remains a separate service; proven token-URL proxy does not establish native Windows startup/event delivery.'),
     ('P0','kanban_native_service', 'connectors/kanzo/connector.ts',

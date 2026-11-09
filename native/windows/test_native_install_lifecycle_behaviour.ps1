@@ -236,7 +236,7 @@ if ($Scenario -in @('SourceRefreshRoundTrip','SourceRefreshMoveFailure','SourceR
     }
     $manifest=[ordered]@{schema=1;variant=2;release_status='SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER';
       repoql=[ordered]@{requiredVersion='1.7.18';connectorContract='fetch-render'};gui='claude-desktop-code';
-      features=[ordered]@{office=$true;ghost=$true};rustOfficeFeature=$true;rustGhostFeature=$true;files=@($rows.ToArray())}
+      features=[ordered]@{office=$true;ghost=$false};rustOfficeFeature=$true;rustGhostFeature=$false;files=@($rows.ToArray())}
     [IO.File]::WriteAllText((Join-Path $Root 'NATIVE_WINDOWS_SOURCE_MANIFEST.json'),($manifest | ConvertTo-Json -Depth 8 -Compress),[Text.UTF8Encoding]::new($false))
   }
   function Assert-Test([bool]$Condition,[string]$Code) { if (-not $Condition) { throw $Code } }
@@ -263,7 +263,7 @@ if ($Scenario -in @('SourceRefreshRoundTrip','SourceRefreshMoveFailure','SourceR
   $supervisorHash=(Get-FileHash -LiteralPath $supervisorPath -Algorithm SHA256).Hash.ToLowerInvariant()
   $bridgePreimage=[IO.File]::ReadAllBytes($bridgePath)
   $stageReceipt=[ordered]@{schema=1;state='STAGED_UNVERIFIED';option=2;repoqlVersion='1.7.18';sourceManifestSha256=$oldTree.manifestSha256;
-    bridgeSha256=$bridgeHash;supervisorSha256=$supervisorHash;bridgePackageVersion='1.0.0';bridgeFeatureOffice=$true;bridgeFeatureGhost=$true;guiConfigured=$false}
+    bridgeSha256=$bridgeHash;supervisorSha256=$supervisorHash;bridgePackageVersion='1.0.0';bridgeFeatureOffice=$true;bridgeFeatureGhost=$false;guiConfigured=$false}
   $installReceipt=[ordered]@{schema='singularity-native-windows-installation/v1';state='installed_not_started';option=2;installRoot=$script:installRoot;ownerSid=$script:ownerSid;
     sourceManifestSha256=$oldTree.manifestSha256;bridgeSha256=$bridgeHash;supervisorSha256=$supervisorHash;supervisorTaskRegistered=$true;
     dashboardTaskRegistered=$true;ghostTaskRegistered=$true;officeTaskRegistered=$true;supervisorConfig='C:\fixture\supervisor.json';dashboardPort=18100;guiIntegrationInstalled=$false}

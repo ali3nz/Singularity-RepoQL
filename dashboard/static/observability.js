@@ -261,6 +261,20 @@ export function sparkChart(target, rows, series, {height=220, empty='No measured
 }
 
 
+// Colour the grey cortex photo once: cool blue on the RepoQL (left) hemisphere, violet on Tencent (right).
+let tintedCache=null;
+function tintedBrain(img){
+  if(tintedCache&&tintedCache.src===img)return tintedCache.canvas;
+  const w=img.naturalWidth,h=img.naturalHeight,c=document.createElement('canvas');c.width=w;c.height=h;
+  const o=c.getContext('2d');o.drawImage(img,0,0,w,h);
+  o.globalCompositeOperation='source-atop';
+  const g=o.createLinearGradient(0,0,w,0);
+  g.addColorStop(0,'rgba(34,170,255,.62)');g.addColorStop(.46,'rgba(60,120,255,.5)');
+  g.addColorStop(.54,'rgba(150,90,255,.5)');g.addColorStop(1,'rgba(200,80,255,.62)');
+  o.fillStyle=g;o.fillRect(0,0,w,h);
+  o.globalCompositeOperation='lighter';o.globalAlpha=.18;o.drawImage(img,0,0,w,h);
+  tintedCache={src:img,canvas:c};return c;
+}
 // One decoded brain image is shared by every graph on the page.
 let brainImage=null;
 function getBrainImage(onload){
@@ -344,7 +358,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
     const map=new Map(rendered.nodes.map(n=>[n.id,n]));
     const lw=1/Math.sqrt(Math.max(.4,zoom)),pulses=[];
     if(neural){const img=getBrainImage(()=>{sceneKey='';schedule()});
-      if(img.complete&&img.naturalWidth)ctx.drawImage(img,-BRAIN_MASK.w/2,-BRAIN_MASK.h/2,BRAIN_MASK.w,BRAIN_MASK.h);}
+      if(img.complete&&img.naturalWidth)ctx.drawImage(tintedBrain(img),-BRAIN_MASK.w/2,-BRAIN_MASK.h/2,BRAIN_MASK.w,BRAIN_MASK.h);}
     ctx.globalCompositeOperation='lighter';ctx.lineCap='round';
     // Parallel links between one pair fan out, so additive blending cannot stack them into a solid white line.
     const pairSeen=new Map();

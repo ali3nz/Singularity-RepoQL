@@ -57,12 +57,16 @@ def backend_key(kind):
     if kind == 'office':
         if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
             mode = os.environ.get('SINGULARITY_OFFICE_NATIVE_AUTH_MODE', 'legacy_url').strip()
-            if mode == 'key_file':
-                # Optional alternative. Installer must enforce owner/service-only ACLs.
+            if mode in ('key_file', 'service_keys'):
+                # The installers restrict these files to the owner/service.
                 key_file = os.environ.get('SINGULARITY_OFFICE_PANEL_KEY_FILE', '').strip()
                 if not key_file:
                     raise PermissionError('panel credential unavailable')
-                key = Path(key_file).read_text(encoding='utf-8').strip()
+                try:
+                    raw = Path(key_file).read_text(encoding='utf-8-sig')
+                    key = json.loads(raw)['apiKey'] if mode == 'service_keys' else raw.strip()
+                except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+                    raise PermissionError('panel credential unavailable') from None
             elif mode == 'legacy_url':
                 # Production-compatible default. Token stays server-side.
                 # The token is extracted server-side; never redirect the
@@ -81,7 +85,7 @@ def backend_key(kind):
         if not key_file:
             raise PermissionError('panel credential unavailable')
         key = Path(key_file).read_text().strip()
-    if not key or len(key) > 4096 or '\r' in key or '\n' in key:
+    if not isinstance(key, str) or not key or len(key) > 4096 or '\r' in key or '\n' in key:
         raise PermissionError('panel credential unavailable')
     return key
 
@@ -189,13 +193,20 @@ def _panel_redirect(kind, current_path, location, *, public_root=False):
     browser_path = target if public_root else prefix(kind) + target
     return urlunsplit(('', '', browser_path, urlencode(query), ''))
 
+def tencent_service_id():
+    service_id = os.environ.get('SINGULARITY_TENCENT_SERVICE_ID', 'default').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', service_id):
+        raise PermissionError('Tencent instance configuration invalid')
+    return service_id
+
+
 def tencent_session():
     """Verify the real configured user, returning only public session fields."""
     conn = http.client.HTTPConnection(*UPSTREAM['tencent'], timeout=15)
     try:
         conn.request('POST', '/api/v1/meta/auth/verify',
             body=json.dumps({'user_key': backend_key('tencent')}),
-            headers={'Content-Type': 'application/json', 'X-Tdai-Service-Id': 'default'})
+            headers={'Content-Type': 'application/json', 'X-Tdai-Service-Id': tencent_service_id()})
         response = conn.getresponse()
         raw = response.read(1024 * 1024 + 1)
         if response.status != 200 or len(raw) > 1024 * 1024:
@@ -208,7 +219,7 @@ def tencent_session():
             raise PermissionError('Tencent credential invalid')
         user = {k: v for k, v in verified['user'].items()
                 if k in ('user_id', 'username', 'display_name', 'user_type', 'created_at')}
-        return {'authenticated': True, 'instance_id': 'default', 'user': user}
+        return {'authenticated': True, 'instance_id': tencent_service_id(), 'user': user}
     finally:
         conn.close()
 
@@ -282,7 +293,7 @@ def serve(handler, kind, method, parsed, *, public_root=False):
                 # write fail its origin check.
                 headers['Origin'] = 'http://127.0.0.1:%d' % _upstream('kanzo', 4242)[1]
         else:
-            headers['X-Tdai-Service-Id'] = 'default'
+            headers['X-Tdai-Service-Id'] = tencent_service_id()
             headers['X-Tdai-User-Key'] = backend_key(kind)
             # The Panel's meta routes need a body identity as well as headers.
             # Never let a supplied identity override the dashboard owner.

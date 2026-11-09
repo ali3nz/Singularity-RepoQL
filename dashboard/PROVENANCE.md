@@ -85,6 +85,10 @@ Full SHA-256 of the exported file, with the source hash it was derived from.
 | `server.py` | `dfd80486daa9898b9b3cfd1d6c989c3c1a02e113e3420055c022643e83eb790c` | `dd70c22e2dbc5a2fb6e75b86f816df691e66204949f4997ec1cd1c3f6a803496` |
 | `tencent_panel_proxy.py` | `c92984cff180515008a5ccfe54968af3c6304afebbc8ac300ddcc98369361d4d` | `c92984cff180515008a5ccfe54968af3c6304afebbc8ac300ddcc98369361d4d` |
 | `unified_bridge.py` | `3ce646babc93951564314caa82b9ef715ecf6a12d236ffce53e36810e88552d8` | `ba5e6a08a74dba7872a820b20f2d904943f983c19b6803ff0569846f2d8a7a13` |
+### File hashes, continued
+
+| File | Source SHA-256 | Export SHA-256 |
+| --- | --- | --- |
 | `static/app.css` | `a51822c93fb3b1b391c6f74475a17237e4c9ab8042d89a7d90bf0254f0981d6e` | `a51822c93fb3b1b391c6f74475a17237e4c9ab8042d89a7d90bf0254f0981d6e` |
 | `static/app.js` | `a205867c737f520da2ae1ceb5225c506efead8bd291f9477d7b99b771eb60236` | `26c1658357abaf3d538021f6564621800e7c9257a5d75e1f4a47574f0939d723` |
 | `static/app_test.mjs` | `7d480e845d822d56cb4d603486c444178c7e4ee74b6bc48aee4f6a6bbd27c8e1` | `7cc23469c9eb9ab96fdfbbe8365242d36f4fcfbba635063c779ecf6b72653cc6` |
@@ -119,3 +123,33 @@ ship as code but are disabled by `featureAllowed` because they need operations A
 not include. No server-side module changed except image content types (`.webp`, `.png`, `.jpg`) in
 `server.py`. `static/bundle.css` is generated: run `python3 tools/build_css.py` after editing any file
 listed in `static/bundle.sources`.
+
+## Windows design refresh, 9 November 2026
+
+The visual changes from upstream dashboard commit `9fb6eba` were merged into the
+Windows projection. They cover Command Center order, dashboard and mobile styles,
+OpenMausBot operations headers and rows, Kanban phone controls and scroll-aware
+refresh, and the two-colour knowledge graph. The CSS bundle was regenerated from
+its source list, with refreshed browser cache versions.
+
+The merge preserves Windows-local routes, bot workspace links, Ghost visibility
+guards, task-stage readback checks and the Closed label. The upstream per-bot
+token metrics require a separate backend and are outside this design refresh.
+
+## Selective port from upstream `279abed`, 10 November 2026
+
+Applied on top of `9fb6eba` as per-file three-way merges against LF copies. Adopted: removal of the
+bottom mobile dock and the page search (`navigation_ui.js`, `ux_pack.js`, `index.html`), the phone
+layout space reclaim, OpenMausBot desktop fill, Office tile opacity, charcoal card tint and Lounge
+colours (`overrides.css`, bundle regenerated with `tools/build_css.py`), Agent Chat per-role display
+names, and the 40-character presence role cap (`agentchat_feed.py`, `PRESENCE_RE`).
+
+Skipped deliberately: the `kanzo` embed, the avatars endpoint (the `agent_avatars` and `bot_avatars`
+modules are not part of the Windows projection), the per-bot token metrics on the usage page (the
+Windows `nativeGui` branch is kept), and upstream `unified/` PiChamber collector and its tests, which
+need a Windows compatibility decision. Windows routes, auth, native Kanban stage readback with the
+Closed label and the OpenMausBot integration are unchanged. Cache versions are `-20261110-`.
+
+Verification: `test_agentchat_recent_presence`, `test_agentchat_windows_file_identity`,
+`app_test.mjs`, `native_consolidation.test.mjs` and `native_variant_ui.test.mjs` pass. No live browser
+check was run, so the port is source-verified only.

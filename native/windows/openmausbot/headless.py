@@ -38,6 +38,20 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def _run_hidden(*args, **kwargs):
+    """subprocess.run that never opens a console window (the bot runs windowless)."""
+    kwargs["creationflags"] = kwargs.get("creationflags", 0) | _NO_WINDOW
+    return subprocess.run(*args, **kwargs)
+
+
+def _popen_hidden(*args, **kwargs):
+    kwargs["creationflags"] = kwargs.get("creationflags", 0) | _NO_WINDOW
+    return subprocess.Popen(*args, **kwargs)
+
+
 DEFAULT_PORT = 18211
 PORT_SPAN = 2  # server port + the vendor's webhook receiver on port+1
 PAYLOAD_RELATIVE = ("stage", "omb")
@@ -83,7 +97,7 @@ def current_sid() -> str | None:
         _SID = ""
         return None
     try:
-        out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
+        out = _run_hidden(["whoami", "/user", "/fo", "csv", "/nh"],
                              capture_output=True, text=True, timeout=20)
         fields = [f.strip().strip('"') for f in (out.stdout or "").strip().split(",")]
         candidate = fields[-1] if fields else ""
@@ -107,7 +121,7 @@ def secure(path: Path, directory: bool = True) -> None:
     if not sid:
         return
     rights = "(OI)(CI)F" if directory else "F"
-    subprocess.run(["icacls", str(path), "/grant", f"*{sid}:{rights}"],
+    _run_hidden(["icacls", str(path), "/grant", f"*{sid}:{rights}"],
                    capture_output=True, timeout=60)
 
 
@@ -302,7 +316,7 @@ def payload_ready(root: str | Path) -> bool:
 
 def _node_version(node: str) -> tuple[int, ...] | None:
     try:
-        out = subprocess.run([node, "-v"], capture_output=True, text=True, timeout=20)
+        out = _run_hidden([node, "-v"], capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.SubprocessError):
         return None
     text = (out.stdout or "").strip().lstrip("v")
@@ -475,12 +489,12 @@ def _terminate(pid: int) -> None:
     a pid we have not just matched against the lease/manifest.
     """
     if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T"], capture_output=True, timeout=30)
+        _run_hidden(["taskkill", "/PID", str(pid), "/T"], capture_output=True, timeout=30)
         for _ in range(8):
             if not _pid_alive(pid):
                 return
             time.sleep(0.25)
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+        _run_hidden(["taskkill", "/PID", str(pid), "/T", "/F"],
                        capture_output=True, timeout=30)
         return
     try:
@@ -501,7 +515,7 @@ def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
     if os.name == "nt":
-        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+        out = _run_hidden(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
                              capture_output=True, text=True, timeout=30)
         return str(pid) in (out.stdout or "")
     try:
@@ -530,7 +544,7 @@ class McpClient:
         env = {k: v for k, v in os.environ.items()
                if k not in {"OPENMAUSBOT_URL", "OPENMAUSBOT_TOKEN", "ELECTRON_RUN_AS_NODE"}}
         env.update({"OMB_PORT": str(self.port), "NO_COLOR": "1"})
-        self.proc = subprocess.Popen([self.node, str(self.payload / CLI), "mcp"],
+        self.proc = _popen_hidden([self.node, str(self.payload / CLI), "mcp"],
                                      cwd=str(self.payload), env=env, text=True, bufsize=1,
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, shell=False)
@@ -721,7 +735,7 @@ def register_task(root: str | Path, state_dir: str | Path, node: str, *, port: i
     """Idempotent per-user logon task; no admin, no service, no elevation."""
     _require_windows()
     script = task_script(root, state_dir, node, port)
-    result = subprocess.run(
+    result = _run_hidden(
         ["schtasks", "/Create", "/TN", name, "/SC", "ONLOGON",
          "/TR", f'"{script}"', "/RL", "LIMITED", "/F"],
         capture_output=True, text=True, timeout=60,
@@ -734,7 +748,7 @@ def register_task(root: str | Path, state_dir: str | Path, node: str, *, port: i
 
 def run_task(name: str = TASK_NAME) -> dict:
     _require_windows()
-    result = subprocess.run(["schtasks", "/Run", "/TN", name],
+    result = _run_hidden(["schtasks", "/Run", "/TN", name],
                             capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         raise HeadlessError("OMB_TASK_RUN_FAILED", (result.stderr or result.stdout).strip()[:300])
@@ -743,7 +757,7 @@ def run_task(name: str = TASK_NAME) -> dict:
 
 def stop_task(name: str = TASK_NAME) -> dict:
     _require_windows()
-    result = subprocess.run(["schtasks", "/End", "/TN", name],
+    result = _run_hidden(["schtasks", "/End", "/TN", name],
                             capture_output=True, text=True, timeout=60)
     return {"task": name, "ended": result.returncode == 0,
             "detail": (result.stderr or "").strip()[:200]}
@@ -751,7 +765,7 @@ def stop_task(name: str = TASK_NAME) -> dict:
 
 def remove_task(name: str = TASK_NAME) -> dict:
     _require_windows()
-    result = subprocess.run(["schtasks", "/Delete", "/TN", name, "/F"],
+    result = _run_hidden(["schtasks", "/Delete", "/TN", name, "/F"],
                             capture_output=True, text=True, timeout=60)
     return {"task": name, "deleted": result.returncode == 0}
 
@@ -791,7 +805,7 @@ def start_via_task(root: str | Path, state_dir: str | Path, node: str, *, port: 
 def task_state(name: str = TASK_NAME) -> str | None:
     if os.name != "nt":
         return None
-    result = subprocess.run(["schtasks", "/Query", "/TN", name, "/FO", "LIST"],
+    result = _run_hidden(["schtasks", "/Query", "/TN", name, "/FO", "LIST"],
                             capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         return None

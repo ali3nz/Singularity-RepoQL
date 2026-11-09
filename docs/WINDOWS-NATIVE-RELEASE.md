@@ -17,13 +17,13 @@ packages must set `SINGULARITY_WINDOWS_NATIVE=1` and a valid
 | Option | GUI | Core | Extra | Rust Office build |
 | --- | --- | --- | --- | --- |
 | 1 | Claude Desktop Code tab | Tencent, RepoQL, Agent Chat, Kanban, dashboard | None | `--no-default-features` |
-| 2 | Claude Desktop Code tab | Same | Ghost and Claude Office | `--no-default-features --features office` |
+| 2 | Claude Desktop Code tab | Same | Claude Office | `--no-default-features --features office` |
 | 3 | OpenChamber Desktop | Same | None | `--no-default-features` |
-| 4 | OpenChamber Desktop | Same | Ghost and Claude Office | `--no-default-features --features office` |
+| 4 | OpenChamber Desktop | Same | Claude Office | `--no-default-features --features office` |
 
-Options 1 and 3 must not install Ghost or Office services, agents, credentials,
+Options 1 and 3 must not install Office services, agents, credentials,
 visualizers, event hooks or executable features. The UI and backend now disable
-Ghost and Office routes; the **native installer and actual minimal package are
+Office routes; the **native installer and actual minimal package are
 still unfinished**. Enabling a route in JavaScript alone is not a security gate.
 
 ## Testing required for *each* option on a clean Windows VM
@@ -58,7 +58,7 @@ still unfinished**. Enabling a route in JavaScript alone is not a security gate.
 8. **Dashboard:** confirm variant-specific nav and disabled backend endpoints,
    Tencent and RepoQL panels, Agent Chat/Kanban, mobile/narrow layout,
    authentication, CORS/CSRF, IPv6 loopback and a browser screenshot.
-9. **Office/Ghost (2/4 only):** start real native Windows backends, forward
+9. **Office (2/4 only):** start real native Windows backends, forward
    GUI events without leaking message bodies, verify actual frontend presence,
    data persistence and removal. Check 1/3 have no payload or Office code.
 10. **Lifecycle:** Windows Service/Task Scheduler with deliberate ownership,
@@ -100,7 +100,7 @@ GUI + RepoQL versions in a test VM before touching user configuration.
 
 ## Dashboard and auth acceptance clarifications (milestone 6)
 
-The RepoQL panel's native login uses official RepoQL token issuance, not disabled authentication. Tencent, Office and Kanzo panels use same-origin session exchange and fixed upstream loopback. The new native Windows proxy rejects remote upstream hosts. Ghost tasks/prompt editing requires a native Windows authenticated control transport; its current Unix-socket adapter is unsupported on Windows. The live graph needs the real Rust unified backend. CPU telemetry needs Windows Rust process accounting. Native GUI token metrics now deliberately refuse generic Freebuff/Orchestra totals and show unknown unless a verified Claude Desktop Code or OpenChamber subscription source reports usage. Exact 1.7.18 preflight is the contract for both connectors. Full details: `WINDOWS_NATIVE_RELEASE_MILESTONE6_20261029.md`.
+The RepoQL panel's native login uses official RepoQL token issuance, not disabled authentication. Tencent, Office and Kanzo panels use same-origin session exchange and fixed upstream loopback. The new native Windows proxy rejects remote upstream hosts. Ghost is retired from the Windows product. The live graph needs the real Rust unified backend. CPU telemetry needs Windows Rust process accounting. Native GUI token metrics now deliberately refuse generic Freebuff/Orchestra totals and show unknown unless a verified Claude Desktop Code or OpenChamber subscription source reports usage. Exact 1.7.18 preflight is the contract for both connectors. Full details: `WINDOWS_NATIVE_RELEASE_MILESTONE6_20261029.md`.
 
 
 ## Concurrent documentation ingestion and Windows path acceptance (Milestone 7)

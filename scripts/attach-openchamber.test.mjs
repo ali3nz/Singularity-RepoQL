@@ -16,7 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -58,6 +58,18 @@ function readdirRecursive(dir, base = "") {
   return out;
 }
 
+// JSONC merge tests supply a product config independently of local ignored files.
+function seededBundle(t) {
+  const dir = mkdtempSync(join(tmpdir(), "attach-bundle-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(BUNDLE, dir, { recursive: true });
+  writeFileSync(join(dir, "opencode.jsonc"), JSON.stringify({
+    mcp: { repoql: { type: "local", command: ["/usr/local/bin/rql", "mcp"] } },
+    plugin: ["./plugins/singularity/index.mjs"],
+  }, null, 2));
+  return dir;
+}
+
 function seededTarget() {
   const dir = mkdtempSync(join(tmpdir(), "attach-target-"));
   mkdirSync(join(dir, "agents"), { recursive: true });
@@ -84,9 +96,9 @@ async function runAttach(args) {
   return { rc, out: out.join("\n") };
 }
 
-test("a foreign target keeps its identity: AGENTS.md gains only a managed block, JSONC merges in place", () => {
+test("a foreign target keeps its identity: AGENTS.md gains only a managed block, JSONC merges in place", (t) => {
   const dir = seededTarget();
-  const plan = planBundleFiles(dir, BUNDLE, { preserveConflicts: true, variant: "3" });
+  const plan = planBundleFiles(dir, seededBundle(t), { preserveConflicts: true });
   const byRel = Object.fromEntries(plan.map((f) => [f.rel, f.status]));
   assert.equal(byRel["AGENTS.md"], "merge-policy", "the target's AGENTS.md is merged, never overwritten");
   assert.equal(byRel["opencode.jsonc"], "merge-jsonc", "the target's opencode.jsonc is merged, never overwritten");
@@ -186,7 +198,7 @@ test("JSONC merge preserves comments, ordering and user values", () => {
   assert.equal(again.text, r.text);
 });
 
-test("an unparseable JSONC target is refused, never rewritten", () => {
+test("an unparseable JSONC target is refused, never rewritten", (t) => {
   const broken = '{ "alpha": 1, /* unterminated\n "beta": 2 }';
   const r = mergeJsoncIntegration(broken, { plugin: [] });
   assert.equal(r.ok, false);
@@ -199,7 +211,7 @@ test("an unparseable JSONC target is refused, never rewritten", () => {
   // through the apply path: refusal is deterministic INCOMPLETE, file preserved
   const dir = mkdtempSync(join(tmpdir(), "attach-badjsonc-"));
   writeFileSync(join(dir, "opencode.jsonc"), broken);
-  const plan = planBundleFiles(dir, BUNDLE, { preserveConflicts: true, variant: "3" });
+  const plan = planBundleFiles(dir, seededBundle(t), { preserveConflicts: true });
   const res = applyBundle(plan, dir, { dryRun: false });
   assert.ok(res.refused.some((r) => r.includes("opencode.jsonc")));
   assert.equal(readFileSync(join(dir, "opencode.jsonc"), "utf8"), broken);
@@ -209,15 +221,15 @@ test("an unparseable JSONC target is refused, never rewritten", () => {
 
 // ── variant classification: no Ghost/Office leak into options 1/3 ───────────
 
-test("the plan itself excludes Ghost/Office payload for options 1 and 3", () => {
+test("the plan includes Ghost and Office only in complete variants", () => {
   const dir = mkdtempSync(join(tmpdir(), "attach-variant-"));
-  const three = planBundleFiles(dir, BUNDLE, { preserveConflicts: true, variant: "3" }).map((f) => f.rel);
-  assert.ok(!three.includes("agents/ghost.md"), "option 3 must not install the Ghost agent");
-  assert.ok(!three.some((r) => r.startsWith("plugins/product-office/")), "option 3 must not install the Office plugin");
-  assert.ok(three.includes("agents/general.md"), "option 3 still installs the core agents");
-  const four = planBundleFiles(dir, BUNDLE, { preserveConflicts: true, variant: "4" }).map((f) => f.rel);
-  assert.ok(four.includes("agents/ghost.md"), "option 4 installs the Ghost agent");
-  assert.ok(four.some((r) => r.startsWith("plugins/product-office/")), "option 4 installs the Office plugin");
+  for (const variant of ["1", "2", "3", "4"]) {
+    const files = planBundleFiles(dir, BUNDLE, { preserveConflicts: true, variant }).map((f) => f.rel);
+    const complete = ["2", "4"].includes(variant);
+    assert.equal(files.includes("agents/ghost.md"), complete, `option ${variant} Ghost classification`);
+    assert.equal(files.some((rel) => rel.startsWith("plugins/product-office/")), complete, `option ${variant} Office classification`);
+    assert.ok(files.includes("agents/general.md"), `option ${variant} still installs the core agents`);
+  }
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -266,9 +278,9 @@ test("a conflicting foreign agent is preserved and ours lands namespaced", () =>
 
 function countOccurrences(hay, needle) { return String(hay).split(needle).length - 1; }
 
-test("the package's own compose-managed config dir is replaced as before", () => {
+test("the package's own compose-managed config dir is replaced as before", (t) => {
   const dir = seededTarget();
-  const plan = planBundleFiles(dir, BUNDLE, { preserveConflicts: false });
+  const plan = planBundleFiles(dir, seededBundle(t), { preserveConflicts: false });
   const byRel = Object.fromEntries(plan.map((f) => [f.rel, f.status]));
   assert.equal(byRel["AGENTS.md"], "replace");
   assert.equal(byRel["opencode.jsonc"], "replace");
