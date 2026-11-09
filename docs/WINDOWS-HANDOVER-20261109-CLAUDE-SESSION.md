@@ -271,3 +271,9 @@ Evidence (focused only): `maintenance_repair` 51/51 (two new tests for items 2 a
 3. RepoQL sign-in; live A/B/C runs; fresh-session recall and SubagentStart; Office install record; AppContainer negative test.
 4. Decide on a Kanzo-only project `.mcp.json` and confirm the user-level Kanzo entry is local-only.
 5. Final independent review and sign-off, then (only then) build the installer.
+
+## Dashboard design refresh (commit bdd6ed6) and reinstall status
+
+- The live :18100 dashboard serves the installed snapshot under `WindowsNative\current`, which predates the current `dashboard/static/` (no `tintedBrain` blue/violet memory brain, old Charcoal calm theme). The source tree is newer than both the installed copy and Dockerhost; no port was needed. Source is pushed in bdd6ed6.
+- `RefreshSource` is refused (`NATIVE_STAGE_IDENTITY_OR_PIN_INVALID`) because the installed stage is a legacy Ghost-era snapshot. The authorized path is `manage_native_windows.ps1 -Mode Reinstall -SkipOffice -Apply -Confirm:$false` with the existing bridge, supervisor, rql, python, workspace and supervisor.json inputs.
+- **Blocked (not done):** Reinstall aborted before any mutation (receipt still `installed_not_started`) with `NATIVE_DASHBOARD_MANAGER_FAILED`. Cause: unregistering `Singularity-ClaudeComplete-Dashboard` returns Access denied from a non-elevated session; the task ACL grants Ben read-only and delete/write only to Administrators/SYSTEM. An elevated PowerShell is required to run the Reinstall. Nothing was reinstalled and the dashboard is not currently listening on :18100.
