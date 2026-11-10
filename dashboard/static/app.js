@@ -3184,8 +3184,7 @@ async function viewOffice() {
   const frame = `<iframe class="office-view-embed native-panel-frame" title="Claude Office live view" src="${esc(frame_src)}"
       allow="clipboard-write" referrerpolicy="no-referrer" loading="eager"></iframe>`;
   body.innerHTML = `${frame}
-      <p class="muted small" id="office-viewer-status" role="status" aria-live="polite" style="display:none">Loading the Office viewer…</p>
-      <a class="native-panel-open" href="${esc(frame_src)}" target="_blank" rel="noopener noreferrer">Open original panel in a separate tab</a>`;
+      <p class="muted small" id="office-viewer-status" role="status" aria-live="polite" style="display:none">Loading the Office viewer…</p>`;
   nativeViewerFrameState(body, '.office-view-embed', '#office-viewer-status');
 }
 
@@ -3484,14 +3483,6 @@ async function viewNativePanel(kind) {
   frame.src = target.url;
   if (tencent) host.appendChild(frame);
   else host.replaceChildren(frame);
-  const nav = document.createElement('a');
-  nav.href = target.url;
-  nav.target = '_blank';
-  nav.rel = 'noopener noreferrer';
-  nav.className = 'native-panel-open';
-  nav.textContent = 'Open original panel in a separate tab';
-  // Available if the upstream refuses framing (CSP, cookies or authentication).
-  host.appendChild(nav);
 }
 async function viewTencentNative() { return viewNativePanel('tencent'); }
 async function viewRepoqlNative() { return viewNativePanel('repoql'); }
