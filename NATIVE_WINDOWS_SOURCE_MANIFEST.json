@@ -950,8 +950,8 @@
     },
     {
       "path": "dashboard/static/bundle.css",
-      "sha256": "f832d48b2b8661ab9cd5ec449e57ea712b979104eaa3cebccaf8ae3bc1777551",
-      "bytes": 592729
+      "sha256": "9325ef5460f93295cf48f01b61c85567603caf4bdd13991800301d89fae625e7",
+      "bytes": 593275
     },
     {
       "path": "dashboard/static/bundle.sources",
@@ -1015,8 +1015,8 @@
     },
     {
       "path": "dashboard/static/overrides.css",
-      "sha256": "bc55a30407562471a5b73cde25caa7681875f959b0c349d2e728d929c9b239fc",
-      "bytes": 80452
+      "sha256": "26f5e7704d4cfabc0a0020ce3f276154a2be5c0798d46405d28a45332ee4e8e6",
+      "bytes": 80990
     },
     {
       "path": "dashboard/static/polish.js",

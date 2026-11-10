@@ -8352,3 +8352,11 @@ html[data-theme="charcoal"] .messenger-mode-feed .messenger-message-alt .messeng
 html[data-theme="charcoal"]:not([data-route="openmausbot"]):not([data-route="kanban"]):not([data-route="office"]) .main{
   padding:8px 10px 10px!important}
 
+/* Agent Lounge spans the whole content area: no width cap, full-height shell. */
+html[data-theme="charcoal"] .main[data-workspace="chat"],
+html[data-theme="charcoal"] .main:has(.messenger-shell){
+  max-width:none!important;width:100%!important;padding:6px 8px 8px!important}
+html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-shell,
+html[data-theme="charcoal"] .main:has(.messenger-shell) .messenger-shell{
+  width:100%!important;max-width:none!important;height:calc(100dvh - 14px)!important;max-height:none!important}
+
