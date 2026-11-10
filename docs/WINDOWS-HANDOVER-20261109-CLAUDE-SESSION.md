@@ -302,3 +302,9 @@ Operator relaxed loopback security: no token is needed on 127.0.0.1.
 - `native/windows/manage_dashboard_shortcut.ps1`: falls back to opening the plain loopback URL when the windowless opener is not staged. The shortcut lives on the user's (OneDrive) Desktop.
 - Verified live in the in-app browser: dashboard, Kanban iframe and Office iframe render without a token.
 - Open: Office task is not started by `Start -SkipOffice` and `manage_claude_office.ps1` reports ownership drift; start `Singularity-ClaudeComplete-Office` manually until fixed. Release remains BLOCKED.
+
+## Claude-bound services (2026-11-10)
+`native/windows/claude_session_watcher.ps1` (logon task `Singularity-ClaudeSessionWatcher`, registered by
+`register_claude_session_watcher.ps1`) starts Office and the unified gateway while a `claude` process is
+running and stops them 60 s after the last one exits. Kanzo, RepoQL host, supervisor and dashboard are left running.
+Not yet verified: the stop path after closing Claude, and reboot behaviour.
