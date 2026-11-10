@@ -10,13 +10,14 @@ param(
   [string[]]$BoundTasks = @('Singularity-ClaudeComplete-Office', 'Singularity-Windows-Unified-Gateway'),
   [int]$PollSeconds = 10,
   [int]$GraceSeconds = 60,
+  [string]$ProcessName = 'claude',
   [switch]$Once
 )
 $ErrorActionPreference = 'Continue'
 $log = Join-Path $env:LOCALAPPDATA 'Singularity\WindowsNative\logs\claude-session-watcher.log'
 New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 function Write-Log($m) { try { "{0:o} {1}" -f (Get-Date), $m | Add-Content -LiteralPath $log } catch {} }
-function Test-ClaudeOpen { [bool](Get-Process -Name 'claude' -ErrorAction SilentlyContinue) }
+function Test-ClaudeOpen { [bool](Get-Process -Name $ProcessName -ErrorAction SilentlyContinue) }
 function Set-Bound([bool]$Up) {
   foreach ($n in $BoundTasks) {
     $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue

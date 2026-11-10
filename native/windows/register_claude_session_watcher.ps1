@@ -4,7 +4,7 @@
 param([ValidateSet('Register','Remove','Status')][string]$Mode = 'Register')
 $ErrorActionPreference = 'Stop'
 $name = 'Singularity-ClaudeSessionWatcher'
-$installed = Join-Path $env:LOCALAPPDATA 'Singularity\WindowsNative\current\bin'
+$installed = Join-Path $env:LOCALAPPDATA 'Singularity\WindowsNative\extras'
 $script = Join-Path $installed 'claude_session_watcher.ps1'
 switch ($Mode) {
   'Remove' { Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue; 'removed'; return }

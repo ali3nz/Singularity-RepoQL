@@ -315,3 +315,14 @@ Not yet verified: the stop path after closing Claude, and reboot behaviour.
 - Agent Chat panels show "state directory unavailable" because `%LOCALAPPDATA%\Singularity\AgentChat` does not exist; the relay is not part of the Windows install. This is the accurate state, not a bug to mask.
 - Focused tests (non-elevated): dashboard 257 run, 1 failure + 6 errors, all Windows symlink/ACL privilege artifacts (WinError 1314, 0o666 vs 0o600). Lifecycle contract: 2 failures from `SeSecurityPrivilege` (needs elevation). Not re-run elevated.
 - Still open: Office React #418 + one 502, `singularity-code-reviewer` definition unavailable, Diagnostics CPU collector, Tencent iframe unchecked, watcher stop path and reboot unverified, `OFFICE_TASK_OWNERSHIP_DRIFT`. Release remains BLOCKED.
+
+## Update 2026-11-10 (live dashboard fix session)
+
+- Elevated Reinstall completed; dashboard serves the current design. Extra project files live in `WindowsNative\extras` (the staged tree refuses unowned files).
+- `register_claude_session_watcher.ps1`: Office and the unified gateway run only while Claude is open (poll 10s, 60s grace). Stop the watcher before a Reinstall.
+- `register_cpu_collector.ps1`: logon task for the CPU history collector. The scheduled action needs doubled-quote `cmd /c ""a" "b""` form; the single-quoted form exited 1.
+  `/api/cpu` still reports `native_windows_cpu_history_no_verified_samples` until verified samples accrue (not yet confirmed).
+- Office embed renders live agents via the panel proxy. Known open: the proxy does not upgrade WebSockets (`/embed/office/ws/...` fails), and React #418 hydration warnings remain.
+- Code reviewer agent is pinned to haiku, effort high (integration test updated).
+- Test caveat: one `test_claude_agents_control` error is a Windows symlink privilege (WinError 1314), environmental.
+- Release remains BLOCKED; nothing here is certified.

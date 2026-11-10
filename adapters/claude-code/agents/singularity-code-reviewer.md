@@ -1,6 +1,8 @@
 ---
 name: singularity-code-reviewer
 description: Implementation critic for significant code and configuration changes. Use to review a requirement, diff, or validation evidence before declaring work complete.
+model: haiku
+effort: high
 tools: Read, Grep, Glob
 ---
 

@@ -50,7 +50,9 @@ test("definitions use valid Claude Code frontmatter: namespaced name, descriptio
     assert.ok((fm.description || "").length > 20, `${file}: description present`);
     assert.equal(fm.mode, undefined, `${file}: no OpenChamber 'mode' field leaked`);
     assert.equal(fm.permissions, undefined, `${file}: no OpenChamber 'permissions' field leaked`);
-    assert.equal(fm.model, undefined, `${file}: model inherits the session (not pinned)`);
+    // Only the code reviewer is pinned (operator decision: haiku, high effort).
+    const pinned = file === "singularity-code-reviewer.md" ? "haiku" : undefined;
+    assert.equal(fm.model, pinned, `${file}: model pinning`);
     if (fm.tools) {
       for (const t of fm.tools.split(",").map((s) => s.trim())) assert.ok(VALID_TOOLS.has(t), `${file}: tool ${t} valid`);
     }

@@ -142,6 +142,7 @@ def transport(kind):
     # Fixed same-origin routing only. No credentials or auth material in JS.
     return ("""(()=>{const prefix=PREFIX;
       const remap=(raw)=>{const u=new URL(raw,location.href);
+        if(u.host!==location.host&&['127.0.0.1','localhost','[::1]'].includes(u.hostname)){u.protocol=u.protocol.startsWith('ws')?(location.protocol==='https:'?'wss:':'ws:'):location.protocol;u.host=location.host;}
         if(u.host===location.host&&['http:','https:','ws:','wss:'].includes(u.protocol)&&!u.pathname.startsWith(prefix+'/'))u.pathname=prefix+u.pathname;
         return u.href;};
       const original=window.fetch.bind(window);
@@ -152,7 +153,7 @@ def transport(kind):
 
 def rewrite(kind, text, content_type):
     base = prefix(kind)
-    text = re.sub(r'([\"\x27`(=])(/(?:assets/|_next/|logo\.png|app\.js|images/|favicon\.ico|downloads/))',
+    text = re.sub(r'([\"\x27`(=])(/(?:assets/|sprites/|_next/|logo\.png|app\.js|images/|favicon\.ico|downloads/))',
                   lambda m: m[1] + base + m[2], text)
     if 'text/html' in content_type:
         text = text.replace('<head>', '<head><script src="' + base + '/_transport.js"></script>', 1)
