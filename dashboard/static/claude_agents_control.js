@@ -46,6 +46,7 @@ export async function mountClaudeAgentsControl(host, api) {
       <button class="btn" type="button" id="claude-model-close" style="margin-top:12px">Cancel</button>
     </dialog>
     <section class="block"><h2>Rules and hooks</h2><p class="muted small">Installed configuration inventory only. Presence does not prove a rule or hook ran. No rule or hook commands are exposed.</p><div id="claude-policy-rows">Loading…</div></section>
+    <section class="block"><h2>OpenMausBot bots</h2><p class="muted small">Live roster from the paired local OpenMausBot. Presence only; it does not prove registration, Kanzo or memory wiring.</p><div id="claude-omb-rows">Loading bots…</div></section>
     <section class="block"><h2>MCP integrations</h2><p class="muted small">Configured entries only. Connection health, tools and credentials require independent local verification. Secrets are never displayed.</p>
     <div id="claude-mcp-rows">Loading MCP configuration…</div></section>`;
   const rows = host.querySelector('#claude-agent-rows');
@@ -110,7 +111,7 @@ export async function mountClaudeAgentsControl(host, api) {
     catch (e) {message.textContent = e.message;}
   });
   if (!rows.isConnected) return;
-  rows.innerHTML = agents.available ? `<div class="table-wrap"><table class="data"><thead><tr><th>Agent</th><th>Description</th><th>Model</th><th>Action</th></tr></thead><tbody>${agents.agents.map(a=>
+  rows.innerHTML = agents.available ? `<div class="table-wrap ac-stack"><table class="data"><thead><tr><th>Agent</th><th>Description</th><th>Model</th><th>Action</th></tr></thead><tbody>${agents.agents.map(a=>
     `<tr data-agent-search="${escape([a.name, a.description, a.model].filter(Boolean).join(' ').toLowerCase())}"><td class="mono">${escape(a.name)}</td><td>${escape(a.description || (a.managed ? 'Definition unavailable' : 'User managed'))}</td><td>${escape(a.model || 'Inherited')}</td><td>${a.editable ? `<button class="btn small" data-edit-agent="${escape(a.name)}">Edit</button>` : 'External or unavailable'}</td></tr>`).join('')}</tbody></table></div>` : `<p class="muted">${escape(agents.reason)}</p>`;
   const visibleAgents = () => {
     const q = filter.value.trim().toLowerCase();
@@ -159,6 +160,13 @@ export async function mountClaudeAgentsControl(host, api) {
         <details><summary>Hook events</summary><ul>${hookEvents || '<li>None found</li>'}</ul></details>`;
     }
   } catch(e) { if (policyHost.isConnected) policyHost.textContent = 'Rules and hooks inventory unavailable: ' + e.message; }
+  const ombHost = host.querySelector('#claude-omb-rows');
+  try {
+    const omb = await api('/api/openmausbot/overview');
+    if (ombHost.isConnected) ombHost.innerHTML = omb.available && (omb.bots || []).length
+      ? `<ul class="ac-bots">${omb.bots.map(b => `<li><strong>${escape(b.name)}</strong> <span class="pill ${b.working ? '' : 'neutral'}">${b.working ? 'working' : 'idle'}</span></li>`).join('')}</ul><p class="muted small">${omb.bots.length} of ${Number(omb.total) || omb.bots.length} bot(s) shown.</p>`
+      : `<p class="muted">No bots available (${escape(omb.reason || 'none paired')}).</p>`;
+  } catch(e) { if (ombHost.isConnected) ombHost.textContent = 'OpenMausBot roster unavailable: ' + e.message; }
   const inv = await api('/api/claude/mcps');
   if (!mcps.isConnected) return;
   const entries = inv.servers || [];
@@ -166,8 +174,8 @@ export async function mountClaudeAgentsControl(host, api) {
   const requiredRows = Object.entries(required).map(([key, value]) =>
     `<tr><td>${escape(key)}</td><td>${escape(value.requirement || '')}</td><td>${escape(value.status === 'configured' ? 'configured' : value.status === 'not_verified' ? 'not verified' : 'missing')}${value.reason ? ' <span class="muted small">(' + escape(value.reason) + ')</span>' : ''}</td><td>${(value.servers || []).map(escape).join(', ') || (value.unknownWrappers || []).map(n => escape(n) + ' (unrecognised)').join(', ') || '—'}</td></tr>`).join('');
   mcps.innerHTML = `<p>${entries.length} configured MCP registration${entries.length === 1 ? '' : 's'} (connection state not tested).</p>
-    <div class="table-wrap"><table class="data"><thead><tr><th>Required integration</th><th>Requirement</th><th>Configuration</th><th>Matched entries</th></tr></thead><tbody>${requiredRows || '<tr><td colspan="4">Requirement map unavailable.</td></tr>'}</tbody></table></div>
-    <div class="table-wrap"><table class="data"><thead><tr><th>Server</th><th>Scope</th><th>Connection</th></tr></thead><tbody>
+    <div class="table-wrap ac-stack"><table class="data"><thead><tr><th>Required integration</th><th>Requirement</th><th>Configuration</th><th>Matched entries</th></tr></thead><tbody>${requiredRows || '<tr><td colspan="4">Requirement map unavailable.</td></tr>'}</tbody></table></div>
+    <div class="table-wrap ac-stack"><table class="data"><thead><tr><th>Server</th><th>Scope</th><th>Connection</th></tr></thead><tbody>
     ${entries.map(s=>`<tr><td>${escape(s.name)}</td><td>${escape(s.scope)}</td><td>Not tested</td></tr>`).join('') || '<tr><td colspan="3">No registrations were found in the inspected configuration files.</td></tr>'}</tbody></table></div>
     <p class="muted small">Required: RepoQL (official plugin or MCP), Kanzo, MemoryCore (RepoQL connector) and a paired local OpenMausBot. Configuration inventory does not prove tool availability.</p>`;
 }

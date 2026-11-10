@@ -1044,3 +1044,16 @@ html[data-theme="charcoal"] .main:has(.messenger-shell){
 html[data-theme="charcoal"] .main[data-workspace="chat"] .messenger-shell,
 html[data-theme="charcoal"] .main:has(.messenger-shell) .messenger-shell{
   width:100%!important;max-width:none!important;height:calc(100dvh - 14px)!important;max-height:none!important}
+
+/* Agents Control: stacked cards on phones, no forced sideways swipe */
+.ac-bots { list-style:none; margin:0; padding:0; display:grid; gap:6px; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); }
+.ac-bots li { padding:8px 10px; border:1px solid var(--line,#3a3a42); border-radius:10px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+@media (max-width:720px) {
+  .ac-stack { overflow-x:visible; border:0; background:none; }
+  .ac-stack table.data, .ac-stack table.data thead, .ac-stack table.data tbody, .ac-stack table.data tr, .ac-stack table.data td { display:block; min-width:0; width:100%; }
+  .ac-stack table.data thead { display:none; }
+  .ac-stack table.data tr { padding:8px 0; border-bottom:1px solid var(--line,#3a3a42); }
+  .ac-stack table.data td { border:0; padding:2px 0; overflow-wrap:anywhere; font-size:14px; }
+  .ac-stack table.data td:first-child { font-weight:600; }
+  .ac-stack table.data tr[hidden] { display:none; }
+}
