@@ -296,7 +296,8 @@ function showSignpost(message) {
 // -------------------------------------------------------------- hash router
 
 function parseRoute() {
-  const raw = location.hash.replace(/^#/, "") || "/";
+  let raw = location.hash.replace(/^#/, "") || "/";
+  if (/^k=/.test(raw)) raw = "/"; // legacy token fragment: not a route
   const [path, query] = raw.split("?");
   return { path: path || "/", params: Object.fromEntries(new URLSearchParams(query || "")) };
 }
@@ -813,7 +814,6 @@ function dashboardSnapshot() {
     ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','Agent activity'],
     ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','Knowledge'],
     ['Office Viewer','/office','Open the live protected office scene.','office','Workspace'],
-    ...(nativeInstall ? [['Agents Control','/claude/agents','Manage your installed Claude Code agents and MCP inventory.','chat','Agent settings']] : []),
   ];
   const REPOQL_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6 20.2 7.3v9.4L12 21.4 3.8 16.7V7.3z" opacity=".55" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.6V12m0 0-3.3 2.2M12 12l3.3 2.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7.3" r="1.75" fill="currentColor"/><circle cx="7.6" cy="15" r="1.75" fill="currentColor"/><circle cx="16.4" cy="15" r="1.75" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg>`;
   const BRAIN_ICON = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z" stroke="currentColor" stroke-width="1.35"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>`;
@@ -2486,7 +2486,9 @@ else {
 }
 // window.__RQDASH_ACCESS__ is set by the server when a Cloudflare Access JWT
 // vouched for this browser on the public hostname; no capability key is needed.
-if (!state.token && !window.__RQDASH_ACCESS__) {
+// Local login serves this page only after the server has granted a session cookie
+// (loopback auto-session), so no fragment key is needed there.
+if (!state.token && !window.__RQDASH_ACCESS__ && !window.__SINGULARITY_LOCAL_LOGIN__) {
   showSignpost("This tab holds no dashboard key.");
 } else {
   window.addEventListener("hashchange", route);

@@ -1654,7 +1654,8 @@ class Handler(BaseHTTPRequestHandler):
         if target.name == "index.html" and local_account is not None:
             body = body.replace(b"<head>", b"<head>\n<script>window.__SINGULARITY_LOCAL_LOGIN__=true;</script>", 1)
         if target.name == "index.html" and (self.access_identity() is not None or
-             (local_account and local_account.authenticated(self.headers.get('Cookie', '')))):
+             (local_account and (getattr(self, '_auto_session_ok', False)
+                                 or local_account.authenticated(self.headers.get('Cookie', ''))))):
             # Tell the SPA that Access already vouched for this browser, so it does
             # not look for the loopback capability key in the URL fragment.
             body = body.replace(b"<head>", b"<head>\n<script>window.__RQDASH_ACCESS__=true;</script>", 1)

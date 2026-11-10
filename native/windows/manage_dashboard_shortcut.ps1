@@ -50,14 +50,19 @@ switch ($Mode) {
   'Create' {
     if ((Test-Path -LiteralPath $shortcut) -and -not (Test-Owned $shortcut)) { throw 'SHORTCUT_FOREIGN_FILE_REFUSED' }
     if (-not (Test-Path -LiteralPath $iconSrc -PathType Leaf)) { throw 'SHORTCUT_ICON_MISSING' }
-    if (-not (Test-Path -LiteralPath $opener -PathType Leaf)) { throw 'WINDOWLESS_DASHBOARD_OPENER_REQUIRED' }
+    $openerArgs='--port '+$DashboardPort+' --state-dir "'+$StateDir+'"'
+    if (-not (Test-Path -LiteralPath $opener -PathType Leaf)) {
+      # No windowless opener staged: loopback needs no token, so open the plain URL in the default browser.
+      $opener=Join-Path $env:SystemRoot 'explorer.exe'
+      $openerArgs=$url
+    }
     New-Item -ItemType Directory -Force -Path $AssetRoot | Out-Null
     Copy-Item -LiteralPath $iconSrc -Destination $iconDest -Force
     $sh=New-Object -ComObject WScript.Shell
     try {
       $l=$sh.CreateShortcut($shortcut)
       $l.TargetPath=$opener
-      $l.Arguments='--port '+$DashboardPort+' --state-dir "'+$StateDir+'"'
+      $l.Arguments=$openerArgs
       $l.IconLocation=$iconDest+',0'
       $l.Description=$marker
       $l.WorkingDirectory=$AssetRoot

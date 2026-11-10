@@ -47,6 +47,8 @@ def panel_config() -> dict:
     # An embed URL alone never grants a Tencent identity; missing key files
     # must not turn the navigation green on a fresh Windows installation.
     tencent_ready = bool(configured_key and Path(configured_key).is_file())
+    # Local Kanzo (Windows, loopback) is reached only through the same-origin proxy.
+    config['kanzo'] = {'url': '/embed/kanzo/', 'configured': True}
     config['tencent'] = {'url': '/embed/tencent/' if tencent_ready else None,
                          'configured': tencent_ready,
                          'automatic_login': tencent_ready}

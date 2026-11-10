@@ -291,3 +291,14 @@ Blockers cleared on the way, useful for the next reinstall:
 - `Invoke-Stage` masks inner errors as `NATIVE_STAGE_OPERATION_FAILED`; use a transcript to see them.
 
 Still not certified: release remains BLOCKED. Office health is false and no Ghost host is present by design.
+
+## Dashboard access fixes (2026-11-10)
+
+Operator relaxed loopback security: no token is needed on 127.0.0.1.
+
+- `dashboard/server.py`: the first loopback request now tells the SPA it is signed in (the auto-session cookie was issued but the page still showed the lock screen).
+- `dashboard/static/app.js`: a legacy `#k=...` fragment is not a route; local-login pages never show the key gate.
+- `dashboard/embed_config.py`: Kanzo panel config points at the same-origin `/embed/kanzo/` proxy (local Kanzo on 4242 only).
+- `native/windows/manage_dashboard_shortcut.ps1`: falls back to opening the plain loopback URL when the windowless opener is not staged. The shortcut lives on the user's (OneDrive) Desktop.
+- Verified live in the in-app browser: dashboard, Kanban iframe and Office iframe render without a token.
+- Open: Office task is not started by `Start -SkipOffice` and `manage_claude_office.ps1` reports ownership drift; start `Singularity-ClaudeComplete-Office` manually until fixed. Release remains BLOCKED.
