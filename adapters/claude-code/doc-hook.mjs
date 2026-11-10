@@ -37,6 +37,7 @@ import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  PRODUCT_ROOT,
   loadAssessment,
   recordAutomaticLearningAssessment,
   evaluateAssessment,
@@ -122,7 +123,7 @@ export async function runDocHook(argv, opts = {}) {
     // Durable-queue resume (release-review requirement: liveness must not depend on one session
     // finishing). Bounded to ONE candidate; the scheduler CLI drains backlog.
     try {
-      const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1 });
+      const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1, installRoot: opts.installRoot ?? PRODUCT_ROOT });
       for (const o of resumed.outcomes || []) stderr.push(`singularity selflearn: resume ${o.id} -> ${o.state}${o.detail ? ` (${clip(o.detail, 100)})` : ""}`);
     } catch (e) {
       stderr.push(`singularity selflearn: resume skipped (${clip(String(e?.message || e), 100)})`);
@@ -208,6 +209,7 @@ export async function runDocHook(argv, opts = {}) {
           results: autoIngest, observable, dirty: obs?.dirty || null, newDirty: obs?.newDirty || null,
         });
         if (learning?.candidate) stderr.push(`singularity selflearn: candidate ${learning.candidate.state} (${learning.candidate.id})`);
+        if (learning?.queueRefusal) stderr.push(`singularity selflearn: BLOCKED — candidate not retained (${clip(learning.queueRefusal, 160)})`);
       } catch (e) {
         stderr.push(`singularity selflearn: assessment skipped (${clip(String(e?.message || e), 100)})`);
       }

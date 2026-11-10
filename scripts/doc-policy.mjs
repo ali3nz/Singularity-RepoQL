@@ -688,7 +688,10 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})` };
     return { status: "NO_LESSON", assessment: rec.record, candidate: null, detail: "automatic NO_LESSON: nothing material changed this pass (observable)" };
   }
-  const rec = guarded({ files: observedFiles, captureStatus: "DEFERRED", captureReason: codeMaterial
+  const refusal = codeMaterial && discovered && !discovered.record ? discovered.detail : null;
+  const rec = guarded({ files: observedFiles, captureStatus: "DEFERRED", captureReason: refusal
+      ? `automatic: material work observed but no durable candidate was created (${refusal})`
+      : codeMaterial
       ? "automatic: material work observed; the agent's verified lesson token is unreported — the durable selflearn candidate carries the work and resumes automatically"
       : "automatic: documentation-only ingestion observed (no code-material change); lesson discovery is not applicable, doc knowledge is captured through the doc pipeline", automatic: true, recordedAt: new Date().toISOString(), ...(discovered?.record ? { deferredPending: relPosix(root, candidatePath(discovered.record.id, root)) } : {}) });
   if (!rec.written) return { status: rec.record.captureStatus, assessment: rec.record, detail: `another writer claimed the assessment concurrently — kept (${rec.record.captureStatus})`, candidate: discovered?.record || null };
@@ -696,7 +699,7 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   const current = candidateForSession();
   const promoted = captureIfPromoted(current, evaluation, observedFiles);
   if (promoted) return promoted;
-  return { status: "DEFERRED", assessment: rec.record, candidate: current || discovered?.record || null, evaluation, detail: current ? `automatic DEFERRED: durable candidate ${current.state} ${relPosix(root, candidatePath(current.id, root))}${discovered?.created ? " (new)" : " (reused)"}, promotion stays gated` : "automatic DEFERRED: material work observed (no candidate file could be written)" };
+  return { status: "DEFERRED", assessment: rec.record, candidate: current || discovered?.record || null, evaluation, detail: current ? `automatic DEFERRED: durable candidate ${current.state} ${relPosix(root, candidatePath(current.id, root))}${discovered?.created ? " (new)" : " (reused)"}, promotion stays gated` : `automatic DEFERRED: material work observed (no candidate file could be written${refusal ? `: ${refusal}` : ""})`, queueRefusal: refusal };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────

@@ -39,8 +39,8 @@
 //   node scripts/selflearn-candidates.mjs mark-promoted --id <id> --concept-id <CamelCaseName> [--receipt <path>]
 //   node scripts/selflearn-candidates.mjs verify --id <id> [--note <text>]   (manual verification receipt)
 //
-// `run` is the single entry point a scheduler may invoke (the shipped systemd
-// timer template does exactly that). Lifecycle hooks call the same function
+// `run` is the single entry point a scheduler may invoke. No scheduler is
+// installed by this module. Lifecycle hooks call the same function
 // in-process, so both paths share one implementation.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
@@ -145,24 +145,38 @@ function acquireLock(id, root, { staleMs = CLAIM_STALE_MS } = {}) {
 // ── discovery ────────────────────────────────────────────────────────────────
 /**
  * Record a durable discovery for a material task. Idempotent per
- * (session, file-set): repeated lifecycle passes update the evidence and
- * lastSeenAt instead of creating duplicates. Never overwrites a record that has
- * already been evaluated or resolved.
+ * (session, file-set): a repeated pass counts a fresh observation on a still-
+ * DISCOVERED record (seenCount/lastSeenAt) but never resets its claim, backoff,
+ * evidence snapshot, or a completed lesson. Never overwrites a record that has
+ * already been evaluated or resolved. (Evaluation merges live workspace
+ * evidence, so the frozen discovery snapshot does not go stale.)
  */
 export function discoverCandidate({ session, files = [], root, evidence = {}, reason = "", agent = "agent", env = process.env } = {}) {
-  const dir = candidateDir(root);
-  const all = listCandidates(root);
-  if (all.length >= MAX_QUEUE) {
-    // Bounded queue: the OLDEST terminal record is displaced, never work.
-    const terminal = all.filter((r) => TERMINAL.has(r.state) || r.state === STATES.FAILED).sort((a, b) => String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
-    if (!terminal.length) return { created: false, record: null, detail: `queue full (${all.length}) with no terminal record to displace` };
-    try { unlinkSync(candidatePath(terminal[0].id, root)); } catch { /* raced */ }
-  }
   const id = candidateId(session, files);
   const path = candidatePath(id, root);
   const prev = existsSync(path) ? loadCandidate(id, root) : null;
-  if (prev && (TERMINAL.has(prev.state) || prev.state === STATES.FAILED)) {
-    return { created: false, record: prev, detail: `candidate already ${prev.state} — not re-opened` };
+  // Re-discovery may count a fresh observation, but must not race an evaluator
+  // or reset its claim, backoff, evidence, or a completed lesson.
+  if (prev) {
+    const lock = acquireLock(id, root);
+    if (!lock.ok) return { created: false, record: prev, detail: "candidate is being processed" };
+    try {
+      const current = loadCandidate(id, root);
+      if (!current) return { created: false, record: null, detail: "candidate disappeared during rediscovery" };
+      if (current.state !== STATES.DISCOVERED) return { created: false, record: current, detail: `candidate already ${current.state} — not re-opened` };
+      const refreshed = { ...current, seenCount: (current.seenCount || 0) + 1, lastSeenAt: nowIso() };
+      writeAtomic(path, refreshed);
+      return { created: false, record: refreshed, path, detail: "discovery observed again" };
+    } finally { lock.release(); }
+  }
+  const all = listCandidates(root);
+  const pendingCount = all.filter((r) => r.state !== STATES.PROMOTED).length;
+  if (!prev && pendingCount >= MAX_QUEUE) {
+    // Never evict an outstanding verification, approval, or promotion receipt.
+    const terminal = all.filter((r) => [STATES.DUPLICATE, STATES.NO_LESSON].includes(r.state))
+      .sort((a, b) => String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
+    if (!terminal.length) return { created: false, record: null, detail: `queue full (${pendingCount}) with no disposable record` };
+    try { unlinkSync(candidatePath(terminal[0].id, root)); } catch { return { created: false, record: null, detail: "queue eviction failed" }; }
   }
   const now = nowIso();
   const record = {
@@ -485,6 +499,11 @@ function retryDelayMs(retries) {
 }
 
 function eligibleForWork(rec, now = Date.now()) {
+  if (rec.state === STATES.NEEDS_VERIFICATION && rec.lesson && rec.dedup?.checked === false &&
+      rec.verification?.pending?.includes("dedup-confirmation")) {
+    const next = Date.parse(rec.dedupNextAttemptAt || "");
+    return !Number.isFinite(next) || now >= next;
+  }
   if (rec.state === STATES.DISCOVERED) return true;
   if (rec.state === STATES.DEFERRED) {
     const next = Date.parse(rec.nextAttemptAt || "");
@@ -513,7 +532,11 @@ export async function evaluateCandidates({
   const dir = candidateDir(root);
   mkdirSync(dir, { recursive: true });
   const providerResolved = provider || resolveFormulationProvider({ root, env, installRoot });
-  const queue = listCandidates(root).filter((r) => eligibleForWork(r, now())).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  const queue = listCandidates(root).filter((r) => eligibleForWork(r, now())).sort((a, b) => {
+    // Resume a previously formulated lesson before attempting new model work.
+    const priority = Number(b.state === STATES.NEEDS_VERIFICATION) - Number(a.state === STATES.NEEDS_VERIFICATION);
+    return priority || String(a.createdAt).localeCompare(String(b.createdAt));
+  });
   const outcomes = [];
   for (const rec of queue.slice(0, Math.max(0, limit))) {
     const lock = acquireLock(rec.id, root);
@@ -521,10 +544,44 @@ export async function evaluateCandidates({
     try {
       const fresh = loadCandidate(rec.id, root);
       if (!fresh || !eligibleForWork(fresh, now())) { outcomes.push({ id: rec.id, state: "SKIPPED", detail: "no longer eligible" }); continue; }
+      if (fresh.state === STATES.NEEDS_VERIFICATION) {
+        // Retry only the unavailable dependency, retaining the original lesson,
+        // manual verification, and model retry count. Never formulate again.
+        let dedup;
+        try { dedup = dedupLesson(fresh.lesson, { root, env, runRql }); }
+        catch (error) { dedup = { ...fresh.dedup, checked: false, rql: `unavailable: ${clip(error?.message || error, 120)}` }; }
+        if (dedup.duplicateOf) {
+          writeAtomic(candidatePath(fresh.id, root), { ...fresh, state: STATES.DUPLICATE,
+            updatedAt: nowIso(), resolvedAt: nowIso(), resolutionReason: dedup.reason,
+            dedup, dedupNextAttemptAt: null, promotion: { ...fresh.promotion, eligible: false } });
+          outcomes.push({ id: fresh.id, state: STATES.DUPLICATE, detail: dedup.reason });
+          continue;
+        }
+        if (!dedup.checked) {
+          const dedupRetries = (fresh.dedupRetries || 0) + 1;
+          writeAtomic(candidatePath(fresh.id, root), { ...fresh, dedup, dedupRetries,
+            dedupNextAttemptAt: new Date(now() + retryDelayMs(dedupRetries)).toISOString(), updatedAt: nowIso() });
+          outcomes.push({ id: fresh.id, state: STATES.NEEDS_VERIFICATION, detail: "dedup unavailable; retry scheduled" });
+          continue;
+        }
+        const verification = { ...fresh.verification };
+        verification.requirements = [...new Set([...(verification.requirements || []), "promotion-metadata", ...(fresh.lesson.needsVerification ? ["manual-verification"] : [])])];
+        verification.satisfied = [...new Set([...(verification.satisfied || []), "repoql-dedup-ran", "dedup-confirmation"])];
+        verification.pending = (verification.requirements || []).filter((r) => !verification.satisfied.includes(r));
+        verification.state = verification.pending.length ? "pending" : "satisfied";
+        const state = verification.pending.length ? STATES.NEEDS_VERIFICATION : STATES.AWAITING_APPROVAL;
+        writeAtomic(candidatePath(fresh.id, root), { ...fresh, state, updatedAt: nowIso(), dedup,
+          dedupNextAttemptAt: null, verification, promotion: { ...fresh.promotion, command: fresh.promotion?.metadata ? promotionCommand(fresh.lesson, fresh.promotion.metadata) : null, eligible: !verification.pending.length } });
+        outcomes.push({ id: fresh.id, state, detail: verification.pending.length ? `needs: ${verification.pending.join(", ")}` : "ready for gated promotion" });
+        continue;
+      }
       const claimed = { ...fresh, state: STATES.EVALUATING, updatedAt: nowIso(), claim: { id: randomUUID(), at: nowIso() } };
       writeAtomic(candidatePath(fresh.id, root), claimed);
       if (!providerResolved) {
-        writeAtomic(candidatePath(fresh.id, root), { ...fresh, state: STATES.DEFERRED, updatedAt: nowIso(), lastError: "no processing provider configured (set SINGULARITY_SELFLEARN_LLM_URL or MEMORY_LLM_BASE_URL)", claim: null });
+        const providerDeferrals = (fresh.providerDeferrals || 0) + 1;
+        writeAtomic(candidatePath(fresh.id, root), { ...fresh, state: STATES.DEFERRED, updatedAt: nowIso(), providerDeferrals,
+          nextAttemptAt: new Date(now() + retryDelayMs(providerDeferrals)).toISOString(),
+          lastError: "no processing provider configured (set SINGULARITY_SELFLEARN_LLM_URL or MEMORY_LLM_BASE_URL)", claim: null });
         outcomes.push({ id: fresh.id, state: STATES.DEFERRED, detail: "no processing provider configured" });
         continue;
       }
@@ -568,7 +625,26 @@ export async function evaluateCandidates({
         continue;
       }
       const lesson = valid.lesson;
-      const dedup = dedupLesson(lesson, { root, env, runRql });
+      if (!lesson.generalizable) {
+        writeAtomic(candidatePath(fresh.id, root), { ...fresh, state: STATES.NO_LESSON,
+          updatedAt: nowIso(), resolvedAt: nowIso(), lesson, claim: null,
+          resolutionReason: "lesson not established as generalizable", promotion: { ...fresh.promotion, eligible: false } });
+        outcomes.push({ id: fresh.id, state: STATES.NO_LESSON, detail: "lesson not established as generalizable" });
+        continue;
+      }
+      // Persist the formulated lesson before contacting RepoQL. If the process
+      // dies during that call, the next pass retries dedup, not formulation.
+      const requirements = ["evidence-refs-resolve", "repoql-dedup-ran", "dedup-confirmation", "promotion-metadata"];
+      if (lesson.needsVerification) requirements.push("manual-verification");
+      const pending = requirements.filter((r) => r !== "evidence-refs-resolve");
+      writeAtomic(candidatePath(fresh.id, root), { ...fresh, state: STATES.NEEDS_VERIFICATION,
+        updatedAt: nowIso(), lesson, dedup: { checked: false, rql: "not-run" }, claim: null,
+        dedupNextAttemptAt: null,
+        verification: { state: "pending", requirements, satisfied: ["evidence-refs-resolve"], pending },
+        promotion: { ...fresh.promotion, eligible: false, command: null } });
+      let dedup;
+      try { dedup = dedupLesson(lesson, { root, env, runRql }); }
+      catch (error) { dedup = { checked: false, rql: `unavailable: ${clip(error?.message || error, 120)}` }; }
       if (dedup.duplicateOf) {
         writeAtomic(candidatePath(fresh.id, root), {
           ...fresh, state: STATES.DUPLICATE, updatedAt: nowIso(), resolvedAt: nowIso(),
@@ -578,12 +654,12 @@ export async function evaluateCandidates({
         outcomes.push({ id: fresh.id, state: STATES.DUPLICATE, detail: dedup.reason });
         continue;
       }
-      const requirements = ["evidence-refs-resolve", "repoql-dedup-ran"];
-      if (lesson.needsVerification) requirements.push("manual-verification");
-      if (!dedup.checked) requirements.push("dedup-confirmation");
+      const finalRequirements = ["evidence-refs-resolve", "repoql-dedup-ran", "promotion-metadata"];
+      if (lesson.needsVerification) finalRequirements.push("manual-verification");
+      if (!dedup.checked) finalRequirements.push("dedup-confirmation");
       const satisfied = ["evidence-refs-resolve", ...(dedup.checked ? ["repoql-dedup-ran"] : [])];
-      const pending = requirements.filter((r) => !satisfied.includes(r));
-      const nextState = pending.length ? STATES.NEEDS_VERIFICATION : STATES.AWAITING_APPROVAL;
+      const finalPending = finalRequirements.filter((r) => !satisfied.includes(r));
+      const nextState = finalPending.length ? STATES.NEEDS_VERIFICATION : STATES.AWAITING_APPROVAL;
       writeAtomic(candidatePath(fresh.id, root), {
         ...fresh,
         state: nextState,
@@ -591,9 +667,11 @@ export async function evaluateCandidates({
         resolvedAt: nowIso(),
         lesson,
         dedup,
-        verification: { state: pending.length ? "pending" : "satisfied", requirements, satisfied, pending },
+        dedupRetries: dedup.checked ? 0 : 1,
+        dedupNextAttemptAt: dedup.checked ? null : new Date(now() + retryDelayMs(1)).toISOString(),
+        verification: { state: finalPending.length ? "pending" : "satisfied", requirements: finalRequirements, satisfied, pending: finalPending },
         promotion: {
-          eligible: !pending.length,
+          eligible: !finalPending.length,
           approvalRequired: true,
           approvedBy: null,
           reference: null,
@@ -603,7 +681,7 @@ export async function evaluateCandidates({
         claim: null,
         lastError: null,
       });
-      outcomes.push({ id: fresh.id, state: nextState, title: lesson.title, detail: pending.length ? `needs: ${pending.join(", ")}` : "ready for gated promotion" });
+      outcomes.push({ id: fresh.id, state: nextState, title: lesson.title, detail: finalPending.length ? `needs: ${finalPending.join(", ")}` : "ready for gated promotion" });
     } finally {
       lock.release();
     }
@@ -616,20 +694,124 @@ function STATE_FAILED_OR_DEFERRED(exhausted) {
   return exhausted ? STATES.FAILED : STATES.DEFERRED;
 }
 
-export function promotionCommand(lesson) {
-  const name = String(lesson.title).replace(/[^A-Za-z0-9]+/g, " ").trim().split(" ").slice(0, 6).map((w) => w[0].toUpperCase() + w.slice(1)).join("") || "SelfLearnLesson";
-  const category = CAPSULE_CATEGORY[lesson.category] || "knowledge";
-  return `rql concept add ${name} ${category} ${JSON.stringify(clip(lesson.text, 180))} --tags selflearn,${lesson.category} --relevance '**' --why ${JSON.stringify(clip(lesson.text, 400))}`;
+function shellQuote(arg) {
+  const s = String(arg);
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(s) && s.length <= 200) return s;
+  // Single-quote everything else: inside single quotes $, `, ! and " are
+  // literal, so model-derived text can never execute when the operator pastes
+  // the printed command. (Double quotes would still allow $(...) execution.)
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+export const CAPSULE_CATEGORIES = Object.freeze(["principle", "wisdom", "rule", "shape", "knowledge"]);
+
+function splitList(v, sep) {
+  return String(v || "").split(sep).map((s) => s.trim()).filter(Boolean);
+}
+
+/** Validate operator-supplied promotion metadata (never model-invented). */
+export function validatePromotionMetadata(meta = {}, lesson = null) {
+  const errors = [];
+  const name = String(meta.conceptName || meta.name || "").trim();
+  if (!/^[A-Za-z][A-Za-z0-9]{1,80}$/.test(name)) errors.push("conceptName must be CamelCase alphanumeric 2..81 chars");
+  const capsuleCategory = String(meta.capsuleCategory || meta.category || (lesson ? CAPSULE_CATEGORY[lesson.category] : "") || "").trim();
+  if (!CAPSULE_CATEGORIES.includes(capsuleCategory)) errors.push(`capsuleCategory must be one of ${CAPSULE_CATEGORIES.join("|")}`);
+  const tags = Array.isArray(meta.tags) ? meta.tags : splitList(meta.tags || "", ",");
+  if (!tags.length || tags.length > 10 || tags.some((t) => !/^[A-Za-z0-9-]{1,40}$/.test(t))) errors.push("tags must be 1..10 comma-separated [A-Za-z0-9-] tokens");
+  const relevanceRaw = String(meta.relevance || "").trim();
+  const relevance = splitList(relevanceRaw, ";");
+  if (capsuleCategory === "principle") {
+    if (relevanceRaw) errors.push("principle applies everywhere and must omit relevance");
+  } else {
+    if (!relevance.length || relevance.length > 8) errors.push("relevance is required (1..8 semicolon-delimited URI globs)");
+    for (const g of relevance) {
+      if (g.length > 200 || !/^[A-Za-z0-9_./*?+~:-]+$/.test(g)) { errors.push(`relevance entry "${clip(g, 60)}" uses unsafe characters`); break; }
+      if (g === "**" || g === "**/**") { errors.push("bare '**' is not an applicability scope; name the subtree the concept governs"); break; }
+      if (!g.includes("/") && !g.includes(".") && !g.includes("*")) { errors.push(`relevance entry "${clip(g, 60)}" must name a path, glob or extension`); break; }
+    }
+  }
+  const verificationRaw = String(meta.verification || "").trim();
+  const verification = splitList(verificationRaw, ";");
+  const ttlDays = Number(meta.ttlDays ?? meta.ttl_days ?? 0);
+  if (capsuleCategory === "principle" || capsuleCategory === "wisdom") {
+    if (verificationRaw) errors.push(`${capsuleCategory} names no evidence to check and must omit verification`);
+    if (ttlDays !== 0) errors.push(`${capsuleCategory} carries no TTL`);
+  } else if (capsuleCategory === "knowledge") {
+    if (!verification.length) errors.push("knowledge requires --verification anchors");
+    if (!Number.isInteger(ttlDays) || ttlDays < 1 || ttlDays > 3650) errors.push("knowledge requires --ttl-days 1..3650");
+  } else {
+    if (verification.length && (!Number.isInteger(ttlDays) || ttlDays < 1 || ttlDays > 3650)) errors.push("verification requires --ttl-days 1..3650");
+    if (!verification.length && ttlDays !== 0) errors.push("ttl-days requires verification anchors");
+  }
+  for (const v of verification) {
+    if (v.length > 300 || /[\s"'`$!&|()<>\\]/.test(v)) { errors.push(`verification entry "${clip(v, 60)}" uses unsafe characters`); break; }
+    if (!v.includes("#") && !/^https?:\/\//.test(v) && !v.includes("/") && !v.includes(".")) { errors.push(`verification entry "${clip(v, 60)}" must anchor proof (file path, #symbol/#line, or URL)`); break; }
+  }
+  if (errors.length) return { ok: false, error: errors[0], errors };
+  return { ok: true, metadata: { conceptName: name, capsuleCategory, tags, relevance: relevance.join(";"), verification: verification.join(";"), ttlDays: ttlDays || 0, why: clip(String(meta.why || ""), 800), example: clip(String(meta.example || ""), 800) } };
+}
+
+export function promotionCommand(lesson, metadata = null) {
+  // The lesson schema does not establish applicability scope, anchored proof,
+  // or a knowledge TTL. Never print a shell command that invents them or
+  // interpolates untrusted model output. Promotion stays with the gated writer:
+  // a command exists ONLY after the operator records validated metadata.
+  if (!metadata) return null;
+  const v = validatePromotionMetadata(metadata, lesson);
+  if (!v.ok) return null;
+  const m = v.metadata;
+  const invariant = clip(String(lesson?.text || lesson?.lesson || ""), 180) || clip(String(lesson?.title || ""), 80);
+  if (!invariant) return null;
+  const argv = ["rql", "concept", "add", m.conceptName, m.capsuleCategory, invariant, "--tags", m.tags.join(",")];
+  if (m.capsuleCategory !== "principle") argv.push("--relevance", m.relevance);
+  if (m.verification) { argv.push("--verification", m.verification, "--ttl-days", String(m.ttlDays)); }
+  argv.push("--why", clip(m.why || String(lesson?.text || ""), 400));
+  if (m.example) argv.push("--example", m.example);
+  return argv.map(shellQuote).join(" ");
+}
+
+/** Operator-gated step: record validated promotion metadata for one candidate. */
+export function recordPromotionMetadata({ id, root, metadata = {}, now = nowIso() } = {}) {
+  if (!/^[0-9a-f]{8}$/.test(String(id || ""))) return { ok: false, error: "invalid candidate id" };
+  const lock = acquireLock(id, root);
+  if (!lock.ok) return { ok: false, error: "candidate is being processed" };
+  try {
+    const rec = loadCandidate(id, root);
+    if (!rec) return { ok: false, error: `no candidate ${id}` };
+    if (![STATES.NEEDS_VERIFICATION, STATES.AWAITING_APPROVAL].includes(rec.state)) return { ok: false, error: `state ${rec.state} does not accept promotion metadata` };
+    if (!rec.lesson) return { ok: false, error: "candidate has no formulated lesson" };
+    const v = validatePromotionMetadata(metadata, rec.lesson);
+    if (!v.ok) return { ok: false, error: v.error };
+    const command = promotionCommand(rec.lesson, v.metadata);
+    if (!command) return { ok: false, error: "promotion metadata did not yield a safe command" };
+    const verification = { ...(rec.verification || { requirements: [], satisfied: [] }) };
+    verification.requirements = [...new Set([...(verification.requirements || []), "promotion-metadata"])];
+    verification.satisfied = [...new Set([...(verification.satisfied || []), "promotion-metadata"])];
+    verification.pending = (verification.requirements || []).filter((r) => !verification.satisfied.includes(r));
+    verification.state = verification.pending.length ? "pending" : "satisfied";
+    verification.promotionMetadata = { ...v.metadata, recordedAt: now };
+    const next = {
+      ...rec,
+      updatedAt: now,
+      verification,
+      state: verification.pending.length ? STATES.NEEDS_VERIFICATION : STATES.AWAITING_APPROVAL,
+      promotion: { ...(rec.promotion || {}), eligible: !verification.pending.length, approvalRequired: true, command, metadata: v.metadata },
+    };
+    writeAtomic(candidatePath(rec.id, root), next);
+    return { ok: true, record: next };
+  } finally { lock.release(); }
 }
 
 // ── gated promotion bookkeeping (called AFTER the authoritative write) ───────
-export function markPromoted({ id, conceptId, root, receipt = null, approvedBy = "operator", now = nowIso() } = {}) {
-  const rec = loadCandidate(id, root);
-  if (!rec) return { ok: false, error: `no candidate ${id}` };
-  if (rec.state === STATES.PROMOTED) return { ok: false, error: `already promoted (${rec.promotion?.reference || "unknown"})` };
+export function markPromoted({ id, conceptId, root, receipt = null, approvedBy = "operator", now = nowIso() } = {}) {    const rec = loadCandidate(id, root);
+    if (!rec) return { ok: false, error: `no candidate ${id}` };
+    if (rec.state === STATES.PROMOTED) return { ok: false, error: `already promoted (${rec.promotion?.reference || "unknown"})` };
   if (![STATES.AWAITING_APPROVAL, STATES.NEEDS_VERIFICATION].includes(rec.state)) return { ok: false, error: `state ${rec.state} is not promotable` };
   if (!/^[A-Za-z][A-Za-z0-9]{1,80}$/.test(String(conceptId || ""))) return { ok: false, error: "concept id must be a CamelCase capsule name" };
-  if (rec.state === STATES.NEEDS_VERIFICATION) return { ok: false, error: `verification is still pending: ${(rec.verification?.pending || []).join(", ")}` };
+  if (!rec.promotion?.metadata) return { ok: false, error: "promotion metadata has not been recorded by the operator" };
+  if (String(conceptId) !== String(rec.promotion.metadata.conceptName)) return { ok: false, error: `concept id must match the recorded promotion metadata (${rec.promotion.metadata.conceptName})` };
+  if (rec.state === STATES.NEEDS_VERIFICATION || rec.promotion?.eligible !== true || !Array.isArray(rec.verification?.pending) || rec.verification.pending.length !== 0)
+    return { ok: false, error: `verification is still pending: ${(rec.verification?.pending || []).join(", ")}` };
   const next = {
     ...rec,
     state: STATES.PROMOTED,
@@ -643,10 +825,15 @@ export function markPromoted({ id, conceptId, root, receipt = null, approvedBy =
 
 /** Record a manual verification receipt (gated: only the operator path calls it). */
 export function recordVerification({ id, note = "", root, now = nowIso() } = {}) {
+  if (!/^[0-9a-f]{8}$/.test(String(id || ""))) return { ok: false, error: "invalid candidate id" };
+  const lock = acquireLock(id, root);
+  if (!lock.ok) return { ok: false, error: "candidate is being processed" };
+  try {
   const rec = loadCandidate(id, root);
   if (!rec) return { ok: false, error: `no candidate ${id}` };
   if (rec.state !== STATES.NEEDS_VERIFICATION) return { ok: false, error: `state ${rec.state} does not need verification` };
   const verification = { ...rec.verification };
+  if (![...(verification.requirements || [])].includes("promotion-metadata")) verification.requirements = [...(verification.requirements || []), "promotion-metadata"];
   verification.satisfied = [...new Set([...(verification.satisfied || []), "manual-verification"])];
   verification.pending = (verification.requirements || []).filter((r) => !verification.satisfied.includes(r));
   verification.state = verification.pending.length ? "pending" : "satisfied";
@@ -657,10 +844,11 @@ export function recordVerification({ id, note = "", root, now = nowIso() } = {})
     updatedAt: now,
     verification,
     state: verification.pending.length ? STATES.NEEDS_VERIFICATION : STATES.AWAITING_APPROVAL,
-    promotion: { ...rec.promotion, eligible: !verification.pending.length, command: rec.promotion?.command || (rec.lesson ? promotionCommand(rec.lesson) : null) },
+    promotion: { ...rec.promotion, eligible: !verification.pending.length, command: rec.promotion?.command || (rec.lesson && rec.promotion?.metadata ? promotionCommand(rec.lesson, rec.promotion.metadata) : null) },
   };
   writeAtomic(candidatePath(rec.id, root), next);
   return { ok: true, record: next };
+  } finally { lock.release(); }
 }
 
 // ── summary for doctor ───────────────────────────────────────────────────────
@@ -674,6 +862,7 @@ export function candidateSummary(root) {
   const promoted = all.filter((r) => r.state === STATES.PROMOTED).sort((a, b) => String(b.promotion?.promotedAt || "").localeCompare(String(a.promotion?.promotedAt || "")))[0] || null;
   return {
     total: all.length,
+    queueFull: all.filter((r) => r.state !== STATES.PROMOTED).length >= MAX_QUEUE,
     byState,
     pending: pending.length,
     awaitingVerification: byState[STATES.NEEDS_VERIFICATION] || 0,
@@ -685,7 +874,7 @@ export function candidateSummary(root) {
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
-// The scheduler path (systemd/selflearn-candidates.timer, a cron, or the
+// The scheduler path (a configured scheduler, a cron, or the
 // documented manual `run`) must resolve the SAME processing provider the
 // lifecycle hooks use. The hooks pass the product checkout as installRoot; a
 // bare CLI run did not, so a queued candidate failed with "no processing
@@ -733,7 +922,15 @@ async function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify({ ok: true, id, state: res.record.state, verification: res.record.verification }, null, 2));
     return 0;
   }
-  console.error("usage: run [--root] [--limit] | list [--json] | show --id | mark-promoted --id --concept-id | verify --id [--note]");
+  if (sub === "record-metadata") {
+    const id = flag(argv, "--id");
+    if (!id) { console.error("record-metadata requires --id <candidate id> --concept-name <Name> --capsule-category <cat> --tags <a,b> [--relevance <g;g>] [--verification <v;v>] [--ttl-days N] [--why <text>] [--example <text>]"); return 2; }
+    const res = recordPromotionMetadata({ id, root, metadata: { conceptName: flag(argv, "--concept-name"), capsuleCategory: flag(argv, "--capsule-category"), tags: flag(argv, "--tags"), relevance: flag(argv, "--relevance"), verification: flag(argv, "--verification"), ttlDays: flag(argv, "--ttl-days", 0), why: flag(argv, "--why", ""), example: flag(argv, "--example", "") } });
+    if (!res.ok) { console.error(`REFUSED: ${res.error}`); return 1; }
+    console.log(JSON.stringify({ ok: true, id, state: res.record.state, command: res.record.promotion?.command || null }, null, 2));
+    return 0;
+  }
+  console.error("usage: run [--root] [--limit] | list [--json] | show --id | mark-promoted --id --concept-id | verify --id [--note] | record-metadata --id --concept-name --capsule-category --tags [--relevance] [--verification] [--ttl-days]");
   return 2;
 }
 

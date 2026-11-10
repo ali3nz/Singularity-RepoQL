@@ -330,7 +330,8 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       const last = s.lastPromotion ? ` | last promotion ${s.lastPromotion.conceptId || "?"} at ${s.lastPromotion.at || "?"}` : " | no promotion yet";
       const oldest = oldestDays === null ? "" : ` | oldest pending ${oldestDays}d`;
       let st;
-      if ((b.PROMOTED || 0) > 0) st = "VERIFIED";
+      if (s.queueFull) st = "DEGRADED";
+      else if ((b.PROMOTED || 0) > 0) st = "VERIFIED";
       else if (s.failed > 0) st = "DEGRADED";
       else if (s.total === 0) st = "NOT_CONFIGURED";
       else st = "INCOMPLETE";
@@ -338,8 +339,8 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
         : st === "VERIFIED" ? ""
         : s.awaitingApproval > 0 ? " — approve one with `node scripts/selflearn-candidates.mjs list` then the printed gated command + mark-promoted"
         : s.awaitingVerification > 0 ? " — verify with `node scripts/selflearn-candidates.mjs verify --id <id> --note <receipt>`"
-        : " — run `node scripts/selflearn-candidates.mjs run` (or install systemd/selflearn-candidates.timer)";
-      out.push(section("selflearn", st, counts + oldest + last + ` | store ${root}` + advice, { summary: s, root }));
+        : " — run `node scripts/selflearn-candidates.mjs run`";
+      out.push(section("selflearn", st, counts + (s.queueFull ? " | pending queue full: new discoveries may be refused" : "") + oldest + last + ` | store ${root}` + advice, { summary: s, root }));
     } catch (e) {
       out.push(section("selflearn", "DEGRADED", `learning queue unreadable: ${String(e?.message || e).slice(0, 120)}`));
     }

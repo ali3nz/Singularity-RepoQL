@@ -55,17 +55,28 @@ see `docs/DOC-INGESTION.md`).
    compared textually; an equivalent existing concept resolves the candidate as
    DUPLICATE (candidate bookkeeping only — no second authoritative record). A
    failed RepoQL check keeps the candidate but never makes it promotion-eligible.
+   Later scheduler passes retry only dedup, preserving the formulated lesson
+   and any manual verification. Failed checks use exponential backoff capped at
+   one hour and remain retryable; no additional model call is made. A recovered
+   check detects duplicates or returns the candidate to its remaining gates.
 4. **Verification.** Requirements are derived from the lesson, not from model
    confidence: `evidence-refs-resolve` (every ref must be a file the discovery
    recorded), `repoql-dedup-ran`, and `manual-verification` when the lesson
    asserts behaviour the evidence does not demonstrate. Any pending requirement
    leaves the candidate NEEDS_VERIFICATION.
-5. **Gated promotion.** A fully verified candidate becomes AWAITING_APPROVAL
-   with the exact existing surface printed in `promotion.command`
-   (`rql concept add …`). Promotion is never automatic: the operator runs that
-   command, then `selflearn-candidates.mjs mark-promoted --id <id> --concept-id
-   <CapsuleName>`. The next lifecycle pass records the session as CAPTURED with
-   the concept reference and keeps the candidate as provenance.
+5. **Gated promotion.** The lesson schema does not establish category-specific
+   relevance, anchored verification or TTL. Verified candidates remain
+   NEEDS_VERIFICATION with `promotion-metadata` pending; no executable command
+   is generated from untrusted model text. The operator records those fields
+   with `node scripts/selflearn-candidates.mjs record-metadata --id <id>
+   --concept-name <CamelCase> --capsule-category <rule|shape|knowledge|principle|wisdom>
+   --tags <a,b> [--relevance <g;g>] [--verification <v;v>] [--ttl-days N]`.
+   Relevance is required except for principle (bare `**` is refused), knowledge
+   requires anchored verification plus `--ttl-days 1..3650`, and every value is
+   validated and shell-quoted before `promotion.command` is set. The candidate
+   then becomes AWAITING_APPROVAL with the exact `rql concept add …` command;
+   the operator runs that command, then `mark-promoted --id <id> --concept-id
+   <CapsuleName>`.
 
 ### Candidate lifecycle states
 
@@ -85,12 +96,14 @@ no second state system.
   run --limit N`); a stale claim (10 min) is recoverable, a live one makes a
   second worker skip. Two concurrent sessions therefore evaluate their own
   records exactly once, and no record is corrupted by parallel writes.
-- Resume after restart: `node scripts/selflearn-candidates.mjs run --root <project>`
-  (installed as `systemd/selflearn-candidates.timer` where systemd exists). It
-  resolves the same processing provider as the hooks, so a queued candidate is
-  not stranded when the interactive session is gone.
-- Queue size is capped (200 candidates); the oldest work is surfaced by
-  `doctor`, and the caps table below still governs interactive captures.
+- Resume after restart: SessionStart runs one candidate, or invoke
+  `node scripts/selflearn-candidates.mjs run --root <project>` manually. No
+  scheduler unit is shipped by this pipeline; unattended operation requires an
+  authorized existing scheduler.
+- The pending queue is capped (200 candidates); awaiting verification and
+  approval records are never evicted. Promoted provenance remains retained but
+  does not consume pending capacity. `candidateSummary` reports `queueFull`;
+  a full pending queue refuses new discoveries rather than deleting them.
 
 ### Observability
 
