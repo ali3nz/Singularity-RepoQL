@@ -308,3 +308,10 @@ Operator relaxed loopback security: no token is needed on 127.0.0.1.
 `register_claude_session_watcher.ps1`) starts Office and the unified gateway while a `claude` process is
 running and stops them 60 s after the last one exits. Kanzo, RepoQL host, supervisor and dashboard are left running.
 Not yet verified: the stop path after closing Claude, and reboot behaviour.
+
+## Dashboard check findings (2026-11-10)
+
+- RepoQL panel login: the `Singularity-RepoQL-Host` task must serve the same path as `SINGULARITY_WORKSPACE` (`%LOCALAPPDATA%\Singularity\Workspace`), otherwise `rql dashboard --url` fails and the handshake returns 503. Fixed on this machine only; that task is not defined in this repo, so a rebuilt machine needs `rql serve --path <Workspace>` set by hand.
+- Agent Chat panels show "state directory unavailable" because `%LOCALAPPDATA%\Singularity\AgentChat` does not exist; the relay is not part of the Windows install. This is the accurate state, not a bug to mask.
+- Focused tests (non-elevated): dashboard 257 run, 1 failure + 6 errors, all Windows symlink/ACL privilege artifacts (WinError 1314, 0o666 vs 0o600). Lifecycle contract: 2 failures from `SeSecurityPrivilege` (needs elevation). Not re-run elevated.
+- Still open: Office React #418 + one 502, `singularity-code-reviewer` definition unavailable, Diagnostics CPU collector, Tencent iframe unchecked, watcher stop path and reboot unverified, `OFFICE_TASK_OWNERSHIP_DRIFT`. Release remains BLOCKED.
