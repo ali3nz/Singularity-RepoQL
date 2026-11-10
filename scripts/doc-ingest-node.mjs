@@ -82,6 +82,7 @@ function ctxOf(opts = {}) {
     lockTimeoutMs: opts.lockTimeoutMs ?? LOCK_TIMEOUT_MS,
     verifyTimeoutMs: opts.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS,
     verifyPollMs: opts.verifyPollMs ?? VERIFY_POLL_MS,
+    deadlineMs: opts.deadlineMs ?? null,
   };
 }
 
@@ -203,6 +204,8 @@ function cfgAuth(cfg) {
 }
 
 async function memoryCall(path, payload, ctx, cfg) {
+  const remaining = ctx.deadlineMs === null ? MEMORY_TIMEOUT_MS : Math.min(MEMORY_TIMEOUT_MS, ctx.deadlineMs - Date.now());
+  if (remaining <= 0) throw new Error('documentation pass deadline reached');
   const auth = cfgAuth(cfg);
   const headers = {
     "Content-Type": "application/json",
@@ -217,7 +220,7 @@ async function memoryCall(path, payload, ctx, cfg) {
       redirect: "error",
       headers,
       body: JSON.stringify(payload),
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(MEMORY_TIMEOUT_MS) : undefined,
+      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(Math.max(1, Math.floor(remaining))) : undefined,
     });
   } catch (e) {
     throw new Error(`memory request failed: ${e?.message || e}`);
@@ -320,6 +323,23 @@ export function docRoots(rootArg, env = process.env) {
 }
 
 /** Return { rel, title, root } or throw Blocked. Symlink-traversal safe. */
+export function isHistoricalDocumentation(path) {
+  const value = String(path).replace(/\\/g, '/');
+  return /^(?:work|data|runtime|test-artifacts)\//i.test(value) ||
+    /(?:^|\/)(?:agent-backups|backups?|[^/]+-backup)(?:\/|$)/i.test(value) ||
+    /\.bak(?:[-.]|$)/i.test(value);
+}
+
+export function documentationState(text) {
+  const frontmatter = String(text).match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!frontmatter) return 'active';
+  const states = [...frontmatter[1].matchAll(/^document_state:\s*([^\r\n]*)/gm)];
+  if (!states.length) return 'active';
+  if (states.length !== 1 || !['active', 'archived', 'superseded'].includes(states[0][1].trim()))
+    throw new Blocked('document_state is ambiguous or unsupported');
+  return states[0][1].trim();
+}
+
 export function classifySource(filePath, roots) {
   let real;
   try {
@@ -346,6 +366,7 @@ export function classifySource(filePath, roots) {
   const rel = toPosix(relative(root, real));
   const text = readFileSync(real, "utf8");
   const title = splitLines(text).map((line) => line.trim()).find((line) => line.startsWith("#"))?.replace(/^[# ]+/, "").trim() || rel;
+  if (isHistoricalDocumentation(rel)) throw new Blocked('retained runtime/backup artifact is not canonical guidance');
   return { rel, title, root };
 }
 
@@ -482,12 +503,14 @@ export async function ingestFile(filePath, opts = {}) {
   let title;
   let rootDir;
   let text;
+  let documentState;
   try {
     const classified = classifySource(filePath, docRoots(opts.root, ctx.env));
     rel = classified.rel;
     title = classified.title;
     rootDir = classified.root;
     text = normalizeDocText(readFileSync(realpathSync(filePath), "utf8"));
+    documentState = documentationState(text);
     rejectSensitive(text, rel);
   } catch (e) {
     if (e instanceof Blocked) return { status: "DOC_INGEST_BLOCKED", file: String(filePath), reason: e.message };
@@ -543,6 +566,7 @@ export async function ingestFile(filePath, opts = {}) {
       const scope = scopeOf(ctx.env);
       const header = `${marker}\ntitle: ${title}\nsource: ${rel} (canonical file on disk — this memory record is its indexed copy)\n` +
         `revision: ${rev}\nroot-id: ${rootId}\nchunk: ${i}/${chunks.length}\ncontent-hash: ${chunkHash}\n` +
+        (documentState === 'active' ? '' : `document-state: ${documentState}\n`) +
         `scope: ${scope.team_id}/${scope.user_id}\ningested: ${ts}\n\n`;
       return { taskId, marker, text: header + body, hash: chunkHash };
     });
@@ -555,6 +579,7 @@ export async function ingestFile(filePath, opts = {}) {
     // Parity with the Python engine: a new record always carries `session`
     // (null when absent), and an explicit session wins over a recorded one.
     rec.session = opts.session || rec.session || null;
+    if (documentState !== 'active') rec.document_state = documentState;
     entry.revs[rev] = rec;
 
     let cfg;
@@ -694,6 +719,7 @@ export async function retryDocuments(opts = {}) {
   }
   const keys = Object.keys(ledger.docs || {}).sort();
   for (const key of keys) {
+    if (results.length >= (opts.limit ?? Infinity) || Date.now() >= (opts.deadlineMs ?? Infinity)) break;
     if (!all && key !== wantedKey) continue;
     const entry = ledger.docs[key];
     if (!rootIsCurrentlyAuthorised(entry?.root, roots)) {
@@ -720,10 +746,10 @@ export async function retryDocuments(opts = {}) {
 
 /** The hook entrypoint: retry every PENDING/FAILED document for this workspace. */
 export async function retryPendingIngestion(root, opts = {}) {
-  return retryDocuments({ ...opts, all: true, root });
+  return retryDocuments({ limit: 8, ...opts, all: true, root });
 }
 
-function statusRow(entry, fallbackRel) {
+function statusRow(entry, fallbackRel, verificationRoots = null) {
   const active = entry?.active_rev;
   const rec = active ? entry?.revs?.[active] || {} : {};
   const rel = entry?.rel || fallbackRel;
@@ -738,7 +764,7 @@ function statusRow(entry, fallbackRel) {
       }
     }
   }
-  return {
+  const row = {
     file: rel,
     root: entry?.root_id,
     doc_id: entry?.doc_id,
@@ -749,6 +775,10 @@ function statusRow(entry, fallbackRel) {
     stale_source: stale,
     title: entry?.title,
   };
+  if (verificationRoots) row.verification = rootIsCurrentlyAuthorised(entry?.root, verificationRoots)
+    ? entryEvidence(entry, rel)
+    : {status: 'DOC_INGEST_NOT_VERIFIED', file: rel, reason: 'recorded root is outside the currently authorised documentation roots'};
+  return row;
 }
 
 export function statusReport(opts = {}) {
@@ -756,16 +786,17 @@ export function statusReport(opts = {}) {
   const { filePath = null, all = false, root = undefined } = opts;
   const ledger = loadLedger(env);
   const rootPin = root !== undefined && root !== null ? rootIdOf(root) : null;
+  const verificationRoots = opts.verify === true ? docRoots(root, env) : null;
   const out = [];
   if (filePath && !all) {
     const wanted = locateEntryKey(ledger, filePath, root);
-    if (wanted !== null) out.push(statusRow(ledger.docs[wanted], filePath));
+    if (wanted !== null) out.push(statusRow(ledger.docs[wanted], filePath, verificationRoots));
     return out;
   }
   for (const key of Object.keys(ledger.docs || {}).sort()) {
     const entry = ledger.docs[key];
     if (rootPin !== null && entry?.root_id !== rootPin) continue;
-    out.push(statusRow(entry, entry?.rel || key.split("::").slice(1).join("::")));
+    out.push(statusRow(entry, entry?.rel || key.split("::").slice(1).join("::"), verificationRoots));
   }
   return out;
 }
@@ -776,6 +807,8 @@ export function statusReport(opts = {}) {
  * recorded ledger evidence plus the current source hash.
  */
 export function verifyFile(rel, opts = {}) {
+  if (isHistoricalDocumentation(rel)) return {status: 'DOC_INGEST_NOT_VERIFIED', file: rel,
+    reason: 'retained runtime/backup artifact is not canonical guidance'};
   const env = envForRoot(opts.env, opts.root);
   const root = opts.root;
   const ledger = loadLedger(env);
@@ -881,11 +914,15 @@ export async function searchDocs(query, opts = {}) {
     const [, dRel, dRev] = ref;
     const rootHit = content.match(/^root-id: ([0-9a-f]{8})$/m)?.[1] ?? null;
     const entry = entries.get(`${rootHit ?? ""}\u0000${dRel}`);
+    const historical = isHistoricalDocumentation(dRel) || !entry || entry.active_rev !== dRev ||
+      ['archived', 'superseded'].includes(entry.revs?.[dRev]?.document_state) ||
+      /^document-state: (?:archived|superseded)$/m.test(content);
     // Workspace scope applies to BOTH current and historical retrieval: an
     // explicit --root (or configured allowlist) must not leak another
     // workspace's history.
     if (authorisedRoots.length && (!entry || !rootIsCurrentlyAuthorised(entry.root, authorisedRoots))) continue;
     if (!includeStale) {
+      if (historical) continue;
       if (!entry || !entry.active_rev) continue;
       if (entry.active_rev !== dRev) continue;
       const evidence = entryEvidence(entry, dRel);
@@ -894,7 +931,8 @@ export async function searchDocs(query, opts = {}) {
     const dedupe = `${rootHit ?? ""}\u0000${dRel}\u0000${dRev}`;
     if (seen.has(dedupe)) continue;
     seen.add(dedupe);
-    items.push({ source: dRel, root: rootHit, revision: dRev, content: content.slice(0, 1200) });
+    items.push({ source: dRel, root: rootHit, revision: dRev, content: content.slice(0, 1200),
+      ...(historical ? {historical: true, currentGuidance: false} : {}) });
     if (items.length >= limit) break;
   }
   return items;

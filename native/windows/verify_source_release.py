@@ -92,9 +92,13 @@ def verify():
         errors.append("bundled RepoQL executable requires separate licence/provenance review")
     cargo = (ROOT / "native/desktop-bridge/Cargo.toml").read_text(encoding="utf-8")
     bridge = (ROOT / "native/desktop-bridge/src/main.rs").read_text(encoding="utf-8")
+    # Ghost may exist as a feature but must be compiled out on Windows
+    # (every gate is all(feature = "ghost", not(windows))); a bare ghost gate
+    # or ungated ghost-control entry point would ship it on Windows.
+    ghost_ungated = any('feature = "ghost"' in ln and 'not(windows)' not in ln
+                        for ln in bridge.splitlines())
     if ('default = []' not in cargo or 'office = []' not in cargo
-            or 'ghost = []' in cargo or '#[cfg(feature = "ghost")]' in bridge
-            or 'Some("ghost-control")' in bridge or '#[cfg(feature = "office")]' not in bridge):
+            or ghost_ungated or '#[cfg(feature = "office")]' not in bridge):
         errors.append("Rust Office exclusion is not enforced by feature gating")
     dashboard = (ROOT / "dashboard/server.py").read_text(encoding="utf-8")
     if 'variant_route_allowed(path, profile)' not in dashboard or '"/api/features"' not in dashboard:

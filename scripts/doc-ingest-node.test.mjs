@@ -10,6 +10,7 @@ import {
   classifySource,
   ingestFile,
   loadLedger,
+  ledgerPath,
   rejectSensitive,
   retryPendingIngestion,
   searchDocs,
@@ -135,6 +136,34 @@ test("ingest → INDEXED, ledger evidence → VERIFIED, re-ingest → UNCHANGED 
   } finally {
     box.cleanup();
   }
+});
+
+test("opt-in status verifies current evidence, pending revisions and authorised roots", async () => {
+  const box = sandbox();
+  const gateway = fakeGateway();
+  try {
+    const doc = box.doc('verified-status.md', '# Verified status\n\nCurrent factual fixture.\n');
+    const ingested = await ingestFile(doc, baseOpts(box, gateway));
+    assert.equal(ingested.status, 'DOC_INGEST_INDEXED');
+    const options = {root: box.root, env: box.env, all: true};
+    assert.equal(Object.hasOwn(statusReport(options)[0], 'verification'), false);
+    assert.equal(statusReport({...options, verify: true})[0].verification.status, 'DOC_INGEST_VERIFIED');
+    const ledger = loadLedger(box.env);
+    const entry = Object.values(ledger.docs)[0];
+    const revision = entry.active_rev === 'ffffffff' ? '00000000' : 'ffffffff';
+    entry.revs[revision] = {status: 'DOC_INGEST_PENDING', ingested_at: '2026-10-29T00:00:00Z'};
+    writeFileSync(ledgerPath(box.env), JSON.stringify(ledger));
+    const row = statusReport({...options, verify: true})[0];
+    assert.equal(row.status, 'DOC_INGEST_INDEXED');
+    assert.equal(row.stale_source, false);
+    assert.equal(row.verification.status, 'DOC_INGEST_NOT_VERIFIED');
+    assert.match(row.verification.reason, /newer unresolved/);
+    delete entry.revs[revision];
+    writeFileSync(ledgerPath(box.env), JSON.stringify(ledger));
+    const restricted = statusReport({env: {...box.env, SINGULARITY_DOC_ROOTS: join(box.root, 'other')}, verify: true})[0];
+    assert.equal(restricted.verification.status, 'DOC_INGEST_NOT_VERIFIED');
+    assert.match(restricted.verification.reason, /outside.*authorised/);
+  } finally {box.cleanup();}
 });
 
 test("a changed document becomes a new revision with a supersession tombstone", async () => {

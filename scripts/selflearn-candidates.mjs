@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/selflearn-candidates.mjs — the ONE automatic lesson-candidate
+// scripts/selflearn-candidates.mjs â€” the ONE automatic lesson-candidate
 // pipeline shared by both harnesses (Claude Code hooks and the OpenChamber
 // plugins), invoked from the existing lifecycle passes plus a scheduler-callable
 // CLI.
@@ -19,13 +19,14 @@
 //   DEDUP       the existing RepoQL surface (`rql explore`) logs the search, and
 //               workspace capsules (.repoql/concepts) are compared textually.
 //               DUPLICATE is only assigned when an equivalent capsule is
-//               actually found — not on a vague similarity score.
+//               actually found â€” not on a vague similarity score.
 //   VERIFICATION the candidate records its requirements and whether they are
 //               satisfied. Model confidence is never verification.
 //   PROMOTION   NOT autonomous: the repository's policy has no auto-promoting
 //               path, so an eligible candidate stops at AWAITING_APPROVAL with
-//               the exact gated command. `mark-promoted` records the concept id
-//               ONLY after the authoritative write succeeded.
+//               a structured argv plan. `approve` binds authority to the exact
+//               payload. `promote` uses the existing CLI and verifies readback.
+//               `mark-promoted` independently verifies bookkeeping recovery.
 //
 // Durable state (git-ignored runtime state under data/selflearn/pending/):
 // atomic rename writes, an exclusive claim directory per candidate, stale-claim
@@ -36,17 +37,20 @@
 //   node scripts/selflearn-candidates.mjs run [--root <dir>] [--limit 2] [--json]
 //   node scripts/selflearn-candidates.mjs list [--root <dir>] [--json]
 //   node scripts/selflearn-candidates.mjs show --id <id> [--root <dir>]
-//   node scripts/selflearn-candidates.mjs mark-promoted --id <id> --concept-id <CamelCaseName> [--receipt <path>]
+//   node scripts/selflearn-candidates.mjs mark-promoted --id <id> --concept-id <CamelCaseName>
 //   node scripts/selflearn-candidates.mjs verify --id <id> [--note <text>]   (manual verification receipt)
 //
 // `run` is the single entry point a scheduler may invoke. No scheduler is
 // installed by this module. Lifecycle hooks call the same function
 // in-process, so both paths share one implementation.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, unlinkSync, statSync, lstatSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {approvalPayload, assertApproval, promotionArguments, evidenceSnapshot, readConcept,
+  capsulePath, invokeRql, verifyConcept, verifyAnchors, hasVerifiedPromotion} from "./selflearn-promotion.mjs";
+export {hasVerifiedPromotion} from "./selflearn-promotion.mjs";
 
 export const LESSON_SCHEMA = "selflearn.lesson.v1";
 export const CANDIDATE_SCHEMA = "selflearn.candidate.v1";
@@ -85,7 +89,7 @@ const clip = (s, n) => { const v = String(s ?? ""); return v.length > n ? v.slic
 const sha8 = (s) => createHash("sha256").update(String(s)).digest("hex").slice(0, 8);
 const nowIso = () => new Date().toISOString();
 
-// ── state layout ─────────────────────────────────────────────────────────────
+// â”€â”€ state layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function candidateDir(root) {
   // The historical pending directory IS the candidate store: one framework,
   // one location, no second bookkeeping format to migrate or reconcile.
@@ -106,7 +110,16 @@ function writeAtomic(path, obj) {
 }
 
 export function loadCandidate(id, root) {
-  try { return JSON.parse(readFileSync(candidatePath(id, root), "utf8")); } catch { return null; }
+  try { return effectiveCandidate(JSON.parse(readFileSync(candidatePath(id, root), "utf8")), root); } catch { return null; }
+}
+
+function effectiveCandidate(record, root) {
+  if (record.state === STATES.PROMOTED && !hasVerifiedPromotion(record, root)) {
+    return {...record, state: STATES.NEEDS_VERIFICATION, promotion: {...record.promotion, eligible: false},
+      verification: {...record.verification, state: "pending",
+        pending: [...new Set([...(record.verification?.pending || []), "authoritative-promotion-receipt"])]}};
+  }
+  return record;
 }
 
 export function listCandidates(root) {
@@ -115,34 +128,53 @@ export function listCandidates(root) {
   try { files = readdirSync(dir).filter((f) => /^[A-Za-z0-9_-]+\.json$/.test(f)); } catch { return []; }
   const out = [];
   for (const f of files) {
-    try { out.push(JSON.parse(readFileSync(join(dir, f), "utf8"))); } catch { /* torn write: skip */ }
+    try { out.push(effectiveCandidate(JSON.parse(readFileSync(join(dir, f), "utf8")), root)); } catch { /* torn write: skip */ }
   }
   return out;
 }
 
-// ── exclusive claim (concurrent writers never evaluate the same record) ──────
+// â”€â”€ exclusive claim (concurrent writers never evaluate the same record) â”€â”€â”€â”€â”€â”€
 function lockDir(id, root) { return join(candidateDir(root), ".locks", `${id}.lock`); }
 
 function acquireLock(id, root, { staleMs = CLAIM_STALE_MS } = {}) {
   const dir = lockDir(id, root);
+  const token = randomUUID();
   mkdirSync(dirname(dir), { recursive: true });
-  try {
+  const busy = () => ({ok: false, release() {}});
+  const claim = () => {
     mkdirSync(dir);
-    writeFileSync(join(dir, "owner"), JSON.stringify({ pid: process.pid, at: Date.now() }));
-    return { ok: true, release: () => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* already gone */ } } };
-  } catch (e) {
-    if (e?.code !== "EEXIST") throw e;
-    // Stale lock from a crashed process: reclaim it, never deadlock the queue.
-    let owner = null;
+    writeFileSync(join(dir, "owner"), JSON.stringify({pid: process.pid, at: Date.now(), token}));
+    return {ok: true, release() {
+      try {
+        const owner = JSON.parse(readFileSync(join(dir, "owner"), "utf8"));
+        if (owner.token === token) rmSync(dir, {recursive: true});
+      } catch { /* A replaced or unavailable claim must remain untouched. */ }
+    }};
+  };
+  try { return claim(); }
+  catch (error) { if (error.code !== "EEXIST") throw error; }
+  try {
+    const age = Date.now() - statSync(dir).mtimeMs;
+    if (age < staleMs) return busy();
+    let owner;
     try { owner = JSON.parse(readFileSync(join(dir, "owner"), "utf8")); } catch { owner = null; }
-    if (owner && Number(owner.at) && Date.now() - Number(owner.at) < staleMs) return { ok: false, release: () => {} };
-    try { rmSync(dir, { recursive: true, force: true }); mkdirSync(dir); writeFileSync(join(dir, "owner"), JSON.stringify({ pid: process.pid, at: Date.now() })); }
-    catch { return { ok: false, release: () => {} }; }
-    return { ok: true, release: () => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* gone */ } } };
-  }
+    if (Number.isInteger(owner?.pid)) {
+      try { process.kill(owner.pid, 0); return busy(); }
+      catch (error) { if (error.code !== "ESRCH") return busy(); }
+    }
+    // Rename the stale directory atomically. Never recursively remove a live
+    // lock path where a new claimant could already have acquired ownership.
+    const stale = dir + ".stale-" + token;
+    renameSync(dir, stale);
+    let result;
+    try { result = claim(); }
+    catch { result = busy(); }
+    rmSync(stale, {recursive: true, force: true});
+    return result;
+  } catch { return busy(); }
 }
 
-// ── discovery ────────────────────────────────────────────────────────────────
+// â”€â”€ discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /**
  * Record a durable discovery for a material task. Idempotent per
  * (session, file-set): a repeated pass counts a fresh observation on a still-
@@ -163,7 +195,7 @@ export function discoverCandidate({ session, files = [], root, evidence = {}, re
     try {
       const current = loadCandidate(id, root);
       if (!current) return { created: false, record: null, detail: "candidate disappeared during rediscovery" };
-      if (current.state !== STATES.DISCOVERED) return { created: false, record: current, detail: `candidate already ${current.state} — not re-opened` };
+      if (current.state !== STATES.DISCOVERED) return { created: false, record: current, detail: `candidate already ${current.state} â€” not re-opened` };
       const refreshed = { ...current, seenCount: (current.seenCount || 0) + 1, lastSeenAt: nowIso() };
       writeAtomic(path, refreshed);
       return { created: false, record: refreshed, path, detail: "discovery observed again" };
@@ -223,30 +255,48 @@ export function sanitizeEvidence(evidence = {}) {
   };
 }
 
-// ── evidence collection from the real workspace ──────────────────────────────
-export function collectWorkspaceEvidence(root, files = [], { execImpl = null } = {}) {
+// â”€â”€ evidence collection from the real workspace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export function collectWorkspaceEvidence(root, files = [], { execImpl = null, deadlineMs = Date.now() + 15_000 } = {}) {
   const run = (args) => {
-    if (execImpl) return execImpl("git", args, root);
-    try { return { status: 0, stdout: execFileSync("git", args, { windowsHide: true, cwd: root, encoding: "utf8", timeout: 15_000, maxBuffer: 8 * 1024 * 1024 }) }; }
-    catch (e) { return { status: e?.status ?? 1, stdout: String(e?.stdout || "") }; }
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return {status: 124, stdout: ''};
+    try {
+      if (execImpl) return execImpl("git", args, root);
+      return {status: 0, stdout: execFileSync("git", args, {windowsHide: true, cwd: root, encoding: "utf8",
+        timeout: Math.min(15_000, remaining), maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore']})};
+    } catch (error) {
+      const status = Number.isInteger(error?.status) && !error.signal && !error.code ? error.status : 124;
+      return {status, stdout: String(error?.stdout || '')};
+    }
   };
   const inside = run(["rev-parse", "--is-inside-work-tree"]);
   const observable = inside.status === 0 && /true/.test(inside.stdout);
   if (!observable) return { files: files.slice(0, 40), diffstat: "", diff: "", observable: false };
   const paths = [...new Set(files)].slice(0, 20);
-  const stat = run(["diff", "--stat", "--", ...paths]);
-  const diff = run(["diff", "--unified=1", "--", ...paths]);
-  const untracked = run(["ls-files", "--others", "--exclude-standard", "--", ...paths]);
+  if (!paths.length) return {files: [], diffstat: '', diff: '', untracked: [],
+    observable: true, diffTruncated: false, untrackedOmitted: 0};
+  const stat = run(["diff", "--no-ext-diff", "--no-textconv", "--stat", "--", ...paths]);
+  const diff = run(["diff", "--no-ext-diff", "--no-textconv", "--unified=1", "--", ...paths]);
+  const stagedStat = run(["diff", "--cached", "--no-ext-diff", "--no-textconv", "--stat", "--", ...paths]);
+  const stagedDiff = run(["diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=1", "--", ...paths]);
+  const untracked = run(["ls-files", "-z", "--others", "--exclude-standard", "--", ...paths]);
+  const untrackedPaths = (untracked.stdout || '').split('\0').filter(Boolean);
+  const newDiffs = untrackedPaths.slice(0, 4).map(path => run(['diff', '--no-index', '--no-ext-diff',
+    '--no-textconv', '--unified=1', '--', process.platform === 'win32' ? 'NUL' : '/dev/null', path]));
+  const diffText = [diff.stdout, stagedDiff.stdout, ...newDiffs.map(result => result.stdout)].filter(Boolean).join('\n');
   return {
     files: paths,
-    diffstat: clip(stat.stdout || "", 800),
-    diff: clip(diff.stdout || "", MAX_DIFF_CHARS),
-    untracked: (untracked.stdout || "").split("\n").filter(Boolean).slice(0, 20),
-    observable: true,
+    diffstat: clip([stat.stdout, stagedStat.stdout].filter(Boolean).join('\n'), 800),
+    diff: clip(diffText, MAX_DIFF_CHARS),
+    untracked: untrackedPaths.slice(0, 20),
+    observable: [stat, diff, stagedStat, stagedDiff, untracked].every(result => result.status === 0)
+      && newDiffs.every(result => result.status === 0 || result.status === 1),
+    diffTruncated: diffText.length > MAX_DIFF_CHARS,
+    untrackedOmitted: Math.max(0, untrackedPaths.length - newDiffs.length),
   };
 }
 
-// ── formulation provider ─────────────────────────────────────────────────────
+// â”€â”€ formulation provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /**
  * The installation's configured processing provider, in policy order:
  *   1. explicit SINGULARITY_SELFLEARN_LLM_{URL,MODEL,KEY}
@@ -263,7 +313,53 @@ function readProviderFile(p) {
   return null;
 }
 
-export function resolveFormulationProvider({ root, env = process.env, installRoot = null } = {}) {
+function plainFile(p) {
+  try { const st = lstatSync(p); return st.isFile() && !st.isSymbolicLink(); } catch { return false; }
+}
+function noReparseAncestors(p, stop) {
+  let cur = dirname(resolve(p)); const end = resolve(stop);
+  if (!resolve(p).toLowerCase().startsWith(end.toLowerCase() + sep)) return false;
+  while (cur.length >= end.length && cur.toLowerCase().startsWith(end.toLowerCase())) {
+    try { if (lstatSync(cur).isSymbolicLink()) return false; } catch { return false; }
+    const up = dirname(cur); if (up === cur) break; cur = up;
+  }
+  return true;
+}
+/**
+ * Windows-native MemoryCore lane (opt-in). Reads the supervisor stack file and
+ * returns a loopback provider only when every element validates; any defect
+ * means unavailable. The key is held non-enumerably so it never serialises.
+ */
+export function resolveNativeMemoryCoreProvider({ env = process.env, platform = process.platform } = {}) {
+  if (platform !== "win32") return null;
+  const base = env.LOCALAPPDATA;
+  if (!base) return null;
+  const nativeRoot = join(resolve(base), "Singularity", "WindowsNative");
+  const stackPath = join(nativeRoot, "memory", "stack.json");
+  try {
+    if (!plainFile(stackPath) || !noReparseAncestors(stackPath, base)) return null;
+    const stack = JSON.parse(readFileSync(stackPath, "utf8"));
+    if (!stack || stack.schema !== "native-memory-supervisor/v1") return null;
+    const core = stack.components?.core;
+    const port = stack.components?.gateway?.port;
+    if (!core || !Number.isInteger(port)) return null;
+    const rawUrl = String(core.env?.TDAI_LLM_BASE_URL || "");
+    let u; try { u = new URL(rawUrl); } catch { return null; }
+    if (u.protocol !== "http:" || u.hostname !== "127.0.0.1" || Number(u.port) !== port || u.pathname !== "/v1"
+        || u.username || u.password || u.search || u.hash || /[?#@]/.test(rawUrl)) return null;
+    const model = String(core.env?.TDAI_LLM_MODEL || "").trim();
+    if (!model) return null;
+    const keyFile = core.llmKeyFile;
+    if (typeof keyFile !== "string" || !keyFile || !plainFile(keyFile) || !noReparseAncestors(keyFile, base)) return null;
+    const key = readFileSync(keyFile, "utf8").trim();
+    if (!key) return null;
+    const provider = { source: "native-memorycore", url: "http://127.0.0.1:" + port + "/v1", model, native: true };
+    Object.defineProperty(provider, "key", { value: key, enumerable: false });
+    return provider;
+  } catch { return null; }
+}
+
+export function resolveFormulationProvider({ root, env = process.env, installRoot = null, allowNativeMemoryCore = false } = {}) {
   if (env.SINGULARITY_SELFLEARN_LLM_URL) {
     return {
       source: "explicit-env",
@@ -314,6 +410,7 @@ export function resolveFormulationProvider({ root, env = process.env, installRoo
     const space = String(env.SINGULARITY_MODEL_SPACE_ID || "default").replace(/^\/+|\/+$/g, "");
     return { source: "canonical-lane", url: `http://${host}:${port}/${lane}/${space}/v1`, model: "", key: laneKey, lane: true };
   }
+  if (allowNativeMemoryCore) return resolveNativeMemoryCoreProvider({ env });
   return null;
 }
 
@@ -387,7 +484,7 @@ export function parseModelJson(text) {
   try { return JSON.parse(candidate.slice(start, end + 1)); } catch { return null; }
 }
 
-async function defaultModelCall({ provider, prompt, fetchImpl = globalThis.fetch, timeoutMs = MODEL_TIMEOUT_MS }) {
+export async function defaultModelCall({ provider, prompt, fetchImpl = globalThis.fetch, timeoutMs = MODEL_TIMEOUT_MS }) {
   const body = JSON.stringify({
     model: provider.model || undefined,
     messages: [{ role: "user", content: prompt }],
@@ -411,7 +508,7 @@ async function defaultModelCall({ provider, prompt, fetchImpl = globalThis.fetch
   return String(j?.choices?.[0]?.message?.content || "");
 }
 
-// ── RepoQL dedup ─────────────────────────────────────────────────────────────
+// â”€â”€ RepoQL dedup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function normalizeText(s) {
   return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -454,13 +551,14 @@ export function readWorkspaceCapsules(root, { max = 500 } = {}) {
  * workspace capsules. DUPLICATE requires an actually equivalent capsule
  * (same normalized name, or >=0.9 token overlap on the invariant/body).
  */
-export function dedupLesson(lesson, { root, env = process.env, runRql = null } = {}) {
+export function dedupLesson(lesson, { root, env = process.env, runRql = null, deadlineMs = Infinity } = {}) {
   // `checked` means the RepoQL search actually ran (the dedup requirement);
   // `duplicateOf` is set ONLY on an equivalent local capsule.
   const findings = { surfaces: ["repoql-explore", "workspace-capsules"], rql: "not-run", checked: false, hits: [], duplicateOf: null, reason: null, capsulesConsidered: 0 };
+  if (Date.now() >= deadlineMs) return {...findings, reason: 'pass deadline reached; dedup remains pending'};
   const probe = runRql || ((query) => {
     try {
-      const out = execFileSync("rql", ["explore", clip(query, 120), "--uri-glob", "**", "--token-budget", "600"], { windowsHide: true, cwd: resolve(root), encoding: "utf8", timeout: 60_000, maxBuffer: 4 * 1024 * 1024 });
+      const out = execFileSync("rql", ["explore", clip(query, 120), "--uri-glob", "**", "--token-budget", "600"], { windowsHide: true, cwd: resolve(root), encoding: "utf8", timeout: Math.max(1, Math.min(60_000, deadlineMs - Date.now())), maxBuffer: 4 * 1024 * 1024 });
       return { status: 0, stdout: out };
     } catch (e) {
       return { status: e?.status ?? 1, stdout: String(e?.stdout || ""), stderr: String(e?.stderr || e?.message || "") };
@@ -493,7 +591,7 @@ export function dedupLesson(lesson, { root, env = process.env, runRql = null } =
   return findings;
 }
 
-// ── the bounded evaluator ────────────────────────────────────────────────────
+// â”€â”€ the bounded evaluator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function retryDelayMs(retries) {
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, retries - 1));
 }
@@ -527,7 +625,7 @@ function eligibleForWork(rec, now = Date.now()) {
  */
 export async function evaluateCandidates({
   root, env = process.env, limit = 2, modelCall = null, runRql = null, fetchImpl = globalThis.fetch,
-  now = () => Date.now(), provider = null, installRoot = null,
+  now = () => Date.now(), provider = null, installRoot = null, deadlineMs = Infinity,
 } = {}) {
   const dir = candidateDir(root);
   mkdirSync(dir, { recursive: true });
@@ -539,6 +637,7 @@ export async function evaluateCandidates({
   });
   const outcomes = [];
   for (const rec of queue.slice(0, Math.max(0, limit))) {
+    if (deadlineMs - Date.now() < 5000) break;
     const lock = acquireLock(rec.id, root);
     if (!lock.ok) { outcomes.push({ id: rec.id, state: "LOCKED", detail: "another worker is evaluating this candidate" }); continue; }
     try {
@@ -548,7 +647,7 @@ export async function evaluateCandidates({
         // Retry only the unavailable dependency, retaining the original lesson,
         // manual verification, and model retry count. Never formulate again.
         let dedup;
-        try { dedup = dedupLesson(fresh.lesson, { root, env, runRql }); }
+        try { dedup = dedupLesson(fresh.lesson, { root, env, runRql, deadlineMs }); }
         catch (error) { dedup = { ...fresh.dedup, checked: false, rql: `unavailable: ${clip(error?.message || error, 120)}` }; }
         if (dedup.duplicateOf) {
           writeAtomic(candidatePath(fresh.id, root), { ...fresh, state: STATES.DUPLICATE,
@@ -590,7 +689,8 @@ export async function evaluateCandidates({
       const prompt = clip(buildPrompt({ files: allowedRefs, evidence, today: new Date(now()).toISOString().slice(0, 10) }), MAX_PROMPT_CHARS);
       let raw = "";
       try {
-        raw = await (modelCall || defaultModelCall)({ provider: providerResolved, prompt, fetchImpl });
+        raw = await (modelCall || defaultModelCall)({ provider: providerResolved, prompt, fetchImpl,
+          timeoutMs: Math.max(1, Math.min(MODEL_TIMEOUT_MS, deadlineMs - Date.now())) });
       } catch (e) {
         const retries = (fresh.retries || 0) + 1;
         const exhausted = retries >= MAX_RETRIES;
@@ -643,7 +743,7 @@ export async function evaluateCandidates({
         verification: { state: "pending", requirements, satisfied: ["evidence-refs-resolve"], pending },
         promotion: { ...fresh.promotion, eligible: false, command: null } });
       let dedup;
-      try { dedup = dedupLesson(lesson, { root, env, runRql }); }
+      try { dedup = dedupLesson(lesson, { root, env, runRql, deadlineMs }); }
       catch (error) { dedup = { checked: false, rql: `unavailable: ${clip(error?.message || error, 120)}` }; }
       if (dedup.duplicateOf) {
         writeAtomic(candidatePath(fresh.id, root), {
@@ -694,15 +794,6 @@ function STATE_FAILED_OR_DEFERRED(exhausted) {
   return exhausted ? STATES.FAILED : STATES.DEFERRED;
 }
 
-function shellQuote(arg) {
-  const s = String(arg);
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(s) && s.length <= 200) return s;
-  // Single-quote everything else: inside single quotes $, `, ! and " are
-  // literal, so model-derived text can never execute when the operator pastes
-  // the printed command. (Double quotes would still allow $(...) execution.)
-  return "'" + s.replace(/'/g, "'\\''") + "'";
-}
-
 export const CAPSULE_CATEGORIES = Object.freeze(["principle", "wisdom", "rule", "shape", "knowledge"]);
 
 function splitList(v, sep) {
@@ -726,7 +817,7 @@ export function validatePromotionMetadata(meta = {}, lesson = null) {
     if (!relevance.length || relevance.length > 8) errors.push("relevance is required (1..8 semicolon-delimited URI globs)");
     for (const g of relevance) {
       if (g.length > 200 || !/^[A-Za-z0-9_./*?+~:-]+$/.test(g)) { errors.push(`relevance entry "${clip(g, 60)}" uses unsafe characters`); break; }
-      if (g === "**" || g === "**/**") { errors.push("bare '**' is not an applicability scope; name the subtree the concept governs"); break; }
+      if (!g.startsWith("**/") || !/[A-Za-z0-9_]/.test(g.slice(3)) || g.split("/").includes("..")) { errors.push("bare '**' is not an applicability scope; name the subtree the concept governs"); break; }
       if (!g.includes("/") && !g.includes(".") && !g.includes("*")) { errors.push(`relevance entry "${clip(g, 60)}" must name a path, glob or extension`); break; }
     }
   }
@@ -745,29 +836,17 @@ export function validatePromotionMetadata(meta = {}, lesson = null) {
   }
   for (const v of verification) {
     if (v.length > 300 || /[\s"'`$!&|()<>\\]/.test(v)) { errors.push(`verification entry "${clip(v, 60)}" uses unsafe characters`); break; }
-    if (!v.includes("#") && !/^https?:\/\//.test(v) && !v.includes("/") && !v.includes(".")) { errors.push(`verification entry "${clip(v, 60)}" must anchor proof (file path, #symbol/#line, or URL)`); break; }
+    if (!/^file:\/\/\/[^#]+#(?:line=[1-9][0-9]*(?:,[1-9][0-9]*)?|symbol=[A-Za-z_$][A-Za-z0-9_$]*)$/.test(v)) { errors.push(`verification entry "${clip(v, 60)}" must anchor proof (file path, #symbol/#line, or URL)`); break; }
   }
   if (errors.length) return { ok: false, error: errors[0], errors };
-  return { ok: true, metadata: { conceptName: name, capsuleCategory, tags, relevance: relevance.join(";"), verification: verification.join(";"), ttlDays: ttlDays || 0, why: clip(String(meta.why || ""), 800), example: clip(String(meta.example || ""), 800) } };
+  return { ok: true, metadata: { conceptName: name, capsuleCategory, tags, relevance: relevance.join(";"), verification: verification.join(";"), ttlDays: ttlDays || 0, why: String(meta.why || "").trim(), example: String(meta.example || "").trim() } };
 }
 
 export function promotionCommand(lesson, metadata = null) {
-  // The lesson schema does not establish applicability scope, anchored proof,
-  // or a knowledge TTL. Never print a shell command that invents them or
-  // interpolates untrusted model output. Promotion stays with the gated writer:
-  // a command exists ONLY after the operator records validated metadata.
   if (!metadata) return null;
-  const v = validatePromotionMetadata(metadata, lesson);
-  if (!v.ok) return null;
-  const m = v.metadata;
-  const invariant = clip(String(lesson?.text || lesson?.lesson || ""), 180) || clip(String(lesson?.title || ""), 80);
-  if (!invariant) return null;
-  const argv = ["rql", "concept", "add", m.conceptName, m.capsuleCategory, invariant, "--tags", m.tags.join(",")];
-  if (m.capsuleCategory !== "principle") argv.push("--relevance", m.relevance);
-  if (m.verification) { argv.push("--verification", m.verification, "--ttl-days", String(m.ttlDays)); }
-  argv.push("--why", clip(m.why || String(lesson?.text || ""), 400));
-  if (m.example) argv.push("--example", m.example);
-  return argv.map(shellQuote).join(" ");
+  const validated = validatePromotionMetadata(metadata, lesson);
+  if (!validated.ok) return null;
+  try { return promotionArguments(lesson, validated.metadata); } catch { return null; }
 }
 
 /** Operator-gated step: record validated promotion metadata for one candidate. */
@@ -782,6 +861,8 @@ export function recordPromotionMetadata({ id, root, metadata = {}, now = nowIso(
     if (!rec.lesson) return { ok: false, error: "candidate has no formulated lesson" };
     const v = validatePromotionMetadata(metadata, rec.lesson);
     if (!v.ok) return { ok: false, error: v.error };
+    try { evidenceSnapshot({...rec, promotion: {...rec.promotion, metadata: v.metadata}}, root); }
+    catch (error) { return {ok: false, error: error.message}; }
     const command = promotionCommand(rec.lesson, v.metadata);
     if (!command) return { ok: false, error: "promotion metadata did not yield a safe command" };
     const verification = { ...(rec.verification || { requirements: [], satisfied: [] }) };
@@ -795,32 +876,82 @@ export function recordPromotionMetadata({ id, root, metadata = {}, now = nowIso(
       updatedAt: now,
       verification,
       state: verification.pending.length ? STATES.NEEDS_VERIFICATION : STATES.AWAITING_APPROVAL,
-      promotion: { ...(rec.promotion || {}), eligible: !verification.pending.length, approvalRequired: true, command, metadata: v.metadata },
+      promotion: { ...(rec.promotion || {}), eligible: !verification.pending.length, approvalRequired: true, command, metadata: v.metadata, approval: null },
     };
     writeAtomic(candidatePath(rec.id, root), next);
     return { ok: true, record: next };
   } finally { lock.release(); }
 }
 
-// ── gated promotion bookkeeping (called AFTER the authoritative write) ───────
-export function markPromoted({ id, conceptId, root, receipt = null, approvedBy = "operator", now = nowIso() } = {}) {    const rec = loadCandidate(id, root);
-    if (!rec) return { ok: false, error: `no candidate ${id}` };
-    if (rec.state === STATES.PROMOTED) return { ok: false, error: `already promoted (${rec.promotion?.reference || "unknown"})` };
-  if (![STATES.AWAITING_APPROVAL, STATES.NEEDS_VERIFICATION].includes(rec.state)) return { ok: false, error: `state ${rec.state} is not promotable` };
-  if (!/^[A-Za-z][A-Za-z0-9]{1,80}$/.test(String(conceptId || ""))) return { ok: false, error: "concept id must be a CamelCase capsule name" };
-  if (!rec.promotion?.metadata) return { ok: false, error: "promotion metadata has not been recorded by the operator" };
-  if (String(conceptId) !== String(rec.promotion.metadata.conceptName)) return { ok: false, error: `concept id must match the recorded promotion metadata (${rec.promotion.metadata.conceptName})` };
-  if (rec.state === STATES.NEEDS_VERIFICATION || rec.promotion?.eligible !== true || !Array.isArray(rec.verification?.pending) || rec.verification.pending.length !== 0)
-    return { ok: false, error: `verification is still pending: ${(rec.verification?.pending || []).join(", ")}` };
-  const next = {
-    ...rec,
-    state: STATES.PROMOTED,
-    updatedAt: now,
-    resolvedAt: now,
-    promotion: { ...rec.promotion, eligible: true, approvedBy: clip(approvedBy, 80), reference: conceptId, promotedAt: now, receipt: receipt ? clip(receipt, 400) : null },
-  };
-  writeAtomic(candidatePath(rec.id, root), next);
-  return { ok: true, record: next };
+/** An explicit authority records approval of the exact currently verified payload. */
+export function approvePromotion({id, root, expectedDigest, authority, expiresAt, now = nowIso()} = {}) {
+  if (!/^[0-9a-f]{8}$/.test(String(id || ""))) return {ok: false, error: "invalid candidate id"};
+  const lock = acquireLock(id, root);
+  if (!lock.ok) return {ok: false, error: "candidate is being processed"};
+  try {
+    const record = loadCandidate(id, root);
+    if (record?.state !== STATES.AWAITING_APPROVAL || record.verification?.pending?.length !== 0)
+      throw new Error("verified candidate awaiting approval required");
+    const {digest} = approvalPayload(record, root);
+    if (digest !== expectedDigest || !/^[A-Za-z0-9][A-Za-z0-9_.@-]{1,79}$/.test(String(authority || "")))
+      throw new Error("explicit named authority and exact current approval digest required");
+    const approval = {authority, digest, grantedAt: now, expiresAt};
+    const next = {...record, promotion: {...record.promotion, approval}};
+    assertApproval(next, root, Date.parse(now));
+    writeAtomic(candidatePath(id, root), next);
+    return {ok: true, record: next};
+  } catch (error) { return {ok: false, error: error.message}; }
+  finally { lock.release(); }
+}
+
+function completePromotion({id, conceptId, root, write = false, now = nowIso()}) {
+  if (!/^[0-9a-f]{8}$/.test(String(id || ""))) return {ok: false, error: "invalid candidate id"};
+  const lock = acquireLock(id, root);
+  if (!lock.ok) return {ok: false, error: "candidate is being processed"};
+  try {
+    const record = loadCandidate(id, root);
+    if (!record) throw new Error("candidate missing");
+    if (record.state === STATES.PROMOTED) return {ok: true, duplicate: true, record};
+    if (record.state !== STATES.AWAITING_APPROVAL || record.promotion?.eligible !== true
+        || !Array.isArray(record.verification?.pending) || record.verification.pending.length)
+      throw new Error("verification is still pending");
+    const validated = validatePromotionMetadata(record.promotion.metadata, record.lesson);
+    if (!validated.ok) throw new Error(validated.error);
+    if (conceptId && conceptId !== validated.metadata.conceptName) throw new Error("concept id must match recorded promotion metadata");
+    const approved = assertApproval(record, root, Date.parse(now));
+    verifyAnchors(record, root);
+    if (write) {
+      const before = readConcept(validated.metadata, root);
+      if (before.state === 'ERROR') throw new Error(before.reason);
+      if (before.state === 'ABSENT' && !existsSync(capsulePath(validated.metadata, root)))
+        invokeRql(promotionArguments(record.lesson, validated.metadata).args, root);
+      // An indexed mismatch or a written-but-not-yet-indexed capsule is never
+      // overwritten. Bounded readback below either verifies it or defers it.
+    }
+    let receipt;
+    let failure;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { receipt = verifyConcept(record, root, Date.parse(now)); break; }
+      catch (error) { failure = error; }
+      if (attempt < 2) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250 * (attempt + 1));
+    }
+    if (!receipt) throw failure;
+    if (assertApproval(record, root).digest !== approved.digest) throw new Error("approval changed during promotion");
+    const next = {...record, state: STATES.PROMOTED, updatedAt: now, resolvedAt: now,
+      promotion: {...record.promotion, reference: validated.metadata.conceptName, promotedAt: now,
+        receipt: {...receipt, payloadDigest: approved.digest, authority: record.promotion.approval.authority}}};
+    writeAtomic(candidatePath(id, root), next);
+    return {ok: true, record: next};
+  } catch (error) { return {ok: false, error: error.message}; }
+  finally { lock.release(); }
+}
+
+/** Bookkeeping always independently reads the real concept. Caller receipts are ignored. */
+export function markPromoted({id, conceptId, root, now} = {}) {
+  return completePromotion({id, conceptId, root, now});
+}
+export function promoteCandidate({id, root, now} = {}) {
+  return completePromotion({id, root, now, write: true});
 }
 
 /** Record a manual verification receipt (gated: only the operator path calls it). */
@@ -851,7 +982,7 @@ export function recordVerification({ id, note = "", root, now = nowIso() } = {})
   } finally { lock.release(); }
 }
 
-// ── summary for doctor ───────────────────────────────────────────────────────
+// â”€â”€ summary for doctor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function candidateSummary(root) {
   const all = listCandidates(root);
   const byState = {};
@@ -862,6 +993,7 @@ export function candidateSummary(root) {
   const promoted = all.filter((r) => r.state === STATES.PROMOTED).sort((a, b) => String(b.promotion?.promotedAt || "").localeCompare(String(a.promotion?.promotedAt || "")))[0] || null;
   return {
     total: all.length,
+    verifiedPromotions: all.filter(record => record.state === STATES.PROMOTED).length,
     queueFull: all.filter((r) => r.state !== STATES.PROMOTED).length >= MAX_QUEUE,
     byState,
     pending: pending.length,
@@ -873,7 +1005,7 @@ export function candidateSummary(root) {
   };
 }
 
-// ── CLI ──────────────────────────────────────────────────────────────────────
+// â”€â”€ CLI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // The scheduler path (a configured scheduler, a cron, or the
 // documented manual `run`) must resolve the SAME processing provider the
 // lifecycle hooks use. The hooks pass the product checkout as installRoot; a
@@ -905,11 +1037,23 @@ async function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify(rec, null, 2));
     return 0;
   }
+  if (sub === "approval-digest") {
+    try { console.log(JSON.stringify(approvalPayload(loadCandidate(flag(argv, "--id"), root), root), null, 2)); return 0; }
+    catch (error) { console.error(error.message); return 1; }
+  }
+  if (sub === "approve" || sub === "promote") {
+    const id = flag(argv, "--id");
+    const result = sub === "approve" ? approvePromotion({id, root, expectedDigest: flag(argv, "--digest"),
+      authority: flag(argv, "--authority"), expiresAt: flag(argv, "--expires-at")}) : promoteCandidate({id, root});
+    console.log(JSON.stringify(result, null, 2));
+    return result.ok ? 0 : 1;
+  }
   if (sub === "mark-promoted") {
     const id = flag(argv, "--id");
     const conceptId = flag(argv, "--concept-id");
     if (!id || !conceptId) { console.error("mark-promoted requires --id <candidate id> --concept-id <CapsuleName>"); return 2; }
-    const res = markPromoted({ id, conceptId, root, receipt: flag(argv, "--receipt", null) });
+    if (argv.includes("--receipt") || argv.includes("--approved-by")) { console.error("caller promotion receipts are refused"); return 2; }
+    const res = markPromoted({ id, conceptId, root });
     if (!res.ok) { console.error(`REFUSED: ${res.error}`); return 1; }
     console.log(JSON.stringify({ ok: true, id, conceptId, state: res.record.state }, null, 2));
     return 0;

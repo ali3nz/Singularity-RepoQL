@@ -29,6 +29,7 @@ export const HOOK_EVENTS = ["SubagentStart", "SubagentStop"];
 // and Stop (closeout check) — an extension of the SAME integration, never a
 // second installation.
 export const DOC_HOOK_SCRIPT = "doc-hook.mjs";
+export const DOC_HOOK_TIMEOUT_SECONDS = 180;
 export const DOC_HOOK_KINDS = ["session-start", "stop"];
 export const DOC_HOOK_EVENTS = ["SessionStart", "Stop"];
 // The parent conversation is captured by the SAME memory hook on Stop and
@@ -174,7 +175,7 @@ function sameArgs(a, b) {
 
 /** Structural equality of two command handlers (args absent !== args []). */
 export function isSameHookHandler(a, b) {
-  return a?.type === "command" && b?.type === "command" && a.command === b.command && sameArgs(a.args, b.args);
+  return a?.type === "command" && b?.type === "command" && a.command === b.command && sameArgs(a.args, b.args) && a.timeout === b.timeout;
 }
 
 /**
@@ -187,7 +188,9 @@ export function isSameHookHandler(a, b) {
 export function handlerSpec(scriptPath, kind, { platform = process.platform, nodePath = process.execPath } = {}) {
   if (String(platform) === "win32") {
     const exe = String(nodePath || "").trim() || "node.exe";
-    return { type: "command", command: exe, args: [String(scriptPath), kind] };
+    const documentation = basenameAny(scriptPath).toLowerCase() === DOC_HOOK_SCRIPT;
+    return { type: "command", command: exe, args: [String(scriptPath), kind],
+      ...(documentation ? {timeout: DOC_HOOK_TIMEOUT_SECONDS} : {}) };
   }
   return { type: "command", command: `node ${scriptPath} ${kind}` };
 }

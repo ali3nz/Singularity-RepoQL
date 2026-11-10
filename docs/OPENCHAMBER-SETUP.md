@@ -36,7 +36,14 @@ OpenCode configuration directory:
 | `openchamber/plugins/product-office/` | `plugins/product-office/` | the memory-capture plugin |
 | `openchamber/plugins/runbook-nudge/`  | `plugins/runbook-nudge/`  | the runbook/concept reminder plugin |
 | `scripts/doc-policy.mjs` | `plugins/singularity-runtime/scripts/doc-policy.mjs` | the shared documentation policy the plugins import at runtime — a byte-identical first-class dependency, so the deterministic import resolves in a foreign target |
+| `scripts/selflearn-candidates.mjs` | `plugins/singularity-runtime/scripts/selflearn-candidates.mjs` | shared lesson discovery and formulation |
+| `scripts/selflearn-promotion.mjs` | `plugins/singularity-runtime/scripts/selflearn-promotion.mjs` | native RepoQL promotion and verified retrieval |
 | `scripts/doc-ingest-node.mjs` | `plugins/singularity-runtime/scripts/doc-ingest-node.mjs` | the Node ingestion engine the shared policy imports (required; the native Windows path) |
+| `scripts/doc-program.mjs` | `plugins/singularity-runtime/scripts/doc-program.mjs` | resumable documentation assessment, drafting, review and verification |
+| `scripts/doc-repoql.mjs` | `plugins/singularity-runtime/scripts/doc-repoql.mjs` | canonical document indexing and retrieval checks |
+| `native/windows/doc_atomic_replace.ps1` | `plugins/singularity-runtime/native/windows/doc_atomic_replace.ps1` | native atomic document replacement helper |
+| `native/windows/openmausbot/maintenance_review.mjs` | `plugins/singularity-runtime/native/windows/openmausbot/maintenance_review.mjs` | existing independent reviewer invocation and receipt validation |
+| `adapters/claude-code/agents/singularity-code-reviewer.md` | `plugins/singularity-runtime/adapters/claude-code/agents/singularity-code-reviewer.md` | canonical reviewer profile read by the shared runtime |
 | `scripts/memory-doc-ingest.py` (+ `scripts/memory_client.py`) | `plugins/singularity-runtime/scripts/` | the legacy Python compatibility helper and its client, retained for operators who run it deliberately |
 | `openchamber/package.json` | `package.json` | declares the config dir as an ESM package |
 

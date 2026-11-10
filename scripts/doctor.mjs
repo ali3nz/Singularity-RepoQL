@@ -10,7 +10,7 @@
 //   - main-session capture                     → the installer record + hook wiring on disk
 //   - last verified recall                     → scripts/acceptance-ordinary-session.mjs evidence
 //   - extraction state + provider ladder       → the failover router's /health
-//   - documentation ingestion backlog          → scripts/memory-doc-ingest.py status
+//   - documentation ingestion backlog          → scripts/doc-ingest-node.mjs status
 //   - Ghost / Claude Office                    → only when the selected option ships them
 //
 // Output: concise human text, optional --json, correct exit code:
@@ -33,6 +33,7 @@ import {
 import { callMemoryCore, loadGhostMemoryConfig } from "./memory-config-loader.mjs";
 import { isAdministrativeKey, readAdministrativeKey } from "./runtime-proofs.mjs";
 import { candidateSummary } from "./selflearn-candidates.mjs";
+import { statusReport } from "./doc-ingest-node.mjs";
 import { auditComponentSet, CREDENTIAL_COMPONENTS, VARIANT_COMPONENTS } from "./bundle-classification.mjs";
 import { MANAGED_BEGIN, MANAGED_END, parseJsonc } from "./attach-openchamber.mjs";
 import { readRqlVersion } from "../native/windows/configure_project_mcp.mjs";
@@ -284,26 +285,26 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
 
   // ── documentation ingestion backlog (the shipped ledger status) ───────────
   {
-    const script = join(ROOT, "scripts", "memory-doc-ingest.py");
-    if (!existsSync(script)) {
-      out.push(section("doc-ingestion", "DEGRADED", "the shipped ingestion helper is missing"));
-    } else {
-      const r = spawnSync("python3", [script, "status"], { windowsHide: true, encoding: "utf8", timeout: 30_000, cwd: env.SINGULARITY_REPO_ROOT || ROOT });
-      let rows = null;
-      try { rows = JSON.parse(r.stdout || "null"); } catch { /* not json */ }
-      if (!Array.isArray(rows)) {
-        out.push(section("doc-ingestion", "NOT_CONFIGURED", `no readable ledger status (rc=${r.status}); nothing is claimed`));
+    try {
+      const nativeEnv = {...process.env, ...env,
+        SINGULARITY_DOC_DATA: env.SINGULARITY_DOC_DATA || join(env.SINGULARITY_REPO_ROOT || ROOT, "data")};
+      const rows = statusReport({env: nativeEnv, verify: true});
+      if (!rows.length) {
+        out.push(section("doc-ingestion", "NOT_CONFIGURED", "no documentation ledger entries"));
       } else {
         const counts = { DOC_INGEST_INDEXED: 0, DOC_INGEST_PENDING: 0, DOC_INGEST_FAILED: 0 };
         for (const row of rows) counts[row.status] = (counts[row.status] || 0) + 1;
         const stale = rows.filter((x) => x.stale_source === true).length;
+        const unverified = rows.filter((x) => x.verification?.status !== "DOC_INGEST_VERIFIED").length;
         const st = (counts.DOC_INGEST_FAILED > 0 && "DEGRADED")
-          || (counts.DOC_INGEST_PENDING > 0 && "INCOMPLETE")
+          || ((counts.DOC_INGEST_PENDING > 0 || stale > 0 || unverified > 0) && "INCOMPLETE")
           || "VERIFIED";
         out.push(section("doc-ingestion", st || "VERIFIED",
-          `indexed ${counts.DOC_INGEST_INDEXED || 0}, pending ${counts.DOC_INGEST_PENDING || 0}, failed ${counts.DOC_INGEST_FAILED || 0}, stale ${stale}` +
-          (st !== "VERIFIED" ? " — retry with `python3 scripts/memory-doc-ingest.py retry`" : "")));
+          `indexed ${counts.DOC_INGEST_INDEXED || 0}, pending ${counts.DOC_INGEST_PENDING || 0}, failed ${counts.DOC_INGEST_FAILED || 0}, stale ${stale}, unverified ${unverified}` +
+          (st !== "VERIFIED" ? " — retry with `node scripts/doc-ingest-node.mjs retry --all`" : "")));
       }
+    } catch {
+      out.push(section("doc-ingestion", "DEGRADED", "documentation ledger is unreadable or malformed"));
     }
   }
 
@@ -321,7 +322,8 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
     // (real false negative on .241). With neither an explicit root nor a
     // project store, fall back to the product checkout.
     const cwdRoot = env.SINGULARITY_REPO_ROOT || process.cwd();
-    const root = cwdRoot !== ROOT && candidateSummary(cwdRoot).total === 0 && candidateSummary(ROOT).total > 0 ? ROOT : cwdRoot;
+    const root = !env.SINGULARITY_REPO_ROOT && cwdRoot !== ROOT && candidateSummary(cwdRoot).total === 0 &&
+      candidateSummary(ROOT).total > 0 ? ROOT : cwdRoot;
     try {
       const s = candidateSummary(root);
       const b = s.byState || {};
@@ -331,13 +333,13 @@ export async function doctor({ env = process.env, fetchImpl = globalThis.fetch }
       const oldest = oldestDays === null ? "" : ` | oldest pending ${oldestDays}d`;
       let st;
       if (s.queueFull) st = "DEGRADED";
-      else if ((b.PROMOTED || 0) > 0) st = "VERIFIED";
+      else if (s.verifiedPromotions > 0) st = "VERIFIED";
       else if (s.failed > 0) st = "DEGRADED";
       else if (s.total === 0) st = "NOT_CONFIGURED";
       else st = "INCOMPLETE";
       const advice = st === "NOT_CONFIGURED" ? " (idle: no material task has been observed yet)"
         : st === "VERIFIED" ? ""
-        : s.awaitingApproval > 0 ? " — approve one with `node scripts/selflearn-candidates.mjs list` then the printed gated command + mark-promoted"
+        : s.awaitingApproval > 0 ? " — approve one with `node scripts/selflearn-candidates.mjs list` then the digest-bound approve and promote actions"
         : s.awaitingVerification > 0 ? " — verify with `node scripts/selflearn-candidates.mjs verify --id <id> --note <receipt>`"
         : " — run `node scripts/selflearn-candidates.mjs run`";
       out.push(section("selflearn", st, counts + (s.queueFull ? " | pending queue full: new discoveries may be refused" : "") + oldest + last + ` | store ${root}` + advice, { summary: s, root }));

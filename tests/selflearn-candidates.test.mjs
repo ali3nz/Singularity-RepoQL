@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import {
   LESSON_SCHEMA,
   discoverCandidate,
@@ -19,10 +20,75 @@ import {
   validatePromotionMetadata,
   candidatePath,
   promotionCommand,
+  collectWorkspaceEvidence,
 } from "../scripts/selflearn-candidates.mjs";
 
-const scratch = () => mkdtempSync(join(tmpdir(), "selflearn-test-"));
+const scratch = () => {
+  const root = mkdtempSync(join(tmpdir(), "selflearn-test-"));
+  mkdirSync(join(root, "src"));
+  writeFileSync(join(root, "src", "cache.py"), "def init():\n    return True\n");
+  return root;
+};
 const PROVIDER = { source: "test", url: "http://127.0.0.1:1/v1", model: "test-model", key: "" };
+
+test('workspace evidence includes staged changes, working edits and space-containing new files', t => {
+  const root = scratch();
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  execFileSync('git', ['init', '--quiet'], {cwd: root, windowsHide: true, stdio: 'ignore'});
+  writeFileSync(join(root, 'src/cache.py'), 'STAGED_FLAG = True\n');
+  execFileSync('git', ['add', '--', 'src/cache.py'], {cwd: root, windowsHide: true, stdio: 'ignore'});
+  writeFileSync(join(root, 'src/cache.py'), 'STAGED_FLAG = False\nWORKTREE_FLAG = True\n');
+  writeFileSync(join(root, 'src/new feature.py'), 'NEW_CONTENT = True\n');
+  const evidence = collectWorkspaceEvidence(root, ['src/cache.py', 'src/new feature.py']);
+  assert.equal(evidence.observable, true);
+  assert.match(evidence.diff, /\+STAGED_FLAG = True/);
+  assert.match(evidence.diff, /\+WORKTREE_FLAG = True/);
+  assert.match(evidence.diff, /\+NEW_CONTENT = True/);
+  assert.deepEqual(evidence.untracked, ['src/new feature.py']);
+  assert.equal(evidence.untrackedOmitted, 0);
+});
+
+test('workspace evidence never broadens an empty file scope into a repository diff', () => {
+  const calls = [];
+  const evidence = collectWorkspaceEvidence('unused', [], {execImpl: (command, args) => {
+    calls.push(args);
+    return {status: 0, stdout: 'true\n'};
+  }});
+  assert.equal(evidence.observable, true);
+  assert.deepEqual(calls, [['rev-parse', '--is-inside-work-tree']]);
+});
+
+test('workspace evidence stops before an expired command budget', () => {
+  let calls = 0;
+  const evidence = collectWorkspaceEvidence('unused', ['src/cache.py'], {deadlineMs: Date.now() - 1,
+    execImpl: () => {calls++; return {status: 0, stdout: 'true\n'};}});
+  assert.equal(evidence.observable, false);
+  assert.equal(calls, 0);
+});
+
+test('workspace evidence cannot accept a no-index timeout as normal differences', () => {
+  let noIndexCalls = 0;
+  const evidence = collectWorkspaceEvidence('unused', ['src/new feature.py'], {execImpl: (command, args) => {
+    if (args[0] === 'rev-parse') return {status: 0, stdout: 'true\n'};
+    if (args[0] === 'ls-files') return {status: 0, stdout: 'src/new feature.py\0'};
+    if (args.includes('--no-index')) {noIndexCalls++; throw new Error('controlled timeout without exit status');}
+    return {status: 0, stdout: ''};
+  }});
+  assert.equal(evidence.observable, false);
+  assert.equal(noIndexCalls, 1);
+});
+
+test('workspace evidence counts every omitted new file beyond its retained list', () => {
+  const untracked = Array.from({length: 21}, (_, index) => `src/new-${index}.py`);
+  const evidence = collectWorkspaceEvidence('unused', ['src'], {execImpl: (command, args) => {
+    if (args[0] === 'rev-parse') return {status: 0, stdout: 'true\n'};
+    if (args[0] === 'ls-files') return {status: 0, stdout: untracked.join('\0') + '\0'};
+    return {status: args.includes('--no-index') ? 1 : 0, stdout: ''};
+  }});
+  assert.equal(evidence.observable, true);
+  assert.equal(evidence.untracked.length, 20);
+  assert.equal(evidence.untrackedOmitted, 17);
+});
 const OK_RQL = () => ({ status: 0, stdout: "no capsule matched" });
 
 function lesson(over = {}) {
@@ -226,8 +292,8 @@ test("full queue retains pending, approved and promoted provenance records", () 
     assert.equal(candidateSummary(dir).queueFull, true);
     assert.equal(loadCandidate(saved.id, dir).state, "AWAITING_APPROVAL");
     writeFileSync(candidatePath(saved.id, dir), JSON.stringify({ ...saved, state: "PROMOTED" }));
-    assert.equal(discoverCandidate({ session: "new", files: ["src/cache.py"], root: dir }).created, true);
-    assert.equal(loadCandidate(saved.id, dir).state, "PROMOTED");
+    assert.equal(discoverCandidate({ session: "new", files: ["src/cache.py"], root: dir }).created, false);
+    assert.equal(loadCandidate(saved.id, dir).state, "NEEDS_VERIFICATION");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -358,14 +424,14 @@ test("promotionCommand names the existing gated RepoQL surface", () => {
   assert.equal(promotionCommand(lesson({ lesson: "$(malicious)" })), null);
   assert.equal(promotionCommand(lesson(), { conceptName: "Bad Name!", capsuleCategory: "rule", tags: "a", relevance: "src/**" }), null);
   assert.equal(promotionCommand(lesson(), { conceptName: "WideScope", capsuleCategory: "rule", tags: "a", relevance: "**" }), null);
-  const meta = validatePromotionMetadata({ conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache,init", relevance: "src/cache.py", verification: "src/cache.py#symbol=init", ttlDays: 90, why: "init before query" }, lesson()).metadata;
+  const meta = validatePromotionMetadata({ conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache,init", relevance: "**/src/cache.py", verification: "file:///src/cache.py#symbol=init", ttlDays: 90, why: "init before query" }, lesson()).metadata;
   const cmd = promotionCommand(lesson(), meta);
-  assert.ok(cmd.startsWith("rql concept add CacheInitRule rule "));
-  assert.ok(cmd.includes("--relevance src/cache.py"));
-  assert.ok(cmd.includes("--ttl-days 90"));
+  assert.deepEqual(cmd.args.slice(0, 4), ["concept", "add", "CacheInitRule", "rule"]);
+  assert.ok(cmd.args.includes("**/src/cache.py"));
+  assert.ok(cmd.args.includes("90"));
+  assert.equal(cmd.shell, false);
   const evil = promotionCommand(lesson({ lesson: "Fix it $(echo PWNED) now", title: "T" }), meta);
-  assert.ok(evil.includes("'Fix it $(echo PWNED) now'"), "model text must be single-quoted so $(...) cannot execute");
-  assert.ok(!evil.includes('"$('), "model text must never be double-quoted");
+  assert.equal(evil.args[4], "Fix it $(echo PWNED) now", "untrusted content remains one literal argument");
 });
 
 test("pre-fix records cannot bypass the operator metadata gate", async () => {
@@ -380,7 +446,7 @@ test("pre-fix records cannot bypass the operator metadata gate", async () => {
     legacy.verification = { state: "satisfied", requirements: ["evidence-refs-resolve"], satisfied: ["evidence-refs-resolve"], pending: [] };
     writeFileSync(candidatePath(id, dir), JSON.stringify(legacy));
     assert.equal(markPromoted({ id, root: dir, conceptId: "CacheInitRule" }).ok, false);
-    assert.match(markPromoted({ id, root: dir, conceptId: "CacheInitRule" }).error, /metadata/);
+    assert.match(markPromoted({ id, root: dir, conceptId: "CacheInitRule" }).error, /verification|metadata|conceptName/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -390,10 +456,10 @@ test("promotion reference must match the recorded metadata", async () => {
     discoverCandidate({ session: "mismatch", files: ["src/cache.py"], root: dir });
     const res = await evaluateCandidates({ root: dir, provider: PROVIDER, runRql: OK_RQL, modelCall: modelReturning(lesson()) });
     const id = res.outcomes[0].id;
-    const ok = recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache", relevance: "src/cache.py" } });
+    const ok = recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache", relevance: "**/src/cache.py" } });
     assert.equal(ok.record.state, "AWAITING_APPROVAL");
     assert.equal(markPromoted({ id, root: dir, conceptId: "OtherName" }).ok, false);
-    assert.equal(markPromoted({ id, root: dir, conceptId: "CacheInitRule" }).ok, true);
+    assert.equal(markPromoted({ id, root: dir, conceptId: "CacheInitRule" }).ok, false, "metadata alone proves neither approval nor an authoritative write");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -403,12 +469,12 @@ test("dedup recovery preserves an operator-recorded command", async () => {
     discoverCandidate({ session: "keep-cmd", files: ["src/cache.py"], root: dir });
     const first = await evaluateCandidates({ root: dir, provider: PROVIDER, runRql: () => ({ status: 1 }), modelCall: modelReturning(lesson()) });
     const id = first.outcomes[0].id;
-    const meta = recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache", relevance: "src/cache.py" } });
-    assert.ok(meta.record.promotion.command.includes("CacheInitRule"));
+    const meta = recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache", relevance: "**/src/cache.py" } });
+    assert.ok(meta.record.promotion.command.args.includes("CacheInitRule"));
     assert.equal(meta.record.state, "NEEDS_VERIFICATION");
     const retry = await evaluateCandidates({ root: dir, runRql: OK_RQL, now: () => Date.now() + 300_000 });
     assert.equal(retry.outcomes[0].state, "AWAITING_APPROVAL");
-    assert.ok(loadCandidate(id, dir).promotion.command.includes("rql concept add CacheInitRule rule "));
+    assert.ok(loadCandidate(id, dir).promotion.command.args.includes("CacheInitRule"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -436,15 +502,102 @@ test("operator-recorded promotion metadata unlocks the approval gate", async () 
     const res = await evaluateCandidates({ root: dir, provider: PROVIDER, runRql: OK_RQL, modelCall: modelReturning(lesson()) });
     const id = res.outcomes[0].id;
     assert.equal(loadCandidate(id, dir).state, "NEEDS_VERIFICATION");
-    assert.equal(recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "Bad!", capsuleCategory: "rule", tags: "a", relevance: "src/cache.py" } }).ok, false);
+    assert.equal(recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "Bad!", capsuleCategory: "rule", tags: "a", relevance: "**/src/cache.py" } }).ok, false);
     assert.equal(recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "WideScope", capsuleCategory: "rule", tags: "a", relevance: "**" } }).ok, false);
-    const ok = recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache,init", relevance: "src/cache.py", verification: "src/cache.py#symbol=init", ttlDays: 90, why: "operator confirmed init order" } });
+    const ok = recordPromotionMetadata({ id, root: dir, metadata: { conceptName: "CacheInitRule", capsuleCategory: "rule", tags: "cache,init", relevance: "**/src/cache.py", verification: "file:///src/cache.py#symbol=init", ttlDays: 90, why: "operator confirmed init order" } });
     assert.equal(ok.ok, true);
     assert.equal(ok.record.state, "AWAITING_APPROVAL");
-    assert.ok(ok.record.promotion.command.includes("rql concept add CacheInitRule rule "));
+    assert.ok(ok.record.promotion.command.args.includes("CacheInitRule"));
     assert.equal(ok.record.promotion.eligible, true);
     const promoted = markPromoted({ id, conceptId: "CacheInitRule", root: dir });
-    assert.equal(promoted.ok, true);
-    assert.equal(promoted.record.state, "PROMOTED");
+    assert.equal(promoted.ok, false);
+    assert.equal(loadCandidate(id, dir).state, "AWAITING_APPROVAL");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- native MemoryCore drafting fallback (opt-in, win32 only) ----
+import { resolveFormulationProvider, resolveNativeMemoryCoreProvider } from "../scripts/selflearn-candidates.mjs";
+import { symlinkSync } from "node:fs";
+
+function nativeFixture(mutate = () => {}) {
+  const local = mkdtempSync(join(tmpdir(), "native-mc-"));
+  const memDir = join(local, "Singularity", "WindowsNative", "memory");
+  mkdirSync(memDir, { recursive: true });
+  const keyFile = join(memDir, "llm.key");
+  writeFileSync(keyFile, "fixture-key-value\n");
+  const stack = {
+    schema: "native-memory-supervisor/v1",
+    components: {
+      gateway: { port: 18431 },
+      core: { env: { TDAI_LLM_BASE_URL: "http://127.0.0.1:18431/v1", TDAI_LLM_MODEL: "extraction-failover" }, llmKeyFile: keyFile },
+    },
+  };
+  mutate(stack, { memDir, keyFile });
+  writeFileSync(join(memDir, "stack.json"), JSON.stringify(stack));
+  return { local, memDir, keyFile, env: { LOCALAPPDATA: local } };
+}
+
+test("native MemoryCore provider is disabled by default and win32-only", () => {
+  const f = nativeFixture();
+  try {
+    assert.equal(resolveFormulationProvider({ root: f.local, env: f.env }), null);
+    assert.equal(resolveNativeMemoryCoreProvider({ env: f.env, platform: "linux" }), null);
+    const p = resolveNativeMemoryCoreProvider({ env: f.env, platform: "win32" });
+    assert.equal(p.source, "native-memorycore");
+    assert.equal(p.native, true);
+    assert.equal(p.key, "fixture-key-value");
+    assert.equal(JSON.stringify(p).includes("fixture-key-value"), false);
+    assert.ok(!Object.keys(p).includes("key"));
+  } finally { rmSync(f.local, { recursive: true, force: true }); }
+});
+
+test("native MemoryCore provider is last: explicit providers win", () => {
+  const f = nativeFixture();
+  try {
+    const env = { ...f.env, SINGULARITY_SELFLEARN_LLM_URL: "http://127.0.0.1:9/v1", SINGULARITY_SELFLEARN_LLM_MODEL: "m", SINGULARITY_SELFLEARN_LLM_KEY: "k" };
+    const p = resolveFormulationProvider({ root: f.local, env, allowNativeMemoryCore: true });
+    assert.ok(p);
+    assert.notEqual(p.source, "native-memorycore");
+    assert.equal(p.url, "http://127.0.0.1:9/v1");
+  } finally { rmSync(f.local, { recursive: true, force: true }); }
+});
+
+for (const [name, mutate] of [
+  ["wrong schema", (s) => { s.schema = "other/v1"; }],
+  ["non-loopback host", (s) => { s.components.core.env.TDAI_LLM_BASE_URL = "http://10.0.0.5:18431/v1"; }],
+  ["port mismatch", (s) => { s.components.core.env.TDAI_LLM_BASE_URL = "http://127.0.0.1:9999/v1"; }],
+  ["wrong path", (s) => { s.components.core.env.TDAI_LLM_BASE_URL = "http://127.0.0.1:18431/other"; }],
+  ["userinfo", (s) => { s.components.core.env.TDAI_LLM_BASE_URL = "http://u:p@127.0.0.1:18431/v1"; }],
+  ["query string", (s) => { s.components.core.env.TDAI_LLM_BASE_URL = "http://127.0.0.1:18431/v1?x=1"; }],
+  ["fragment", (s) => { s.components.core.env.TDAI_LLM_BASE_URL = "http://127.0.0.1:18431/v1#f"; }],
+  ["empty model", (s) => { s.components.core.env.TDAI_LLM_MODEL = " "; }],
+  ["missing key file", (s, c) => { s.components.core.llmKeyFile = join(c.memDir, "absent.key"); }],
+]) {
+  test("native MemoryCore provider is unavailable on " + name, () => {
+    const f = nativeFixture(mutate);
+    try { assert.equal(resolveNativeMemoryCoreProvider({ env: f.env, platform: "win32" }), null); }
+    finally { rmSync(f.local, { recursive: true, force: true }); }
+  });
+}
+
+test("native MemoryCore provider is unavailable for an empty key and a missing stack", () => {
+  const f = nativeFixture();
+  try {
+    writeFileSync(f.keyFile, "  \n");
+    assert.equal(resolveNativeMemoryCoreProvider({ env: f.env, platform: "win32" }), null);
+    rmSync(join(f.memDir, "stack.json"));
+    assert.equal(resolveNativeMemoryCoreProvider({ env: f.env, platform: "win32" }), null);
+    assert.equal(resolveNativeMemoryCoreProvider({ env: {}, platform: "win32" }), null);
+  } finally { rmSync(f.local, { recursive: true, force: true }); }
+});
+
+test("native MemoryCore provider refuses a symlinked key file when links can be created", (t) => {
+  const f = nativeFixture();
+  try {
+    const real = join(f.local, "real.key");
+    writeFileSync(real, "k");
+    rmSync(f.keyFile);
+    try { symlinkSync(real, f.keyFile); } catch { t.skip("symlink creation not permitted"); return; }
+    assert.equal(resolveNativeMemoryCoreProvider({ env: f.env, platform: "win32" }), null);
+  } finally { rmSync(f.local, { recursive: true, force: true }); }
 });

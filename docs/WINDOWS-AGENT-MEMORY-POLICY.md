@@ -105,6 +105,22 @@ omits the leading `documentation/` segment. Validate with the installed
 RepoQL version before adding. A concept search hit alone does not establish
 that the rule applies to the current file.
 
+Promotion approval binds the exact candidate, category metadata, verifier state
+and current source hashes. A named authority and unexpired digest-bound receipt
+are required. The native writer uses structured arguments under the verified
+RepoQL 1.7.18 binary pin. The authoritative indexed capsule is read back before
+`PROMOTED` is recorded. A command exit code or caller receipt cannot substitute
+for source identity, content, metadata and applicability checks. Retry preserves
+already-written capsules and verifies them without duplicate creation.
+
+Verification anchors use the installed RepoQL URI contract, such as
+`file:///src/component.py#line=1,8` or an actual supported symbol anchor. The
+anchored source must belong to the evidence and resolve through actual RepoQL
+readback. Approval expires within 24 hours and changes to any bound source or
+candidate field require renewed approval. Ordinary automated delegation, when
+explicitly authorized by the operator, must retain these per-candidate checks
+and its own scope, expiry, revocation and rate limits.
+
 ## Ten suggested operator acceptance probes
 
 Use **read-only** probes for Frigate, Home Assistant, Sonarr, Radarr, Jellyfin,

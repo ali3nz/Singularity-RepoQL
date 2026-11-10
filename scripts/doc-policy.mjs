@@ -28,6 +28,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSyn
 import { join, resolve, isAbsolute, extname, dirname, relative as relPosix } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  hasVerifiedPromotion,
   candidateDir,
   candidatePath,
   candidateId,
@@ -86,7 +87,7 @@ export function isDocsOnlyChange(files) {
 // proof. `verify` re-derives every fact: record exists for the workspace/scope,
 // source exists inside its authorised root, current hash == active revision,
 // revision verified, chunks accounted for, no newer unresolved revision.
-import { ingestFile as ingestFileInNode, verifyFile as verifyFileInNode } from "./doc-ingest-node.mjs";
+import { ingestFile as ingestFileInNode, verifyFile as verifyFileInNode, isHistoricalDocumentation, retryPendingIngestion } from "./doc-ingest-node.mjs";
 
 const DEFAULT_EXEC = (file, args, opts, cb) => execFile(file, args, { encoding: "utf8", windowsHide: true, ...(opts || {}) }, cb);
 
@@ -99,7 +100,8 @@ function runPython(args, cwd, execImpl, timeoutMs = 60_000) {
   });
 }
 
-export async function collectEvidence(docs, projectRoot = process.env.SINGULARITY_DOC_EVIDENCE_ROOT || process.cwd(), execImpl = null) {
+export async function collectEvidence(docs, projectRoot = process.env.SINGULARITY_DOC_EVIDENCE_ROOT || process.cwd(), execImpl = null,
+  {session = null, env = process.env, deadlineMs} = {}) {
   const evidence = {};
   const root = resolve(projectRoot);
   for (const d of docs || []) {
@@ -108,7 +110,7 @@ export async function collectEvidence(docs, projectRoot = process.env.SINGULARIT
     // is kept for compatibility and for operators who run it deliberately.
     if (!execImpl) {
       try {
-        evidence[d] = verifyFileInNode(d, { root, env: process.env });
+        evidence[d] = verifyFileInNode(d, { root, env });
       } catch (e) {
         evidence[d] = { status: "DOC_INGEST_NOT_VERIFIED", reason: `verification unavailable: ${clip(e?.message || e, 120)}` };
       }
@@ -126,15 +128,63 @@ export async function collectEvidence(docs, projectRoot = process.env.SINGULARIT
         reason: `verification unavailable: ${clip((r.err && r.err.message) || r.stderr, 120)}` };
     }
   }
+  if (session && !execImpl) {
+    const {verifyDocumentationClosure} = await import('./doc-program.mjs');
+    evidence.__documentationWork = await verifyDocumentationClosure({root, session, env, deadlineMs});
+    // Independent observation of this session's changes (HEAD-anchored): the
+    // declared file list alone must not decide whether documentation is needed.
+    try {
+      const obs = await observeWorkspace(root, session, {env});
+      evidence.__observedMaterial = {
+        observable: obs.observable === true,
+        material: classifyFiles(obs.newDirty || []).material,
+        unobservable: (obs.unobservable || []).map(u => ({code: u.code, path: u.path})),
+      };
+      // Observed material must carry a persisted obligation even when the
+      // declared file list omitted it. Only a DOC_FULLY_VERIFIED proof
+      // (source-bound by verifyDocumentationClosure) can cover its sources.
+      if (evidence.__observedMaterial.material.length) {
+        try {
+          const {recordDocumentationObligation} = await import('./doc-program.mjs');
+          recordDocumentationObligation({root, session, files: evidence.__observedMaterial.material,
+            reason: 'observed material change not declared in the assessment'});
+        } catch (e) {
+          evidence.__observedMaterial.observable = false;
+          evidence.__observedMaterial.unobservable.push({code: 'OBLIGATION_RECORD_FAILED'});
+        }
+      }
+    } catch (e) {
+      evidence.__observedMaterial = {observable: false, material: [], unobservable: [{code: 'OBSERVATION_FAILED'}]};
+    }
+  }
   return evidence;
 }
 
 // Findings that always block closure, independent of the claimed status.
 export function evaluateAssessment(assess, opts = {}) {
   const findings = [];
+  const tracked = assess.projectRoot && assess.session
+    ? pendingDocumentationObligations(assess.projectRoot, assess.session, {includeCompleted: true}) : [];
+  if (((assess.docWork && !assess.docWork.pending) || tracked.length) && !tracked.some(work =>
+      !['DOC_FULLY_VERIFIED', 'DOC_SUPERSEDED'].includes(work.status)) &&
+      opts.evidence?.__documentationWork?.status !== 'DOC_FULLY_VERIFIED')
+    findings.push(`FINDING: documentation closure independently unverified (${opts.evidence?.__documentationWork?.reason || 'current MemoryCore and RepoQL readback required'}).`);
+  if (assess.docWork?.pending) findings.push(`FINDING: documentation obligation ${assess.docWork.id} is ${assess.docWork.status}, phase ${assess.docWork.phase}.`);
+  if (assess.projectRoot && assess.session) {
+    for (const work of pendingDocumentationObligations(assess.projectRoot, assess.session)) {
+      if (work.id !== assess.docWork?.id) findings.push(`FINDING: unresolved documentation obligation ${work.id}, phase ${work.phase}. ${work.blocked || ''}`);
+    }
+  }
   const files = assess.files || [];
-  const { material } = classifyFiles(files);
+  const observed = opts.evidence?.__observedMaterial;
+  const norm = (f) => normalizeObservedPath(f);
+  const material = [...new Map([...classifyFiles(files).material, ...(observed?.material || [])]
+    .map(f => [observedKey(f), norm(f)])).values()];
   const status = assess.docStatus;
+  if (status === "DOC_NOT_REQUIRED" && observed && observed.observable === false) {
+    const codes = [...new Set((observed.unobservable || []).map(u => u.code))].join(", ") || "UNKNOWN";
+    findings.push(`FINDING: DOC_NOT_REQUIRED refused — workspace changes could not be independently observed (${codes}).`);
+  }
 
   if (!status) findings.push("FINDING: no documentation assessment recorded — run scripts/doc-policy.mjs assess (DOC_UPDATED | DOC_NOT_REQUIRED <reason> | DOC_BLOCKED).");
   if (status === "DOC_BLOCKED") findings.push(`FINDING: documentation was required but BLOCKED — this does not close the task. Reason: ${assess.docReason || "unspecified"}. Resolve the blocker or complete the documentation, then re-report.`);
@@ -143,8 +193,13 @@ export function evaluateAssessment(assess, opts = {}) {
     if (!assess.docReason || String(assess.docReason).trim().length < 8) {
       findings.push("FINDING: DOC_NOT_REQUIRED needs a concise, specific reason (>= 8 chars).");
     }
-    if (material.length && !(assess.skipJustification || "")) {
-      findings.push(`FINDING: DOC_NOT_REQUIRED refused — ${material.length} material file(s) changed (${material.slice(0, 5).join(", ")}${material.length > 5 ? ", ..." : ""}). Update docs or explain the skip in a concrete justification.`);
+    const proof = opts.evidence?.__documentationWork;
+    const sourceFiles = new Set(Array.isArray(proof?.sourceFiles)
+      ? proof.sourceFiles.map(file => String(file).replace(/\\/g, '/')) : []);
+    const verifiedNoChange = proof?.status === 'DOC_FULLY_VERIFIED' && proof.docStatus === 'DOC_NOT_REQUIRED'
+      && material.every(file => sourceFiles.has(String(file).replace(/\\/g, '/')));
+    if (material.length && !verifiedNoChange) {
+      findings.push(`FINDING: DOC_NOT_REQUIRED refused — ${material.length} material file(s) changed (${material.slice(0, 5).join(", ")}${material.length > 5 ? ", ..." : ""}). Update docs or independently verify the existing documentation for every material file.`);
     }
   }
 
@@ -217,9 +272,43 @@ export function writeAssessmentAtomic(session, root, record) {
   mkdirSync(dir, { recursive: true });
   const path = assessmentPath(session, root);
   const tmp = `${path}.tmp-${Date.now()}`;
+  const previous = loadAssessment(session, root);
+  if (previous?.docWork && record.docWork === undefined) record = {...record, docWork: previous.docWork};
   writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n");
   renameSync(tmp, path);
   return path;
+}
+
+/** Pending transaction journals remain authoritative if an assessment is replaced. */
+export function pendingDocumentationObligations(root, session = null, {includeCompleted = false} = {}) {
+  const directory = stateDir(root);
+  if (!existsSync(directory)) return [];
+  const names = readdirSync(directory).filter(name => /^doc-[a-f0-9]{24}\.json$/.test(name));
+  if (names.length > 512) return [{id: 'bounded-scan-required', phase: 'BLOCKED', blocked: 'Documentation journal scope exceeds 512 entries.'}];
+  const pending = [];
+  for (const name of names) {
+    try {
+      const path = join(directory, name);
+      if (statSync(path).size > 1024 * 1024) throw new Error('oversized journal');
+      const work = JSON.parse(readFileSync(path, 'utf8'));
+      if (work.schema !== 'singularity.doc-work/v1') throw new Error('invalid journal schema');
+      if ((!session || work.session === sanitizeSession(session)) &&
+          (includeCompleted || !['DOC_FULLY_VERIFIED', 'DOC_SUPERSEDED'].includes(work.status))) pending.push(work);
+    } catch { pending.push({id: name, phase: 'CORRUPT', blocked: 'Documentation transaction could not be verified.'}); }
+  }
+  return pending;
+}
+
+/** Existing SessionStart/Stop events are the retry mechanism. */
+export async function maintainDocumentation(session, root, {files = [], env = process.env, advance = true, budgetMs = 150_000} = {}) {
+  const {recordDocumentationObligation, resumeDocumentationWork} = await import('./doc-program.mjs');
+  const work = files.length ? recordDocumentationObligation({root, session, files}) : null;
+  if (work) {
+    await recordAutomaticLearningAssessment(session, root, {env: {...env, SINGULARITY_REPO_ROOT: resolve(root), SELFLEARN_INLINE: '0'},
+      observable: true, dirty: files, newDirty: files});
+  }
+  if (!advance) return work ? {status: work.status, id: work.id, phase: work.phase} : {status: 'IDLE'};
+  return resumeDocumentationWork({root, session: null, env, work, budgetMs});
 }
 
 export function writeBaselineAtomic(session, root, record) {
@@ -327,6 +416,7 @@ export function docRootsFor(dir, env = process.env) {
 }
 
 export function isEligibleDocPath(absPath, rootPath, { maxSizeBytes = 200 * 1024 } = {}) {
+  if (isHistoricalDocumentation(relPosix(resolve(rootPath), resolve(absPath)).replace(/\\/g, '/'))) return false;
   // Split on both separators: on Windows `join()` yields backslashes, and a
   // POSIX-only split silently disabled every directory-name exclusion there.
   const parts = absPath.split(/[\\/]/);
@@ -389,19 +479,50 @@ function relposixSafe(root, full) {
   return r || full.split("/").pop();
 }
 
-function runGitStatus(dir, execImpl) {
+function runGit(dir, args, execImpl, timeout = 5000) {
   const impl = execImpl || DEFAULT_EXEC;
   return new Promise((done) => {
-    impl("git", ["-C", dir, "status", "--porcelain", "-z", "--untracked-files=all"],
-      { encoding: "utf8", timeout: 5000, windowsHide: true }, (err, stdout) => {
-        if (err) return done(null); // not a repo, no git, or timeout: unobservable
-        const entries = String(stdout || "").split("\0").filter(Boolean).map((line) => {
-          const rest = line.slice(3); // 2 status chars + space
-          return rest.split(" -> ").pop().trim();
-        }).filter(Boolean);
-        done(entries);
-      });
+    impl("git", ["-C", dir, ...args], { encoding: "utf8", timeout, windowsHide: true }, (err, stdout) => {
+      done(err ? null : String(stdout || ""));
+    });
   });
+}
+
+/** Parse `git status --porcelain -z`. A rename/copy record is followed by a
+ * SEPARATE NUL field holding the origin path; keep destination AND origin and
+ * never trim literal path whitespace. */
+export function parsePorcelainZ(out) {
+  const fields = String(out || "").split("\0");
+  const paths = [];
+  for (let i = 0; i < fields.length; i++) {
+    const rec = fields[i];
+    if (rec.length < 4) continue;
+    const xy = rec.slice(0, 2);
+    paths.push(rec.slice(3));
+    if (/[RC]/.test(xy) && i + 1 < fields.length && fields[i + 1]) paths.push(fields[++i]);
+  }
+  return [...new Set(paths.filter(Boolean))];
+}
+
+async function runGitStatus(dir, execImpl) {
+  const out = await runGit(dir, ["status", "--porcelain", "-z", "--untracked-files=all"], execImpl);
+  return out === null ? null : parsePorcelainZ(out);
+}
+
+const HEAD_RE = /^[0-9a-f]{40,64}$/;
+async function readHead(dir, execImpl) {
+  const out = await runGit(dir, ["rev-parse", "--verify", "HEAD"], execImpl);
+  const head = out === null ? "" : out.trim();
+  return HEAD_RE.test(head) ? head : null;
+}
+
+/** Strip a leading ./, standardize separators; compare case-insensitively on win32 only. */
+export function normalizeObservedPath(p) {
+  return String(p).replace(/\\/g, "/").replace(/^(\.\/)+/, "");
+}
+export function observedKey(p, platform = process.platform) {
+  const n = normalizeObservedPath(p);
+  return platform === "win32" ? n.toLowerCase() : n;
 }
 
 // One bounded observation: present census + new/unseen dirty files vs baseline.
@@ -422,11 +543,52 @@ export async function observeWorkspace(dir, session, { execImpl = null, env = pr
     }
   }
   let newDirty = null; // null = unobservable (no git)
+  const unobservable = []; // safe reason codes, with the affected path where one exists
   if (dirty) {
     const baseSet = new Set(baselineDirty || []);
-    newDirty = dirty.filter((f) => !baseSet.has(f));
+    const { hashes: currentHashes, skipped } = await snapshotDirtyMaterial(root, dirty);
+    newDirty = dirty.filter((f) => !baseSet.has(f) || (baselineRec?.dirtyHashes?.[f] &&
+      baselineRec.dirtyHashes[f] !== currentHashes[f]));
+    // A baseline-dirty material path whose baseline or current hash is missing
+    // cannot be shown unchanged: name it instead of silently attributing nothing.
+    for (const f of classifyFiles(dirty).material) {
+      if (baseSet.has(f) && (!baselineRec?.dirtyHashes?.[f] || !currentHashes[f]) && !newDirty.includes(f)) {
+        unobservable.push({ code: skipped.includes(f) ? "HASH_LIMIT_EXCEEDED" : "BASELINE_HASH_UNAVAILABLE", path: f });
+      }
+    }
+    // HEAD-anchored: commits made since the baseline are also this session's change.
+    if (!baselineRec) unobservable.push({ code: "BASELINE_MISSING" });
+    if (baselineRec) {
+      const head = await readHead(root, execImpl);
+      if (!baselineRec.head) unobservable.push({ code: "BASELINE_HEAD_MISSING" });
+      else if (!head) unobservable.push({ code: "HEAD_UNAVAILABLE" });
+      else if (head !== baselineRec.head) {
+        const diff = await runGit(root, ["diff", "--name-only", "--no-renames", "-z", `${baselineRec.head}..${head}`], execImpl, 15000);
+        if (diff === null) unobservable.push({ code: "HEAD_DIFF_FAILED" });
+        else {
+          const seen = new Set(newDirty.map((p) => observedKey(p)));
+          for (const raw of diff.split("\0").filter(Boolean)) {
+            const p = normalizeObservedPath(raw);
+            if (!seen.has(observedKey(p))) { seen.add(observedKey(p)); newDirty.push(p); }
+          }
+        }
+      }
+    }
+  } else {
+    unobservable.push({ code: "GIT_UNAVAILABLE" });
   }
-  return { root, censusFiles, baselineRec, changedDocs, dirty, newDirty, observable: dirty !== null };
+  return { root, censusFiles, baselineRec, changedDocs, dirty, newDirty, unobservable, observable: dirty !== null && unobservable.length === 0 };
+}
+
+async function snapshotDirtyMaterial(root, dirty) {
+  const {confinedDocument} = await import('./doc-repoql.mjs');
+  const hashes = {};
+  const material = classifyFiles(dirty).material;
+  for (const path of material.slice(0, 64)) {
+    try { hashes[path] = createHash('sha256').update(readFileSync(confinedDocument(root, path))).digest('hex'); }
+    catch { /* Unavailable and unsafe paths require later bounded source evidence. */ }
+  }
+  return { hashes, skipped: material.slice(64) };
 }
 
 export async function saveSessionBaseline(session, dir, { execImpl = null, env = process.env } = {}) {
@@ -435,7 +597,9 @@ export async function saveSessionBaseline(session, dir, { execImpl = null, env =
   const dirty = await runGitStatus(root, execImpl) || [];
   const files = {};
   for (const [p, meta] of censusFiles) files[p] = { size: meta.size, mtimeMs: meta.mtimeMs, rel: meta.rel, root: meta.root };
-  return writeBaselineAtomic(session, root, { created: new Date().toISOString(), files, dirty });
+  const { hashes: dirtyHashes } = await snapshotDirtyMaterial(root, dirty);
+  const head = await readHead(root, execImpl);
+  return writeBaselineAtomic(session, root, { created: new Date().toISOString(), files, dirty, dirtyHashes, head });
 }
 
 /** A bounded ingestion pass must acknowledge only verified/resolved files.
@@ -460,7 +624,7 @@ export function acknowledgeResolvedDocs(session, dir, obs, processed) {
   return advanced;
 }
 
-export async function ingestDocChange(absDoc, docRoot, session, { execImpl = null, env = process.env } = {}) {
+export async function ingestDocChange(absDoc, docRoot, session, { execImpl = null, env = process.env, deadlineMs } = {}) {
   // Default path: the in-process Node engine (same ledger, same statuses, no
   // Python runtime). An injected execImpl selects the legacy Python subprocess.
   if (!execImpl) {
@@ -469,6 +633,7 @@ export async function ingestDocChange(absDoc, docRoot, session, { execImpl = nul
         root: resolve(docRoot),
         session: session || "auto-discovery",
         env,
+        deadlineMs,
       });
     } catch (e) {
       return { status: "DOC_INGEST_FAILED", reason: `ingestion unavailable: ${clip(e?.message || e, 140)}` };
@@ -477,7 +642,7 @@ export async function ingestDocChange(absDoc, docRoot, session, { execImpl = nul
   const workspaceRoot = resolve(env?.SINGULARITY_REPO_ROOT || process.cwd());
   const cwd = workspaceRoot;
   const args = [DOC_INGEST_SCRIPT, "ingest", "--file", resolve(absDoc), "--root", resolve(docRoot), "--session", session || "auto-discovery"];
-  const r = await runPython(args, cwd, execImpl, 120_000);
+  const r = await runPython(args, cwd, execImpl, deadlineMs ? Math.max(1, Math.min(120_000, deadlineMs - Date.now())) : 120_000);
   try { return JSON.parse(r.stdout || "{}"); }
   catch {
     return { status: "DOC_INGEST_FAILED", reason: `ingestion unavailable: ${clip((r.err && r.err.message) || r.stderr, 140)}` };
@@ -490,7 +655,7 @@ const CLAIM_STATUS = new Set(["CAPTURED", "NO_LESSON", "DEFERRED"]); // an expli
 // The shared auto-ingestion pass. Ingests only NEW/CHANGED eligible docs
 // (content-hash dedup inside memory-doc-ingest renders repeats as
 // DOC_INGEST_UNCHANGED with no MemoryCore write).
-export async function autoIngestChangedDocs(dir, session, { execImpl = null, env = process.env } = {}) {
+export async function autoIngestChangedDocs(dir, session, { execImpl = null, env = process.env, deadlineMs = Date.now() + 150_000 } = {}) {
   let obs = await observeWorkspace(dir, session, { execImpl, env });
   if (!obs.baselineRec) {
     // Baseline-less first pass (discover CLI, fresh workspace): snapshot the
@@ -503,9 +668,14 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
   }
   const results = [];
   const processed = [];
+  const material = classifyFiles(obs.newDirty || []).material;
+  await maintainDocumentation(session, dir, {files: material, env, advance: false});
+  const documentation = await maintainDocumentation(session, dir, {env, budgetMs: Math.max(0, deadlineMs - Date.now())});
+  const retries = execImpl ? [] : await retryPendingIngestion(dir, {env, deadlineMs});
   const targets = obs.changedDocs.slice(0, MAX_DOC_INGEST_PER_PASS);
   for (const doc of targets) {
-    const res = await ingestDocChange(doc.path, doc.root, session, { execImpl, env });
+    if (deadlineMs - Date.now() < 1000) break;
+    const res = await ingestDocChange(doc.path, doc.root, session, { execImpl, env, deadlineMs });
     processed.push({ doc, result: res });
     results.push({ file: doc.rel, ...res });
   }
@@ -522,11 +692,11 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
   // gated propose path (scripts/memory_turn_capture.py) still owns promotion.
   let learning = null;
   try {
-    learning = await recordAutomaticLearningAssessment(session, dir, { execImpl, env, results, observable: obs.observable, dirty: obs.dirty, newDirty: obs.newDirty });
+    learning = await recordAutomaticLearningAssessment(session, dir, { execImpl, env, results, observable: obs.observable, dirty: obs.dirty, newDirty: obs.newDirty, deadlineMs });
   } catch (e) {
     learning = { status: "DEFERRED", assessment: null, detail: `automatic assessment could not run: ${String(e?.message || e).slice(0, 100)}` };
   }
-  return { ...obs, results, ingested: targets.length, observable: obs.observable, learning };
+  return { ...obs, results, retries, ingested: processed.length, observable: obs.observable, learning, documentation };
 }
 
 /**
@@ -547,13 +717,13 @@ export async function autoIngestChangedDocs(dir, session, { execImpl = null, env
  * passes for the same session repeat the same deterministic write (atomic
  * rename) so two sessions evaluate their own keys independently (§8).
  */
-export async function recordAutomaticLearningAssessment(session, dir, { execImpl = null, env = process.env, results = [], observable = true, dirty = null, newDirty = null } = {}) {
+export async function recordAutomaticLearningAssessment(session, dir, { execImpl = null, env = process.env, results = [], observable = true, dirty = null, newDirty = null, deadlineMs = Infinity } = {}) {
   // One real macrotask yield at the start: the load → evaluate → write window
   // is genuinely asynchronous for concurrent hook passes, so the write-time
   // re-check below (and any concurrent claim) is exercised the same way in
   // production as it is in the §8 test. The pass remains fail-safe either way.
   await new Promise((r) => setTimeout(r, 0));
-  const root = env.SINGULARITY_REPO_ROOT || process.cwd();
+  const root = resolve(dir || env.SINGULARITY_REPO_ROOT || process.cwd());
   const existing = loadAssessment(session, root);
   // An AGENT-claimed disposition is final. An AUTOMATIC DEFERRED is not: a
   // later automatic pass may upgrade it to CAPTURED/NO_LESSON and resolve the
@@ -612,7 +782,7 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
     if (!discovered || !discovered.record || env.SELFLEARN_INLINE !== "1") return null;
     try {
       const limit = Math.max(1, Math.min(Number(env.SELFLEARN_INLINE_LIMIT || 1) || 1, 3));
-      const res = await evaluateCandidates({ root, env, limit, installRoot: PRODUCT_ROOT });
+      const res = await evaluateCandidates({ root, env, limit, installRoot: PRODUCT_ROOT, deadlineMs });
       return { provider: res.provider, evaluated: res.evaluated, outcomes: res.outcomes };
     } catch (e) {
       return { provider: null, evaluated: 0, error: clip(String(e?.message || e), 160) };
@@ -664,7 +834,7 @@ export async function recordAutomaticLearningAssessment(session, dir, { execImpl
   // concept reference so the ledger and doctor never report already-authoritative
   // work as pending. Nothing here promotes by itself.
   const captureIfPromoted = (cand, evaluation, files) => {
-    if (cand?.state !== "PROMOTED") return null;
+    if (!hasVerifiedPromotion(cand, root)) return null;
     const captured = guarded({ files: files || cand.files || [], captureStatus: "CAPTURED", captureReason: `automatic: selflearn candidate ${cand.id} was promoted through the gated path (${cand.promotion?.reference || "concept recorded"})`, candidateId: cand.id, promotion: cand.promotion || null, automatic: true, recordedAt: new Date().toISOString() });
     if (!captured.written) return { status: captured.record.captureStatus, assessment: captured.record, candidate: cand, evaluation, detail: `another writer claimed the assessment concurrently — kept (${captured.record.captureStatus})` };
     return { status: "CAPTURED", assessment: captured.record, candidate: cand, evaluation, detail: `automatic CAPTURED: candidate ${cand.id} promoted (${cand.promotion?.reference || "concept"}) and retrievable; provenance retained` };
@@ -754,8 +924,7 @@ export async function main(argv = process.argv.slice(2)) {
     };
     // DOC_UPDATED collects INDEPENDENT ledger evidence at record time; the
     // check command re-collects at verification time (evidence must hold then).
-    const evidence = record.docStatus === "DOC_UPDATED" && record.docs.length
-      ? await collectEvidence(record.docs, root) : null;
+    const evidence = await collectEvidence(record.docs || [], root, null, {session});
     const findings = evaluateAssessment(record, { evidence });
     record.findings = findings;
     record.token = `SINGDOC-${sha8(JSON.stringify(record))}`;
@@ -768,19 +937,33 @@ export async function main(argv = process.argv.slice(2)) {
     return 0;
   }
 
+  if (sub === 'maintain') {
+    if (!session) { console.log('maintain requires --session <id>'); return 2; }
+    const root = resolve(value('--project-root', 0) || process.env.SINGULARITY_REPO_ROOT || process.cwd());
+    const result = await maintainDocumentation(session, root, {files: all('--files', 0)});
+    console.log(JSON.stringify(result, null, 2));
+    return ['DOC_FULLY_VERIFIED', 'IDLE'].includes(result.status) ? 0 : 1;
+  }
+
   if (sub === "check") {
     if (!session) { console.log("check requires --session <id>"); return 2; }
     const root = resolve(value("--project-root", 0) || process.env.SINGULARITY_REPO_ROOT || process.cwd());
     const record = loadAssessment(session, root);
     if (!record) {
-      console.log(JSON.stringify({ session: sanitizeSession(session), complete: false, findings: ["FINDING: no assessment for this session — a material task must record one (doc-policy.mjs assess)."] }));
+      // Record the observed obligation first so a missing assessment cannot hide it.
+      let extra = [];
+      try {
+        const evidence = await collectEvidence([], root, null, {session});
+        extra = evaluateAssessment({session: sanitizeSession(session), projectRoot: root, files: [], docStatus: 'DOC_BLOCKED', docReason: 'none'}, {evidence})
+          .filter(f => /obligation|could not be independently observed/.test(f));
+      } catch {}
+      console.log(JSON.stringify({ session: sanitizeSession(session), complete: false, findings: ["FINDING: no assessment for this session — a material task must record one (doc-policy.mjs assess).", ...extra] }));
       return 1;
     }
     // Evidence is re-collected AT CHECK TIME against the current ledger and
     // current source hashes — a status that was true earlier does not count
     // if the document changed afterwards or the record disappeared.
-    const evidence = record.docStatus === "DOC_UPDATED" && (record.docs || []).length
-      ? await collectEvidence(record.docs, root) : null;
+    const evidence = await collectEvidence(record.docs || [], root, null, {session});
     const findings = evaluateAssessment(record, { evidence });
     if (findings.length) {
       console.log(JSON.stringify({ session: sanitizeSession(session), complete: false, findings }));

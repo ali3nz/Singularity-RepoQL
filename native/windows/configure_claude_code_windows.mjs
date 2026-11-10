@@ -14,7 +14,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto
 import { join, dirname, basename, resolve, relative, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENT_MAP } from '../../adapters/claude-code/agent-map.mjs';
-import { ensureMemoryIntegration, removeMemoryIntegration, hookOwnership, PARENT_HOOK_EVENTS } from '../../adapters/claude-code/settings-merge.mjs';
+import { ensureMemoryIntegration, removeMemoryIntegration, hookOwnership, PARENT_HOOK_EVENTS, DOC_HOOK_TIMEOUT_SECONDS } from '../../adapters/claude-code/settings-merge.mjs';
 // fleet#993: the supported Configure flow reaches the parent-session memory proxy
 // through the existing, already-tested adapters helper — no new provider logic.
 import { ensureMainMemoryIntegration, removeMainMemoryIntegration, detectProviderConflicts, isMainMemoryOwnConfig, resolveMainProxyUrl } from '../../adapters/claude-code/main-memory.mjs';
@@ -958,6 +958,7 @@ export function verifyConfiguration({home}) {
         owned[0].h.command!==j.nodeExe ||
         !Array.isArray(owned[0].h.args) || owned[0].h.args.length!==2 ||
         owned[0].h.args[0]!==expected.script || owned[0].h.args[1]!==expected.kind ||
+        (expected.script===docScript && owned[0].h.timeout!==DOC_HOOK_TIMEOUT_SECONDS) ||
         owned[0].group.matcher!==undefined) issues.push(drift);
   }
   const rule=join(claude,'rules','singularity-workflow.md');

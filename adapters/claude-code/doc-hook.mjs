@@ -39,18 +39,16 @@ import { fileURLToPath } from "node:url";
 import {
   PRODUCT_ROOT,
   loadAssessment,
-  recordAutomaticLearningAssessment,
+  autoIngestChangedDocs,
   evaluateAssessment,
   collectEvidence,
   observeWorkspace,
   saveSessionBaseline,
-  acknowledgeResolvedDocs,
-  ingestDocChange,
-  MAX_DOC_INGEST_PER_PASS,
   classifyFiles,
+  maintainDocumentation,
+  pendingDocumentationObligations,
 } from "../../scripts/doc-policy.mjs";
 import { evaluateCandidates } from "../../scripts/selflearn-candidates.mjs";
-import { retryPendingIngestion } from "../../scripts/doc-ingest-node.mjs";
 
 const MAX_BLOCKS = 3;
 const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n) : s; };
@@ -103,6 +101,8 @@ function openDocIngestScript() {
 }
 
 export async function runDocHook(argv, opts = {}) {
+  if ((opts.env || process.env).SINGULARITY_INTERNAL_DOC_REVIEW === '1')
+    return {exitCode: 0, stdout: null, stderr: []}; // Skip documentation AND candidate resume in the child.
   let input = {};
   let inputOk = true;
   try { input = JSON.parse(String(opts.stdin ?? readFileSync(0, "utf8"))) || {}; } catch { /* malformed payload */ inputOk = false; }
@@ -115,15 +115,23 @@ export async function runDocHook(argv, opts = {}) {
   const root = workspaceRootOf(input, opts.env || {});
 
   if (kind === "session-start") {
+    const deadlineMs = Date.now() + 150_000;
     if (!policyOn(opts.env)) return { exitCode: 0, stdout: null, stderr };
     try {
       // Baseline: pre-existing dirty files stay unattributable to this session.
       await saveSessionBaseline(input.session_id || "unknown", root, { env: opts.env || process.env });
     } catch { /* baseline failure must not break the session */ }
+    if (pendingDocumentationObligations(root).length) {
+      try {
+        const result = await maintainDocumentation(input.session_id, root, {env: opts.env || process.env,
+          budgetMs: Math.max(0, deadlineMs - Date.now())});
+        stderr.push(`singularity documentation: ${result.status}${result.reason ? ` (${clip(result.reason, 160)})` : ''}`);
+      } catch { stderr.push('singularity documentation: DOC_BLOCKED, pending work retained'); }
+    }
     // Durable-queue resume (release-review requirement: liveness must not depend on one session
     // finishing). Bounded to ONE candidate; the scheduler CLI drains backlog.
     try {
-      const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1, installRoot: opts.installRoot ?? PRODUCT_ROOT });
+      const resumed = await evaluateCandidates({ root, env: opts.env || process.env, limit: 1, installRoot: opts.installRoot ?? PRODUCT_ROOT, deadlineMs });
       for (const o of resumed.outcomes || []) stderr.push(`singularity selflearn: resume ${o.id} -> ${o.state}${o.detail ? ` (${clip(o.detail, 100)})` : ""}`);
     } catch (e) {
       stderr.push(`singularity selflearn: resume skipped (${clip(String(e?.message || e), 100)})`);
@@ -138,80 +146,47 @@ export async function runDocHook(argv, opts = {}) {
   }
 
   if (kind === "stop") {
-    if (input.stop_hook_active) return { exitCode: 0, stdout: null, stderr }; // never loop on our own block
+    const deadlineMs = Date.now() + 150_000;
     if (!policyOn(opts.env)) return { exitCode: 0, stdout: null, stderr };
     const session = input.session_id;
-
-    // 1. event-driven retry of pending ingestion for this workspace ledger
-    //    (in-process Node engine: same ledger, same statuses, no Python).
-    if (openDocIngestScript()) {
+    // Observe and persist before the recursive-Stop escape. No child work starts there.
+    if (session) {
       try {
-        const results = await retryPendingIngestion(root, { env: opts.env || process.env });
-        for (const r of results) {
-          if (r && r.status && r.status !== "DOC_INGEST_UNCHANGED") {
-            stderr.push(`singularity doc hook: ${r.file || ""} -> ${r.status}`);
-          }
-        }
-      } catch (e) {
-        stderr.push(`singularity doc hook: ingestion retry unavailable (${clip(String(e?.message || e).split("\n")[0], 120)})`);
+        const observed = await observeWorkspace(root, session, {env: opts.env || process.env});
+        const sourceFiles = classifyFiles(observed.newDirty || []).material.filter(path => !/\.m(?:d|arkdown|dx)$/i.test(path));
+        const result = await maintainDocumentation(session, root, {files: sourceFiles,
+          env: opts.env || process.env, advance: false});
+        if (input.stop_hook_active) return {exitCode: 0, stdout: null, stderr};
+      } catch (error) {
+        if (!input.stop_hook_active) return blockOnce(session, root, [
+          `FINDING: documentation observation/resume unavailable (${clip(String(error.message), 120)}). Pending obligations remain unresolved.`,
+        ], stderr);
       }
     }
+    if (input.stop_hook_active) return { exitCode: 0, stdout: null, stderr }; // never loop on our own block
 
     let obs = null;
-    let autoIngest = [];
     let materialObserved = false;
     let observable = false;
     if (session) {
       try {
-        // 2. AUTO-DISCOVERY: ingest new/changed eligible docs since the baseline.
-        obs = await observeWorkspace(root, session, { env: opts.env || process.env });
-        observable = obs.observable;
-        if (obs.baselineRec) {
-          const targets = obs.changedDocs.slice(0, MAX_DOC_INGEST_PER_PASS);
-          const processed = [];
-          for (const doc of targets) {
-            const res = await ingestDocChange(doc.path, doc.root, session, { env: opts.env || process.env });
-            processed.push({ doc, result: res });
-            autoIngest.push({ file: doc.rel, ...res });
-            if (res.status && res.status !== "DOC_INGEST_UNCHANGED") {
-              stderr.push(`singularity doc hook: auto-ingest ${doc.rel} -> ${res.status}`);
-            }
-          }
-          if (obs.changedDocs.length > targets.length) {
-            stderr.push(`singularity doc hook: ${obs.changedDocs.length - targets.length} documentation change(s) remain queued for another pass`);
-          }
-          // Acknowledge only revisions observed before ingestion began. A
-          // complete fresh census would swallow edits made during this pass.
-          try {
-            acknowledgeResolvedDocs(session, root, obs, processed);
-          } catch { /* stale baseline retries safely next pass */ }
-        }
-        // 4. observed material changes this session (never pre-existing dirt).
-        if (observable) {
-          const { material } = classifyFiles(obs.newDirty || []);
-          materialObserved = material.length > 0;
-          if (materialObserved) {
-            stderr.push(`singularity doc hook: observed material change(s): ${clip(material.slice(0, 4).join(", "), 120)}${material.length > 4 ? ", ..." : ""}`);
-          }
-        }
-      } catch (e) {
-        stderr.push(`singularity doc hook: observed state unavailable, continuing (${clip(String(e?.message || e), 120)})`);
-      }
-    }
-
-    // 2b. AUTOMATIC LEARNING: the SAME shared function the OpenChamber plugin
-    // uses. Creates a durable candidate and runs one bounded lesson evaluation
-    // on this completion event; a failure here never blocks the doc closeout.
-    if (session) {
-      try {
-        const learning = await recordAutomaticLearningAssessment(session, root, {
-          env: { ...(opts.env || process.env), SINGULARITY_REPO_ROOT: root, SELFLEARN_INLINE: "1" },
-          results: autoIngest, observable, dirty: obs?.dirty || null, newDirty: obs?.newDirty || null,
+        obs = await autoIngestChangedDocs(root, session, {
+          env: {...(opts.env || process.env), SELFLEARN_INLINE: '1'}, deadlineMs,
         });
-        if (learning?.candidate) stderr.push(`singularity selflearn: candidate ${learning.candidate.state} (${learning.candidate.id})`);
-        if (learning?.queueRefusal) stderr.push(`singularity selflearn: BLOCKED — candidate not retained (${clip(learning.queueRefusal, 160)})`);
-      } catch (e) {
-        stderr.push(`singularity selflearn: assessment skipped (${clip(String(e?.message || e), 100)})`);
+        observable = obs.observable;
+        materialObserved = classifyFiles(obs.newDirty || []).material.length > 0;
+        if (obs.documentation?.status && obs.documentation.status !== 'IDLE')
+          stderr.push('singularity documentation: ' + obs.documentation.status);
+        for (const result of obs.results || []) {
+          if (result.status !== 'DOC_INGEST_UNCHANGED')
+            stderr.push('singularity doc hook: auto-ingest ' + result.file + ' -> ' + result.status);
+        }
+        if (obs.learning?.candidate)
+          stderr.push('singularity selflearn: candidate ' + obs.learning.candidate.state + ' (' + obs.learning.candidate.id + ')');
+      } catch (error) {
+        return blockOnce(session, root, [
+          'FINDING: documentation lifecycle unavailable (' + clip(String(error.message), 120) + '). Pending work remains unresolved.',
+        ], stderr);
       }
     }
 
@@ -228,14 +203,15 @@ export async function runDocHook(argv, opts = {}) {
         // message for a generic assessment reminder (and Chinese docs through
         // the separate doc pipeline stay unaffected). Whenever the agent later
         // records a real assessment, docStatus appears and this path is used.
-        const learningOnly = record.automatic === true && (record.docStatus == null);
+        const learningOnly = record.automatic === true && (record.docStatus == null) && !record.docWork?.pending;
         if (!learningOnly) {
           let findings;
           try {
-            const evidence = record.docStatus === "DOC_UPDATED" && (record.docs || []).length
-              ? await collectEvidence(record.docs, root)
-              : null;
+            const evidence = await collectEvidence(record.docs || [], root, null,
+              {session, env: opts.env || process.env, deadlineMs});
             findings = evaluateAssessment(record, { evidence });
+            if (materialObserved && !record.docStatus)
+              findings.unshift('FINDING: material implementation change observed without a documentation assessment.');
           } catch (e) {
             findings = [`FINDING: assessment evaluation failed (${clip(String(e?.message || e), 120)})`];
           }

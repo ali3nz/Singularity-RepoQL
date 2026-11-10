@@ -7,6 +7,7 @@ import {
   ALL_HOOK_KINDS,
   DOC_HOOK_KINDS,
   DOC_HOOK_SCRIPT,
+  DOC_HOOK_TIMEOUT_SECONDS,
   HOOK_KINDS,
   HOOK_SCRIPT,
   basenameAny,
@@ -51,7 +52,15 @@ test("POSIX output is byte-identical to the previous release (shell form, no arg
   ]);
   for (const handler of ownedHandlers(settings)) {
     assert.equal("args" in handler, false, "POSIX handlers must not gain an args key");
+    assert.equal("timeout" in handler, false, "POSIX handlers must preserve their existing timeout behavior");
   }
+});
+
+test('Windows documentation hooks receive the shared timeout and detect timeout drift', () => {
+  const expected = handlerSpec(WIN_DOC_SCRIPT, 'stop', {platform: 'win32', nodePath: WIN_NODE});
+  assert.equal(expected.timeout, DOC_HOOK_TIMEOUT_SECONDS);
+  assert.equal(isSameHookHandler(expected, {...expected, timeout: 60}), false);
+  assert.equal('timeout' in handlerSpec(WIN_SCRIPT, 'subagent-stop', {platform: 'win32', nodePath: WIN_NODE}), false);
 });
 
 test("win32 output is exec form: absolute node.exe + verbatim args (no shell string)", () => {
@@ -73,7 +82,7 @@ test("win32 output is exec form: absolute node.exe + verbatim args (no shell str
   assert.equal(memoryStart[0].args[0].includes(" "), true, "spaces live inside an argv element, not a shell word");
 
   const docStop = handlersOn(settings, "Stop");
-  assert.deepEqual(docStop[0], { type: "command", command: WIN_NODE, args: [WIN_DOC_SCRIPT, "stop"] });
+  assert.deepEqual(docStop[0], { type: "command", command: WIN_NODE, args: [WIN_DOC_SCRIPT, "stop"], timeout: DOC_HOOK_TIMEOUT_SECONDS });
 
   // Serialising and re-reading must not alter a backslash or a space.
   const roundTrip = JSON.parse(JSON.stringify(settings));
@@ -234,7 +243,7 @@ test("a POSIX install is UPGRADED in place to exec form on win32 (no duplicate, 
   assert.equal(upgraded.hooks.SessionStart.length, groupBefore, "no extra group is created");
   assert.equal(upgraded.hooks.SessionStart[0].hooks[0].command, "node /other/session.mjs", "foreign handler untouched");
   const replaced = upgraded.hooks.SessionStart[0].hooks[1];
-  assert.deepEqual(replaced, { type: "command", command: WIN_NODE, args: [WIN_DOC_SCRIPT, "session-start"] });
+  assert.deepEqual(replaced, { type: "command", command: WIN_NODE, args: [WIN_DOC_SCRIPT, "session-start"], timeout: DOC_HOOK_TIMEOUT_SECONDS });
   assert.equal(upgraded.hooks.SubagentStart[0].hooks[0].command, WIN_NODE);
   assert.equal(JSON.stringify(upgraded).includes(`node ${POSIX_SCRIPT}`), false, "no legacy shell command survives");
   assert.equal(ownedHandlers(upgraded).length, 4);

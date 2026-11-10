@@ -101,6 +101,43 @@ export function buildReviewRequest({defect, files, context, nonce = randomUUID()
   return {...payload, payloadText};
 }
 
+export function isProtectedDocumentation(path) {
+  return /(?:^|\/)(?:AGENTS\.md|CLAUDE\.md)(?:\.|$)|_web\.md$|MANIFEST\.json$|(?:^|\/)(?:issues|journal|security|engagements|agents-guides|agent-guides)\//i.test(path) ||
+    /(?:^|\/)(?:governance|policies)(?:\/|$)/i.test(path) ||
+    /(?:^|\/)[^/]*(?:policy|policies|governance|workflow|security|credential|handover|agent-control|release[-_]gate|release[-_]acceptance)[^/]*\.md$/i.test(path) ||
+    /(?:^|\/)(?:SECURITY|RULES|DOC-INGESTION|WINDOWS-RELEASE-ACCEPTANCE|WINDOWS-AGENT-MEMORY-POLICY|MEMORY-LOOP|memory-capture-promotion)\.md$/i.test(path);
+}
+
+/** Documentation uses the existing trace-verified reviewer and request schema. */
+export function buildDocumentationReviewRequest({operations, evidence, requirement, nonce = randomUUID()}) {
+  if (!Array.isArray(operations) || !operations.length || operations.length > 2 ||
+      typeof requirement !== 'string' || !requirement || !Array.isArray(evidence?.sources) || !evidence.sources.length)
+    fail('DOC_REVIEW_EVIDENCE_REQUIRED');
+  const files = operations.map(({path, before, after}) => {
+    if (typeof path !== 'string' || !/^docs\/.+\.md$/i.test(path) || path.includes('..') ||
+        path.includes('\\') || isProtectedDocumentation(path)) fail('DOC_REVIEW_PATH_REFUSED');
+    if ((before !== null && typeof before !== 'string') || typeof after !== 'string' || !after.trim())
+      fail('DOC_REVIEW_IMAGE_INVALID');
+    if (Buffer.byteLength(after) > 24 * 1024 || (before !== null && Buffer.byteLength(before) > 24 * 1024))
+      fail('DOC_REVIEW_INPUT_TOO_LARGE_SPLIT_CHANGE');
+    const beforeImage = fileImage(path, before === null ? null : Buffer.from(before));
+    const afterImage = fileImage(path, Buffer.from(after));
+    delete beforeImage.base64;
+    delete afterImage.base64;
+    return {path, before: beforeImage, after: afterImage};
+  });
+  const defect = 'DOCUMENTATION_REQUIRED';
+  const beforeHash = sha(JSON.stringify(files.map(({path, before}) => ({path, before}))));
+  const afterHash = sha(JSON.stringify(files.map(({path, after}) => ({path, after}))));
+  const diffContent = JSON.stringify({schema: `${REVIEW_REQUEST_SCHEMA}/diff`, defect,
+    context: {requirement, scope: 'Canonical documentation only. Validate every claim against the supplied current source and tests. Preserve unrelated prose.', evidence}, files});
+  const payload = {schema: REVIEW_REQUEST_SCHEMA, nonce, reviewer: REVIEWER_NAME,
+    defect, beforeHash, afterHash, diffHash: sha(diffContent), diffContent};
+  const payloadText = JSON.stringify(payload);
+  if (Buffer.byteLength(payloadText, 'utf8') > MAX_INPUT_BYTES) fail('DOC_REVIEW_INPUT_TOO_LARGE_SPLIT_CHANGE');
+  return {...payload, payloadText};
+}
+
 function parseProfile(raw) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(raw);
   if (!match) fail('REVIEW_PROFILE_INVALID');
@@ -215,10 +252,35 @@ export function parseReviewerTrace(raw, expected) {
     if (!lines.length) return {status: 'invalid', reason: 'REVIEW_TRACE_EMPTY'};
     events = lines.map((line) => JSON.parse(line));
   } catch { return {status: 'invalid', reason: 'REVIEW_TRACE_MALFORMED'}; }
-  const {calls, results} = toolBlocks(events);
+  const parentOf = (event) => event?.parent_tool_use_id ?? event?.message?.parent_tool_use_id ?? null;
+  const rootEvents = events.filter((event) => !parentOf(event));
+  const nestedEvents = events.filter((event) => parentOf(event));
+  const {calls, results} = toolBlocks(rootEvents);
   if (calls.length !== 1 || calls[0].name !== 'Agent')
     return {status: 'invalid', reason: 'REVIEW_AGENT_CALL_MISSING_OR_EXTRA'};
   const call = calls[0];
+  // Nested (forwarded subagent) events must belong to the sole root Agent call and
+  // may only use the read-only reviewer tools.
+  const nestedIds = new Set();
+  const nestedResultIds = [];
+  const nestedTextOnly = [];
+  for (const event of nestedEvents) {
+    if (parentOf(event) !== call.id) return {status: 'invalid', reason: 'REVIEW_NESTED_FOREIGN_PARENT'};
+    const blocks = event?.message?.content ?? event?.content;
+    if (!Array.isArray(blocks)) continue;
+    for (const block of blocks) {
+      if (block?.type === 'tool_use') {
+        if (!TOOL_SET.includes(block.name)) return {status: 'invalid', reason: 'REVIEW_NESTED_TOOL_FORBIDDEN'};
+        if (!block.id || nestedIds.has(block.id)) return {status: 'invalid', reason: 'REVIEW_NESTED_ID_DUPLICATE'};
+        nestedIds.add(block.id);
+      } else if (block?.type === 'tool_result') nestedResultIds.push(block.tool_use_id);
+    }
+    const isAssistant = (event.type ?? event.message?.role) === 'assistant' || event.message?.role === 'assistant';
+    if (isAssistant && blocks.length && blocks.every((b) => b?.type === 'text' && typeof b.text === 'string'))
+      nestedTextOnly.push(blocks.map((b) => b.text).join(''));
+  }
+  if (nestedResultIds.some((id) => !nestedIds.has(id)))
+    return {status: 'invalid', reason: 'REVIEW_NESTED_RESULT_UNPAIRED'};
   if (!call.id || call.input?.subagent_type !== REVIEWER_NAME || call.input?.prompt !== expected.prompt)
     return {status: 'invalid', reason: 'REVIEW_AGENT_CALL_MISMATCH'};
   if (results.length !== 1 || results[0].tool_use_id !== call.id)
@@ -227,7 +289,17 @@ export function parseReviewerTrace(raw, expected) {
   const terminal = events.filter((event) => event?.type === 'result');
   if (terminal.length !== 1 || terminal[0].subtype !== 'success' || terminal[0].is_error !== false)
     return {status: 'unavailable', reason: 'REVIEW_CLI_INCOMPLETE'};
-  return parseReceipt(resultText(results[0]), expected);
+  const rootText = resultText(results[0]);
+  if (!nestedEvents.length) return parseReceipt(rootText, expected);
+  // Nested format: receipt is the single final text-only nested response and must
+  // appear verbatim in the paired root handback (two-space indented frame).
+  if (nestedTextOnly.length !== 1) return {status: 'invalid', reason: 'REVIEW_RECEIPT_AMBIGUOUS'};
+  if (typeof rootText !== 'string') return {status: 'invalid', reason: 'REVIEW_RESULT_NOT_TEXT'};
+  const receiptText = nestedTextOnly[0].trim();
+  const dedented = rootText.split(/\r?\n/).map((line) => line.replace(/^ {2}/, '')).join('\n');
+  if (!receiptText || !dedented.includes(receiptText))
+    return {status: 'invalid', reason: 'REVIEW_RECEIPT_NOT_IN_HANDBACK'};
+  return parseReceipt(receiptText, expected);
 }
 
 function defaultCliPath() {
@@ -309,7 +381,7 @@ function validateCliPath(path, platform) {
 
 export async function reviewCandidate(request, options = {}) {
   const {platform = process.platform, claudeExe = defaultCliPath(), spawnImpl = nodeSpawn,
-    timeoutMs = REVIEW_TIMEOUT_MS} = options;
+    timeoutMs = REVIEW_TIMEOUT_MS, env = process.env} = options;
   const loaded = readCanonicalReviewerProfile();
   if (!loaded.ok) return {status: 'unavailable', reason: loaded.reason};
   if (!validateCliPath(claudeExe, platform)) return {status: 'unavailable', reason: 'REVIEW_CLI_UNAVAILABLE'};
@@ -319,10 +391,11 @@ export async function reviewCandidate(request, options = {}) {
     '--print', '--input-format', 'text', '--output-format', 'stream-json', '--verbose',
     '--forward-subagent-text', '--no-session-persistence',
     '--permission-mode', 'dontAsk',
-    '--tools', 'Agent', '--allowedTools', `Agent(${REVIEWER_NAME})`, '--agents', agentDefinitions,
+    '--tools', 'Agent,Read,Grep,Glob', '--allowedTools', `Agent(${REVIEWER_NAME}),Read,Grep,Glob`,
+    '--agents', agentDefinitions,
   ];
   const run = await runBounded({command: claudeExe, args, input: prompt, cwd: REPO_ROOT,
-    env: process.env, spawnImpl, timeoutMs});
+    env, spawnImpl, timeoutMs});
   if (!run.ok) return {status: 'unavailable', reason: run.reason};
   const profileAfter = readCanonicalReviewerProfile();
   if (!profileAfter.ok || profileAfter.profile.profileSha256 !== loaded.profile.profileSha256)

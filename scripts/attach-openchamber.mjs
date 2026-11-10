@@ -567,6 +567,33 @@ export function writeAttachManifest(backupDir, { target, changed, variant = null
   return p;
 }
 
+/** Carry the shared policy's complete runtime closure into an attached target. */
+export function planSharedRuntime(configDir) {
+  return [
+    "scripts/doc-policy.mjs",
+    "scripts/selflearn-candidates.mjs",
+    "scripts/doc-ingest-node.mjs",
+    "scripts/memory-doc-ingest.py",
+    "scripts/memory_client.py",
+    "scripts/selflearn-promotion.mjs",
+    "scripts/doc-program.mjs",
+    "scripts/doc-repoql.mjs",
+    "native/windows/doc_atomic_replace.ps1",
+    "native/windows/openmausbot/maintenance_review.mjs",
+    "adapters/claude-code/agents/singularity-code-reviewer.md",
+  ].map((repoRel) => {
+    const src = join(ROOT, repoRel);
+    if (!existsSync(src)) throw new Error(`shared runtime dependency missing from the product: ${src}`);
+    const dst = join(configDir, "plugins", "singularity-runtime", repoRel);
+    let status = "create", curSha = null;
+    if (existsSync(dst)) {
+      curSha = sha(dst);
+      status = curSha === sha(src) ? "present" : "replace";
+    }
+    return { rel: `plugins/singularity-runtime/${repoRel}`, src, dst, status, prevSha: curSha, prevMode: existsSync(dst) ? statSync(dst).mode & 0o777 : null };
+  });
+}
+
 /**
  * Roll an attach back — the SUPPORTED product entrypoint (not a manual
  * harness step):
@@ -721,23 +748,7 @@ async function main(argv) {
   // deterministic plugin import (plugins/…/../singularity-runtime/scripts/
   // doc-policy.mjs) then resolves in native AND containerized runtimes (the
   // config dir is bind-mounted into the container).
-  const sharedRuntimePlan = [
-    "doc-policy.mjs",
-    "selflearn-candidates.mjs", // the shared automatic lesson pipeline doc-policy imports
-    "doc-ingest-node.mjs", // required direct import of doc-policy: missing it silently disables shared discovery
-    "memory-doc-ingest.py",
-    "memory_client.py", // sibling import of memory-doc-ingest (its ONLY non-stdlib import) — without it the attached runtime cannot ingest at all
-  ].map((name) => {
-    const src = join(ROOT, "scripts", name);
-    if (!existsSync(src)) throw new Error(`shared runtime dependency missing from the product: ${src}`);
-    const dst = join(configDir, "plugins", "singularity-runtime", "scripts", name);
-    let status = "create", curSha = null;
-    if (existsSync(dst)) {
-      curSha = sha(dst);
-      status = curSha === sha(src) ? "present" : "replace";
-    }
-    return { rel: `plugins/singularity-runtime/scripts/${name}`, src, dst, status, prevSha: curSha, prevMode: existsSync(dst) ? statSync(dst).mode & 0o777 : null };
-  });
+  const sharedRuntimePlan = planSharedRuntime(configDir);
 
   // ONE backup directory per attach: the bundle files and the credential
   // files share the same stamp and the same manifest.

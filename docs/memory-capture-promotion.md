@@ -64,19 +64,32 @@ see `docs/DOC-INGESTION.md`).
    recorded), `repoql-dedup-ran`, and `manual-verification` when the lesson
    asserts behaviour the evidence does not demonstrate. Any pending requirement
    leaves the candidate NEEDS_VERIFICATION.
-5. **Gated promotion.** The lesson schema does not establish category-specific
-   relevance, anchored verification or TTL. Verified candidates remain
-   NEEDS_VERIFICATION with `promotion-metadata` pending; no executable command
-   is generated from untrusted model text. The operator records those fields
-   with `node scripts/selflearn-candidates.mjs record-metadata --id <id>
-   --concept-name <CamelCase> --capsule-category <rule|shape|knowledge|principle|wisdom>
-   --tags <a,b> [--relevance <g;g>] [--verification <v;v>] [--ttl-days N]`.
-   Relevance is required except for principle (bare `**` is refused), knowledge
-   requires anchored verification plus `--ttl-days 1..3650`, and every value is
-   validated and shell-quoted before `promotion.command` is set. The candidate
-   then becomes AWAITING_APPROVAL with the exact `rql concept add …` command;
-   the operator runs that command, then `mark-promoted --id <id> --concept-id
-   <CapsuleName>`.
+5. **Gated promotion.** Category-specific metadata is recorded with
+   `node scripts/selflearn-candidates.mjs record-metadata --id <id>
+   --concept-name <CamelCase> --capsule-category <category> --tags <a,b>`
+   and the applicable `--relevance`, `--verification` and `--ttl-days` fields.
+   Nonuniversal relevance starts `**/`, excludes `**/**` and must match actual
+   source evidence. Knowledge requires source-backed verification such as
+   `file:///src/component.py#line=1,8` and a TTL from 1 to 3650 days.
+   Principle uses the native `--universal` flag. Metadata never grants approval.
+6. **Exact approval and execution.** `approval-digest --id <id>` derives the
+   current lesson, validated metadata, verifier state and source hashes.
+   `approve --id <id> --digest <digest> --authority <named-authority>
+   --expires-at <ISO-date>` records explicit approval for at most 24 hours.
+   Any bound change invalidates approval. `promote --id <id>` invokes the pinned
+   native RepoQL 1.7.18 executable using structured arguments and `shell:false`.
+   The command display is explanatory. Multiline text, Unicode and shell
+   metacharacters remain literal argument data. Caller-provided receipts and
+   `--approved-by` are refused.
+7. **Authoritative completion and recovery.** Promotion becomes `PROMOTED` only
+   after independent indexed `rql read` content matches the exact capsule URI,
+   local capsule bytes, invariant, category, metadata, verification and scope.
+   Its durable receipt binds that content and the approved payload digest.
+   `mark-promoted --id <id> --concept-id <CapsuleName>` performs the same readback
+   for a previously written capsule. It requires current approval. On retry,
+   an existing matching capsule is verified without a duplicate write.
+   Missing, unavailable or mismatched evidence preserves a recoverable pending
+   candidate. Legacy promotion records require current independent verification.
 
 ### Candidate lifecycle states
 

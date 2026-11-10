@@ -150,6 +150,68 @@ test('review accepts only the matching read-only Agent tool result', () => {
   assert.equal(absent.reason, 'REVIEW_AGENT_CALL_MISSING_OR_EXTRA');
 });
 
+// Nested (forwarded subagent) trace: the reviewer's own Read/Grep/Glob events carry
+// parent_tool_use_id of the root Agent call; the root result is an indented handback.
+function nestedTrace(prompt, {receipt = {}, mutate = null, handback = null, nestedTexts = null} = {}) {
+  const marker = 'REQUEST_JSON=';
+  const request = JSON.parse(prompt.slice(prompt.lastIndexOf(marker) + marker.length));
+  const body = JSON.stringify({schema: REVIEW_RECEIPT_SCHEMA, nonce: request.nonce, reviewer: REVIEWER_NAME,
+    reviewerProfileSha256: request.reviewerProfileSha256, beforeHash: request.beforeHash,
+    afterHash: request.afterHash, diffHash: request.diffHash, decision: 'APPROVE', findings: [], ...receipt}, null, 2);
+  const callId = 'review-call-1';
+  const events = [
+    {type: 'assistant', message: {content: [{type: 'tool_use', id: callId, name: 'Agent',
+      input: {subagent_type: REVIEWER_NAME, prompt}}]}},
+    {type: 'assistant', parent_tool_use_id: callId, message: {role: 'assistant', content: [
+      {type: 'tool_use', id: 'n1', name: 'Read', input: {file_path: 'x'}}]}},
+    {type: 'user', parent_tool_use_id: callId, message: {role: 'user', content: [
+      {type: 'tool_result', tool_use_id: 'n1', content: 'ok'}]}},
+  ];
+  for (const text of nestedTexts ?? [body])
+    events.push({type: 'assistant', parent_tool_use_id: callId, message: {role: 'assistant', content: [{type: 'text', text}]}});
+  const framed = handback ?? ('Reviewer response:\n' + body.split('\n').map((l) => '  ' + l).join('\n'));
+  events.push({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: callId, content: framed}]}});
+  events.push({type: 'result', subtype: 'success', is_error: false, result: 'dispatcher finished'});
+  if (mutate) mutate(events);
+  return events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+}
+
+test('nested reviewer trace is approved only from the verbatim handback receipt', () => {
+  const {expected, prompt} = reviewFixture();
+  const ok = parseReviewerTrace(nestedTrace(prompt), expected);
+  assert.equal(ok.status, 'approved');
+  assert.equal(ok.traceVerified, true);
+});
+
+test('nested reviewer trace refusals fail closed', () => {
+  const {expected, prompt} = reviewFixture();
+  const reason = (trace) => parseReviewerTrace(trace, expected).reason;
+  const nested = (events) => events.filter((e) => e.parent_tool_use_id);
+  assert.equal(reason(nestedTrace(prompt, {mutate: (ev) => { nested(ev)[0].parent_tool_use_id = 'other'; }})),
+    'REVIEW_NESTED_FOREIGN_PARENT');
+  assert.equal(reason(nestedTrace(prompt, {mutate: (ev) => { nested(ev)[0].message.content[0].name = 'Bash'; }})),
+    'REVIEW_NESTED_TOOL_FORBIDDEN');
+  assert.equal(reason(nestedTrace(prompt, {mutate: (ev) => { ev.splice(2, 0, structuredClone(ev[1])); }})),
+    'REVIEW_NESTED_ID_DUPLICATE');
+  assert.equal(reason(nestedTrace(prompt, {mutate: (ev) => { nested(ev)[1].message.content[0].tool_use_id = 'zz'; }})),
+    'REVIEW_NESTED_RESULT_UNPAIRED');
+  assert.equal(reason(nestedTrace(prompt, {mutate: (ev) => { ev.splice(1, 0, structuredClone(ev[0])); }})),
+    'REVIEW_AGENT_CALL_MISSING_OR_EXTRA');
+  assert.equal(reason(nestedTrace(prompt, {mutate: (ev) => {
+    ev.at(-2).message.content[0].tool_use_id = 'unpaired'; }})), 'REVIEW_TOOL_RESULT_MISMATCH');
+  assert.equal(reason(nestedTrace(prompt, {nestedTexts: ['one', 'two']})), 'REVIEW_RECEIPT_AMBIGUOUS');
+  assert.equal(reason(nestedTrace(prompt, {handback: 'APPROVE (dispatcher says so)'})),
+    'REVIEW_RECEIPT_NOT_IN_HANDBACK');
+  assert.equal(parseReviewerTrace(nestedTrace(prompt, {mutate: (ev) => { ev.at(-1).is_error = true; }}), expected).status,
+    'unavailable');
+  assert.equal(reason(nestedTrace(prompt, {receipt: {nonce: '11111111-1111-4111-8111-111111111111'}})),
+    'REVIEW_RECEIPT_STALE');
+  assert.equal(reason(nestedTrace(prompt, {receipt: {diffHash: '0'.repeat(64)}})), 'REVIEW_RECEIPT_HASH_MISMATCH');
+  // Forged dispatcher: nested receipt rejects, handback/dispatcher claims approval.
+  const forged = nestedTrace(prompt, {receipt: {decision: 'REJECT', findings: ['bad']}, handback: 'APPROVE'});
+  assert.notEqual(parseReviewerTrace(forged, expected).status, 'approved');
+});
+
 test('an errored or unspecified terminal cannot approve a matching reviewer result', () => {
   const {request, expected, prompt} = reviewFixture();
   for (const terminalError of [true, undefined]) {
@@ -231,7 +293,9 @@ test('review prompt carries exact before and after bytes with their hashes', asy
     audit[0].args[audit[0].args.indexOf('--permission-mode') + 1] === 'dontAsk', true);
   assert.equal(audit[0].args.includes('--setting-sources'), false);
   assert.equal(audit[0].args.includes('--settings'), false);
-  assert.equal(audit[0].args[audit[0].args.indexOf('--tools') + 1], 'Agent');
+  assert.equal(audit[0].args[audit[0].args.indexOf('--tools') + 1], 'Agent,Read,Grep,Glob');
+  assert.equal(audit[0].args[audit[0].args.indexOf('--allowedTools') + 1],
+    `Agent(${REVIEWER_NAME}),Read,Grep,Glob`);
   const agents = JSON.parse(audit[0].args[audit[0].args.indexOf('--agents') + 1]);
   assert.deepEqual(agents[REVIEWER_NAME].tools, ['Read', 'Grep', 'Glob']);
   assert.equal(audit[0].inheritedEnvironment, true);

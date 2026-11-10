@@ -15,13 +15,14 @@
 // restores exactly those files, refuses foreign edits and is idempotent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  planBundleFiles, applyBundle, attachMain, rollbackAttach, writeAttachManifest,
+  planBundleFiles, planSharedRuntime, applyBundle, attachMain, rollbackAttach, writeAttachManifest,
   classifyCandidateKey, isSameSecret, readAdminKey,
   mergeManagedBlock, stripManagedBlock, mergeJsoncIntegration, parseJsonc,
   MANAGED_BEGIN, MANAGED_END,
@@ -406,8 +407,8 @@ test("the attach records a manifest and the rollback restores exactly what the a
   // byte-identical copies land in <config>/singularity-runtime/scripts/ so the
   // plugin's deterministic import resolves in the FOREIGN target runtime.
   const runtimeFiles = manifest.files.filter((f) => f.rel.startsWith("plugins/singularity-runtime/scripts/"));
-  assert.equal(runtimeFiles.length, 5, "doc-policy.mjs, selflearn-candidates.mjs, doc-ingest-node.mjs and the legacy Python ingestion/client pair are carried into the target");
-  for (const name of ["doc-policy.mjs", "selflearn-candidates.mjs", "doc-ingest-node.mjs", "memory-doc-ingest.py", "memory_client.py"]) {
+  assert.equal(runtimeFiles.length, 8, "doc-policy.mjs, selflearn-candidates.mjs, doc-ingest-node.mjs, selflearn-promotion.mjs, doc-program.mjs, doc-repoql.mjs and the legacy Python ingestion/client pair are carried into the target");
+  for (const name of ["doc-policy.mjs", "selflearn-candidates.mjs", "doc-ingest-node.mjs", "memory-doc-ingest.py", "memory_client.py", "selflearn-promotion.mjs", "doc-program.mjs", "doc-repoql.mjs"]) {
     const dst = join(dir, "plugins", "singularity-runtime", "scripts", name);
     assert.ok(existsSync(dst), `${name} is installed into the target runtime`);
     assert.equal(
@@ -529,4 +530,46 @@ test("a rollback without a manifest refuses to touch anything (N-g)", () => {
   assert.equal(r.rc, 2);
   assert.match(r.detail, /no attach manifest/);
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("attached documentation runtime imports its complete copied dependency tree and rolls back", async (t) => {
+  const fixture = mkdtempSync(join(tmpdir(), "attach-runtime-"));
+  t.after(() => rmSync(fixture, {recursive: true, force: true}));
+  const configDir = join(fixture, "config");
+  const backupDir = join(fixture, "backups");
+  mkdirSync(configDir);
+  const dependencies = [
+    "scripts/doc-policy.mjs", "scripts/selflearn-candidates.mjs", "scripts/doc-ingest-node.mjs",
+    "scripts/memory-doc-ingest.py", "scripts/memory_client.py", "scripts/selflearn-promotion.mjs",
+    "scripts/doc-program.mjs", "scripts/doc-repoql.mjs", "native/windows/doc_atomic_replace.ps1",
+    "native/windows/openmausbot/maintenance_review.mjs", "adapters/claude-code/agents/singularity-code-reviewer.md",
+  ];
+  const expected = dependencies.map(path => `plugins/singularity-runtime/${path}`).sort();
+  const plan = planSharedRuntime(configDir);
+  assert.deepEqual(plan.map(file => file.rel).sort(), expected);
+  const {changed} = applyBundle(plan, configDir, {backupDir});
+  assert.deepEqual(changed.map(file => file.rel).sort(), expected);
+  for (const file of plan) assert.deepEqual(readFileSync(file.dst), readFileSync(file.src), file.rel);
+  const manifestPath = writeAttachManifest(backupDir, {target: {kind: "local", configDir}, changed});
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  assert.deepEqual(manifest.files.map(file => file.rel).sort(), expected);
+
+  const runtime = join(configDir, "plugins", "singularity-runtime");
+  const policy = await import(pathToFileURL(join(runtime, "scripts", "doc-policy.mjs")).href);
+  const program = await import(pathToFileURL(join(runtime, "scripts", "doc-program.mjs")).href);
+  assert.equal(typeof policy.maintainDocumentation, "function");
+  assert.equal(typeof program.resumeDocumentationWork, "function");
+  const review = await import(pathToFileURL(join(runtime, "native/windows/openmausbot/maintenance_review.mjs")).href);
+  const copiedProfileHash = review.currentReviewerProfileHash();
+  assert.equal(typeof copiedProfileHash, "string");
+  assert.equal(copiedProfileHash, createHash("sha256")
+    .update(readFileSync(join(ROOT, "adapters/claude-code/agents/singularity-code-reviewer.md"))).digest("hex"));
+  const atomicHelper = fileURLToPath(new URL("../native/windows/doc_atomic_replace.ps1",
+    pathToFileURL(join(runtime, "scripts", "doc-program.mjs"))));
+  assert.equal(existsSync(atomicHelper), true);
+  assert.deepEqual(readFileSync(atomicHelper), readFileSync(join(ROOT, "native/windows/doc_atomic_replace.ps1")));
+
+  const rollback = rollbackAttach(backupDir);
+  assert.equal(rollback.ok, true, rollback.refused.join("; "));
+  for (const file of changed) assert.equal(existsSync(file.dst), false, `${file.rel} rolled back`);
 });

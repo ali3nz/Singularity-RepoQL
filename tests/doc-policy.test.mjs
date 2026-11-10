@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -14,6 +15,12 @@ import {
   scanDocCensus,
   isEligibleDocPath,
   observeWorkspace,
+  parsePorcelainZ,
+  normalizeObservedPath,
+  observedKey,
+  saveSessionBaseline,
+  loadBaseline,
+  writeBaselineAtomic,
   autoIngestChangedDocs,
   collectEvidence,
   recordAutomaticLearningAssessment,
@@ -182,6 +189,20 @@ test("DOC_NOT_REQUIRED: valid for trivia, refused for material changes, vague re
   }).some((f) => /needs a concise, specific reason/.test(f)));
 });
 
+test("DOC_NOT_REQUIRED: generic material skip text cannot replace independent source coverage", () => {
+  const assessment = {files: ['src/a.mjs'], docStatus: 'DOC_NOT_REQUIRED',
+    docReason: 'The change was described as formatting only.',
+    skipJustification: 'Existing documentation is sufficient and no additional documentation is necessary.',
+    captureStatus: 'NO_LESSON', captureReason: 'Controlled policy regression has no reusable lesson.'};
+  assert.ok(evaluateAssessment(assessment).some(finding => /DOC_NOT_REQUIRED refused/.test(finding)));
+  const proof = {status: 'DOC_FULLY_VERIFIED', docStatus: 'DOC_NOT_REQUIRED', sourceFiles: ['src/other.mjs']};
+  assert.ok(evaluateAssessment(assessment, {evidence: {__documentationWork: proof}})
+    .some(finding => /DOC_NOT_REQUIRED refused/.test(finding)));
+  proof.sourceFiles = ['src\\a.mjs'];
+  assert.equal(evaluateAssessment(assessment, {evidence: {__documentationWork: proof}})
+    .some(finding => /DOC_NOT_REQUIRED refused/.test(finding)), false);
+});
+
 function execCliCapture() {
   const calls = [];
   return { calls };
@@ -191,10 +212,14 @@ test("CLI end-to-end: evidence-backed DOC_UPDATED closes; stale/fabricated/pendi
   const dir = scratch();
   const capture = { lines: [] };
   const origLog = console.log;
+  const origRoot = process.env.SINGULARITY_REPO_ROOT;
+  const origEv = process.env.SINGULARITY_DOC_EVIDENCE_ROOT;
   const origCwd = process.cwd();
   try {
     console.log = (...a) => { capture.lines.push(a.join(" ")); };
     process.chdir(dir);
+    process.env.SINGULARITY_REPO_ROOT = dir;
+    process.env.SINGULARITY_DOC_EVIDENCE_ROOT = dir;
     mkdirSync("sources", { recursive: true });
     mkdirSync("docs", { recursive: true });
     writeFileSync("main.py", "print('synthetic')\n");
@@ -237,6 +262,8 @@ test("CLI end-to-end: evidence-backed DOC_UPDATED closes; stale/fabricated/pendi
   } finally {
     console.log = origLog;
     process.chdir(origCwd);
+    if (origRoot === undefined) delete process.env.SINGULARITY_REPO_ROOT; else process.env.SINGULARITY_REPO_ROOT = origRoot;
+    if (origEv === undefined) delete process.env.SINGULARITY_DOC_EVIDENCE_ROOT; else process.env.SINGULARITY_DOC_EVIDENCE_ROOT = origEv;
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -395,10 +422,14 @@ test("CLI end-to-end refuses material DOC_NOT_REQUIRED; check on unknown session
   const dir = scratch();
   const capture = { lines: [] };
   const origLog = console.log;
+  const origRoot = process.env.SINGULARITY_REPO_ROOT;
+  const origEv = process.env.SINGULARITY_DOC_EVIDENCE_ROOT;
   const origCwd = process.cwd();
   try {
     console.log = (...a) => { capture.lines.push(a.join(" ")); };
     process.chdir(dir);
+    process.env.SINGULARITY_REPO_ROOT = dir;
+    process.env.SINGULARITY_DOC_EVIDENCE_ROOT = dir;
     let rc = await cliMain(["assess", "--session", "m1", "--files", "a.py", "--doc-status", "DOC_NOT_REQUIRED", "--reason", "small change", "--capture-status", "CAPTURED"]);
     assert.equal(rc, 1);
     rc = await cliMain(["check", "--session", "unknown-session"]);
@@ -407,6 +438,8 @@ test("CLI end-to-end refuses material DOC_NOT_REQUIRED; check on unknown session
   } finally {
     console.log = origLog;
     process.chdir(origCwd);
+    if (origRoot === undefined) delete process.env.SINGULARITY_REPO_ROOT; else process.env.SINGULARITY_REPO_ROOT = origRoot;
+    if (origEv === undefined) delete process.env.SINGULARITY_DOC_EVIDENCE_ROOT; else process.env.SINGULARITY_DOC_EVIDENCE_ROOT = origEv;
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -477,29 +510,20 @@ test("§7 runtime state files alone are NOT material work: NO_LESSON, no candida
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("§7 a candidate promoted by the gated evaluator upgrades the session from DEFERRED to CAPTURED", async () => {
+test("§7 legacy PROMOTED without verified RepoQL receipt remains deferred", async () => {
   const dir = scratch();
   try {
-    const first = await recordAutomaticLearningAssessment("la7", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: ["src/a.py"] });
+    const first = await recordAutomaticLearningAssessment("la7", dir, {env: {SINGULARITY_REPO_ROOT: dir}, results: [], observable: true, newDirty: ["src/a.py"]});
     assert.equal(first.status, "DEFERRED");
-    // Simulate the gated evaluator's own promotion write (state + concept ref);
-    // nothing in this test promotes model output.
     const file = join(dir, loadAssessment("la7", dir).deferredPending);
-    const rec = JSON.parse(readFileSync(file, "utf8"));
-    writeFileSync(file, JSON.stringify({ ...rec, state: "PROMOTED", promotion: { ...(rec.promotion || {}), reference: "InitBeforeQuery", promotedAt: new Date().toISOString() } }));
-    // The promotion happens in a later gated step, so the closing pass may see
-    // no new dirty work at all — it must still resolve the session.
-    const later = await recordAutomaticLearningAssessment("la7", dir, { env: { SINGULARITY_REPO_ROOT: dir }, results: [], observable: true, newDirty: [] });
-    assert.equal(later.status, "CAPTURED", "promoted work is no longer reported as pending");
-    assert.equal(later.candidate.state, "PROMOTED");
-    const after = loadAssessment("la7", dir);
-    assert.equal(after.captureStatus, "CAPTURED");
-    assert.equal(after.candidateId, later.candidate.id);
-    assert.match(after.captureReason, /InitBeforeQuery/);
-    assert.equal("deferredPending" in after, false);
-    assert.equal(existsSync(file), true, "the promoted record is kept as provenance, not deleted");
-    assert.equal(listPendingCandidates(dir).length, 0, "promoted work leaves the pending queue");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    const record = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({...record, state: "PROMOTED", promotion: {reference: "InitBeforeQuery"}}));
+    const later = await recordAutomaticLearningAssessment("la7", dir, {env: {SINGULARITY_REPO_ROOT: dir}, results: [], observable: true, newDirty: []});
+    assert.equal(later.status, "DEFERRED");
+    assert.equal(loadAssessment("la7", dir).captureStatus, "DEFERRED");
+    assert.equal(existsSync(file), true);
+    assert.equal(later.candidate.state, "NEEDS_VERIFICATION");
+  } finally { rmSync(dir, {recursive: true, force: true}); }
 });
 
 test("§7 pending candidates are idempotent, survive a CAPTURED disposition, and resolve explicitly", async () => {
@@ -640,4 +664,95 @@ test("§7 autoIngestChangedDocs carries the automatic learning disposition in it
     process.chdir(origCwd);
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ── HEAD-anchored change observation ─────────────────────────────────────────
+function gitRepo() {
+  const dir = scratch();
+  const g = (...a) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { stdio: "pipe" });
+  g("init", "-q"); writeFileSync(join(dir, "a.js"), "1"); g("add", "."); g("commit", "-qm", "base");
+  return { dir, g };
+}
+function pinRoot(dir) {
+  const old = process.env.SINGULARITY_REPO_ROOT;
+  process.env.SINGULARITY_REPO_ROOT = dir;
+  return () => { if (old === undefined) delete process.env.SINGULARITY_REPO_ROOT; else process.env.SINGULARITY_REPO_ROOT = old; };
+}
+
+test("parsePorcelainZ keeps rename destination and origin and literal whitespace", () => {
+  const out = ["R  new name.js", "old.js", "?? lead.js ", ""].join("\0");
+  assert.deepEqual(parsePorcelainZ(out), ["new name.js", "old.js", "lead.js "]);
+});
+
+test("observedKey strips ./ and folds case on win32 only", () => {
+  assert.equal(normalizeObservedPath("./a" + String.fromCharCode(92) + "b.js"), "a/b.js");
+  assert.equal(observedKey("./A/B.js", "win32"), "a/b.js");
+  assert.equal(observedKey("./A/B.js", "linux"), "A/B.js");
+});
+
+test("a commit made after the baseline is still observed", async () => {
+  const { dir, g } = gitRepo(); const restore = pinRoot(dir);
+  try {
+    await saveSessionBaseline("obs-s", dir);
+    writeFileSync(join(dir, "committed.js"), "2"); g("add", "."); g("commit", "-qm", "later");
+    const obs = await observeWorkspace(dir, "obs-s");
+    assert.ok(obs.newDirty.includes("committed.js"), JSON.stringify(obs.newDirty));
+    assert.equal(obs.observable, true);
+  } finally { restore(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a legacy baseline without HEAD is unobservable, not clean", async () => {
+  const { dir } = gitRepo(); const restore = pinRoot(dir);
+  try {
+    await saveSessionBaseline("obs-l", dir);
+    const rec = loadBaseline("obs-l", dir); delete rec.head; writeBaselineAtomic("obs-l", dir, rec);
+    const obs = await observeWorkspace(dir, "obs-l");
+    assert.equal(obs.observable, false);
+    assert.ok(obs.unobservable.some((u) => u.code === "BASELINE_HEAD_MISSING"));
+  } finally { restore(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("evaluateAssessment adds observed material and refuses NOT_REQUIRED when unobservable", () => {
+  const base = { docStatus: "DOC_NOT_REQUIRED", docReason: "nothing user-visible changed", files: [], captureStatus: "NO_LESSON" };
+  const omitted = evaluateAssessment(base, { evidence: { __observedMaterial: { observable: true, material: ["src/omitted.js"], unobservable: [] } } });
+  assert.ok(omitted.some((f) => /DOC_NOT_REQUIRED refused — 1 material/.test(f)), omitted.join("|"));
+  const blind = evaluateAssessment(base, { evidence: { __observedMaterial: { observable: false, material: [], unobservable: [{ code: "BASELINE_HEAD_MISSING" }] } } });
+  assert.ok(blind.some((f) => /could not be independently observed \(BASELINE_HEAD_MISSING\)/.test(f)), blind.join("|"));
+  const clean = evaluateAssessment(base, { evidence: { __observedMaterial: { observable: true, material: [], unobservable: [] } } });
+  assert.deepEqual(clean, []);
+});
+
+test("collectEvidence records a documentation obligation for observed undeclared material", async () => {
+  const { dir, g } = gitRepo(); const restore = pinRoot(dir);
+  try {
+    await saveSessionBaseline("obs-o", dir);
+    writeFileSync(join(dir, "omitted.js"), "export const x = 1;\n"); g("add", "."); g("commit", "-qm", "omitted");
+    const ev = await collectEvidence([], dir, null, { session: "obs-o", env: { SINGULARITY_REPO_ROOT: dir } });
+    assert.ok(ev.__observedMaterial.material.includes("omitted.js"), JSON.stringify(ev.__observedMaterial));
+    const findings = evaluateAssessment({ docStatus: "DOC_NOT_REQUIRED", docReason: "nothing user-visible changed", files: [], captureStatus: "NO_LESSON", session: "obs-o", projectRoot: dir }, { evidence: ev });
+    assert.ok(findings.length > 0, "undeclared material must not pass");
+  } finally { restore(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an edited pre-existing dirty file is observed; untouched dirt is not", async () => {
+  const { dir } = gitRepo(); const restore = pinRoot(dir);
+  try {
+    writeFileSync(join(dir, "a.js"), "dirty-1"); writeFileSync(join(dir, "b.js"), "keep");
+    await saveSessionBaseline("obs-e", dir);
+    writeFileSync(join(dir, "a.js"), "dirty-2");
+    const obs = await observeWorkspace(dir, "obs-e");
+    assert.ok(obs.newDirty.includes("a.js"), JSON.stringify(obs.newDirty));
+    assert.ok(!obs.newDirty.includes("b.js"), JSON.stringify(obs.newDirty));
+  } finally { restore(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("more than 64 pre-existing dirty files cannot be hashed and fail closed on edits", async () => {
+  const { dir } = gitRepo(); const restore = pinRoot(dir);
+  try {
+    for (let i = 0; i < 70; i++) writeFileSync(join(dir, `p${i}.js`), "x");
+    await saveSessionBaseline("obs-m", dir);
+    writeFileSync(join(dir, "p3.js"), "changed");
+    const obs = await observeWorkspace(dir, "obs-m");
+    assert.ok(obs.newDirty.includes("p3.js") || obs.observable === false, JSON.stringify(obs));
+  } finally { restore(); rmSync(dir, { recursive: true, force: true }); }
 });
