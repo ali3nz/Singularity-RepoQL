@@ -16,7 +16,7 @@ card_icons=dict(re.findall(r"'(/[^']+)': `(<svg.*?</svg>)`,",source))
 card_icons['/repoql/control']=re.search(r'const REPOQL_ICON = `(<svg.*?</svg>)`',js).group(1)
 card_icons['/unified/graph']=re.search(r'const BRAIN_ICON = `(<svg.*?</svg>)`',js).group(1)
 card_icons['/unified/tencent']=card_icons['/unified/graph']
-for route in ['/kanban','/ghost','/agentchat','/office','/unified/graph','/repoql/control','/unified/tencent']:
+for route in ['/kanban','/agentchat','/office','/unified/graph','/repoql/control','/unified/tencent']:
     pattern=re.compile(r'data-nav="'+re.escape(route)+r'"[^>]*><span class="nav-icon" aria-hidden="true">(<svg.*?</svg>)</span>')
     match=pattern.search(html)
     assert match,route

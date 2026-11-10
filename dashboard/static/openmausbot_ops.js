@@ -71,16 +71,16 @@ function dur(a, b) {
 }
 
 export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = 'now', params = {}, setCleanup,
-  includeGhost = true, workspaceHref = '#/openmausbot/chat'}) {
+  workspaceHref = '#/openmausbot/chat'}) {
   const tzChoices = [...new Set([LOCAL_TZ, 'Pacific/Auckland', 'UTC'])];
   const ui = {
-    bot: !includeGhost && params.bot === 'ghost' ? 'all' : params.bot || 'all',
+    bot: params.bot === 'ghost' ? 'all' : params.bot || 'all',
     tz: tzChoices.includes(params.tz) ? params.tz : LOCAL_TZ,
     view: params.view === 'day' ? 'day' : 'week',
     date: /^\d{4}-\d{2}-\d{2}$/.test(params.date || '') ? params.date : null,
     more: 25,
   };
-  let data = null, lastGood = null, loadError = null, ghostSnap = null, timer = null, busy = false;
+  let data = null, lastGood = null, loadError = null, timer = null, busy = false;
 
   const baseRoute = () => (TABS.find((t) => t[0] === tab) || TABS[0])[2];
   const queryString = () => {
@@ -94,12 +94,11 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
   const tabHref = (path) => '#' + path + (ui.bot !== 'all' ? '?bot=' + encodeURIComponent(ui.bot) : '')
     + (ui.tz !== LOCAL_TZ ? (ui.bot !== 'all' ? '&' : '?') + 'tz=' + encodeURIComponent(ui.tz) : '');
   const remember = () => { try { history.replaceState(null, '', '#' + baseRoute() + queryString()); } catch { /* ignore */ } };
-  if (!includeGhost && (params.bot === 'ghost' || params.tab === 'ghost')) remember();
+  if (params.bot === 'ghost' || params.tab === 'ghost') remember();
 
   const botId = () => {
     if (!data) return null;
     if (ui.bot === 'all') return null;
-    if (includeGhost && ui.bot === 'ghost') return data.ghost_bot_id || null;
     return ui.bot;
   };
   const bots = () => new Map((data?.bots || []).map((b) => [b.id, b]));
@@ -134,12 +133,6 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
       if (!current()) return;
       if (d.error) throw new Error(d.message || d.error);
       data = lastGood = d; loadError = null;
-      if (includeGhost && tab === 'now' && data.ghost_bot_id && (!botId() || botId() === data.ghost_bot_id)) {
-        try {
-          const g = await api('/api/ghost/status', {timeoutMs: 8000});
-          ghostSnap = g && typeof g === 'object' ? g : null;
-        } catch { ghostSnap = {unavailable: true}; }
-      }
     } catch (error) {
       if (!current()) return;
       loadError = error.message || 'unavailable';
@@ -151,8 +144,7 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
   // ---- shared chrome ----
   function chrome(body) {
     const opts = (data?.bots || []).slice().sort((a, b) => a.name.localeCompare(b.name));
-    const ghost = includeGhost ? data?.ghost_bot_id : null;
-    const sel = ui.bot === 'ghost' && ghost ? ghost : ui.bot;
+    const sel = ui.bot;
     const nav = TABS.map(([key, label, path]) =>
       `<a href="${esc(tabHref(path))}" ${key === tab ? 'aria-current="page"' : ''}>${esc(label)}${key === 'attention' && data ? attentionBadge() : ''}</a>`).join('');
     return `<header class="omb-ops-head"><div class="omb-ops-title"><h1>OpenMausBot operations</h1><p class="muted">What is running, scheduled, needs you, and ran.</p></div>`
@@ -161,7 +153,7 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
       <div class="ops-toolbar">
         <label>Bot <select id="ops-bot" aria-label="Filter by bot">
           <option value="all">All bots (${opts.length})</option>
-          ${opts.map((b) => `<option value="${esc(b.id)}" ${b.id === sel ? 'selected' : ''}>${esc(b.name)}${b.id === ghost ? ' ★' : ''}</option>`).join('')}
+          ${opts.map((b) => `<option value="${esc(b.id)}" ${b.id === sel ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
         </select></label>
         <label>Timezone <select id="ops-tz" aria-label="Display timezone">
           ${tzChoices.map((z) => `<option ${z === ui.tz ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></label>
@@ -181,7 +173,6 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
         if (s.state !== 'ok') out.push(`<div class="ops-note red" role="alert"><strong>${esc(s.label)} is unavailable.</strong> Nothing derived from it is shown as healthy.</div>`);
         else if (s.stale) out.push(`<div class="ops-note amber"><strong>${esc(s.label)} looks stale</strong> — not rewritten for ${Math.round(s.age_seconds / 60)} min.</div>`);
       }
-      if (includeGhost && ui.bot === 'ghost' && !data.ghost_bot_id) out.push('<div class="ops-note amber">Ghost\'s native bot id could not be read, so all bots are shown.</div>');
     }
     return out.join('');
   }
@@ -195,32 +186,15 @@ export async function viewOpenMausOps({app, api, pageHead, esc, current, tab = '
     const mine = (data.routines || []).filter((r) => wantBot(r.bot_id));
     const enabled = mine.filter((r) => r.enabled).length;
     const recent = (data.runs || []).filter((r) => wantBot(r.bot_id)).slice(0, 5);
-    const ghostId = includeGhost ? data.ghost_bot_id : null;
-    const showGhost = ghostId && (!botId() || botId() === ghostId);
     const runRow = (r) => `<li class="ops-row run">${botChip(r.bot_id)}<span class="ops-rel">${esc(rel(r.started_at || r.created_at, now))}</span>
       <span class="ops-main">${esc(r.routine_name || 'Run')}</span><span class="ops-sub">Started ${esc(dateTime(r.started_at || r.created_at, tz))} · ${esc(r.trigger)}</span></li>`;
     const upRow = (u) => { const r = rmap.get(u.routine_id); return `<li class="ops-row up">${botChip(u.bot_id)}<span class="ops-rel">${esc(rel(u.at, now))}</span>
       <span class="ops-main">${esc(r?.name || u.routine_id)}</span><span class="ops-sub"><time datetime="${new Date(u.at).toISOString()}">${esc(dateTime(u.at, tz))}</time></span></li>`; };
     const recRow = (r) => `<li class="ops-row rec">${botChip(r.bot_id)}<span class="ops-rel">${pill((RUNSTATE[r.status] || [])[1] || 'amber', (RUNSTATE[r.status] || [r.status || 'Unknown'])[0])}</span>
       <span class="ops-main">${esc(r.routine_name || 'Run')}</span><span class="ops-sub">${esc(dateTime(r.started_at || r.created_at, tz))}</span></li>`;
-    let ghost = '';
-    if (showGhost) {
-      let line;
-      if (!ghostSnap || ghostSnap.unavailable) line = pill('amber', 'Unavailable') + ' <span class="muted small">Ghost\'s runner snapshot could not be read. This says nothing about whether his jobs ran.</span>';
-      else {
-        const age = Date.now() - (ghostSnap.generatedAt || 0);
-        const stale = ghostSnap.collector !== 'ok' || !Number.isFinite(age) || age > 120000;
-        const active = (ghostSnap.runs || []).length;
-        line = (stale ? pill('amber', 'Stale') : pill(active ? 'blue' : 'green', active ? `${active} active` : 'Idle'))
-          + ` <span class="muted small">Ghost runner snapshot · a separate source from the routine record${stale ? ' · not fresh, treat as unknown' : ''}</span>`;
-      }
-      ghost = `<section class="ops-card"><h2>Ghost's downstream runner</h2><p class="ops-line">${line}</p>
-        <p class="muted small">Ghost's routines only <em>start</em> a job and read it back. A completed routine run means the dispatch turn finished, not that the job did.</p></section>`;
-    }
     return `<div class="ops-grid">
       <section class="ops-card"><h2>Running now</h2>${running.length ? `<ul class="ops-list">${running.map(runRow).join('')}</ul>` : emptyState('Nothing in progress', 'OpenMausBot has no unfinished run record' + (botId() ? ' for this bot.' : '.'))}</section>
       <section class="ops-card"><h2>Coming up</h2>${up.length ? `<ul class="ops-list">${up.map(upRow).join('')}</ul>` : emptyState('Nothing scheduled', 'No enabled routine has a future run time' + (botId() ? ' for this bot.' : '.'))}</section>
-      ${ghost}
       <section class="ops-card"><h2>Latest runs</h2>${recent.length ? `<ul class="ops-list">${recent.map(recRow).join('')}</ul>
         <p><a href="${esc(tabHref('/openmausbot/history'))}">All run history →</a></p>` : emptyState('No runs kept', 'OpenMausBot has no run records for this selection.')}</section>
       <section class="ops-card"><h2>Routines</h2><p class="ops-big">${enabled}<span class="muted small"> enabled of ${mine.length}</span></p>

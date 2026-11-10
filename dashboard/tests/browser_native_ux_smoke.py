@@ -6,12 +6,11 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 
 helper = (Path(__file__).resolve().parents[1] / 'static/ux_pack.js').read_text()
-fleet_endpoints = {'/api/ghost/status', '/api/harness/health', '/api/agents-control'}
+fleet_endpoints = {'/api/harness/health', '/api/agents-control'}
 html = '''<!doctype html><html><body>
 <aside class="sidebar">
   <a class="nav-link" data-nav="/" href="#/">Command Center</a>
   <a class="nav-link" data-nav="/diagnostics" href="#/diagnostics">Diagnostics</a>
-  <a class="nav-link" data-nav="/ghost" href="#/ghost" {retired}>Ghost</a>
   <a class="nav-link" data-nav="/harness" href="#/harness" {retired}>Harness</a>
   <div hidden><a class="nav-link" data-nav="/hidden" href="#/hidden">Hidden page</a></div>
   <details><summary>Reference</summary>
@@ -49,13 +48,13 @@ with sync_playwright() as playwright:
             page.wait_for_selector('.ux-health[data-state="ok"]')
             assert page.locator('.ux-health').get_attribute('data-state') == 'ok'
             assert page.locator('.ux-chip').all_text_contents() == (
-                ['Dashboard', 'Host'] if native else ['Dashboard', 'Host', 'Harness', 'Ghost'])
+                ['Dashboard', 'Host'] if native else ['Dashboard', 'Host', 'Harness'])
             page.keyboard.press('Control+k')
             palette = page.get_by_role('dialog', name='Command palette')
             for target in ('#/', '#/diagnostics', '#/concepts'):
                 assert palette.locator(f'a[href="{target}"]').count() == 1
             assert palette.locator('a[href="#/hidden"]').count() == 0
-            for target in ('#/ghost', '#/harness'):
+            for target in ('#/harness',):
                 assert palette.locator(f'a[href="{target}"]').count() == (0 if native else 1)
             if native:
                 assert palette.locator('a[href^="#/agents-control"]').count() == 0

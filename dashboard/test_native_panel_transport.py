@@ -16,6 +16,18 @@ class TransportTests(unittest.TestCase):
         self.assertIn("/embed/office/assets/x.js", out)
         self.assertIn("_transport.js", out)
 
+    def test_rewrite_keeps_sprite_catalog_paths_in_javascript(self):
+        js = 'x={a:"/sprites/coffee-machine.png",b:"/_next/static/c.js"}'
+        out = p.rewrite("office", js, "application/javascript")
+        self.assertIn('"/sprites/coffee-machine.png"', out)
+        self.assertIn('/embed/office/_next/static/c.js', out)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_rewrite_prefixes_vite_preload_helper():
+    from native_panel_proxy import rewrite, prefix
+    out = rewrite('openmausbot', 'const a=function(i){return"/"+i};', 'text/javascript')
+    assert 'return"' + prefix('openmausbot') + '/"+i' in out

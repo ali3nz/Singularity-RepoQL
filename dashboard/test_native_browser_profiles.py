@@ -60,7 +60,7 @@ class NativeBrowserProfiles(unittest.TestCase):
                                 self.assertEqual(page.locator('#fb-details').count(),0)
                                 self.assertNotIn('100,000',page.locator('#usage-summary').inner_text())
                                 self.assertIn(expected,page.locator('[data-nav="/unified/usage"]').inner_text())
-                                for route,shown in [('/ghost',option in (2,4)),('/office',option in (2,4)),
+                                for route,shown in [('/office',option in (2,4)),
                                                     ('/native/status',True)]:
                                     element=page.locator(f'[data-nav="{route}"]')
                                     self.assertEqual(element.is_visible(),shown, (option,route))

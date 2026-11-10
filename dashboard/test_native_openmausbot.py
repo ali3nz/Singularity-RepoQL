@@ -10,7 +10,7 @@ from unittest.mock import patch
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from native_openmausbot import operations, overview
+from native_openmausbot import operations, overview, role_names
 
 
 class MockOMB(BaseHTTPRequestHandler):
@@ -30,6 +30,29 @@ class MockOMB(BaseHTTPRequestHandler):
 
 
 class NativeOpenMausBotTest(unittest.TestCase):
+    def test_role_names_use_uuid_roles_and_trimmed_bounded_names(self):
+        inventory = {'available': True, 'bots': [
+            {'id': '01234567-89ab-cdef-0123-456789abcdef', 'name': '  Builder <bot>  '},
+            {'id': 'fedcba9876543210fedcba9876543210', 'name': 'x' * 80},
+            {'id': 'bot_A', 'name': 'Invalid identity'},
+            {'name': 'Missing identity'},
+            {'id': '11111111-1111-1111-1111-111111111111'},
+            {'id': '22222222-2222-2222-2222-222222222222', 'name': '  '},
+        ]}
+        with patch('native_openmausbot.overview', return_value=inventory) as read:
+            state = Path('local-state')
+            self.assertEqual(role_names(state), {
+                'omb-0123456789abcdef0123456789abcdef': 'Builder <bot>',
+                'omb-fedcba9876543210fedcba9876543210': 'x' * 60,
+            })
+            read.assert_called_once_with(state)
+
+    def test_role_names_are_empty_when_local_service_is_unavailable(self):
+        with patch('native_openmausbot.overview', return_value={
+            'available': False, 'reason': 'service_unavailable', 'bots': [],
+        }):
+            self.assertEqual(role_names(Path('local-state')), {})
+
     def test_local_only_read_and_truthful_external_states(self):
         MockOMB.requested=[]
         srv=ThreadingHTTPServer(('127.0.0.1',0),MockOMB)
@@ -87,9 +110,8 @@ class NativeOperationsTest(unittest.TestCase):
         return value
 
     def result(self):
-        with patch('native_openmausbot._reader', return_value=self.read), patch('openmausbot_ops._ghost_bot_id') as ghost:
+        with patch('native_openmausbot._reader', return_value=self.read):
             result = operations(Path('.'), self.now - 60_000, self.now + 86_400_000, now_ms=self.now)
-            ghost.assert_not_called()
             return result
 
     def routine(self, schedule, **extra):

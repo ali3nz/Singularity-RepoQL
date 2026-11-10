@@ -127,7 +127,7 @@ class HTTPAccountBoundary(unittest.TestCase):
         cookie=accepted[1]['Set-Cookie'].split(';',1)[0]
         # Generic dashboard API mutating operations cannot rely on a cookie
         # without the browser's exact Origin.
-        self.assertEqual(self.request('/api/ghost/plans',method='POST',cookie=cookie,origin=False)[0],403)
+        self.assertEqual(self.request('/api/openmausbot/routines',method='POST',cookie=cookie,origin=False)[0],403)
         self.assertEqual(self.request('/app.js',cookie=None,origin=False)[0],401)
 
 

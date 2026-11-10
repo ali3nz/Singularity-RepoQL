@@ -50,10 +50,6 @@ def report(config, *, profile=None, probes=None):
         from native_panel_proxy import backend_key
         backend_key('office')
         return office_status().get('available') is True and embed_url() is not None
-    def check_ghost():
-        from ghost_bridge import control_request
-        code, result = control_request('GET')
-        return code == 200 and isinstance(result, dict) and result.get('ok') is True
     def check_unified():
         from unified_bridge import forward_unified
         data = forward_unified('GET', '/api/unified/health')
@@ -74,12 +70,10 @@ def report(config, *, profile=None, probes=None):
         'harness_rust_coordinator': _status(verified=probe('harness_rust_coordinator',check_harness), reason='authenticated_rust_coordinator_unavailable'),
         'unified_graph_gateway': _status(verified=probe('unified_graph_gateway',check_unified), reason='unified_gateway_not_verified'),
         'claude_office_http': _status(enabled=flags['office'],verified=flags['office'] and probe('claude_office_http',check_office), reason='office_login_not_verified'),
-        'ghost_control_http': _status(enabled=flags['ghost'],verified=flags['ghost'] and probe('ghost_control_http',check_ghost), reason='ghost_control_not_verified'),
         'native_gui_session': _status(reason='real_windows_gui_acceptance_required'),
         'connector_indexing': _status(reason='actual_connector_sweep_required'),
         'subscription_token_receipts': _status(reason='authoritative_gui_receipts_required'),
         'claude_office_event_delivery': _status(enabled=flags['office'], reason='live_gui_event_ack_required'),
-        'ghost_prompt_editing': _status(enabled=flags['ghost'], reason='native_ghost_prompt_mutation_required'),
         'installed_windows_service': _status(reason='windows_service_lifecycle_required'),
     }
     return {

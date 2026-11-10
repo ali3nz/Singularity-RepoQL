@@ -444,11 +444,6 @@ tr.clickable:hover td, tr[data-href]:hover td { background: rgba(38, 230, 255, 0
 .tencent-frame-shell iframe{width:100%;height:85vh;min-height:750px;display:block;border:0}
 @media(max-width:700px){.unified-graph-canvas{height:540px}.tencent-frame-shell iframe{min-height:640px}}
 
-/* Ghost's existing responsive UI isolated from RepoQL's page styles. */
-.ghost-frame-shell{border:1px solid var(--border,#243141);border-radius:12px;overflow:hidden;background:#080d14}
-.ghost-frame-shell iframe{display:block;width:100%;height:calc(100vh - 156px);min-height:780px;border:0}
-@media(max-width:850px){.ghost-frame-shell iframe{height:calc(100vh - 135px);min-height:660px}}
-
 /* Claude Office keeps its own visuals and session logic inside the hosted view. */
 .office-frame-shell { margin-top: 12px; width: 100%; height: min(75vh, 860px); border: 1px solid var(--border, #444); border-radius: 8px; overflow: hidden; }
 .office-frame-shell iframe { width: 100%; height: 100%; border: 0; background: #111; }
@@ -635,7 +630,6 @@ button, a, select, input { -webkit-tap-highlight-color: rgba(38,230,255,.13); }
   .metric .value { font-size:clamp(19px,6vw,27px); overflow-wrap:anywhere; }
   .native-panel-frame { height:calc(100dvh - 185px); min-height:520px; }
   .office-frame-shell { height:calc(100dvh - 185px); min-height:510px; }
-  .ghost-frame-shell iframe { height:calc(100dvh - 185px); min-height:520px; }
   .unified-graph-canvas { height: min(68dvh, 530px); }
   .workflow-page { gap:12px; }
 }
@@ -654,9 +648,6 @@ button, a, select, input { -webkit-tap-highlight-color: rgba(38,230,255,.13); }
   .graph-controls .graph-toggle { min-height:44px; display:inline-flex; align-items:center; padding:8px 10px; }
   .graph-jump, .graph-edit button { min-height:44px; }
 }
-
-/* Ghost is a first-party RepoQL view; its own styles live in Shadow DOM. */
-#ghost-integrated {display:block;min-width:0;max-width:100%;}
 
 /* Native graph gestures and mode controls, including on narrow screens. */
 .graph-mode-label{font-size:12px;color:#b6ecf8;white-space:nowrap}
@@ -1602,7 +1593,7 @@ html[data-theme^="light-"] .ug-empty-insp { color:var(--muted); }
   --role-chat: #75b3d0;
   --role-work: #88b998;
   --role-office: #cbac79;
-  --role-ghost: #8fb4c4;
+
   --role-tencent: #9d8cff;
   --role-usage: #d4ac71;
   --role-attention: #d4ac71;
@@ -1610,17 +1601,17 @@ html[data-theme^="light-"] .ug-empty-insp { color:var(--muted); }
 html[data-theme="neon-violet"] {
   --role-repoql:#7da5e4; --role-harness:#71b7c2; --role-agents:#7ac09d;
   --role-history:#c7a37e; --role-memory:#b8a1df; --role-orchestra:#d2a2c8;
-  --role-chat:#7aadd4; --role-work:#8bb99e; --role-office:#cfb083; --role-ghost:#a3b8d2; --role-tencent:#ab98ff; --role-usage:#d8b279;
+  --role-chat:#7aadd4; --role-work:#8bb99e; --role-office:#cfb083;--role-tencent:#ab98ff; --role-usage:#d8b279;
 }
 html[data-theme="neon-emerald"] {
   --role-repoql:#7cabe0; --role-harness:#69baa8; --role-agents:#83ba95;
   --role-history:#d0aa79; --role-memory:#ac9ed5; --role-orchestra:#caa1bc;
-  --role-chat:#7bb6d4; --role-work:#7cb59d; --role-office:#cfb082; --role-ghost:#8ab9b0; --role-tencent:#aa9be1; --role-usage:#d4b17c;
+  --role-chat:#7bb6d4; --role-work:#7cb59d; --role-office:#cfb082;--role-tencent:#aa9be1; --role-usage:#d4b17c;
 }
 html[data-theme-mode="light"] {
   --role-repoql:#3d77b8; --role-harness:#217e83; --role-agents:#2c8768;
   --role-history:#a1783b; --role-memory:#8065af; --role-orchestra:#a35f8e;
-  --role-chat:#347da1; --role-work:#43835d; --role-office:#9c762d; --role-ghost:#477a93; --role-tencent:#6b58a8; --role-usage:#ab792f;
+  --role-chat:#347da1; --role-work:#43835d; --role-office:#9c762d;--role-tencent:#6b58a8; --role-usage:#ab792f;
   --role-attention:#ab792f;
 }
 html[data-theme="light-sand"] {
@@ -1642,7 +1633,6 @@ html[data-theme="light-mint"] {
 .command-link[data-accent="chat"] { --tile-accent:var(--role-chat); }
 .command-link[data-accent="work"] { --tile-accent:var(--role-work); }
 .command-link[data-accent="office"] { --tile-accent:var(--role-office); }
-.command-link[data-accent="ghost"] { --tile-accent:var(--role-ghost); }
 .command-link[data-accent="tencent"] { --tile-accent:var(--role-tencent); }
 .command-link[data-accent="usage"] { --tile-accent:var(--role-usage); }
 .command-link[data-accent="attention"] { --tile-accent:var(--role-attention); }
@@ -1658,7 +1648,6 @@ html[data-theme="light-mint"] {
 .nav-link[data-nav="/office"] { --nav-accent:var(--role-office); }
 .nav-link[data-nav="/kanban"] { --nav-accent:var(--role-work); }
 .nav-link[data-nav="/agentchat"] { --nav-accent:var(--role-chat); }
-.nav-link[data-nav="/ghost"] { --nav-accent:var(--role-ghost); }
 .nav-link[data-nav="/unified/usage"] { --nav-accent:var(--role-usage); }
 .nav-link { --nav-accent:var(--role-repoql); }
 .nav-link .dot, .nav-link.active .dot { background:var(--nav-accent); box-shadow:none; }
@@ -1732,8 +1721,6 @@ html[data-theme="light-mint"] {
     radial-gradient(ellipse 350px 260px at 100% 28%,color-mix(in srgb,var(--tile-accent) 20%,transparent),transparent 87%),
     linear-gradient(132deg,color-mix(in srgb,var(--tile-accent) 10%,var(--surface)),var(--surface) 76%);
 }
-/* Ghost retains a compact card in the first row alongside Kanban. */
-.command-links-priority .command-workspace-feature[data-accent="ghost"] { grid-column:span 1; }
 .command-rank {
   top:17px;left:18px;display:grid;place-items:center;width:23px;height:23px;
   font-size:11px;letter-spacing:0;border-radius:8px;
@@ -1743,7 +1730,6 @@ html[data-theme="light-mint"] {
 }
 .command-card-content { display:flex;position:relative;z-index:2;flex-direction:column;gap:9px;min-width:0;width:100%;max-width:100%; }
 .command-workspace-feature .command-card-content { width:58%; max-width:58%; }
-.command-workspace-feature[data-accent="ghost"] .command-card-content { width:100%; max-width:100%; }
 .command-card-kicker {
   width:max-content; max-width:100%;font:700 10px/1.3 var(--mono);letter-spacing:.15em;
   color:color-mix(in srgb,var(--tile-accent) 73%,var(--text));text-transform:uppercase;
@@ -1834,12 +1820,6 @@ html[data-theme="light-mint"] {
   filter:drop-shadow(0 0 24px color-mix(in srgb,var(--tile-accent) 14%,transparent));
 }
 .command-card-illustration svg { display:block;width:100%;height:100%;object-fit:contain; }
-.command-workspace-feature[data-accent="ghost"] .command-card-illustration {
-  right:-32px;top:-5px;width:73%;height:90%;opacity:.3;z-index:0;
-}
-.command-workspace-feature[data-accent="ghost"] .command-card-content {
-  text-shadow:0 1px 2px color-mix(in srgb,var(--bg) 18%,transparent);
-}
 html[data-theme-mode="light"] .command-links-priority .command-workspace {
   box-shadow:0 12px 26px rgba(28,51,79,.10),inset 0 1px 0 rgba(255,255,255,.6);
 }
@@ -1848,28 +1828,22 @@ html[data-theme-mode="light"] .command-links-priority .command-workspace:hover {
 }
 @media(max-width:1320px){
   .command-links-priority { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] { grid-column:span 1; }
-}
+  }
 @media(max-width:950px){
   .command-links-priority { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .command-links-priority .command-workspace-feature:not([data-accent="ghost"]) { grid-column:span 2; }
   .command-workspace-feature .command-card-content { width:64%;max-width:64%; }
   .command-links-visual .command-card-content { max-width:60%; }
 }
 @media(max-width:650px){
   .command-links-priority { grid-template-columns:minmax(0,1fr); gap:12px; }
-  .command-links-priority > .command-workspace,
-  .command-links-priority .command-workspace-feature:not([data-accent="ghost"]),
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] {
+  .command-links-priority > .command-workspace{
     grid-column:1 / -1; min-height:168px; padding:19px 17px 17px 52px;
   }
   .command-links-visual .command-card-content,
   .command-workspace-feature .command-card-content { width:70%;max-width:70%; }
-  .command-workspace-feature[data-accent="ghost"] .command-card-content { width:72%;max-width:72%; }
   .command-card-illustration { right:-10px;top:12px;width:42%;height:calc(100% - 24px);opacity:.7; }
   .command-card-icon { right:12px; top:12px; width:30px; height:30px; border-radius:10px; }
   .command-card-icon svg { width:18px; height:18px; }
-  .command-workspace-feature[data-accent="ghost"] .command-card-illustration { right:-22px;width:55%;opacity:.22; }
   .command-workspace .command-card-content strong,
   .command-workspace-feature .command-card-content strong { font-size:19px; }
   .command-workspace .command-card-description { -webkit-line-clamp:2; }
@@ -2007,7 +1981,6 @@ html[data-theme="neon-emerald"] {
   color:color-mix(in srgb,var(--tile-accent) 89%,var(--text));
   filter:drop-shadow(0 12px 24px color-mix(in srgb,var(--tile-accent) 12%,transparent));
 }
-.command-links-visual .command-workspace[data-accent="ghost"] .command-card-illustration { opacity:.43; }
 .command-links-visual .command-workspace[data-accent="chat"] .command-card-illustration { opacity:.65; }
 .command-links-visual .command-workspace[data-accent="office"] .command-card-illustration { opacity:.75; }
 .command-links-visual .command-workspace[data-accent="repoql"] .command-card-illustration { opacity:.85; }
@@ -2161,7 +2134,6 @@ body::before {
   opacity: .96;
   filter: drop-shadow(0 0 10px color-mix(in srgb,var(--tile-accent) 26%,transparent)) drop-shadow(0 18px 26px color-mix(in srgb,var(--tile-accent) 14%,transparent));
 }
-.command-links-visual .command-workspace[data-accent="ghost"] .command-card-illustration { opacity: .58; }
 .command-links-visual .command-workspace[data-accent="chat"] .command-card-illustration { opacity: .8; }
 .command-links-visual .command-workspace[data-accent="office"] .command-card-illustration { opacity: .88; }
 .command-links-visual .command-workspace[data-accent="repoql"] .command-card-illustration { opacity: .96; }
@@ -2205,14 +2177,12 @@ body::before {
 }
 .command-links-visual .command-card-illustration,
 .command-links-visual .command-workspace:not(.command-workspace-feature) .command-card-illustration,
-.command-links-visual .command-workspace[data-accent="ghost"] .command-card-illustration,
 .command-links-visual .command-workspace[data-accent="chat"] .command-card-illustration,
 .command-links-visual .command-workspace[data-accent="office"] .command-card-illustration {
   opacity:1;
   color:color-mix(in srgb,var(--tile-accent) 98%,#f5faff);
   filter:drop-shadow(0 0 19px color-mix(in srgb,var(--tile-accent) 45%,transparent));
 }
-.command-links-visual .command-workspace[data-accent="ghost"] .command-card-illustration {opacity:.78;}
 .command-links-visual .command-workspace[data-accent="chat"] .command-card-illustration {opacity:.9;}
 .command-links-visual .command-card-icon {background:color-mix(in srgb,var(--tile-accent) 24%,var(--surface-raised)); border-color:color-mix(in srgb,var(--tile-accent) 62%,var(--line));}
 .command-brain-svg .mini-brain-outline {stroke-opacity:.9;}
@@ -2644,7 +2614,7 @@ html[data-theme-mode="light"] .messenger-expand {color:#105c7d;border-color:#9bb
   --role-chat: #5ca8ff;
   --role-work: #b8ff4a;
   --role-office: #ff9b57;
-  --role-ghost: #ff5fa8;
+
   --role-tencent: #8d83ff;
   --role-usage: #ffd36f;
   --role-attention: #ffbf66;
@@ -2657,20 +2627,20 @@ html[data-theme="neon-violet"] {
   --cyan:#7ce4ff; --blue:#84afff; --purple:#d0a3ff; --green:#82e8bf; --amber:#ffd188; --red:#ff8fb7;
   --role-repoql:#76e9ff; --role-harness:#59e5dd; --role-agents:#79ffb3; --role-history:#ffc96f;
   --role-memory:#cf96ff; --role-orchestra:#ff8fe5; --role-chat:#72b6ff; --role-work:#c6ff63;
-  --role-office:#ffae73; --role-ghost:#ff79ba; --role-tencent:#a795ff; --role-usage:#ffd98d;
+  --role-office:#ffae73;--role-tencent:#a795ff; --role-usage:#ffd98d;
 }
 html[data-theme="neon-emerald"] {
   --cyan:#64efd5; --blue:#7db6ff; --purple:#b79dff; --green:#8dffbe; --amber:#ffcc7f; --red:#ff8f98;
   --role-repoql:#58e7e9; --role-harness:#2df2c0; --role-agents:#8effae; --role-history:#ffca74;
   --role-memory:#b998ff; --role-orchestra:#ef8fd0; --role-chat:#72c0ff; --role-work:#bfff63;
-  --role-office:#ffb06c; --role-ghost:#ff74ae; --role-tencent:#ae9cff; --role-usage:#ffd48b;
+  --role-office:#ffb06c;--role-tencent:#ae9cff; --role-usage:#ffd48b;
 }
 
 html, body {
   background:
     radial-gradient(1200px 760px at 100% -8%, color-mix(in srgb, var(--role-chat) 14%, transparent), transparent 63%),
     radial-gradient(900px 620px at 2% -4%, color-mix(in srgb, var(--role-memory) 12%, transparent), transparent 62%),
-    radial-gradient(720px 520px at 86% 112%, color-mix(in srgb, var(--role-ghost) 9%, transparent), transparent 64%),
+    radial-gradient(720px 520px at 86% 112%, color-mix(in srgb, var(--role-work) 9%, transparent), transparent 64%),
     linear-gradient(180deg, #050816, #060b15 42%, #04060b);
 }
 body::before {
@@ -2718,7 +2688,7 @@ body::before {
   background:
     radial-gradient(340px 260px at 96% 24%, color-mix(in srgb, var(--role-memory) 24%, transparent), transparent 76%),
     radial-gradient(420px 220px at 4% -10%, color-mix(in srgb, var(--role-chat) 26%, transparent), transparent 82%),
-    radial-gradient(260px 160px at 68% 88%, color-mix(in srgb, var(--role-ghost) 13%, transparent), transparent 82%),
+    radial-gradient(260px 160px at 68% 88%, color-mix(in srgb, var(--role-work) 13%, transparent), transparent 82%),
     linear-gradient(132deg, color-mix(in srgb, var(--role-repoql) 7%, var(--surface)), color-mix(in srgb, var(--role-memory) 4%, var(--surface)) 64%, var(--surface));
   box-shadow: 0 28px 58px rgba(0,0,0,.28), 0 0 0 1px color-mix(in srgb, var(--role-repoql) 9%, transparent) inset, inset 0 1px 0 rgba(255,255,255,.04);
 }
@@ -2739,7 +2709,7 @@ body::before {
 .command-hero-rich .command-hero-orbit > i { box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 12%, transparent), 0 0 18px color-mix(in srgb, var(--role-chat) 18%, transparent); }
 .command-hero-rich .command-hero-orbit > i:nth-of-type(1) { background: linear-gradient(180deg, var(--role-chat), var(--role-repoql)); }
 .command-hero-rich .command-hero-orbit > i:nth-of-type(2) { background: linear-gradient(180deg, var(--role-memory), var(--role-orchestra)); }
-.command-hero-rich .command-hero-orbit > i:nth-of-type(3) { background: linear-gradient(180deg, var(--role-ghost), var(--role-office)); }
+.command-hero-rich .command-hero-orbit > i:nth-of-type(3) { background: linear-gradient(180deg, var(--role-work), var(--role-office)); }
 
 .command-links-visual .command-workspace {
   border-color: color-mix(in srgb, var(--tile-accent) 34%, var(--line));
@@ -2864,7 +2834,6 @@ body::before {
 .main[data-workspace="repoql"] { --page-accent: var(--role-repoql); }
 .main[data-workspace="harness"] { --page-accent: var(--role-harness); }
 .main[data-workspace="work"] { --page-accent: var(--role-work); }
-.main[data-workspace="ghost"] { --page-accent: var(--role-ghost); }
 .main[data-workspace="chat"] { --page-accent: var(--role-chat); }
 .main[data-workspace="memory"] { --page-accent: var(--role-memory); }
 .main[data-workspace="office"] { --page-accent: var(--role-office); }
@@ -2971,18 +2940,15 @@ html[data-theme-mode="light"] .main[data-workspace] .btn.active {
 @media(max-width:1320px){
   .command-links-priority .command-workspace .command-card-content { width:58% !important; max-width:58% !important; }
   .command-links-priority .command-workspace .command-card-illustration { width:30% !important; right:0 !important; }
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] .command-card-illustration { width:30% !important; right:-4px !important; }
-}
+  }
 @media(max-width:950px){
   .command-links-priority .command-workspace .command-card-content { width:60% !important; max-width:60% !important; }
   .command-links-priority .command-workspace .command-card-illustration { width:30% !important; right:0 !important; }
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] .command-card-illustration { width:30% !important; right:-4px !important; }
-}
+  }
 @media(max-width:650px){
   .command-links-priority .command-workspace .command-card-content { width:62% !important; max-width:62% !important; }
   .command-links-priority .command-workspace .command-card-illustration { width:30% !important; right:-6px !important; }
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] .command-card-illustration { width:28% !important; right:-6px !important; }
-}
+  }
 
 /* Mirror priority-card geometry for RTL without affecting the LTR layout. */
 .command-links-priority:dir(rtl) .command-workspace { padding-inline:49px 20px; }
@@ -2990,7 +2956,6 @@ html[data-theme-mode="light"] .main[data-workspace] .btn.active {
 .command-links-priority:dir(rtl) .command-rank { left:auto; right:18px; }
 .command-links-priority:dir(rtl) .command-card-icon { right:auto; left:16px; }
 .command-links-priority:dir(rtl) .command-workspace .command-card-illustration { right:auto !important; left:0 !important; }
-.command-links-priority:dir(rtl) .command-workspace-feature[data-accent="ghost"] .command-card-illustration { left:-4px !important; }
 @media(max-width:650px){
   .command-links-priority:dir(rtl) .command-workspace { padding-inline:52px 17px; }
   .command-links-priority:dir(rtl) .command-card-icon { left:12px; }
@@ -3036,9 +3001,7 @@ html[data-theme-mode="light"] .main[data-workspace] .btn.active {
 }
 @media (max-width:650px) {
   .command-links-visual .command-workspace:not(.command-workspace-feature),
-  .command-links-priority > .command-workspace,
-  .command-links-priority .command-workspace-feature:not([data-accent="ghost"]),
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] {
+  .command-links-priority > .command-workspace{
     min-height:114px;
     padding:10px 12px;
   }
@@ -3267,11 +3230,9 @@ html[data-theme-mode="light"] .kn-task-advance {color:#6d471d;background:#fff2d8
 }
 .command-overview-card[data-accent="work"] { --card-accent: var(--role-work); }
 .command-overview-card[data-accent="chat"] { --card-accent: var(--role-chat); }
-.command-overview-card[data-accent="ghost"] { --card-accent: var(--role-ghost); }
 .command-overview-card[data-accent="memory"] { --card-accent: var(--role-memory); }
 .command-overview-card[data-accent="work"] strong { color:color-mix(in srgb,var(--role-work) 72%,white); }
 .command-overview-card[data-accent="chat"] strong { color:color-mix(in srgb,var(--role-chat) 72%,white); }
-.command-overview-card[data-accent="ghost"] strong { color:color-mix(in srgb,var(--role-ghost) 72%,white); }
 .command-overview-card[data-accent="memory"] strong { color:color-mix(in srgb,var(--role-memory) 72%,white); }
 @media(max-width:980px){ .command-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
 @media(max-width:650px){ .command-overview{padding:13px 12px 14px;} .command-overview-grid{grid-template-columns:1fr;gap:10px;} .command-overview-card{padding:12px;} }
@@ -3589,21 +3550,6 @@ html[data-theme-mode="light"] .nav-section .nav-link .nav-icon {
   .command-hero-rich .command-hero-copy h2 {font-size:clamp(23px,6vw,32px);max-width:100%;}
   .command-overview-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
 }
-/* Direct entrance to the preserved Ghost operations console. */
-.ghost-operations-tile {
-  display:flex;align-items:center;gap:15px;min-height:108px;padding:16px 20px;margin-bottom:16px;
-  color:#fff;text-decoration:none;border:1px solid rgba(213,111,255,.62);border-radius:20px;
-  background:radial-gradient(180px 100px at 85% 0%,rgba(238,75,220,.3),transparent 90%),
-    linear-gradient(115deg,#21134e 0%,#122d60 46%,#471c71 100%);
-  box-shadow:0 8px 32px rgba(86,31,170,.22),inset 0 1px 0 rgba(230,202,255,.12);
-}
-.ghost-operations-tile:hover,.ghost-operations-tile:focus-visible {border-color:#efbcff;box-shadow:0 0 0 2px rgba(230,142,255,.17),0 16px 32px rgba(86,31,170,.27);}
-.ghost-operations-tile-icon {display:grid;place-items:center;flex:none;width:68px;height:68px;color:#e0a6ff;filter:drop-shadow(0 0 11px rgba(218,130,255,.65));}
-.ghost-operations-tile-icon svg {width:100%;height:100%;}
-.ghost-operations-tile-copy {display:grid;gap:5px;min-width:0;flex:1;}
-.ghost-operations-tile-copy strong {font-size:clamp(18px,2.5vw,25px);font-weight:800;}
-.ghost-operations-tile-copy > span {font-size:12px;color:#d6dafd;line-height:1.3;}
-.ghost-operations-tile-arrow {display:grid;place-items:center;width:39px;height:39px;border-radius:50%;font-size:25px;background:rgba(208,156,255,.17);border:1px solid rgba(220,183,255,.52);}
 /* One live feed, collapsed filter controls and more room for mobile messages. */
 .messenger-shell .messenger-listpane[hidden] {display:none!important;}
 .lounge-filters {min-width:0;flex:1;max-width:610px;position:relative;}
@@ -3732,7 +3678,6 @@ html[data-theme-mode=light] .messenger-kanzo div>span:not(.messenger-kanzo-label
    All source data, semantics and routing remain unchanged. */
 .main[data-page-identity=bot]{--page-accent:#55cdbd}
 .main[data-page-identity=work]{--page-accent:#6bcfa0}
-.main[data-page-identity=ghost]{--page-accent:#a18afd}
 .main[data-page-identity=lounge]{--page-accent:#6e9bdf}
 .main[data-page-identity=office]{--page-accent:#f0bb70}
 .main[data-page-identity=memory],.main[data-page-identity=concepts]{--page-accent:#ad8ff1}
@@ -3756,7 +3701,6 @@ html[data-theme-mode=light] .messenger-kanzo div>span:not(.messenger-kanzo-label
 .nav-section .nav-link[data-nav="/bots"]{--nav-accent:#55cdbd}
 .nav-section .nav-link[data-nav="/kanban"]{--nav-accent:#70d6a0}
 .nav-section .nav-link[data-nav="/agentchat"]{--nav-accent:#6a9ee2}
-.nav-section .nav-link[data-nav="/ghost"]{--nav-accent:#b092fb}
 .nav-section .nav-link[data-nav="/office"]{--nav-accent:#eebc75}
 .nav-section .nav-link[data-nav="/unified/graph"],.nav-section .nav-link[data-nav="/architecture/memory"],.nav-section .nav-link[data-nav="/knowledge/all"],.nav-section .nav-link[data-nav="/unified/tencent"]{--nav-accent:#af93f1}
 .nav-section .nav-link[data-nav="/architecture/orchestra"]{--nav-accent:#e58dc6}
@@ -3831,7 +3775,6 @@ html[data-theme-mode=light] .messenger-chat-search input::placeholder{color:#5b7
 }
 .main[data-page-identity=repoql] { --page-secondary: #ab91f2; }
 .main[data-page-identity=work] { --page-secondary: #7db3df; }
-.main[data-page-identity=ghost] { --page-secondary: #f0a6cf; }
 .main[data-page-identity=office] { --page-secondary: #85c5b2; }
 .main[data-page-identity=memory],
 .main[data-page-identity=concepts] { --page-secondary: #68c7c2; }
@@ -3919,7 +3862,6 @@ html[data-theme-mode=light] .messenger-chat-search input::placeholder{color:#5b7
 /* Every dock destination gets an identifiable colour; do not imply a status. */
 .mobile-dock a[data-dock="/"] { --dock-accent: #78aaff; }
 .mobile-dock a[data-dock="/kanban"] { --dock-accent: #7cca91; }
-.mobile-dock a[data-dock="/ghost"] { --dock-accent: #b28cf3; }
 .mobile-dock a[data-dock="/agentchat"] { --dock-accent: #7aa9ea; }
 .mobile-dock a[data-dock="/unified/graph"] { --dock-accent: #b191ed; }
 @media (max-width: 940px) {
@@ -4283,14 +4225,23 @@ html[data-theme-mode="light"] .main[data-page-route="/unified/usage"] .usage-sta
 .ug-empty-orb { display:none; }
 .ug-loader i { filter:none; }
 
-/* Ghost schedule page: slim link to Operations instead of a hero card (2026-11-05) */
-a.ghost-operations-tile{min-height:0!important;padding:10px 14px!important;gap:12px!important;border-radius:12px!important;box-shadow:none!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.12)!important;margin:0 0 14px!important;}
-a.ghost-operations-tile:hover,a.ghost-operations-tile:focus-visible{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.28)!important;box-shadow:none!important;}
-a.ghost-operations-tile .ghost-operations-tile-icon{width:30px!important;height:30px!important;filter:none!important;}
-a.ghost-operations-tile .ghost-operations-tile-copy{display:flex!important;align-items:baseline;gap:10px;flex-wrap:wrap;}
-a.ghost-operations-tile .ghost-operations-tile-copy strong{font-size:15px!important;font-weight:650!important;}
-a.ghost-operations-tile .ghost-operations-tile-copy>span{font-size:13px!important;color:#9fb3c7!important;}
-a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height:28px!important;font-size:16px!important;}
+/* Agent Lounge: charcoal grey surfaces to match the rest of the dashboard (non-light themes) */
+html:not([data-theme-mode="light"]) .messenger-shell,
+html:not([data-theme-mode="light"]) .messenger-thread,
+html:not([data-theme-mode="light"]) .messenger-listpane{background:#171719!important;background-image:none!important}
+html:not([data-theme-mode="light"]) .messenger-shell{border-color:#2d2d31!important;--ms-divider:#2d2d31!important}
+html:not([data-theme-mode="light"]) .messenger-toolbar,
+html:not([data-theme-mode="light"]) .messenger-threadhead,
+html:not([data-theme-mode="light"]) .lounge-presence,
+html:not([data-theme-mode="light"]) .lounge-filters{background:#1a1a1d!important;background-image:none!important;border-color:#2d2d31!important}
+html:not([data-theme-mode="light"]) .messenger-modes{background:#101011!important;background-image:none!important;border-color:#2d2d31!important}
+html:not([data-theme-mode="light"]) .messenger-global-search input,
+html:not([data-theme-mode="light"]) .messenger-chat-search input,
+html:not([data-theme-mode="light"]) .lounge-person{background:#222225!important;background-image:none!important;border-color:#2d2d31!important}
+html:not([data-theme-mode="light"]) .messenger-bubble,
+html:not([data-theme-mode="light"]) .messenger-mode-feed .messenger-bubble,
+html:not([data-theme-mode="light"]) .messenger-message-alt .messenger-bubble{background:#242426!important;background-image:none!important;border-color:#36363a!important}
+html:not([data-theme-mode="light"]) .messenger-date-divider{background:#222225!important}
 
 
 /* ==== mobile_app.css ==== */
@@ -4375,8 +4326,7 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   }
   .command-links-visual .command-workspace .command-card-illustration,
   .command-links-visual .command-workspace-feature .command-card-illustration,
-  .command-links-visual .command-workspace:not(.command-workspace-feature) .command-card-illustration,
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] .command-card-illustration {
+  .command-links-visual .command-workspace:not(.command-workspace-feature) .command-card-illustration{
     position:absolute;left:6%;right:auto!important;top:5px;width:88%!important;height:71%;
     opacity:.95!important;filter:drop-shadow(0 4px 17px color-mix(in srgb,var(--tile-accent) 77%,transparent));
   }
@@ -4393,12 +4343,6 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   .command-overview-card {min-height:91px;border-radius:14px;}
   .command-overview-card strong {font-variant-numeric:tabular-nums;}
   .command-more {border-radius:17px;}
-  .ghost-operations-tile {border-radius:21px;padding:12px;min-height:115px;gap:8px;
-    box-shadow:0 10px 25px rgba(134,52,230,.18);}
-  .ghost-operations-tile-icon {width:51px;height:51px;}
-  .ghost-operations-tile-copy strong {font-size:18px;}
-  .ghost-operations-tile-copy > span {font-size:11px;}
-  .ghost-operations-tile-arrow {width:32px;height:32px;}
   /* A compact feed stays dominant; color identifies chat versus Kanzo updates. */
   .messenger-mode-feed .messenger-toolbar {background:linear-gradient(110deg,#091d31,#161239);}
   .messenger-mode-feed .messenger-message {border-radius:16px;border-color:rgba(168,111,255,.48);
@@ -4520,13 +4464,10 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   /* Match the mockup's cyan / violet / teal / magenta / azure identity. */
   .command-links-priority > .command-workspace[data-accent="work"] {--tile-accent:#08f0e6;}
   .command-links-priority > .command-workspace[data-accent="chat"] {--tile-accent:#a251ff;}
-  .command-links-priority > .command-workspace[data-accent="ghost"] {--tile-accent:#05d6c0;}
   .command-links-priority > .command-workspace[data-accent="memory"] {--tile-accent:#16c9e9;}
   .command-links-priority > .command-workspace[data-accent="office"] {--tile-accent:#1a91ff;}
   .command-links-priority > .command-workspace[data-accent="work"] {order:1;}
   .command-links-priority > .command-workspace[data-accent="chat"] {order:2;}
-  .command-links-priority > .command-workspace[data-accent="ghost"] {order:3;}
-  .command-links-priority > .command-workspace[data-accent="ghostops"] {order:4;}
   .command-links-priority > .command-workspace[data-accent="memory"] {order:5;}
   .command-links-priority > .command-workspace[data-accent="office"] {order:6;}
 
@@ -4551,12 +4492,9 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
     mask-image:linear-gradient(180deg,#000 6%,#000 52%,transparent 99%);}
   .command-links-priority .command-card-illustration svg {display:none;}
   .command-links-priority .command-workspace[data-accent="work"] .command-card-illustration {background-image:url('/assets/mobile/kanban.svg');}
-  .command-links-priority .command-workspace[data-accent="ghost"] .command-card-illustration {background-image:url('/assets/mobile/house.svg');}
-  .command-links-priority .command-workspace[data-accent="ghostops"] .command-card-illustration {background-image:url('/assets/mobile/ghost.svg');}
   .command-links-priority .command-workspace[data-accent="chat"] .command-card-illustration {background-image:url('/assets/mobile/lounge.svg');}
   .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {background-image:url('/assets/mobile/memory.svg');}
   .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration {background-image:url('/assets/mobile/office.svg');}
-  .command-links-priority .command-workspace[data-accent="ghostops"] {--tile-accent:#b444f2;}
   .command-links-priority .command-workspace .command-card-content,
   .command-links-priority .command-workspace-feature .command-card-content {
     position:absolute!important;inset:auto 9px 13px 11px!important;width:calc(100% - 20px)!important;
@@ -4582,20 +4520,6 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   .mobile-dock a[aria-current="page"] {border:1px solid #15ecf9!important;color:#75efff;
     background:linear-gradient(133deg,#06cdd455,#4528ba66)!important;
     box-shadow:0 0 20px #00dcf664,inset 0 0 12px #32b5ff55;}
-  /* Ghost: visually separate agent controls from the real planner. */
-  .main[data-workspace="ghost"] > .page-head {display:none;}
-  .ghost-operations-tile {min-height:148px!important;margin:5px 0 12px!important;border:2px solid #ca59f9!important;
-    border-radius:23px!important;padding:16px!important;background:
-    linear-gradient(90deg,#170e54df 0%,#170e54b0 40%,transparent 75%),url('/assets/mobile/ghost-hero.svg') right center/75% auto no-repeat,
-    linear-gradient(120deg,#171048,#330c58)!important;
-    box-shadow:0 0 19px #b63bff55,inset 0 0 17px #b03ff944!important;}
-  .ghost-operations-tile-icon {display:none;}
-  .ghost-operations-tile-copy {z-index:2;max-width:65%;}
-  .ghost-operations-tile-copy strong {font-size:clamp(25px,6vw,31px)!important;line-height:1.13;}
-  .ghost-operations-tile-copy > span {color:#e3c5ff!important;font-size:12px!important;line-height:1.3;}
-  .ghost-operations-tile-arrow {align-self:end;background:#8045ccaa;color:white;box-shadow:0 0 16px #bb57f677;}
-  #ghost-planner-integrated {border:1px solid #06e8e9a6;border-radius:23px;
-    box-shadow:0 0 21px #07ddea33;overflow:hidden;}
   /* Lounge: compact colorful feed, no imaginary agent status or counts. */
   .main:has(.messenger-shell) {padding:0!important;}
   .main:has(.messenger-shell)::before {margin:4px auto 0;font-size:27px;line-height:1.5;}
@@ -4684,10 +4608,6 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   .main :is(button,select,summary,a) {touch-action:manipulation;}
   .main :is(button,select,summary,a):focus-visible,
   .mobile-dock a:focus-visible {outline:2px solid #90f2ff;outline-offset:3px;}
-  .ghost-operations-tile {min-height:121px!important;padding:12px 15px!important;
-    margin:2px 0 10px!important;}
-  .ghost-operations-tile-copy strong {font-size:clamp(22px,5.8vw,27px)!important;}
-  .ghost-operations-tile-copy > span {max-width:23ch;font-size:11px!important;}
   .messenger-messages {overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
   .messenger-message :is(p,span), .messenger-kanzo {overflow-wrap:anywhere;}
   .lounge-filters > summary {min-height:46px!important;}
@@ -4760,8 +4680,6 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
     background:linear-gradient(0deg,#061025,#061025e8 33%,transparent)!important;}
   .command-links-priority .command-workspace[data-accent="work"] .command-card-illustration {background-image:url('/assets/mobile/kanban-pro.webp')!important;}
   .command-links-priority .command-workspace[data-accent="chat"] .command-card-illustration {background-image:url('/assets/mobile/lounge-pro.webp')!important;}
-  .command-links-priority .command-workspace[data-accent="ghost"] .command-card-illustration {background-image:url('/assets/mobile/house-pro.webp')!important;}
-  .command-links-priority .command-workspace[data-accent="ghostops"] .command-card-illustration {background-image:url('/assets/mobile/ghost-pro.webp')!important;}
   .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {background-image:url('/assets/mobile/memory-pro.svg')!important;}
   .command-links-priority .command-workspace .command-card-content,
   .command-links-priority .command-workspace-feature .command-card-content {bottom:13px!important;}
@@ -4788,9 +4706,7 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   .ug-hero-minimal {border-radius:15px!important;}
   .ug-stage-shell {border-width:1px!important;border-radius:17px!important;box-shadow:none!important;}
   .ug-stage-shell .unified-graph-canvas {filter:none!important;}
-  #ghost-planner-integrated {box-shadow:none!important;border-radius:16px!important;}
-  .ghost-operations-tile {box-shadow:none!important;border-width:1px!important;border-radius:16px!important;}
-}
+  }
 @media (max-width:360px) {
   .command-links-priority {gap:8px!important;}
   .command-links-priority > .command-workspace {min-height:154px!important;}
@@ -4919,21 +4835,6 @@ a.ghost-operations-tile .ghost-operations-tile-arrow{width:28px!important;height
   .main[data-workspace="work"] .kn-task-description {color:#adc7dd!important;font-size:12px!important;line-height:1.4!important;}
 
   /* Household screen: retain existing live planner, improve visual hierarchy. */
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile {
-    min-height:125px!important;margin:3px 0 12px!important;border-radius:16px!important;
-    padding:12px!important;border:1.5px solid rgba(29,232,250,.72)!important;
-    background:linear-gradient(90deg,rgba(5,17,35,.32) 0%,rgba(5,10,31,.89) 100%),
-      url('/assets/mobile/house-pro.webp') left center/cover no-repeat!important;
-    box-shadow:0 0 12px rgba(13,227,243,.16)!important;}
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy {
-    max-width:62%!important;margin-left:auto!important;}
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy strong {
-    font-size:19px!important;font-weight:800!important;}
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy > span {
-    color:#d2e8ff!important;font-size:11px!important;}
-  .main[data-workspace="ghost"] #ghost-planner-integrated,
-  .main[data-workspace="ghost"] #ghost-integrated {border:0!important;overflow:visible!important;box-shadow:none!important;}
-
   /* Lounge: show real feed, not a fabricated announcement/card dataset. */
   .main[data-workspace="chat"] {padding:10px 9px 16px!important;}
   .main[data-workspace="chat"] .messenger-shell {height:calc(100dvh - 84px - env(safe-area-inset-bottom,0px))!important;
@@ -5657,22 +5558,6 @@ html[data-theme="charcoal"] .kn-field-control:focus-visible,
 html[data-theme="charcoal"] .kn-search:focus-visible,
 html[data-theme="charcoal"] .kn-select:focus-visible { outline-color: var(--cyan); }
 
-/* 4b. Ghost Operations entry tile: charcoal panel, muted ghost accent. */
-html[data-theme="charcoal"] .ghost-operations-tile {
-  background: var(--panel) !important; border-color: color-mix(in srgb, var(--role-ghost) 34%, var(--line)) !important;
-  box-shadow: none !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile:hover,
-html[data-theme="charcoal"] .ghost-operations-tile:focus-visible {
-  border-color: color-mix(in srgb, var(--role-ghost) 60%, var(--line-hot)) !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .3) !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-icon { color: color-mix(in srgb, var(--role-ghost) 78%, #fff); filter: none; }
-html[data-theme="charcoal"] .ghost-operations-tile-copy > span { color: var(--muted); }
-html[data-theme="charcoal"] .ghost-operations-tile-arrow {
-  background: #232326; border-color: var(--line-hot); color: var(--text);
-}
-
 /* 0. Charcoal semantic palette: the muted pre-spectrum role hues, so accents,
    nav icons, workspace tiles and Kanban stages stay quiet on charcoal. Light
    and neon themes keep their own saturated role palettes. */
@@ -5680,7 +5565,7 @@ html[data-theme="charcoal"] {
   --role-repoql: #6f9ddf; --role-harness: #64bcbe; --role-agents: #68bca0;
   --role-history: #c3a176; --role-memory: #a690d8; --role-orchestra: #ca94b8;
   --role-chat: #75b3d0; --role-work: #88b998; --role-office: #cbac79;
-  --role-ghost: #8fb4c4; --role-tencent: #9d8cff; --role-usage: #d4ac71;
+--role-tencent: #9d8cff; --role-usage: #d4ac71;
   --role-attention: #d4ac71;
 }
 html[data-theme="charcoal"] .kn-shell {
@@ -5688,8 +5573,6 @@ html[data-theme="charcoal"] .kn-shell {
   --kn-done: #709b85; --kn-backlog: #8a8f9b;
 }
 
-/* v46 — design-consistency pass (worker B, fleet#787): rhythm, control metrics and
-   keyboard focus only. No token or colour changes; ghost/alternate skins untouched. */
 html[data-theme="charcoal"] .page-head{margin-bottom:20px}
 html[data-theme="charcoal"] .page-head h1{line-height:1.15}
 html[data-theme="charcoal"] .pill,html[data-theme="charcoal"] .chip{min-height:22px;padding:2px 9px;line-height:1.35}
@@ -5773,7 +5656,7 @@ html[data-theme="charcoal"] {
   --role-repoql: #6ca6ff;   --role-harness: #45c4c9;  --role-agents: #50caa0;
   --role-history: #dca45c;  --role-memory: #a98cf3;   --role-orchestra: #e583b8;
   --role-chat: #55b8ee;     --role-work: #69cf8e;     --role-office: #e6b150;
-  --role-ghost: #7fbce0;    --role-tencent: #9f8fff;  --role-usage: #eba952;
+--role-tencent: #9f8fff;  --role-usage: #eba952;
   --role-attention: #e6a94f;
   --cyan: #62b9f0; --blue: #6ca6ff; --purple: #b399f4; --green: #5fd49f;
   --amber: #e9b25c; --red: #f28a99;
@@ -5976,8 +5859,6 @@ html[data-theme="charcoal"] #dash .command-links-priority .command-workspace[dat
   filter: saturate(1.05) drop-shadow(0 12px 22px color-mix(in srgb, var(--a, var(--role-repoql)) 26%, transparent)) !important;
   opacity: .92 !important;
 }
-html[data-theme="charcoal"] .command-workspace-feature[data-accent="ghost"] .command-card-illustration { opacity: .5 !important; }
-
 html[data-theme="charcoal"] #dash .command-more {
   --s: var(--section-accent, var(--role-repoql));
   border: 1px solid color-mix(in srgb, var(--s) 28%, var(--line)) !important;
@@ -6007,14 +5888,6 @@ html[data-theme="charcoal"] .command-hero-rich {
     radial-gradient(ellipse 380px 260px at 93% 15%, color-mix(in srgb, var(--role-memory) 20%, transparent), transparent 80%),
     radial-gradient(ellipse 300px 200px at 6% 100%, color-mix(in srgb, var(--role-repoql) 14%, transparent), transparent 80%),
     linear-gradient(145deg, #1d1e23, #121316) !important;
-}
-
-/* Ghost entry tile and any remaining tiles that carry --tile-accent. */
-html[data-theme="charcoal"] .ghost-operations-tile {
-  background:
-    radial-gradient(ellipse 60% 140% at 100% 0%, color-mix(in srgb, var(--role-ghost) 20%, transparent), transparent 72%),
-    var(--panel) !important;
-  border-color: color-mix(in srgb, var(--role-ghost) 44%, var(--line)) !important;
 }
 
 /* --- 8. Reading pages (cheat sheet, architecture) -------------------------- */
@@ -6661,8 +6534,6 @@ html[data-theme="charcoal"] #dash .command-overview-card .command-overview-value
 /* Workspace tiles: 24px line icon, title, chevron. Two per row, 88px minimum. */
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="work"] { --tile-accent: var(--role-work); }
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="chat"] { --tile-accent: var(--role-chat); }
-html[data-theme="charcoal"] #dash .command-workspace[data-accent="ghost"] { --tile-accent: var(--role-ghost); }
-html[data-theme="charcoal"] #dash .command-workspace[data-accent="ghostops"] { --tile-accent: var(--role-ghost); }
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="memory"] { --tile-accent: var(--role-memory); }
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="office"] { --tile-accent: var(--role-office); }
 
@@ -6766,51 +6637,6 @@ html[data-theme="charcoal"] #dash .command-more-grid { padding: 0 12px !importan
 html[data-theme="charcoal"] #dash .command-mini-chip {
   min-height: 44px !important; padding: 0 12px !important; border-radius: 8px !important;
   font-size: 13px !important; font-weight: 500 !important;
-}
-
-/* Ghost Operations entry: a flat row with the same icon and chevron as the home tiles. */
-html[data-theme="charcoal"] .main .ghost-operations-tile,
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile {
-  display: grid !important; grid-template-columns: 24px minmax(0, 1fr) 20px !important; align-items: center !important;
-  gap: 12px !important; min-height: 56px !important; margin: 0 0 10px !important; padding: 12px !important;
-  border-radius: 12px !important; border: 1px solid color-mix(in srgb, var(--role-ghost) 30%, #2d2d31) !important;
-  background: #171719 !important; background-image: none !important; box-shadow: none !important; color: #f1f1f3 !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-icon {
-  display: block !important; width: 24px !important; height: 24px !important; color: var(--role-ghost) !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-icon svg { width: 24px !important; height: 24px !important; }
-html[data-theme="charcoal"] .ghost-operations-tile-copy {
-  display: grid !important; gap: 2px !important; min-width: 0 !important; max-width: none !important; margin: 0 !important; z-index: auto !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-copy strong {
-  font-size: 15px !important; font-weight: 500 !important; line-height: 1.25 !important; color: #f1f1f3 !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-copy > span {
-  font-size: 12px !important; line-height: 1.35 !important; color: #b3b3bb !important; max-width: none !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-arrow {
-  display: block !important; width: 20px !important; height: 20px !important; margin: 0 !important; padding: 0 !important;
-  align-self: center !important; background: none !important; box-shadow: none !important;
-  font-size: 0 !important; line-height: 0 !important; color: #9a9aa3 !important; border: 0 !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-arrow::after {
-  content: ""; display: block; width: 7px; height: 7px; margin-left: 6px;
-  border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg);
-}
-html[data-theme="charcoal"] .main[data-workspace="ghost"] #ghost-planner-integrated {
-  border: 1px solid #2d2d31 !important; border-radius: 12px !important; box-shadow: none !important; overflow: hidden !important;
-}
-
-/* Ghost entry copy: the mockup pushes the text right with margin-left:auto and caps its width. */
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy {
-  margin-left: 0 !important; max-width: none !important;
-}
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy strong {
-  font-size: 15px !important; font-weight: 500 !important; color: #f1f1f3 !important;
-}
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy > span {
-  max-width: none !important; font-size: 12px !important; color: #b3b3bb !important;
 }
 
 /* Kanban: neutral KPI cards, stage colour only as a thin edge, sentence-case headings. */
@@ -6978,14 +6804,12 @@ html[data-theme="charcoal"] #dash .command-links-priority .command-workspace[dat
   }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/kanban"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-kanban.svg') !important; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-bots.svg') !important; }
-  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/ghost"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-ghost.svg') !important; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-lounge.svg') !important; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] .command-card-illustration {
     background-image: var(--scrim), url('/assets/mobile/office-live.webp') !important; background-position: center 35% !important;
   }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] { --tile-accent: #a78bfa; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/kanban"] { --tile-accent: #7dd3a8; }
-  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/ghost"] { --tile-accent: #5eead4; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"] { --tile-accent: #7cb7ff; }
   /* Office is the hero: first, full width, the real scene. Memory graph is a full-width strip at the end. */
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] {
@@ -7316,7 +7140,6 @@ html[data-theme="charcoal"] #app .command-links-visual .command-workspace .comma
 }
 html[data-theme="charcoal"] #app .command-workspace[href="#/kanban"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/kanban-pro.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/bots"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/bots-pro.svg') !important; }
-html[data-theme="charcoal"] #app .command-workspace[href="#/ghost"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/house-pro.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/agentchat"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/lounge-pro.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/unified/graph"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/memory-graph-command-v11-1.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/office"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/office-viewer-command-v11-1.webp') !important; }
@@ -8160,11 +7983,9 @@ html[data-theme="charcoal"] .page-head>div:first-child{min-width:0}
   .main[data-page-route="/architecture/memory"] .memory-brain-head h3{font-size:17px}
 }
 
-/* Command Center phone order: OpenMausBot, Kanban, Ghost, Lounge, Memory Graph, Office last. */
 @media (max-width:760px){
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/openmausbot"]{order:1!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/kanban"]{order:2!important}
-  html[data-theme] #dash .command-links-priority > .command-workspace[href="#/ghost"]{order:3!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/agentchat"]{order:4!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/unified/graph"]{order:5!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/office"]{order:6!important}
@@ -8448,6 +8269,23 @@ html[data-theme] #dash .command-links-priority > .command-workspace[href="#/open
     height:100%!important;min-height:0!important;width:100%!important;flex:1 1 auto!important}
 }
 
+/* Every other page, desktop: fit to the screen like Kanban/OpenMausBot. The page never
+   scrolls as a whole; .main is exactly one viewport tall and scrolls internally, and
+   fixed-pixel canvases/charts size from the viewport instead. Embedded-panel routes
+   above keep their own (more specific) edge-to-edge rules. */
+@media (min-width:761px){
+  html[data-theme="charcoal"] .layout{min-height:100vh!important}
+  html[data-theme="charcoal"] .main{
+    box-sizing:border-box!important;height:100vh!important;max-height:100vh!important;
+    overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain}
+  html[data-theme="charcoal"] .main .unified-graph-canvas{
+    height:clamp(340px,calc(100vh - 330px),900px)!important}
+  html[data-theme="charcoal"] .main .graph{height:clamp(300px,calc(100vh - 360px),700px)!important}
+  html[data-theme="charcoal"] .main .chart{height:clamp(180px,calc(100vh - 520px),320px)!important}
+  html[data-theme="charcoal"] .main .tencent-frame-shell iframe{
+    height:calc(100vh - 140px)!important;min-height:0!important}
+}
+
 /* Native panels (Kanban/Kanzo, Tencent, RepoQL), phone: fill the screen the same way
    OpenMausBot chat already does - hide the bottom dock, drop the page padding, and let
    the iframe take the space below the top bar. Reachable again via the Menu drawer. */
@@ -8509,4 +8347,8 @@ html[data-theme="charcoal"] .messenger-message-alt .messenger-bubble{
   color:#eef3fb!important;border:1px solid color-mix(in srgb,var(--ms-accent,#3f5e8f) 35%,transparent)!important}
 html[data-theme="charcoal"] .messenger-mode-feed .messenger-message-alt .messenger-bubble{
   background:color-mix(in srgb,var(--ms-accent,#3f5e8f) 48%,#141b26 52%)!important;box-shadow:none!important}
+
+/* Minimal page padding everywhere (embedded-panel routes keep their own 0 padding). */
+html[data-theme="charcoal"]:not([data-route="openmausbot"]):not([data-route="kanban"]):not([data-route="office"]) .main{
+  padding:8px 10px 10px!important}
 

@@ -1,0 +1,2 @@
+# Preserve the source hashes used by the pinned Kanzo connector.
+connectors/kanzo/** text eol=lf

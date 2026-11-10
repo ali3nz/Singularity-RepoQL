@@ -51,7 +51,7 @@ class SilentRuntimeContract(unittest.TestCase):
         self.assertIn('LEGACY_GATEWAY_TASK_REQUIRES_SCOPED_REPLACEMENT',gateway)
 
     def test_extra_dashboard_children_no_console(self):
-        for name in ('dashboard/native_cpu.py','dashboard/native_ghost.py','dashboard/repoql_native_auth.py',
+        for name in ('dashboard/native_cpu.py','dashboard/repoql_native_auth.py',
                      'dashboard/harness_telemetry.py','dashboard/freebuff_allowance.py',
                      'dashboard/unified_bridge.py','dashboard/repoql_bridge.py'):
             with self.subTest(file=name):

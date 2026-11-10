@@ -11,4 +11,7 @@ paths = [
   '''connectors/kanzo/tools/pin\.py''',
   '''dashboard/test_auth_modes\.py''',
   '''connectors/memorycore/fixtures/.*''',
+  '''adapters/claude-code/memory-hook\.test\.mjs''',
+  '''adapters/claude-code/installer\.test\.mjs''',
+  '''harness/kit/orchestrate\.mjs''',
 ]

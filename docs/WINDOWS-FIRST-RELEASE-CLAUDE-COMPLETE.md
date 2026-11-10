@@ -6,7 +6,7 @@ Last updated: 2026-10-29. Status: **NOT RELEASE READY**. This is a Codex/native-
 
 Variant 2 must include the installed Claude Code Desktop **Code tab** integration; all 9 `singularity-*` agents; four hook events (SubagentStart, SubagentStop, SessionStart and Stop); Tencent MemoryCore capture, recall, extract, promotion and durable recovery; RepoQL and Kanzo MCP servers plus both RepoQL connector manifests; Agent Chat and Kanzo board/task tools; Claude Office visualizer; authentication-isolated dashboard with usage/CPU history; native Windows persistence, reboot, backup and uninstall. No Ubuntu, WSL, Docker, SSH workers or Claude free-worker quota required for core service operation.
 
-The *complete* source ZIP currently does **not** contain a compiled Windows installer, the external pinned Claude Office app, or verified native Tencent/RepoQL/Kanzo/Ghost daemons. Never tell an end user it is ready to run from its archive alone. For `-Apply` use a test Windows account and explicit operator approval; never change a working production installation.
+The *complete* source ZIP currently does **not** contain a compiled Windows installer, the external pinned Claude Office app, or verified native Tencent/RepoQL/Kanzo daemons. Never tell an end user it is ready to run from its archive alone. For `-Apply` use a test Windows account and explicit operator approval; never change a working production installation.
 
 ## Version and supply chain
 
@@ -15,7 +15,7 @@ The *complete* source ZIP currently does **not** contain a compiled Windows inst
 - Acquire a native **Kanzo** executable from a verified upstream Windows build, or build the Rust crate natively on Windows. Its Linux/macOS shell installer is **not** a Windows provisioning method. Confirm its `mcp` stdio command and writable board storage with live handshakes; refuse release when no safe Windows executable exists.
 - Build the Rust bridge, Harness authority and supervisor on a Windows runner; verify signatures/hashes and hold the binary manifest. No downloaded executable from an unverified mirror.
 - The Claude Office viewer is an external pinned app, *not bundled*. Acquire and build the pinned source natively, with the established **token-in-server-URL credential method**; preserve backend token extraction and proxy behaviour. Do not replace this with keyfile or embedded browser token authentication. Validate real event delivery and prompt edit.
-- Ghost must run using a configured provider; **zero available Claude workers is expected** and must not stall the installer, live memory capture, or persistent board operations. Never silently use a paid alternative.
+- Ghost is retired from the Windows product; legacy Linux variants only. Zero available Claude workers must not stall the installer, live memory capture, or persistent board operations. Never silently use a paid alternative.
 
 ## Project MCP registration (all variants; no global settings edits)
 

@@ -1,6 +1,6 @@
 # Windows handover — Claude session, 2026-11-09
 
-Authoritative tree: `C:\Users\Ben\Singularity-RepoQL` (`work\release` is an older snapshot). Nothing is committed. The installer has NOT been built and must not be until the operator signs off after personal testing.
+Authoritative tree: `<repo-root>` (`work\release` is an older snapshot). Nothing is committed. The installer has NOT been built and must not be until the operator signs off after personal testing.
 
 ## Standing operator constraints
 - Do not build the installer before the operator's own sign-off.
@@ -53,7 +53,7 @@ Then also clean:
 ## Environment notes
 - Git index is mixed CRLF: use `--ignore-cr-at-eol`, keep CRLF when editing (scripts that read/replace `\r\n` then restore it work well).
 - Bash `python` is the Store shim: use `py -3`. pytest is not installed; run `cd <dir> && py -3 -m unittest <module>`.
-- Bash cwd resets to `work\release`; `cd /c/Users/Ben/Singularity-RepoQL` first.
+- Bash cwd resets to `work\release`; `cd <repo-root>` first.
 - Doc ingest after doc changes: `node scripts/doc-ingest-node.mjs ingest --file DOC --root .` then `status --root .`.
 - Ports: Tencent 18126, core gateway 18421, Kanzo 4242, Office 18128, dashboard 18100, unified Rust gateway 18101, OpenMausBot 18211.
 
@@ -72,7 +72,7 @@ The operator requested Luna workers at max effort for delegated reviews. This co
 - Fixed the four OpenChamber fixture failures using an isolated temporary bundle. The source merge now reads integration keys from each planned file's actual source directory. The shipped bundle remains the target of the separate real-bundle retirement checks. A fresh independent Luna review approved the two-file change.
 - Ported the current dashboard presentation into the authoritative Windows source, including phone Command Center cards, phone Kanban KPI tiles and filters, compact bot-operation headers and routine rows, and the blue/purple memory cortex. The existing timezone selector, native workspace links, persisted task-stage readback and Windows Ghost guards are retained.
 - Fixed the secondary UX helper that still displayed and queried Ghost and Harness on Windows. Hidden navigation entries are filtered from the command palette, and native palettes avoid the fleet-only agent-control endpoint. A focused browser regression fails against the backed-up helper and passes with the patch for Windows variants 1–4 and the legacy profile.
-- Regenerated the CSS bundle and updated changed asset cache versions. A fresh independent Luna POST review approved the exact eleven-path dashboard patch. Its normalized diff is at Dockerhost `/home/ali3nz/docker/work/singularity-1086/resume-20261109/windows-design-exact.diff`, SHA-256 `8fb693fff5356e2679c800ddf2d84273a8cae59c8b41ff575a463bebe069a76e`.
+- Regenerated the CSS bundle and updated changed asset cache versions. A fresh independent Luna POST review approved the exact eleven-path dashboard patch. Its normalized diff is at Dockerhost `<dockerhost-work-path>.diff`, SHA-256 `8fb693fff5356e2679c800ddf2d84273a8cae59c8b41ff575a463bebe069a76e`.
 
 ### Verified checks
 
@@ -81,7 +81,7 @@ The operator requested Luna workers at max effort for delegated reviews. This co
 - Windows Rust supervisor tests passed 16 tests. The unified gateway passed four unit tests and 32 integration tests. Both Cargo runs used the existing lockfiles and offline dependencies and returned exit code zero.
 - The five existing Kanban browser checks passed queue/backlog separation, native responsive layout, refresh ordering, persisted stage readback and usability. The obsolete queue-summary assertion now checks the new KPI layout while preserving its task/filter/move/overflow assertions.
 - The full-entrypoint browser fixture passed Command Center, Kanban and bot operations at 390px and 1280px, with no horizontal overflow or JavaScript errors. The actual neural canvas rendered all three synthetic sources with the blue/purple cortex and no JavaScript errors. These browser checks use isolated test data.
-- Evidence logs and screenshots are under Dockerhost `/home/ali3nz/docker/work/singularity-1086/resume-20261109/`. Verified before-change backups and their checksum manifest are under `/mnt/newdata/backups/singularity-1086-resume-20261109/`.
+- Evidence logs and screenshots are under Dockerhost `<dockerhost-work-path>`. Verified before-change backups and their checksum manifest are under `<dockerhost-backup-path>`.
 
 ### Operator and runtime gates
 
@@ -117,13 +117,13 @@ Root independently ran the following five suites against the frozen source snaps
 
 The Windows reparse-path rejection test now uses a directory junction under the normal account, retaining its security rejection assertion. The source Maintainer prompt removes operational Ghost checks and documents the `ROLLED_BACK` status with verified before-image restoration. Its negative retired-persona impersonation guard is retained.
 
-The exact nine source/template hashes are recorded in Dockerhost `/home/ali3nz/docker/work/singularity-1086/resume-20261109/maintainer-metadata-postfix-source.sha256`. The matching root test log is `maintainer-metadata-postfix-combined-tests.txt` in the same directory. The final independent reviewer is a Luna worker at maximum effort. Its POST verdict and this document's new ingestion receipt must be verified before the source checkpoint is described as approved.
+The exact nine source/template hashes are recorded in Dockerhost `<dockerhost-work-path>.sha256`. The matching root test log is `maintainer-metadata-postfix-combined-tests.txt` in the same directory. The final independent reviewer is a Luna worker at maximum effort. Its POST verdict and this document's new ingestion receipt must be verified before the source checkpoint is described as approved.
 
 ### Installed dashboard launcher correction
 
 The reported Windows dialog came from the installed legacy C# dashboard opener. Its `GetOwnedTask` check expected Task Scheduler logon type 7 while the product-owned dashboard task uses InteractiveToken, type 3. A reviewed one-byte correction changes that check to type 3. The installed executable has SHA-256 `27e1fd1abc10e97ce1390f9d0ec35963e7ca550beb032193b11b24ca602ffc76`, and its hidden `--verify` check returned zero on independent readback. The source dashboard-task registration already specifies Interactive logon.
 
-The byte backup, preserved ownership/DACL evidence and repair receipt are recorded under Dockerhost `/mnt/newdata/backups/singularity-dashboard-shortcut-1086/` and the task evidence directory. The normal desktop-opening check was rejected by automatic approval and was not repeated. The desktop browser-opening outcome therefore still needs operator observation.
+The byte backup, preserved ownership/DACL evidence and repair receipt are recorded under Dockerhost `<dockerhost-backup-path>` and the task evidence directory. The normal desktop-opening check was rejected by automatic approval and was not repeated. The desktop browser-opening outcome therefore still needs operator observation.
 
 This legacy EXE correction is local runtime work. There is no tracked, buildable legacy C# dashboard-launcher source in this repository. The current source shortcut targets the Rust `singularity-dashboard-open.exe`, so the local legacy patch does not establish reproducible release provenance for that EXE.
 
@@ -137,7 +137,7 @@ Required live acceptance A/B/C remains pending. There is no observed scheduled a
 
 The earlier fresh-session memory recall, SubagentStart, Office installation-record and AppContainer negative-test acceptance gaps remain in the handover. Source publication awaits complete intended-path/dependency validation of the mixed working tree and the final reviewer gate. The existing dirty installer/setup paths require provenance and remain outside this continuation's write scope. Installer creation, modification, build, packaging and release publication remain held under the operator's instruction.
 
-Before-image backups for the source continuation remain under `/mnt/newdata/backups/singularity-1086-resume-20261109/` and `/mnt/newdata/backups/singularity-1086/`. The latter includes verified document, prompt, integration-fixture and adapter-terminal snapshots with manifests. The implementation record remains fleet#1086.
+Before-image backups for the source continuation remain under `<dockerhost-backup-path>` and `<dockerhost-backup-path>`. The latter includes verified document, prompt, integration-fixture and adapter-terminal snapshots with manifests. The implementation record remains fleet#1086.
 
 ## Operator-led GUI acceptance on 10 November 2026
 
@@ -178,7 +178,7 @@ The operator requested an immediate handover, stopped further implementation and
 
 The owning card is `fleet#1086`. The current session is `01a1be0f-1c9e-7832-b9fa-db5bc02882b2`, with Kanzo identity `codex`. Administrative closure is partial. The next agent must read this card, run the complete board check, and acquire its own exact scope before writes.
 
-The Windows checkout is `C:\Users\Ben\Singularity-RepoQL`. Preserve its existing modified and untracked work. Dockerhost is reachable as `root@192.168.1.240`. Task evidence is under `/home/ali3nz/docker/work/singularity-1086/resume-20261109/`. Backups are under `/mnt/newdata/backups/singularity-1086/`.
+The Windows checkout is `<repo-root>`. Preserve its existing modified and untracked work. Dockerhost is reachable as `the Dockerhost SSH account`. Task evidence is under `<dockerhost-work-path>`. Backups are under `<dockerhost-backup-path>`.
 
 ### Current review blocker
 
@@ -207,7 +207,7 @@ The evidence directory contains `blocked-reporting-final-source/`, `blocked-repo
 
 The operator requested the latest live Dockerhost dashboard design changes on Windows. The read-only analysis is complete. The latest changes have not been ported.
 
-Upstream is `/home/ali3nz/docker/repoql-dashboard`, clean branch `main`, at `279abed908819d9fba1941f84684655bb991c3aa`. Its systemd service was active and its process working directory matched that repository. Windows `dashboard/PROVENANCE.md` already records refresh `9fb6ebad76e162486448bfc77cacb8c60b1fc878`.
+Upstream is `<dockerhost-work-path>`, clean branch `main`, at `279abed908819d9fba1941f84684655bb991c3aa`. Its systemd service was active and its process working directory matched that repository. Windows `dashboard/PROVENANCE.md` already records refresh `9fb6ebad76e162486448bfc77cacb8c60b1fc878`.
 
 The six changed files within the original 32-file projection are `agentchat_feed.py`, `embed_config.py`, `server.py`, `static/app.js`, `static/index.html`, and `static/navigation_ui.js`. Related changes also touch `static/ux_pack.js`, `static/overrides.css`, generated `static/bundle.css`, and new `agent_avatars.py`.
 

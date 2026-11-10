@@ -2,7 +2,7 @@
 
 Scope: local MSI build, isolated RC lifecycle, test batteries, release
 paperwork. Machine: windows241 (`ali3nz\ben`, PowerShell 5.1). Install root:
-`C:\Users\Ben\AppData\Local\Singularity\Fleet861RC`. Branch `rc-fleet893`.
+`%LOCALAPPDATA%\Singularity\Fleet861RC`. Branch `rc-fleet893`.
 Every row names the raw log that proves it; logs are in
 `work/singularity-windows-claude-omb-20261105/evidence-msi-remediation/`
 (numbered; the low 60s are this continuation).

@@ -1,4 +1,4 @@
-"""Dashboard-session embeds for the existing Tencent and Office applications.
+"""Dashboard-session embeds for the existing Tencent, Office and OpenMausBot applications.
 
 Backend keys stay server-side. Each fixed upstream is reachable only after an
 authenticated handshake; cookie-authenticated writes and WS handshakes also
@@ -11,13 +11,22 @@ from pathlib import Path
 import re
 import select
 import socket
+import stat
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit, urljoin, parse_qsl
 
 from repoql_native_auth import COOKIE_NAME, create_launch_cookie, valid_launch_cookie
 
 
 def _upstream(kind, default_port):
-    """Fixed loopback upstream; only these three names exist, never a URL from a request."""
+    """Fixed loopback upstream; no URL is accepted from a request."""
+    if kind == 'openmausbot':
+        try:
+            port = int(os.environ.get('SINGULARITY_WINDOWS_OMB_PORT', '18211'))
+        except (TypeError, ValueError):
+            raise ValueError('invalid fixed OpenMausBot port') from None
+        if not 1024 <= port <= 65534:
+            raise ValueError('invalid fixed OpenMausBot port')
+        return ('127.0.0.1', port)
     prefix = 'SINGULARITY_' + kind.upper() + '_HOST'
     port_key = 'SINGULARITY_' + kind.upper() + '_PORT'
     host = os.environ.get(prefix, '127.0.0.1').strip()
@@ -35,7 +44,7 @@ def _upstream(kind, default_port):
 
 
 UPSTREAM = {'tencent': _upstream('tencent', 18126 if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1' else 8125), 'office': _upstream('office', 8001),
-            'kanzo': _upstream('kanzo', 4242)}
+            'kanzo': _upstream('kanzo', 4242), 'openmausbot': _upstream('openmausbot', 18211)}
 MAX_BODY = 8 * 1024 * 1024
 
 
@@ -53,7 +62,31 @@ def upstream_path(kind, path):
     return rest
 
 
-def backend_key(kind):
+def openmausbot_session_token(handler):
+    """Read the optional local OMB session token without exposing it to the browser."""
+    try:
+        state_dir = Path(handler.app.config.state_dir)
+    except (AttributeError, TypeError, ValueError):
+        raise PermissionError('panel credential unavailable') from None
+    token_path = state_dir / 'omb-session.token'
+    try:
+        info = token_path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise PermissionError('panel credential unavailable') from None
+    if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+        raise PermissionError('panel credential unavailable')
+    try:
+        token = token_path.read_text(encoding='utf8').strip()
+    except (OSError, UnicodeError):
+        raise PermissionError('panel credential unavailable') from None
+    if not re.fullmatch(r'[A-Za-z0-9_\-]{12,2048}', token):
+        raise PermissionError('panel credential unavailable')
+    return token
+
+
+def backend_key(kind, handler=None):
     if kind == 'office':
         if os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
             mode = os.environ.get('SINGULARITY_OFFICE_NATIVE_AUTH_MODE', 'legacy_url').strip()
@@ -79,12 +112,14 @@ def backend_key(kind):
             # Preserve the old Linux configuration and authenticated proxy.
             key = parse_qs(urlsplit(os.environ.get('SINGULARITY_OFFICE_EMBED_URL',
                 os.environ.get('CLAUDE_OFFICE_EMBED_URL', ''))).query).get('token', [''])[0]
-    else:
+    elif kind == 'tencent':
         key_file = os.environ.get('SINGULARITY_TENCENT_OWNER_KEY_FILE',
                                   os.environ.get('TENCENT_OWNER_KEY_FILE', '')).strip()
         if not key_file:
             raise PermissionError('panel credential unavailable')
         key = Path(key_file).read_text().strip()
+    else:
+        raise PermissionError('unsupported panel authentication')
     if not isinstance(key, str) or not key or len(key) > 4096 or '\r' in key or '\n' in key:
         raise PermissionError('panel credential unavailable')
     return key
@@ -96,7 +131,14 @@ def authenticated(handler, kind):
 
 def handshake(handler, kind):
     prefix(kind)
-    if kind != 'kanzo':
+    omb_token = None
+    if kind == 'openmausbot':
+        try:
+            omb_token = openmausbot_session_token(handler)
+        except (OSError, PermissionError):
+            handler.send_json(503, {'error': 'openmausbot_session_unavailable'})
+            return
+    elif kind != 'kanzo':
         try:
             backend_key(kind)  # fail before issuing a cookie if configuration is absent
         except (OSError, PermissionError):
@@ -126,6 +168,26 @@ def handshake(handler, kind):
         if not ready:
             handler.send_json(503, {'error': 'local_kanzo_unavailable'})
             return
+    if kind == 'openmausbot':
+        try:
+            conn = http.client.HTTPConnection(*UPSTREAM['openmausbot'], timeout=3)
+            try:
+                headers = {'Accept': 'application/json', 'Accept-Encoding': 'identity',
+                           'Host': '127.0.0.1:%d' % UPSTREAM['openmausbot'][1]}
+                if omb_token:
+                    headers['Authorization'] = 'Bearer ' + omb_token
+                conn.request('GET', '/api/health', headers=headers)
+                response = conn.getresponse()
+                raw = response.read(4097)
+                health = json.loads(raw) if response.status == 200 and len(raw) <= 4096 else None
+                ready = isinstance(health, dict) and health.get('app') == 'openmausbot'
+            finally:
+                conn.close()
+        except (OSError, http.client.HTTPException, ValueError):
+            ready = False
+        if not ready:
+            handler.send_json(503, {'error': 'local_openmausbot_unavailable'})
+            return
     cookie = create_launch_cookie(handler.app.token, audience=kind)
     secure = '; Secure' if handler.access_identity() is not None or handler.request_is_https() else ''
     body = b'{"ready":true}'
@@ -147,14 +209,24 @@ def transport(kind):
         return u.href;};
       const original=window.fetch.bind(window);
       window.fetch=(input,options)=>original(input instanceof Request?new Request(remap(input.url),input):remap(input),options);
+      const ES=window.EventSource;if(ES)window.EventSource=class extends ES{constructor(url,init){super(remap(url),init)}};
       const WS=window.WebSocket;window.WebSocket=class extends WS{constructor(url,protocols){super(remap(url),protocols)}};
     })();""").replace('PREFIX', json.dumps(prefix(kind))).encode()
 
 
 def rewrite(kind, text, content_type):
     base = prefix(kind)
-    text = re.sub(r'([\"\x27`(=])(/(?:assets/|sprites/|_next/|logo\.png|app\.js|images/|favicon\.ico|downloads/))',
+    # Never rewrite /sprites/ inside JavaScript: the Office sprite catalog keys
+    # are compared with root-relative paths stored in saved layouts, and a
+    # rewritten key silently misses, leaving inserted items at raw texture size.
+    # Root /sprites/ and /rooms/ requests are served by static_asset() instead.
+    is_js = 'javascript' in content_type or 'ecmascript' in content_type
+    sprites = '' if is_js else 'sprites/|'
+    text = re.sub(r'([\"\x27`(=])(/(?:assets/|' + sprites + r'_next/|logo\.png|app\.js|images/|favicon\.ico|downloads/))',
                   lambda m: m[1] + base + m[2], text)
+    if is_js:
+        # Vite's preload helper builds CSS/chunk URLs as "/"+dep at runtime.
+        text = re.sub(r'return\s*([\"\x27])/\1\s*\+', lambda m: 'return' + m[1] + base + '/' + m[1] + '+', text)
     if 'text/html' in content_type:
         text = text.replace('<head>', '<head><script src="' + base + '/_transport.js"></script>', 1)
     return text
@@ -263,10 +335,13 @@ def serve(handler, kind, method, parsed, *, public_root=False):
             handler.send_json(403, {'error': 'cross_origin_refused'})
             return
     if is_ws:
-        if kind != 'office' or not path.startswith('/ws/'):
+        if kind == 'office' and not path.startswith('/ws/'):
             handler.send_json(403, {'error': 'websocket_path_refused'})
             return
-        websocket(handler, kind, path)
+        if kind not in ('office', 'openmausbot'):
+            handler.send_json(403, {'error': 'websocket_path_refused'})
+            return
+        websocket(handler, kind, path, parsed.query)
         return
     if method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'):
         raise PermissionError('unsupported panel method')
@@ -293,7 +368,7 @@ def serve(handler, kind, method, parsed, *, public_root=False):
                 # RC port, and a hard-coded production port would make every
                 # write fail its origin check.
                 headers['Origin'] = 'http://127.0.0.1:%d' % _upstream('kanzo', 4242)[1]
-        else:
+        elif kind == 'tencent':
             headers['X-Tdai-Service-Id'] = tencent_service_id()
             headers['X-Tdai-User-Key'] = backend_key(kind)
             # The Panel's meta routes need a body identity as well as headers.
@@ -305,10 +380,40 @@ def serve(handler, kind, method, parsed, *, public_root=False):
                 data.pop('user_id', None)
                 data['user_key'] = backend_key(kind)
                 body = json.dumps(data).encode()
+        elif kind == 'openmausbot':
+            token = openmausbot_session_token(handler)
+            if token:
+                headers['Authorization'] = 'Bearer ' + token
+            if method not in ('GET', 'HEAD'):
+                headers['Origin'] = 'http://127.0.0.1:%d' % UPSTREAM['openmausbot'][1]
+        else:
+            raise PermissionError('unsupported panel')
         conn = http.client.HTTPConnection(*UPSTREAM[kind], timeout=30)
         try:
             conn.request(method, path + ('?' + parsed.query if parsed.query else ''), body=body, headers=headers)
             response = conn.getresponse()
+            if kind == 'openmausbot' and response.status == 200 and 'text/event-stream' in (response.getheader('Content-Type') or ''):
+                # Live event stream: relay chunks as they arrive instead of buffering.
+                if conn.sock is not None:
+                    conn.sock.settimeout(300)
+                handler.send_response(200)
+                handler.send_header('Content-Type', 'text/event-stream')
+                handler.send_header('Cache-Control', 'no-store')
+                handler.send_header('X-Accel-Buffering', 'no')
+                handler.send_header('X-Content-Type-Options', 'nosniff')
+                handler.send_header('Connection', 'close')
+                handler.end_headers()
+                handler.close_connection = True
+                try:
+                    while True:
+                        chunk = response.read1(8192) if hasattr(response, 'read1') else response.read(1)
+                        if not chunk:
+                            break
+                        handler.wfile.write(chunk)
+                        handler.wfile.flush()
+                except (OSError, ValueError):
+                    pass
+                return
             limit = 27 * 1024 * 1024 if kind == 'kanzo' else MAX_BODY
             content = response.read(limit + 1)
             if len(content) > limit:
@@ -349,11 +454,23 @@ def serve(handler, kind, method, parsed, *, public_root=False):
         handler.wfile.write(content)
 
 
-def websocket(handler, kind, path):
+def websocket(handler, kind, path, query=''):
     upstream = None
     try:
-        lines = [f'GET {path} HTTP/1.1', 'Host: %s:%d' % UPSTREAM[kind],
-                 'Connection: Upgrade', 'Upgrade: websocket', 'X-API-Key: ' + backend_key(kind)]
+        if any(c in query for c in ('\r', '\n', '\x00')) or len(query) > 4096:
+            raise PermissionError('invalid websocket query')
+        target = path + ('?' + query if query else '')
+        lines = [f'GET {target} HTTP/1.1', 'Host: %s:%d' % UPSTREAM[kind],
+                 'Connection: Upgrade', 'Upgrade: websocket']
+        if kind == 'office':
+            lines.append('X-API-Key: ' + backend_key(kind))
+        elif kind == 'openmausbot':
+            token = openmausbot_session_token(handler)
+            if token:
+                lines.append('Authorization: Bearer ' + token)
+            lines.append('Origin: http://127.0.0.1:%d' % UPSTREAM['openmausbot'][1])
+        else:
+            raise PermissionError('unsupported websocket panel')
         for key in ('Sec-WebSocket-Key', 'Sec-WebSocket-Version', 'Sec-WebSocket-Protocol', 'Sec-WebSocket-Extensions'):
             value = handler.headers.get(key)
             if value:

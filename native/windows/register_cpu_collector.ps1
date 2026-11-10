@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $name = 'Singularity-CpuHistoryCollector'
 $root = Join-Path $env:LOCALAPPDATA 'Singularity'
 $cur  = Join-Path $root 'WindowsNative\current'
+$bridge = Join-Path $cur 'bin\singularity-desktop-bridge.exe'
 $py   = Join-Path $root 'Runtime\python\pythonw.exe'
 $pyc  = Join-Path $root 'Runtime\python\python.exe'
 $state = Join-Path $root 'Dashboard'
@@ -32,6 +33,7 @@ $env_lines = @(
   "set SINGULARITY_WORKSPACE=$(Join-Path $root 'Workspace')",
   "set SINGULARITY_RQL_BIN=$(Join-Path $root 'Runtime\repoql\rql.exe')",
   "set SINGULARITY_RQL_EXE=$(Join-Path $root 'Runtime\repoql\rql.exe')",
+  "set SINGULARITY_NATIVE_BRIDGE_EXE=$bridge",
   'set PYTHONDONTWRITEBYTECODE=1',
   "set PYTHONPATH=$(Join-Path $cur 'source\dashboard')",
   "cd /d `"$(Join-Path $cur 'source\dashboard')`"",

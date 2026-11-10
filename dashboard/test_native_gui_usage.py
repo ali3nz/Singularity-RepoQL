@@ -69,6 +69,7 @@ class NativeGuiUsageTests(unittest.TestCase):
         from unittest.mock import patch as mock_patch
         for n in (1,2,3,4):
             with self.subTest(option=n),patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_INSTALL_VARIANT':str(n)}), \
+                mock_patch('unified_bridge._native_origin_failure',return_value=None), \
                 mock_patch('unified_bridge._fetch_upstream',return_value=self.payload):
                 result=forward_unified('GET','/api/unified/usage',{'days':'30'})
                 expected='claude-desktop-code' if n in (1,2) else 'openchamber-desktop-subscription'

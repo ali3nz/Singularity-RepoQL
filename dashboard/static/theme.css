@@ -439,22 +439,6 @@ html[data-theme="charcoal"] .kn-field-control:focus-visible,
 html[data-theme="charcoal"] .kn-search:focus-visible,
 html[data-theme="charcoal"] .kn-select:focus-visible { outline-color: var(--cyan); }
 
-/* 4b. Ghost Operations entry tile: charcoal panel, muted ghost accent. */
-html[data-theme="charcoal"] .ghost-operations-tile {
-  background: var(--panel) !important; border-color: color-mix(in srgb, var(--role-ghost) 34%, var(--line)) !important;
-  box-shadow: none !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile:hover,
-html[data-theme="charcoal"] .ghost-operations-tile:focus-visible {
-  border-color: color-mix(in srgb, var(--role-ghost) 60%, var(--line-hot)) !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .3) !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-icon { color: color-mix(in srgb, var(--role-ghost) 78%, #fff); filter: none; }
-html[data-theme="charcoal"] .ghost-operations-tile-copy > span { color: var(--muted); }
-html[data-theme="charcoal"] .ghost-operations-tile-arrow {
-  background: #232326; border-color: var(--line-hot); color: var(--text);
-}
-
 /* 0. Charcoal semantic palette: the muted pre-spectrum role hues, so accents,
    nav icons, workspace tiles and Kanban stages stay quiet on charcoal. Light
    and neon themes keep their own saturated role palettes. */
@@ -462,7 +446,7 @@ html[data-theme="charcoal"] {
   --role-repoql: #6f9ddf; --role-harness: #64bcbe; --role-agents: #68bca0;
   --role-history: #c3a176; --role-memory: #a690d8; --role-orchestra: #ca94b8;
   --role-chat: #75b3d0; --role-work: #88b998; --role-office: #cbac79;
-  --role-ghost: #8fb4c4; --role-tencent: #9d8cff; --role-usage: #d4ac71;
+--role-tencent: #9d8cff; --role-usage: #d4ac71;
   --role-attention: #d4ac71;
 }
 html[data-theme="charcoal"] .kn-shell {
@@ -470,8 +454,6 @@ html[data-theme="charcoal"] .kn-shell {
   --kn-done: #709b85; --kn-backlog: #8a8f9b;
 }
 
-/* v46 — design-consistency pass (worker B, fleet#787): rhythm, control metrics and
-   keyboard focus only. No token or colour changes; ghost/alternate skins untouched. */
 html[data-theme="charcoal"] .page-head{margin-bottom:20px}
 html[data-theme="charcoal"] .page-head h1{line-height:1.15}
 html[data-theme="charcoal"] .pill,html[data-theme="charcoal"] .chip{min-height:22px;padding:2px 9px;line-height:1.35}
@@ -555,7 +537,7 @@ html[data-theme="charcoal"] {
   --role-repoql: #6ca6ff;   --role-harness: #45c4c9;  --role-agents: #50caa0;
   --role-history: #dca45c;  --role-memory: #a98cf3;   --role-orchestra: #e583b8;
   --role-chat: #55b8ee;     --role-work: #69cf8e;     --role-office: #e6b150;
-  --role-ghost: #7fbce0;    --role-tencent: #9f8fff;  --role-usage: #eba952;
+--role-tencent: #9f8fff;  --role-usage: #eba952;
   --role-attention: #e6a94f;
   --cyan: #62b9f0; --blue: #6ca6ff; --purple: #b399f4; --green: #5fd49f;
   --amber: #e9b25c; --red: #f28a99;
@@ -758,8 +740,6 @@ html[data-theme="charcoal"] #dash .command-links-priority .command-workspace[dat
   filter: saturate(1.05) drop-shadow(0 12px 22px color-mix(in srgb, var(--a, var(--role-repoql)) 26%, transparent)) !important;
   opacity: .92 !important;
 }
-html[data-theme="charcoal"] .command-workspace-feature[data-accent="ghost"] .command-card-illustration { opacity: .5 !important; }
-
 html[data-theme="charcoal"] #dash .command-more {
   --s: var(--section-accent, var(--role-repoql));
   border: 1px solid color-mix(in srgb, var(--s) 28%, var(--line)) !important;
@@ -789,14 +769,6 @@ html[data-theme="charcoal"] .command-hero-rich {
     radial-gradient(ellipse 380px 260px at 93% 15%, color-mix(in srgb, var(--role-memory) 20%, transparent), transparent 80%),
     radial-gradient(ellipse 300px 200px at 6% 100%, color-mix(in srgb, var(--role-repoql) 14%, transparent), transparent 80%),
     linear-gradient(145deg, #1d1e23, #121316) !important;
-}
-
-/* Ghost entry tile and any remaining tiles that carry --tile-accent. */
-html[data-theme="charcoal"] .ghost-operations-tile {
-  background:
-    radial-gradient(ellipse 60% 140% at 100% 0%, color-mix(in srgb, var(--role-ghost) 20%, transparent), transparent 72%),
-    var(--panel) !important;
-  border-color: color-mix(in srgb, var(--role-ghost) 44%, var(--line)) !important;
 }
 
 /* --- 8. Reading pages (cheat sheet, architecture) -------------------------- */
@@ -1443,8 +1415,6 @@ html[data-theme="charcoal"] #dash .command-overview-card .command-overview-value
 /* Workspace tiles: 24px line icon, title, chevron. Two per row, 88px minimum. */
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="work"] { --tile-accent: var(--role-work); }
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="chat"] { --tile-accent: var(--role-chat); }
-html[data-theme="charcoal"] #dash .command-workspace[data-accent="ghost"] { --tile-accent: var(--role-ghost); }
-html[data-theme="charcoal"] #dash .command-workspace[data-accent="ghostops"] { --tile-accent: var(--role-ghost); }
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="memory"] { --tile-accent: var(--role-memory); }
 html[data-theme="charcoal"] #dash .command-workspace[data-accent="office"] { --tile-accent: var(--role-office); }
 
@@ -1548,51 +1518,6 @@ html[data-theme="charcoal"] #dash .command-more-grid { padding: 0 12px !importan
 html[data-theme="charcoal"] #dash .command-mini-chip {
   min-height: 44px !important; padding: 0 12px !important; border-radius: 8px !important;
   font-size: 13px !important; font-weight: 500 !important;
-}
-
-/* Ghost Operations entry: a flat row with the same icon and chevron as the home tiles. */
-html[data-theme="charcoal"] .main .ghost-operations-tile,
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile {
-  display: grid !important; grid-template-columns: 24px minmax(0, 1fr) 20px !important; align-items: center !important;
-  gap: 12px !important; min-height: 56px !important; margin: 0 0 10px !important; padding: 12px !important;
-  border-radius: 12px !important; border: 1px solid color-mix(in srgb, var(--role-ghost) 30%, #2d2d31) !important;
-  background: #171719 !important; background-image: none !important; box-shadow: none !important; color: #f1f1f3 !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-icon {
-  display: block !important; width: 24px !important; height: 24px !important; color: var(--role-ghost) !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-icon svg { width: 24px !important; height: 24px !important; }
-html[data-theme="charcoal"] .ghost-operations-tile-copy {
-  display: grid !important; gap: 2px !important; min-width: 0 !important; max-width: none !important; margin: 0 !important; z-index: auto !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-copy strong {
-  font-size: 15px !important; font-weight: 500 !important; line-height: 1.25 !important; color: #f1f1f3 !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-copy > span {
-  font-size: 12px !important; line-height: 1.35 !important; color: #b3b3bb !important; max-width: none !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-arrow {
-  display: block !important; width: 20px !important; height: 20px !important; margin: 0 !important; padding: 0 !important;
-  align-self: center !important; background: none !important; box-shadow: none !important;
-  font-size: 0 !important; line-height: 0 !important; color: #9a9aa3 !important; border: 0 !important;
-}
-html[data-theme="charcoal"] .ghost-operations-tile-arrow::after {
-  content: ""; display: block; width: 7px; height: 7px; margin-left: 6px;
-  border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg);
-}
-html[data-theme="charcoal"] .main[data-workspace="ghost"] #ghost-planner-integrated {
-  border: 1px solid #2d2d31 !important; border-radius: 12px !important; box-shadow: none !important; overflow: hidden !important;
-}
-
-/* Ghost entry copy: the mockup pushes the text right with margin-left:auto and caps its width. */
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy {
-  margin-left: 0 !important; max-width: none !important;
-}
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy strong {
-  font-size: 15px !important; font-weight: 500 !important; color: #f1f1f3 !important;
-}
-html[data-theme="charcoal"] .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy > span {
-  max-width: none !important; font-size: 12px !important; color: #b3b3bb !important;
 }
 
 /* Kanban: neutral KPI cards, stage colour only as a thin edge, sentence-case headings. */
@@ -1760,14 +1685,12 @@ html[data-theme="charcoal"] #dash .command-links-priority .command-workspace[dat
   }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/kanban"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-kanban.svg') !important; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-bots.svg') !important; }
-  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/ghost"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-ghost.svg') !important; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/tile-lounge.svg') !important; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] .command-card-illustration {
     background-image: var(--scrim), url('/assets/mobile/office-live.webp') !important; background-position: center 35% !important;
   }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"] { --tile-accent: #a78bfa; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/kanban"] { --tile-accent: #7dd3a8; }
-  html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/ghost"] { --tile-accent: #5eead4; }
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"] { --tile-accent: #7cb7ff; }
   /* Office is the hero: first, full width, the real scene. Memory graph is a full-width strip at the end. */
   html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"] {
@@ -2098,7 +2021,6 @@ html[data-theme="charcoal"] #app .command-links-visual .command-workspace .comma
 }
 html[data-theme="charcoal"] #app .command-workspace[href="#/kanban"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/kanban-pro.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/bots"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/bots-pro.svg') !important; }
-html[data-theme="charcoal"] #app .command-workspace[href="#/ghost"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/house-pro.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/agentchat"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/lounge-pro.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/unified/graph"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/memory-graph-command-v11-1.webp') !important; }
 html[data-theme="charcoal"] #app .command-workspace[href="#/office"] .command-card-illustration { background-image: var(--scrim), url('/assets/mobile/office-viewer-command-v11-1.webp') !important; }

@@ -682,7 +682,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _native_panel_write(self, method: str) -> None:
         # The native apps use these verbs; do not widen other dashboard APIs.
-        if self.is_public_office_host() or urlparse(self.path).path.startswith(('/embed/tencent/', '/embed/office/', '/embed/kanzo/')):
+        if self.is_public_office_host() or urlparse(self.path).path.startswith(('/embed/tencent/', '/embed/office/', '/embed/kanzo/', '/embed/openmausbot/')):
             self.route(method)
         else:
             self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
@@ -831,7 +831,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
                 return
-            for panel in ('tencent', 'office', 'kanzo'):
+            for panel in ('tencent', 'office', 'kanzo', 'openmausbot'):
                 if path.startswith('/embed/' + panel + '/'):
                     from native_panel_proxy import serve
                     serve(self, panel, method, parsed)
@@ -869,7 +869,7 @@ class Handler(BaseHTTPRequestHandler):
                     if self.headers.get("X-Requested-With") != "repoql-dashboard" and not (path.startswith("/api/v1/") or path.startswith("/v3/")):
                         self.send_json(HTTPStatus.FORBIDDEN, {"error": "missing dashboard request header"})
                         return
-                if path in ('/api/embed/tencent/handshake', '/api/embed/office/handshake', '/api/embed/kanzo/handshake'):
+                if path in ('/api/embed/tencent/handshake', '/api/embed/office/handshake', '/api/embed/kanzo/handshake', '/api/embed/openmausbot/handshake'):
                     if method != 'GET':
                         self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
                         return
@@ -889,7 +889,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Obtain a fresh RepoQL-issued login automatically on each
                     # panel open. Do not return its value to the JavaScript app.
                     if not refresh_native_login_path(force=True):
-                        self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "official_repoql_login_issuance_failed"})
+                        self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "official_repoql_login_issuance_failed", "message": "RepoQL did not issue a sign-in link. Check that the RepoQL host is running (rql host status); the dashboard retries automatically on the next open."})
                         return
                     cookie = create_launch_cookie(self.app.token)
                     self.send_response(HTTPStatus.OK)
@@ -920,7 +920,7 @@ class Handler(BaseHTTPRequestHandler):
                         return
                     login = refresh_native_login_path()
                     if not login:
-                        self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "official_repoql_login_issuance_failed"})
+                        self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "official_repoql_login_issuance_failed", "message": "RepoQL did not issue a sign-in link. Check that the RepoQL host is running (rql host status); the dashboard retries automatically on the next open."})
                         return
                     self.send_response(HTTPStatus.SEE_OTHER)
                     self.send_header("Location", login)
@@ -928,15 +928,6 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_header("Referrer-Policy", "no-referrer")
                     self.send_header("Content-Length", "0")
                     self.end_headers()
-                    return
-                if path == "/api/ghost/scheduler":
-                    self.serve_ghost_scheduler(method)
-                    return
-                if path == "/api/ghost/plans":
-                    self.serve_ghost_plans(method)
-                    return
-                if path in ("/api/ghost/status", "/api/ghost/control"):
-                    self.serve_ghost_api(method, path)
                     return
                 if path.startswith("/api/v1/") or path.startswith("/v3/"):
                     from tencent_panel_proxy import serve_proxy
@@ -1190,136 +1181,6 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return (parsed.netloc.lower() == host.lower()
                 and parsed.scheme == self.request_scheme())
-
-    def serve_ghost_plans(self, method: str) -> None:
-        """Private scheduling drafts only; never represent these as active jobs."""
-        from ghost_schedule_plans import control
-        if method in ("POST", "DELETE"):
-            # Ghost draft prompts can contain private agent instructions.
-            # Unlike general bearer-authenticated CLI routes, this endpoint is
-            # browser-only and requires an exact authenticated browser origin.
-            if (not self.request_origin_allowed(require_origin=True)
-                    or self.headers.get("X-Requested-With") != "repoql-dashboard"
-                    or self.headers.get("X-Ghost-Control") != "1"
-                    or self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json"
-                    or self.headers.get("Sec-Fetch-Site", "") == "cross-site"):
-
-                self.send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "control_request_rejected"})
-                return
-            try:
-                body = self.read_body()
-            except ValueError:
-                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "invalid_json"})
-                return
-            status, payload = control(method, body)
-        else:
-            status, payload = control(method)
-        self.send_json(HTTPStatus(status), payload)
-
-    def serve_ghost_scheduler(self, method: str) -> None:
-        """Proxy native schedule actions and require an independent live readback."""
-        # A verified Cloudflare email/sub does not identify a Windows SID. This
-        # per-user scheduler surface is available only through this process's
-        # local dashboard capability until an operator-owned identity mapping
-        # exists; never let a remote Access user inherit the server owner's SID.
-        if not self.scheduler_identity_bound():
-            self.send_json(HTTPStatus.FORBIDDEN, {
-                "ok": False, "verified": False, "error": "scheduler_owner_binding_required", "schedules": [],
-            })
-            return
-        if os.environ.get("SINGULARITY_WINDOWS_NATIVE") != "1":
-            self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {
-                "ok": False, "verified": False, "error": "native_scheduler_unavailable", "schedules": [],
-            })
-            return
-        if method not in ("GET", "POST"):
-            self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {"ok": False, "error": "method_not_allowed"})
-            return
-        body = None
-        if method == "POST":
-            from ghost_bridge import control_headers_valid
-            if not control_headers_valid(self.headers, self.headers.get("Host", "")):
-                self.send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "control_request_rejected"})
-                return
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                length = -1
-            if not 0 < length <= 131072:
-                self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": "invalid_request_size"})
-                return
-            try:
-                body = self.read_scheduler_body()
-            except ValueError:
-                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "invalid_json"})
-                return
-        from ghost_schedule_plans import scheduler_control
-        from native_ghost import control_request as host_request
-        status, payload = scheduler_control(method, body, host_request=host_request)
-        self.send_json(HTTPStatus(status), payload)
-
-    def read_scheduler_body(self) -> dict:
-        """Parse scheduler JSON while refusing duplicate keys at every depth."""
-        length = int(self.headers.get("Content-Length") or 0)
-        if not 0 < length <= 131072:
-            raise ValueError("invalid scheduler request size")
-        raw = self.rfile.read(length)
-
-        def unique_pairs(pairs):
-            result = {}
-            for key, value in pairs:
-                if key in result:
-                    raise ValueError("duplicate scheduler request field")
-                result[key] = value
-            return result
-
-        try:
-            payload = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_pairs)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            raise ValueError("invalid scheduler request JSON")
-        if not isinstance(payload, dict):
-            raise ValueError("scheduler request must be an object")
-        return payload
-
-    def scheduler_identity_bound(self) -> bool:
-        """Require this user's bearer capability and a loopback browser peer."""
-        try:
-            local_peer = ipaddress.ip_address(self.client_address[0]).is_loopback
-        except (ValueError, IndexError, TypeError):
-            local_peer = False
-        account = getattr(getattr(self, 'app', None), 'local_account', None)
-        owner_cookie = bool(account and account.authenticated(getattr(self, 'headers', {}).get('Cookie', '')))
-        return local_peer and (self.bearer_authorized() or owner_cookie)
-
-    def serve_ghost_api(self, method: str, path: str) -> None:
-        from ghost_bridge import control_headers_valid, control_request, read_status
-        if path == "/api/ghost/status":
-            if method != "GET":
-                self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"})
-                return
-            status, payload = read_status()
-        elif method == "GET":
-            status, payload = control_request("GET")
-        elif method == "POST":
-            if not control_headers_valid(self.headers, self.headers.get("Host", "")):
-                self.send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "control_request_rejected"})
-                return
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                length = -1
-            if not 0 < length <= 131072:
-                self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": "invalid_request_size"})
-                return
-            try:
-                body = self.read_body()
-            except ValueError:
-                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "invalid_json"})
-                return
-            status, payload = control_request("POST", body)
-        else:
-            status, payload = 405, {"ok": False, "error": "method_not_allowed"}
-        self.send_json(HTTPStatus(status), payload)
 
     def send_json(self, status: HTTPStatus, payload: dict) -> None:
         body = json.dumps(payload, default=str).encode("utf-8")
@@ -1608,7 +1469,7 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
 
     def serve_static(self, path: str) -> None:
-        if path.startswith(("/ghost/", "/office/")) and not variant_route_allowed(path, variant_features()):
+        if path.startswith("/office/") and not variant_route_allowed(path, variant_features()):
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "feature_not_in_install_variant"})
             return
         relative = "index.html" if path in ("/", "") else path.lstrip("/")
@@ -1737,6 +1598,10 @@ class Handler(BaseHTTPRequestHandler):
                         return json.load(src)
                 except (OSError, ValueError):
                     return {"available": False, "reason": "OpenChamber summary unreadable"}
+            if path == "/api/agentchat/avatars":
+                from native_openmausbot import role_names
+                return {"names": role_names(app.config.state_dir), "agents": {},
+                        "avatars": [], "palette": []}
             if path == "/api/agentchat/presence":
                 from agentchat_feed import read_presence
                 return read_presence()

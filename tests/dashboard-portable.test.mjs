@@ -86,9 +86,9 @@ test("dashboard tree ships the current static surface", () => {
   for (const rel of [
     "server.py", "repoql_bridge.py", "access.py", "native_panel_proxy.py",
     "repoql_native_auth.py", "tencent_panel_proxy.py", "office_bridge.py",
-    "ghost_bridge.py", "harness_api.py", "harness_telemetry.py", "harness_rust.py",
+    "harness_api.py", "harness_telemetry.py", "harness_rust.py",
     "repoql_connectors.py", "static/index.html", "static/app.js", "static/app.css",
-    "static/navigation_ui.js", "static/ghost/index.html",
+    "static/navigation_ui.js",
     "config.example.json", ".env.example", "docker-compose.yml",
     "PROVENANCE.md", "THIRD-PARTY-NOTICES.md",
   ]) {
@@ -267,8 +267,7 @@ test("synthetic fixture: auth, static surface, truthful panels, Kanzo /mcp block
     assert.equal(panels.repoql.configured, false, "native RepoQL must not claim readiness without an issuer");
 
     const ghost = await request(port, "/api/ghost/status", { token });
-    assert.equal(ghost.status, 503);
-    assert.equal(JSON.parse(ghost.body).collector, "unconfigured");
+    assert.equal(ghost.status, 404, "Ghost is removed from the Windows dashboard");
 
     const crossOrigin = await request(port, "/api/repos/import", {
       method: "POST", token,

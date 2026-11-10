@@ -84,9 +84,7 @@ export function initNavigationUI() {
   const currentPath = () => (location.hash.replace(/^#/, '').split('?')[0] || '/');
   const navPaths = links.map(link => link.dataset.nav);
   const sectionFor = (path) => {
-    const native = Boolean(window.__SINGULARITY_VARIANT__?.variant);
-    const target = native && (path === '/ghost' || path.startsWith('/ghost/'))
-      ? '/openmausbot' : navPathFor(path, navPaths);
+    const target = navPathFor(path, navPaths);
     return links.find(link => link.dataset.nav === target && !link.hidden) || null;
   };
 
@@ -117,7 +115,7 @@ export function initNavigationUI() {
       const groupName = (group.querySelector('h2')?.textContent || '').toLocaleLowerCase();
       let showGroup = false;
       group.querySelectorAll('[data-nav]').forEach(link => {
-        const permitted = link.dataset.variantDisabled !== '1' && !(window.__SINGULARITY_VARIANT__?.features && ((link.dataset.nav === '/ghost' && !window.__SINGULARITY_VARIANT__.features.ghost) || (link.dataset.nav === '/office' && !window.__SINGULARITY_VARIANT__.features.office)));
+        const permitted = link.dataset.variantDisabled !== '1' && !(window.__SINGULARITY_VARIANT__?.features && (link.dataset.nav === '/office' && !window.__SINGULARITY_VARIANT__.features.office));
         const show = permitted && (!term || groupName.includes(term) || link.textContent.toLocaleLowerCase().includes(term));
         link.hidden = !show;
         if (show) { matches++; showGroup = true; }

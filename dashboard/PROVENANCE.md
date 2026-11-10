@@ -31,7 +31,6 @@ source host, and no runtime state (`token`, `cpu.db`, exclusions, logs,
 | `agentchat_feed.py` | Inbox root under the configured state directory. |
 | `embed_config.py` | Tencent panel reports `configured: false` unless a credential source is configured (was unconditionally true). |
 | `freebuff_allowance.py` | Allowance helper optional and env-configured; child environment inherited selectively; host label configurable. |
-| `ghost_bridge.py` | Snapshot and control socket from env; absent configuration reports `unknown`/`unconfigured` instead of probing a fleet path. |
 | `harness_rust.py` | Coordinator token path follows the configured state directory. |
 | `harness_telemetry.py` | Harness inputs default under the configured state directory; no operator directories are named. |
 | `native_panel_proxy.py` | Upstream host/port from env (fixed names only), key file from env, credential absence returns `503 *_panel_unconfigured`, WebSocket Host header follows the configured upstream. |
@@ -43,14 +42,13 @@ source host, and no runtime state (`token`, `cpu.db`, exclusions, logs,
 | `unified_bridge.py` | Gateway token path under the configured state directory. |
 | `static/app.js` | Generic signpost command; neutral host label. |
 | `static/app_test.mjs` | Comment only. |
-| `static/ghost/index.html` | Removed operator GitHub/WikiJS links and operator timezone label. |
 | `static/index.html` | Neutral data-source wording. |
 | `static/repoql_cheatsheet.js` | Neutral host wording. |
 | `static/workflow_graphs.js` | Reference labels use a configured host/workspace description. |
 
 Everything else is byte-identical to the exported source:
 
-`collector.py`, `graph_annotations.py`, `harness_api.py`, `repoql_connectors.py`, `tencent_panel_proxy.py`, `static/app.css`, `static/ghost/api.js`, `static/ghost/dashboard.js`, `static/ghost/tasks.js`, `static/navigation_ui.js`, `static/observability.js`, `static/repoql_guidance.js`
+`collector.py`, `graph_annotations.py`, `harness_api.py`, `repoql_connectors.py`, `tencent_panel_proxy.py`, `static/app.css`, `static/navigation_ui.js`, `static/observability.js`, `static/repoql_guidance.js`
 
 ## Rust subcomponent
 
@@ -71,7 +69,6 @@ Full SHA-256 of the exported file, with the source hash it was derived from.
 | `collector.py` | `117c1cd46fe82e5af2d93addc0dbcac34db00a9ccd079824737c626faae4a1c8` | `117c1cd46fe82e5af2d93addc0dbcac34db00a9ccd079824737c626faae4a1c8` |
 | `embed_config.py` | `44e453397a75f4be3e263f9e8e39bf95d4bdfb82e9daca73dfa9a312e6c38a0d` | `ca2e1aefea88f0def8779ac68bb2f066d00e87ab7bd1e6928d9db27c627ab4ac` |
 | `freebuff_allowance.py` | `09b3559b1d1dd6670391a5377609dccb5e399700f33eb1b3886e94f269b45acd` | `55d688007af59adcfc5a17390972db77639f9950e82c4e5c38cb5f214501d30b` |
-| `ghost_bridge.py` | `819d150613dcba2d0e45227caf914af21de8460bf79f94c18bdbaad9f8556546` | `d15752278abbbc3e69b312a4adda02f0f5cee877c1a41e7c87bbe268388d4b92` |
 | `graph_annotations.py` | `0ddd3aa6935b3414184957c162eccf8ff603a5c5aa84d4914fb9b03ae4de54f6` | `0ddd3aa6935b3414184957c162eccf8ff603a5c5aa84d4914fb9b03ae4de54f6` |
 | `harness_api.py` | `d6f31edb01e711676b0b20bd534c1e33388c517545af23670cce7e3f59accab6` | `d6f31edb01e711676b0b20bd534c1e33388c517545af23670cce7e3f59accab6` |
 | `harness_rust.py` | `1fc90b12fd15329e105c20b35c24a8de291d7f6284259cbc91654469186dcdd4` | `0ae9d45adb4bce3a36e2e0e8485f773284e01c69d16198cc0b0639cbb34b308b` |
@@ -92,10 +89,6 @@ Full SHA-256 of the exported file, with the source hash it was derived from.
 | `static/app.css` | `a51822c93fb3b1b391c6f74475a17237e4c9ab8042d89a7d90bf0254f0981d6e` | `a51822c93fb3b1b391c6f74475a17237e4c9ab8042d89a7d90bf0254f0981d6e` |
 | `static/app.js` | `a205867c737f520da2ae1ceb5225c506efead8bd291f9477d7b99b771eb60236` | `26c1658357abaf3d538021f6564621800e7c9257a5d75e1f4a47574f0939d723` |
 | `static/app_test.mjs` | `7d480e845d822d56cb4d603486c444178c7e4ee74b6bc48aee4f6a6bbd27c8e1` | `7cc23469c9eb9ab96fdfbbe8365242d36f4fcfbba635063c779ecf6b72653cc6` |
-| `static/ghost/api.js` | `c60d849637236483f74a7554a7cf32e23bdc052432d1d29ece61c1266e345dc8` | `c60d849637236483f74a7554a7cf32e23bdc052432d1d29ece61c1266e345dc8` |
-| `static/ghost/dashboard.js` | `8246a422eb1f831911b4a19e7aac437efa75485e6887c67351bb75562bf19a77` | `8246a422eb1f831911b4a19e7aac437efa75485e6887c67351bb75562bf19a77` |
-| `static/ghost/index.html` | `5cad149d862e3667ed92b8aef491f7e47464e86431f14b5ee127233134c4faee` | `4a5f10b1cfb5488fb649c4c145701d51061f08cb38e8ab12fcdf9eaf9a1f4910` |
-| `static/ghost/tasks.js` | `f9fc3ff887cb4307909b5166f21c868509850ebd2abf94676e2b08ef99fc7ada` | `f9fc3ff887cb4307909b5166f21c868509850ebd2abf94676e2b08ef99fc7ada` |
 | `static/index.html` | `b01b3ee71a137d6d685e72983940bddcf79b44ef6b02d5abbc2a45947f0eb47b` | `5c67cb686fee4914d4e699c453274ea345cd4a81b247d790850685fa6eab57f2` |
 | `static/navigation_ui.js` | `49a2ea6208700cc863463366ac5f062ed68a789c2d686580e0e99275128f1006` | `49a2ea6208700cc863463366ac5f062ed68a789c2d686580e0e99275128f1006` |
 | `static/observability.js` | `553c2d1769714d33882b5c4bf2cf1f9c1498e7cf5feaf92d05f53844fbca3454` | `553c2d1769714d33882b5c4bf2cf1f9c1498e7cf5feaf92d05f53844fbca3454` |
@@ -107,7 +100,7 @@ Full SHA-256 of the exported file, with the source hash it was derived from.
 
 See `THIRD-PARTY-NOTICES.md`: Kanzo is an unmodified AGPL-3.0-only separate
 process (not redistributed), and the RepoQL runtime, Tencent panel, Claude
-Office and Ghost are external services, not bundled here.
+Office is an external service, not bundled here.
 
 ## Design refresh — 2026-11-08
 
@@ -115,7 +108,7 @@ The static surface was refreshed from the live dashboard's current design (charc
 bundle, phone layout, illustrated workspace cards, command-center health strip, memory-graph and
 navigation updates). It was a three-way merge against the original export base, so every
 portability and native-install change in `static/app.js`, `static/index.html` and
-`static/navigation_ui.js` was kept: variant gating, the Windows-local OpenMausBot and Ghost views,
+`static/navigation_ui.js` was kept: variant gating, the Windows-local OpenMausBot views,
 Claude Agents Control, local login and the native usage labels.
 
 Fleet-only pages (shared bot operations, fleet Agents Control, Agent Roles, bot retirement redirects)
@@ -132,7 +125,7 @@ OpenMausBot operations headers and rows, Kanban phone controls and scroll-aware
 refresh, and the two-colour knowledge graph. The CSS bundle was regenerated from
 its source list, with refreshed browser cache versions.
 
-The merge preserves Windows-local routes, bot workspace links, Ghost visibility
+The merge preserves Windows-local routes, bot workspace links, visibility
 guards, task-stage readback checks and the Closed label. The upstream per-bot
 token metrics require a separate backend and are outside this design refresh.
 
@@ -153,3 +146,5 @@ Closed label and the OpenMausBot integration are unchanged. Cache versions are `
 Verification: `test_agentchat_recent_presence`, `test_agentchat_windows_file_identity`,
 `app_test.mjs`, `native_consolidation.test.mjs` and `native_variant_ui.test.mjs` pass. No live browser
 check was run, so the port is source-verified only.
+
+Ghost modules (`ghost_bridge.py`, `ghost_schedule_plans.py`, `native_ghost.py`, `static/ghost/`) were removed from the Windows dashboard; Ghost is not part of the Windows product.

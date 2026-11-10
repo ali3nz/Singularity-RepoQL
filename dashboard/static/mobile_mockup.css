@@ -41,13 +41,10 @@
   /* Match the mockup's cyan / violet / teal / magenta / azure identity. */
   .command-links-priority > .command-workspace[data-accent="work"] {--tile-accent:#08f0e6;}
   .command-links-priority > .command-workspace[data-accent="chat"] {--tile-accent:#a251ff;}
-  .command-links-priority > .command-workspace[data-accent="ghost"] {--tile-accent:#05d6c0;}
   .command-links-priority > .command-workspace[data-accent="memory"] {--tile-accent:#16c9e9;}
   .command-links-priority > .command-workspace[data-accent="office"] {--tile-accent:#1a91ff;}
   .command-links-priority > .command-workspace[data-accent="work"] {order:1;}
   .command-links-priority > .command-workspace[data-accent="chat"] {order:2;}
-  .command-links-priority > .command-workspace[data-accent="ghost"] {order:3;}
-  .command-links-priority > .command-workspace[data-accent="ghostops"] {order:4;}
   .command-links-priority > .command-workspace[data-accent="memory"] {order:5;}
   .command-links-priority > .command-workspace[data-accent="office"] {order:6;}
 
@@ -72,12 +69,9 @@
     mask-image:linear-gradient(180deg,#000 6%,#000 52%,transparent 99%);}
   .command-links-priority .command-card-illustration svg {display:none;}
   .command-links-priority .command-workspace[data-accent="work"] .command-card-illustration {background-image:url('/assets/mobile/kanban.svg');}
-  .command-links-priority .command-workspace[data-accent="ghost"] .command-card-illustration {background-image:url('/assets/mobile/house.svg');}
-  .command-links-priority .command-workspace[data-accent="ghostops"] .command-card-illustration {background-image:url('/assets/mobile/ghost.svg');}
   .command-links-priority .command-workspace[data-accent="chat"] .command-card-illustration {background-image:url('/assets/mobile/lounge.svg');}
   .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {background-image:url('/assets/mobile/memory.svg');}
   .command-links-priority .command-workspace[data-accent="office"] .command-card-illustration {background-image:url('/assets/mobile/office.svg');}
-  .command-links-priority .command-workspace[data-accent="ghostops"] {--tile-accent:#b444f2;}
   .command-links-priority .command-workspace .command-card-content,
   .command-links-priority .command-workspace-feature .command-card-content {
     position:absolute!important;inset:auto 9px 13px 11px!important;width:calc(100% - 20px)!important;
@@ -103,20 +97,6 @@
   .mobile-dock a[aria-current="page"] {border:1px solid #15ecf9!important;color:#75efff;
     background:linear-gradient(133deg,#06cdd455,#4528ba66)!important;
     box-shadow:0 0 20px #00dcf664,inset 0 0 12px #32b5ff55;}
-  /* Ghost: visually separate agent controls from the real planner. */
-  .main[data-workspace="ghost"] > .page-head {display:none;}
-  .ghost-operations-tile {min-height:148px!important;margin:5px 0 12px!important;border:2px solid #ca59f9!important;
-    border-radius:23px!important;padding:16px!important;background:
-    linear-gradient(90deg,#170e54df 0%,#170e54b0 40%,transparent 75%),url('/assets/mobile/ghost-hero.svg') right center/75% auto no-repeat,
-    linear-gradient(120deg,#171048,#330c58)!important;
-    box-shadow:0 0 19px #b63bff55,inset 0 0 17px #b03ff944!important;}
-  .ghost-operations-tile-icon {display:none;}
-  .ghost-operations-tile-copy {z-index:2;max-width:65%;}
-  .ghost-operations-tile-copy strong {font-size:clamp(25px,6vw,31px)!important;line-height:1.13;}
-  .ghost-operations-tile-copy > span {color:#e3c5ff!important;font-size:12px!important;line-height:1.3;}
-  .ghost-operations-tile-arrow {align-self:end;background:#8045ccaa;color:white;box-shadow:0 0 16px #bb57f677;}
-  #ghost-planner-integrated {border:1px solid #06e8e9a6;border-radius:23px;
-    box-shadow:0 0 21px #07ddea33;overflow:hidden;}
   /* Lounge: compact colorful feed, no imaginary agent status or counts. */
   .main:has(.messenger-shell) {padding:0!important;}
   .main:has(.messenger-shell)::before {margin:4px auto 0;font-size:27px;line-height:1.5;}
@@ -205,10 +185,6 @@
   .main :is(button,select,summary,a) {touch-action:manipulation;}
   .main :is(button,select,summary,a):focus-visible,
   .mobile-dock a:focus-visible {outline:2px solid #90f2ff;outline-offset:3px;}
-  .ghost-operations-tile {min-height:121px!important;padding:12px 15px!important;
-    margin:2px 0 10px!important;}
-  .ghost-operations-tile-copy strong {font-size:clamp(22px,5.8vw,27px)!important;}
-  .ghost-operations-tile-copy > span {max-width:23ch;font-size:11px!important;}
   .messenger-messages {overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
   .messenger-message :is(p,span), .messenger-kanzo {overflow-wrap:anywhere;}
   .lounge-filters > summary {min-height:46px!important;}
@@ -281,8 +257,6 @@
     background:linear-gradient(0deg,#061025,#061025e8 33%,transparent)!important;}
   .command-links-priority .command-workspace[data-accent="work"] .command-card-illustration {background-image:url('/assets/mobile/kanban-pro.webp')!important;}
   .command-links-priority .command-workspace[data-accent="chat"] .command-card-illustration {background-image:url('/assets/mobile/lounge-pro.webp')!important;}
-  .command-links-priority .command-workspace[data-accent="ghost"] .command-card-illustration {background-image:url('/assets/mobile/house-pro.webp')!important;}
-  .command-links-priority .command-workspace[data-accent="ghostops"] .command-card-illustration {background-image:url('/assets/mobile/ghost-pro.webp')!important;}
   .command-links-priority .command-workspace[data-accent="memory"] .command-card-illustration {background-image:url('/assets/mobile/memory-pro.svg')!important;}
   .command-links-priority .command-workspace .command-card-content,
   .command-links-priority .command-workspace-feature .command-card-content {bottom:13px!important;}
@@ -309,9 +283,7 @@
   .ug-hero-minimal {border-radius:15px!important;}
   .ug-stage-shell {border-width:1px!important;border-radius:17px!important;box-shadow:none!important;}
   .ug-stage-shell .unified-graph-canvas {filter:none!important;}
-  #ghost-planner-integrated {box-shadow:none!important;border-radius:16px!important;}
-  .ghost-operations-tile {box-shadow:none!important;border-width:1px!important;border-radius:16px!important;}
-}
+  }
 @media (max-width:360px) {
   .command-links-priority {gap:8px!important;}
   .command-links-priority > .command-workspace {min-height:154px!important;}
@@ -440,21 +412,6 @@
   .main[data-workspace="work"] .kn-task-description {color:#adc7dd!important;font-size:12px!important;line-height:1.4!important;}
 
   /* Household screen: retain existing live planner, improve visual hierarchy. */
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile {
-    min-height:125px!important;margin:3px 0 12px!important;border-radius:16px!important;
-    padding:12px!important;border:1.5px solid rgba(29,232,250,.72)!important;
-    background:linear-gradient(90deg,rgba(5,17,35,.32) 0%,rgba(5,10,31,.89) 100%),
-      url('/assets/mobile/house-pro.webp') left center/cover no-repeat!important;
-    box-shadow:0 0 12px rgba(13,227,243,.16)!important;}
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy {
-    max-width:62%!important;margin-left:auto!important;}
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy strong {
-    font-size:19px!important;font-weight:800!important;}
-  .main[data-workspace="ghost"]:has(#ghost-planner-integrated) .ghost-operations-tile-copy > span {
-    color:#d2e8ff!important;font-size:11px!important;}
-  .main[data-workspace="ghost"] #ghost-planner-integrated,
-  .main[data-workspace="ghost"] #ghost-integrated {border:0!important;overflow:visible!important;box-shadow:none!important;}
-
   /* Lounge: show real feed, not a fabricated announcement/card dataset. */
   .main[data-workspace="chat"] {padding:10px 9px 16px!important;}
   .main[data-workspace="chat"] .messenger-shell {height:calc(100dvh - 84px - env(safe-area-inset-bottom,0px))!important;

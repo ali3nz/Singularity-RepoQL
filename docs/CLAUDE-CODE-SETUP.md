@@ -290,7 +290,7 @@ surface:
 
 - **Option 1 — Claude Code + MemoryCore:** after the stack is up, run this
   installer — Claude Code users get the specialised agents and the memory loop
-  without OpenChamber, Ghost or Claude Office.
+  without OpenChamber, or Claude Office.
 - **Option 2 — Claude Code Complete:** the same flow; Ghost and Claude Office
   are automatically included — Ghost's `GHOST_BACKEND=claude-code` keeps the
   complete Claude Code option independent of OpenChamber.

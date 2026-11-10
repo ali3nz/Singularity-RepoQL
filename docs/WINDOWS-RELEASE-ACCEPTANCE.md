@@ -42,7 +42,7 @@ A release candidate is installed beside the live product, so package identity an
 | --- | --- | --- |
 | MSI UpgradeCode | `A4059181-F59A-4C8D-B098-E26C9111B74E` | `7F2C4D19-5A6B-4C7E-9B3D-1E8A0C5D2F61` |
 | MSI ProductCode | build-assigned | pinned `3C9A51E7-8B24-4D6F-A0C5-6D7E9B1F4A28` |
-| Install directory | `<ProgramFiles>\Singularity RepoQL` (per-machine) | `%LOCALAPPDATA%\Singularity\Fleet861RC` (per-user, no elevation; `C:\Users\Ben\AppData\Local\Singularity\Fleet861RC`) |
+| Install directory | `<ProgramFiles>\Singularity RepoQL` (per-machine) | `%LOCALAPPDATA%\Singularity\Fleet861RC` (per-user, no elevation; `%LOCALAPPDATA%\Singularity\Fleet861RC`) |
 | Bundle UpgradeCode | `E83EDB61-178B-4CD3-92F0-9C97E6D6292F` | `B1D6E4A9-3F58-47C2-8E90-2A5C7B3D4186` |
 | State root | `%LOCALAPPDATA%\Singularity\WindowsNative` | `%LOCALAPPDATA%\Singularity\Fleet861RC\state` |
 | Dashboard port | `18100` (gateway `18101`, tunnel `18128`) | `18200` |

@@ -155,21 +155,8 @@ def _read_json(path: str):
         return json.load(fh)
 
 
-def _ghost_bot_id() -> str | None:
-    """Ghost's native bot id comes from the identity override map, never from a display name."""
-    try:
-        data = _read_json(os.environ.get('OMB_IDENTITY_OVERRIDES', IDENTITY_OVERRIDES))
-        for bot_id, ident in (data.get('identities') or {}).items():
-            if isinstance(ident, dict) and ident.get('role') == 'ghost':
-                return bot_id
-    except (OSError, ValueError, AttributeError):
-        pass
-    return None
-
-
 def build(start_ms: int, end_ms: int, now_ms: int | None = None, data_dir: str | None = None, *,
-          source_documents: dict | None = None, source_states: dict | None = None,
-          include_ghost: bool = True) -> dict:
+          source_documents: dict | None = None, source_states: dict | None = None) -> dict:
     now_ms = now_ms or int(time.time() * 1000)
     data_dir = data_dir or os.environ.get('OMB_DATA_DIR', DATA_DIR)
     if end_ms <= start_ms or end_ms - start_ms > MAX_WINDOW_DAYS * 86_400_000:
@@ -216,8 +203,6 @@ def build(start_ms: int, end_ms: int, now_ms: int | None = None, data_dir: str |
               'sources': sources, 'bots': bots,
               'routines': [], 'occurrences': [], 'runs': [], 'attention': [], 'now': {},
               'history': {}, 'unsupported': ['pending approvals', 'blocked/queued work states']}
-    if include_ghost:
-        result['ghost_bot_id'] = _ghost_bot_id()
     if routines_doc is None:
         return result
 

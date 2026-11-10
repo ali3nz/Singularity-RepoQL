@@ -32,7 +32,7 @@ globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 const { dashboardSnapshot, miniatureBrainGraph } = (await import('../static/app.js')).__editorTestSurface;
 const ready = dashboardSnapshot({service:{verdict:'ready',queued_operations:2},indexing:{active:1,failed_rows:3},repositories:{unavailable:0},errors:{indexing_failures:3}});
 
-const expectedOrder = ['Kanban Board','Ghost Protocol','Agent Lounge','Memory Graph','Office Viewer'];
+const expectedOrder = ['Kanban Board','Agent Lounge','Memory Graph','Office Viewer'];
 for (const expected of [...expectedOrder, 'Reference documents', 'System knowledge', 'Diagnostics', 'RepoQL Cheat Sheet', 'AI Usage', 'Memory Architecture', 'Orchestration Architecture']) {
   assert.ok(ready.includes(expected), expected);
 }

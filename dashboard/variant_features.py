@@ -22,20 +22,17 @@ def features(variant=None, *, native_windows=None):
             raise ValueError("native Windows dashboard requires SINGULARITY_INSTALL_VARIANT=1..4")
         # Legacy installations which do not opt into native variant packaging
         # must not be silently given a different feature set.
-        return {"variant": None, "gui": "legacy", "features": {k: True for k in policy["variants"]["4"]["features"]}}
+        return {"variant": None, "gui": "legacy", "features": {k: k != "ghost" for k in policy["variants"]["4"]["features"]}}
     row = policy["variants"].get(str(variant))
     if row is None:
         raise ValueError("install variant must be one of 1, 2, 3, 4")
     selected = dict(row["features"])
-    if native_windows:
-        selected["ghost"] = False
+    selected["ghost"] = False  # Ghost is retired from the Windows product.
     return {"variant": int(variant), "gui": row["gui"], "features": selected}
 
 
 def route_allowed(path, profile):
     f = profile["features"]
-    if path.startswith(("/api/ghost/", "/ghost/")) or path in ("/ghost",):
-        return f["ghost"]
     if path.startswith(("/embed/office/", "/api/embed/office/", "/api/harness/office", "/office/")) or path == "/office":
         return f["office"]
     if path.startswith(("/embed/kanzo/", "/api/embed/kanzo/")) or path == "/kanban":

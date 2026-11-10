@@ -61,8 +61,11 @@ if ($existing) {
   $matches = ($actions.Count -eq 1 -and $actions[0].Execute -ieq $runtimeExe -and
               $actions[0].Arguments -ceq $arguments)
   $principalMatches = ($userIds -contains [string]$existing.Principal.UserId)
-  $triggerMatches = ($triggers.Count -eq 1 -and
-                     $triggers[0].CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger')
+  # Current registrations carry a logon AND a startup trigger (survives logoff/reboot);
+  # a legacy logon-only registration is still recognised as ours.
+  $triggerKinds = @($triggers | ForEach-Object { $_.CimClass.CimClassName })
+  $triggerMatches = ($triggerKinds -contains 'MSFT_TaskLogonTrigger' -and
+                     @($triggerKinds | Where-Object { $_ -notin @('MSFT_TaskLogonTrigger','MSFT_TaskBootTrigger') }).Count -eq 0)
   $limited = ($existing.Principal.RunLevel -eq 'Limited')
   $enabled = ($existing.Settings.Enabled -eq $true)
   $legacyOwnedForRemoval = ($Remove -and $actions.Count -eq 1 -and $actions[0].Execute -ieq $exe -and
@@ -93,9 +96,10 @@ if ($LASTEXITCODE -ne 0) { throw 'RUST_SUPERVISOR_CONFIG_CHECK_FAILED' }
 $changed = $false
 if ($Apply -and $PSCmdlet.ShouldProcess($taskName, 'Register current-user logon native supervisor task')) {
   $action = New-ScheduledTaskAction -Execute $runtimeExe -Argument $arguments
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user.Name
-  $principal = New-ScheduledTaskPrincipal -UserId $user.Name -LogonType Interactive -RunLevel Limited
-  $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+  # S4U + startup trigger: runs without an interactive session, so the stack survives logoff and reboot.
+  $trigger = @((New-ScheduledTaskTrigger -AtLogOn -User $user.Name), (New-ScheduledTaskTrigger -AtStartup))
+  $principal = New-ScheduledTaskPrincipal -UserId $user.Name -LogonType S4U -RunLevel Limited
+  $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
   $after = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq $taskName })
   if ($after.Count -ne 1) { throw 'TASK_REGISTRATION_NOT_VERIFIED' }
@@ -103,8 +107,10 @@ if ($Apply -and $PSCmdlet.ShouldProcess($taskName, 'Register current-user logon 
   $afterActions = @($check.Actions)
   $afterTriggers = @($check.Triggers)
   if ($afterActions.Count -ne 1 -or $afterActions[0].Execute -ine $runtimeExe -or
-      $afterActions[0].Arguments -cne $arguments -or $afterTriggers.Count -ne 1 -or
-      $afterTriggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
+      $afterActions[0].Arguments -cne $arguments -or $afterTriggers.Count -ne 2 -or
+      @($afterTriggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' }).Count -ne 1 -or
+      @($afterTriggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' }).Count -ne 1 -or
+      [string]$check.Principal.LogonType -ne 'S4U' -or
       (-not ($userIds -contains [string]$check.Principal.UserId)) -or
       $check.Principal.RunLevel -ne 'Limited' -or -not $check.Settings.Enabled) {
     throw 'TASK_REGISTRATION_NOT_VERIFIED'

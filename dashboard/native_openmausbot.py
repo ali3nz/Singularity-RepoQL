@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import time
+import uuid
 
 _ID = re.compile(r'[A-Za-z0-9_-]{1,128}\Z')
 
@@ -89,6 +90,21 @@ def overview(state_dir: Path) -> dict:
             'service_unavailable', 'service_not_authorised', 'response_too_large', 'inventory_invalid',
             'windows_native_only', 'invalid_local_port', 'credential_path_refused', 'credential_invalid') else 'unavailable'
         return {'available': False, 'reason': reason, 'bots': []}
+
+
+def role_names(state_dir: Path) -> dict[str, str]:
+    """Map local bot UUID identities to their current display names."""
+    inventory = overview(state_dir)
+    names = {}
+    for bot in inventory['bots']:
+        try:
+            role = 'omb-' + uuid.UUID(bot['id']).hex
+        except (KeyError, ValueError, TypeError, AttributeError):
+            continue
+        name = bot.get('name')
+        if isinstance(name, str) and name.strip():
+            names[role] = name.strip()[:60]
+    return names
 
 
 def _timestamp(value):
@@ -181,7 +197,7 @@ def operations(state_dir: Path, start_ms: int, end_ms: int, *, now_ms: int | Non
             except (OSError, ValueError, RuntimeError, http.client.HTTPException):
                 pass
     result = build(start_ms, end_ms, now_ms=now_ms, source_documents=documents,
-                   source_states=states, include_ghost=False)
+                   source_states=states)
     # Native OMB also keeps queued, waiting, cancelled and missed records.
     # Only a running record verifies that a turn is currently running.
     if result['now']:

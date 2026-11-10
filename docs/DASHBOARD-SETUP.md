@@ -18,7 +18,7 @@ optional service you can run beside an existing RepoQL installation.
 | Python | 3.11 or newer; standard library only. PyJWT is imported lazily and only for optional Cloudflare Access verification. |
 | RepoQL runtime | A user-installed `rql` CLI and a workspace it serves. The supported connector runtime for this export is **1.7.18**; setup does not upgrade it. |
 | Node (optional) | Only to run `tests/dashboard-portable.test.mjs` and the static JS checks. |
-| Attached panels (optional) | Kanzo, Tencent MemoryPanel, Claude Office and Ghost are **separate programs**. Nothing here installs, starts or bundles them. |
+| Attached panels (optional) | Kanzo, Tencent MemoryPanel and Claude Office are **separate programs**. Nothing here installs, starts or bundles them. |
 
 The dashboard binds `127.0.0.1:18100` by default and authenticates every API
 call with a generated capability token. You do not need Cloudflare or a public
@@ -71,7 +71,6 @@ Environment variables win over the JSON file, which wins over neutral defaults.
 | `SINGULARITY_OFFICE_HOST` / `_PORT` | `127.0.0.1:8001` | Office health probe and proxy upstream. |
 | `CLAUDE_OFFICE_PUBLIC_URL` / `CLAUDE_OFFICE_EMBED_URL` | empty | Optional public Office URL and its embed launch URL. |
 | `SINGULARITY_KANZO_HOST` / `_PORT` | `127.0.0.1:4242` | Fixed loopback upstream for the unmodified Kanzo board. |
-| `SINGULARITY_GHOST_SNAPSHOT` / `_CONTROL_SOCKET` | empty | Ghost collector snapshot file and control socket. |
 | `SINGULARITY_AGENTCHAT_STATE_DIR` | `$STATE_DIR/agentchat` | Read-only agentchat inbox directory. |
 | `SINGULARITY_OPENCHAMBER_SUMMARY_FILE` | empty | Optional OpenChamber usage summary JSON. |
 | `SINGULARITY_FREEBUCKS_STATUS_MODULE` | empty | Optional Freebuff allowance helper module. |
@@ -93,7 +92,6 @@ Every page renders one of three honest states; none is faked:
 | Tencent panel (`/embed/tencent/`) | Proxy reaches the configured loopback service with the key | `tencent_panel_unconfigured`, no key read | `502 tencent_upstream_unavailable` |
 | Office (`/embed/office/`, `/api/harness/office`) | Health probe returns `status: ok` | No public/embed URL configured | `available: false` with the measured reason |
 | Kanzo board (`/embed/kanzo/`) | `/api/ping` answers `kanzo` before a session cookie is issued | — | `503 local_kanzo_unavailable`; `/mcp` is always `403 kanzo_mcp_is_local_only` |
-| Ghost (`/api/ghost/*`) | Fresh collector snapshot / control socket | `collector: unconfigured` | `state: unknown`; no action is confirmed |
 | Harness Control Center | Configured run ledgers produce events | Empty, bounded dataset | Panel reports `available: false` per source |
 | Agentchat feed | Configured inbox directory | `Agent Chat state directory unavailable` | Empty feed, never fabricated messages |
 | Unified graph / coordinator | Loopback service plus gateway token | `available: false, not_configured` | `available: false` with the error code |
@@ -170,7 +168,7 @@ shipped tree for fleet-private identifiers, checks the loopback/capability
 defaults, and starts the server against a synthetic fixture to prove: static
 serving, token authentication, same-origin mutation refusal, truthful
 "unconfigured" panel responses, and the Kanzo `/mcp` block. It does not prove a
-real RepoQL host, a real Kanzo/Tencent/Office/Ghost deployment or browser
+real RepoQL host, a real Kanzo/Tencent/Office deployment or browser
 rendering.
 
 ## Provenance and licence

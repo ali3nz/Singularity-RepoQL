@@ -24,6 +24,8 @@ The standard Windows desktop location is `%LOCALAPPDATA%\Programs\OpenMausBot\Op
 4. Run the existing Option 2 `install_claude_complete.ps1 -Mode Configure -Apply` after its prerequisites are met. During its existing Kanzo MCP configuration, the presence of the desktop executable, MCP script, and token file automatically adds the OpenMausBot MCP server. The same pass installs the shared bot rules without overwriting a foreign file.
 5. In Claude Code, approve the project's OpenMausBot MCP registration, list bots, send a safe test message, wait for a settled answer, and independently confirm the model/usage receipt. No model calls occur during setup checks.
 
+**Dashboard provisioner status.** The dashboard provisioner (`native/windows/provision/provisioner.py`, integration `openmausbot_mcp`) only detects the token file: it must be a regular, non-symlink file of at most 4096 bytes whose content matches the `omb_sess_` session format. The token value is never read into receipts, logs or command lines. When the token is missing or invalid, the integration reports `needs_user_action` and the one-time pairing in steps 1 to 3 must be completed by hand. Automated pairing through the `connect` CLI is not implemented because that CLI's flags and non-interactive pairing source are not verified in this repository. The ACL helper that restricts the token location with `icacls` is not yet wired to any live step.
+
 The default local OpenMausBot port is 8799. If the desktop selects a different port, **update the source configuration and reapply only through the existing owned MCP rollback process**; do not edit a receipt-owned `.mcp.json` manually. The launcher refuses unknown ports and does not discover other hosts with a bearer token. If the project MCP was already configured before pairing, use the existing `--rollback` and controlled `--apply` flow during an authorised maintenance window; never modify a foreign or active MCP definition in place. Run the project's `verify` action afterwards.
 
 ### Offline rule check (read only)
@@ -99,7 +101,7 @@ node .\native\windows\openmausbot\provision_maintainer.mjs --source $root --rc-r
 `bots --json` before and after (the applied team, `cwd`, `approval` and
 `computer` must match the plan and unrelated bots must survive), then creates
 the bot's own bounded routine through the vendor MCP `trigger` tool and reads it
-back with `trigger_info`. The response reports `scheduleVerified:true` only when
+back with `trigger_info`. Bot configuration (team, title, description, soul, approval, computer, cwd) is verified with the vendor read-only `team apply --check --json` (exit 6 = drift, reported as `OMB_BOT_CONFIG_MISMATCH`); this vendor behaviour is not yet confirmed live (NOT_RUN). The response reports `scheduleVerified:true` only when
 that readback lists the routine enabled with a future run; otherwise the reason
 is returned and the command exits non-zero. `--verify-schedule` repeats just the
 readback.

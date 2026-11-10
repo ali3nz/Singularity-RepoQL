@@ -404,12 +404,19 @@ function architectureProbeState(kind, value, nowMs = Date.now()) {
 function architectureRuntimeChecks() {
   const guide = APP.querySelector('.arch-guide');
   if (!guide) return;
+  for (const link of guide.querySelectorAll('a[href^="#/"]')) {
+    if (!featureAllowed(link.getAttribute('href').slice(1))) link.remove();
+  }
+  const checks = [
+    ...(!nativeInstall ? [['Harness telemetry', 'harness', '/api/harness/health']] : []),
+    ['Unified Rust plane', 'unified', '/api/unified/health'],
+  ];
   guide.insertAdjacentHTML('afterend', `<section class="arch-runtime block" aria-label="Current service observations">
     <div class="block-title">Current service observations</div>
-    <p class="muted">These read-only checks show whether telemetry and the unified Rust plane respond. They do not validate capture, recall, worker gates, or end-to-end correctness.</p>
+    <p class="muted">${nativeInstall ? 'Check the local unified Rust service. Capture, recall and worker gates require their own validation.' : 'These read-only checks show whether telemetry and the unified Rust plane respond. They do not validate capture, recall, worker gates, or end-to-end correctness.'}</p>
     <div class="arch-runtime-results" id="arch-runtime-results" role="status" aria-live="polite">Not checked</div>
     <button class="btn" type="button" id="arch-runtime-refresh">Check services</button>
-    <a href="#/harness">Inspect Harness evidence</a>
+    ${nativeInstall ? '<a href="#/native/status">Windows Integration Status</a>' : '<a href="#/harness">Inspect Harness evidence</a>'}
   </section>`);
   const results = APP.querySelector('#arch-runtime-results');
   const button = APP.querySelector('#arch-runtime-refresh');
@@ -418,19 +425,16 @@ function architectureRuntimeChecks() {
     button.disabled = true;
     results.textContent = 'Checking services…';
     const epoch = state.routeEpoch;
-    const probes = await Promise.allSettled([
-      api('/api/harness/health', {timeoutMs:8000}),
-      api('/api/unified/health', {timeoutMs:8000}),
-    ]);
+    const probes = await Promise.allSettled(checks.map(([, , endpoint]) => api(endpoint, {timeoutMs:8000})));
     if (epoch !== state.routeEpoch || !results.isConnected) return;
-    const labels = ['Harness telemetry', 'Unified Rust plane'];
     results.replaceChildren();
     probes.forEach((probe, i) => {
+      const [label, kind] = checks[i];
       const [status, detail] = probe.status === 'fulfilled'
-        ? architectureProbeState(i === 0 ? 'harness' : 'unified', probe.value)
+        ? architectureProbeState(kind, probe.value)
         : ['Unavailable', 'The service check could not complete.'];
       const row = document.createElement('p');
-      row.innerHTML = `<strong>${labels[i]}: ${esc(status)}</strong> · ${esc(detail)}`;
+      row.innerHTML = `<strong>${label}: ${esc(status)}</strong> · ${esc(detail)}`;
       results.appendChild(row);
     });
     button.disabled = false;
@@ -453,7 +457,6 @@ async function route() {
   // routing, MCP authority, task ownership or API calls.
   APP.dataset.workspace = path === '/kanban' ? 'work'
     : path.startsWith('/bots') || path.startsWith('/openmausbot') ? 'chat'
-    : path.startsWith('/ghost') ? 'ghost'
     : path === '/agentchat' ? 'chat'
     : path === '/unified/graph' || path.startsWith('/architecture/memory') || path.startsWith('/knowledge/') ? 'memory'
     : path === '/office' ? 'office'
@@ -465,7 +468,6 @@ async function route() {
   // the existing route handlers or the owning coordinator/data source.
   APP.dataset.pageIdentity = path.startsWith('/bots') ? 'bot'
     : path === '/kanban' ? 'work'
-    : path.startsWith('/ghost') ? 'ghost'
     : path === '/agentchat' ? 'lounge'
     : path === '/office' ? 'office'
     : path === '/architecture/orchestra' ? 'orchestra'
@@ -489,18 +491,16 @@ async function route() {
     APP.innerHTML = '<div class="empty">This component is not included in the selected Singularity installation option.</div>';
     return;
   }
-  markNav(path.startsWith('/bots/') ? '/bots' : path.startsWith('/ghost') ? '/openmausbot' : path.startsWith('/openmausbot/') && !['/openmausbot/fleet','/openmausbot/calendar','/openmausbot/attention','/openmausbot/history'].includes(path) ? '/openmausbot/chat' : path);
+  markNav(path.startsWith('/bots/') ? '/bots' : path.startsWith('/openmausbot/') && !['/openmausbot/fleet','/openmausbot/calendar','/openmausbot/attention','/openmausbot/history'].includes(path) ? '/openmausbot/chat' : path);
   if (state.routeEpoch > 1) window.scrollTo(0, 0);
   try {
-    if (!nativeInstall && path === '/ghost/planner') return await viewGhostPlanner();
-    if (!nativeInstall && path === '/ghost') return await viewGhostOperations();
     // Shared bot operations (Now / Calendar / Needs attention / Run history).
     // The embedded native workspace (chat and routine management) moved to /openmausbot/chat.
     if (["/openmausbot", "/openmausbot/calendar", "/openmausbot/attention", "/openmausbot/history"].includes(path)) {
       return await viewOpenMausOps({
         app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
-        tab: path.split("/")[2] || "now", params, includeGhost: !nativeInstall,
-        workspaceHref: nativeInstall ? 'http://127.0.0.1:18211/' : '#/openmausbot/chat',
+        tab: path.split("/")[2] || "now", params,
+        workspaceHref: '#/openmausbot/chat',
         setCleanup: (fn) => { state.cleanup = fn; },
       });
     }
@@ -518,18 +518,9 @@ async function route() {
       const canonical = replaceRoute(href("/openmausbot"));
       return await viewOpenMausOps({
         app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
-        params: canonical.params, includeGhost: !nativeInstall,
-        workspaceHref: nativeInstall ? 'http://127.0.0.1:18211/' : '#/openmausbot/chat',
+        params: canonical.params,
+        workspaceHref: '#/openmausbot/chat',
         setCleanup: (fn) => { state.cleanup = fn; },
-      });
-    }
-    // Ghost is a bot inside the shared operations view now. Old bookmarks land on
-    // the Ghost-filtered view. The standalone Ghost console and planner are retired.
-    if (path === "/ghost" || path.startsWith("/ghost/")) {
-      const canonical = replaceRoute(href("/openmausbot", {bot: "ghost"}));
-      return await viewOpenMausOps({
-        app: APP, api, pageHead, esc, current: () => epoch === state.routeEpoch,
-        tab: "now", params: canonical.params, setCleanup: (fn) => { state.cleanup = fn; },
       });
     }
     if (path === "/unified/graph") return await viewUnifiedGraph();
@@ -611,57 +602,6 @@ async function viewNativeBotInventory() {
   const rows = (report.bots || []).map(bot => `<tr><td>${esc(bot.name)}</td><td class="mono">${esc(bot.id)}</td><td>${esc(bot.working ? 'Working' : 'Idle')}</td><td class="muted">Registration, Tencent, Duo and Kanzo not verified</td></tr>`).join('');
   holder.innerHTML = `<h2>${Number(report.total) || 0} local bot(s)</h2><p class="muted small">This is a read-only inventory, not a registration or execution receipt. No credentials are exposed to this page.</p>
   <div class="table-wrap"><table class="data"><thead><tr><th>Bot</th><th>Identity</th><th>Runtime</th><th>External integrations</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No bots in this workspace.</td></tr>'}</tbody></table></div>`;
-}
-
-async function viewGhostOperations() {
-  const epoch=state.routeEpoch;
-  APP.innerHTML = pageHead('Ghost Protocol','') +
-    '<section id="ghost-integrated" aria-label="Ghost Protocol"><div class="loading">Loading Ghost controls…</div></section>';
-  const heading = APP.querySelector('.page-head h1');
-  heading.tabIndex = -1;
-  heading.focus({preventScroll: true});
-  // The original Ghost markup and styles are reused, but mounted in this page.
-  // No external application, nested browsing context, or duplicate controls.
-  const response=await fetch('/ghost/index.html',{cache:'no-store',signal:state.routeAbort?.signal});
-  if(!response.ok)throw new Error('Ghost interface unavailable');
-  const markup=new DOMParser().parseFromString(await response.text(),'text/html');
-  if(epoch!==state.routeEpoch)return;
-  const host=document.getElementById('ghost-integrated');
-  if(!host)return;
-  const style=markup.querySelector('style'),shell=markup.querySelector('.shell');
-  if(!style||!shell)throw new Error('Ghost interface assets missing');
-  const shadow=host.attachShadow({mode:'open'});
-  const css=document.createElement('style');css.textContent=style.textContent;
-  shadow.append(css,document.importNode(shell,true));
-  const {mountGhost} = await import('./ghost/dashboard.js');
-  if (epoch !== state.routeEpoch) return;
-  state.cleanup=mountGhost(shadow);
-}
-
-async function viewGhostPlanner() {
-  const epoch=state.routeEpoch;
-  APP.innerHTML = pageHead('Household Planner','', '<a class="btn small" href="#/ghost">Ghost operations</a>') +
-    '<section id="ghost-planner-integrated" aria-label="Ghost Household Planner"><div class="loading">Loading planner…</div></section>';
-  const heading = APP.querySelector('.page-head h1');
-  heading.tabIndex = -1;
-  heading.focus({preventScroll: true});
-  // Additive to the accepted Ghost Operations console: same shadow-root
-  // isolation and the planner's own script copy, never a replacement.
-  const [response, module] = await Promise.all([
-    fetch('/ghost/planner/index.html',{cache:'no-store',signal:state.routeAbort?.signal}),
-    import('./ghost/planner/dashboard.js'),
-  ]);
-  if(!response.ok)throw new Error('Ghost planner unavailable');
-  const markup=new DOMParser().parseFromString(await response.text(),'text/html');
-  if(epoch!==state.routeEpoch)return;
-  const host=document.getElementById('ghost-planner-integrated');
-  if(!host)return;
-  const style=markup.querySelector('style'),shell=markup.querySelector('.shell');
-  if(!style||!shell)throw new Error('Ghost planner assets missing');
-  const shadow=host.attachShadow({mode:'open'});
-  const css=document.createElement('style');css.textContent=style.textContent;
-  shadow.append(css,document.importNode(shell,true));
-  state.cleanup=module.mountGhost(shadow);
 }
 
 // -------------------------------------------------------------- shared views
@@ -808,9 +748,8 @@ function miniatureBrainGraph() {
 function dashboardSnapshot() {
   const destinations = [
     ['OpenMausBot','/openmausbot/chat','Open the OpenMausBot workspace to chat with and manage your bots.','chat','Bot operations'],
-    ['Bot Operations','/openmausbot','See every bot\'s schedule, recent runs and anything needing attention.','ghost','Bot operations'],
     ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','Delivery'],
-    ...(nativeInstall ? [] : [['Ghost Protocol','/ghost','Plan family time, review upcoming events and manage Ghost jobs.','ghost','Household & schedule']]),
+    ['Bot Operations','/openmausbot','See every bot\'s schedule, recent runs and anything needing attention.','chat','Bot operations'],
     ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','Agent activity'],
     ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','Knowledge'],
     ['Office Viewer','/office','Open the live protected office scene.','office','Workspace'],
@@ -820,7 +759,6 @@ function dashboardSnapshot() {
   const iconBadges = {
     '/kanban': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="5.5" height="15" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="10.2" y="8" width="5.5" height="11.5" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="16.9" y="6" width="3.6" height="13.5" rx="1.6" stroke="currentColor" stroke-width="1.6"/></svg>`,
     '/openmausbot/chat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="13" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor"/><path d="M12 7V4" stroke="currentColor" stroke-width="1.5"/></svg>`,
-    '/ghost': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 18.5V9a4.5 4.5 0 1 1 9 0v9l-2.2-1.5-2.3 1.5-2.3-1.5-2.2 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10.2" r="1" fill="currentColor"/><circle cx="14" cy="10.2" r="1" fill="currentColor"/></svg>`,
     '/agentchat': `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H11l-4 3v-3.2A3.5 3.5 0 0 1 5 11.5v-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8.7h6M9 11.3h3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
     '/office': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M2.5 20.5h19"/><path d="M8.5 7.5h2M13.5 7.5h2M8.5 11.5h2M13.5 11.5h2"/><path d="M10.5 20.5v-2.5a1.5 1.5 0 0 1 3 0v2.5"/></svg>`,
     '/unified/graph': BRAIN_ICON,
@@ -836,7 +774,6 @@ function dashboardSnapshot() {
   const cardIllustrations = {
     '/kanban': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="17" y="19" width="266" height="152" rx="19" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".28"/><path d="M38 45H262" stroke="currentColor" stroke-opacity=".18"/><circle cx="42" cy="32" r="3" fill="currentColor" fill-opacity=".65"/><circle cx="53" cy="32" r="3" fill="currentColor" fill-opacity=".28"/><circle cx="64" cy="32" r="3" fill="currentColor" fill-opacity=".28"/><g fill="currentColor" fill-opacity=".075" stroke="currentColor" stroke-opacity=".35"><rect x="31" y="55" width="72" height="103" rx="9"/><rect x="114" y="55" width="72" height="103" rx="9"/><rect x="197" y="55" width="72" height="103" rx="9"/></g><g fill="currentColor" fill-opacity=".22"><rect x="39" y="64" width="36" height="5" rx="2.5"/><rect x="122" y="64" width="39" height="5" rx="2.5"/><rect x="205" y="64" width="44" height="5" rx="2.5"/></g><g fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".46"><rect x="39" y="79" width="56" height="25" rx="5"/><rect x="39" y="110" width="56" height="25" rx="5"/><rect x="122" y="79" width="56" height="25" rx="5"/><rect x="122" y="110" width="56" height="33" rx="5"/><rect x="205" y="79" width="56" height="36" rx="5"/></g><g stroke="currentColor" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"><path d="M47 88H74M47 94H63M130 88H162M130 94H148M213 88H246M213 94H234"/></g><circle cx="241" cy="136" r="13" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".55"/><path d="m235 136 4 4 8-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     '/openmausbot/chat': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="86" y="52" width="128" height="92" rx="26" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".5" stroke-width="2"/><path d="M150 52V30" stroke="currentColor" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/><circle cx="150" cy="26" r="6" fill="currentColor" fill-opacity=".55"/><circle cx="123" cy="92" r="11" fill="currentColor" fill-opacity=".45"/><circle cx="177" cy="92" r="11" fill="currentColor" fill-opacity=".45"/><path d="M128 120h44" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/><path d="M60 98H44M256 98h-16M70 132 52 144M230 132l18 12" stroke="currentColor" stroke-opacity=".3" stroke-width="2" stroke-linecap="round"/></svg>`,
-    '/ghost': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="151" cy="95" r="79" stroke="currentColor" stroke-opacity=".13"/><circle cx="151" cy="95" r="59" stroke="currentColor" stroke-opacity=".31"/><circle cx="151" cy="95" r="39" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="4 8"/><path d="M151 23V42M151 148V167M79 95H99M204 95H223" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round"/><path d="M133 121V80a18 18 0 0 1 36 0v41l-9-7-9 7-9-7-9 7Z" fill="currentColor" fill-opacity=".19" stroke="currentColor" stroke-opacity=".83" stroke-width="2" stroke-linejoin="round"/><circle cx="143" cy="88" r="3" fill="currentColor"/><circle cx="159" cy="88" r="3" fill="currentColor"/><circle cx="229" cy="43" r="5" fill="currentColor" fill-opacity=".8"/><circle cx="73" cy="138" r="3" fill="currentColor" fill-opacity=".45"/><path d="m217 46-19 12M84 133l18-10" stroke="currentColor" stroke-opacity=".38" stroke-dasharray="3 5"/></svg>`,
     '/agentchat': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="47" y="43" width="108" height="71" rx="26" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-opacity=".68"/><path d="M86 114 69 132l2-19" stroke="currentColor" stroke-opacity=".68" stroke-linecap="round" stroke-linejoin="round"/><rect x="146" y="78" width="107" height="60" rx="24" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".42"/><path d="M198 138 214 151l-1-13" stroke="currentColor" stroke-opacity=".42" stroke-linecap="round" stroke-linejoin="round"/><path d="M71 66h57M71 82h41M166 99h50M166 114h30" stroke="currentColor" stroke-opacity=".8" stroke-width="4" stroke-linecap="round"/></svg>`,
     '/office': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="44" y="31" width="212" height="118" rx="18" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/><rect x="58" y="45" width="184" height="89" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".22"/><path d="M111 162h79M132 149l-8 13M167 149l8 13" stroke="currentColor" stroke-opacity=".4" stroke-linecap="round"/><rect x="74" y="60" width="73" height="28" rx="8" fill="currentColor" fill-opacity=".13"/><rect x="155" y="60" width="70" height="53" rx="8" fill="currentColor" fill-opacity=".09"/><path d="M84 71h36M84 79h22M166 73h48M166 82h32M166 91h39" stroke="currentColor" stroke-opacity=".54" stroke-linecap="round"/></svg>`,
     '/unified/graph': miniatureBrainGraph(),
@@ -851,7 +788,7 @@ function dashboardSnapshot() {
   const referenceDocuments = [
     ['RepoQL Cheat Sheet','/repoql/cheat-sheet'],
     ['Memory Architecture','/architecture/memory'],
-    ...(!nativeInstall ? [['Orchestration Architecture','/architecture/orchestra']] : []),
+    ['Orchestration Architecture','/architecture/orchestra'],
   ];
   const systemKnowledge = [
     ['RepoQL Dashboard','/repoql/control'],
@@ -862,7 +799,9 @@ function dashboardSnapshot() {
     ['Indexing and Sources','/indexing'],
   ];
   const diagnosticsTools = [
-    ['AI Usage','/unified/usage'],
+    ...(!nativeInstall ? [['AI Usage','/unified/usage']] : []),
+    ['Bot fleet status','/openmausbot/fleet'],
+    ...(nativeInstall ? [['Agents Control','/claude/agents']] : []),
     ['Diagnostics','/diagnostics'],
     ...(!nativeInstall ? [
       ['Harness Control Center','/harness'],
@@ -888,9 +827,9 @@ function dashboardSnapshot() {
   <section aria-labelledby="goto-heading">
     <div class="command-heading"><h2 id="goto-heading">Primary workspaces</h2></div>
     <div class="command-links command-links-priority command-links-visual">${destinations.map(([title,link,description,accent,kicker])=>`<a class="command-link command-workspace${featureCards.has(link)?' command-workspace-feature':''}" data-accent="${esc(accent)}" href="#${esc(link)}">
-      <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || (link === '/openmausbot' ? iconBadges['/ghost'] : '') || REPOQL_ICON}</span>
+      <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || REPOQL_ICON}</span>
       <span class="command-card-content"><span class="command-card-kicker">${esc(kicker)}</span><strong>${esc(title)}</strong><span class="command-card-description">${esc(description)}</span><span class="command-card-cta">Open workspace <span aria-hidden="true">↗</span></span></span>
-      <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || (link === '/openmausbot' ? cardIllustrations['/ghost'] : '') || ''}</span>
+      <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || ''}</span>
     </a>`).join('')}</div>
   </section>
   <details class="command-more block" data-accent="office" open>
@@ -1753,7 +1692,6 @@ async function mountRuntime(panel) {
     ['Harness collector', '/api/harness/health'],
     ['Run state authority', '/api/harness/rust'],
     ['Office viewer', '/api/harness/office'],
-    ...(!nativeInstall ? [['Ghost observer', '/api/ghost/status']] : []),
   ];
   let sequence = 0;
   const render = async () => {
@@ -1775,7 +1713,6 @@ async function mountRuntime(panel) {
         name === 'Harness collector' ? `<dt>Last ingest</dt><dd>${esc(relative(data?.last_ingest))}</dd>
           <dt>Ingest errors</dt><dd>${data?.ingest_errors == null ? 'Unavailable' : esc(fmt(data.ingest_errors))}</dd>` : '',
         name === 'Office viewer' ? `<dt>Viewer</dt><dd>${data?.available === true ? 'Available (health only)' : 'Unavailable'}</dd>` : '',
-        name === 'Ghost observer' ? `<dt>Observer</dt><dd>${esc(displayLabel(data?.state, 'Unknown'))}</dd>` : '',
       ].join('');
       return `<section class="block"><div class="block-title">${esc(name)}
           <span class="tag ${!ok || explicitFailure ? 'amber' : 'green'}">${stateText}</span></div>
@@ -2429,20 +2366,18 @@ async function viewConnectors() {
 
 const selectedFeatures = window.__SINGULARITY_VARIANT__?.features || null;
 function featureAllowed(path) {
-  if (nativeInstall && (path === "/architecture/orchestra" || path === "/harness" || path.startsWith("/harness/"))) return false;
+  if (nativeInstall && (path === "/harness" || path.startsWith("/harness/"))) return false;
   if (path === "/claude/agents") return nativeInstall;
-  if (nativeInstall && (path === '/ghost' || path.startsWith('/ghost/'))) return false;
   // Fleet-only controls need APIs outside the Windows product.
-  if (nativeInstall && (path === "/agents-control" || path === "/reference/agents" || path === "/openmausbot/chat")) return false;
+  if (nativeInstall && (path === "/agents-control" || path === "/reference/agents")) return false;
   if (!selectedFeatures) return true;
-  if (path === "/ghost" || path.startsWith("/ghost/")) return selectedFeatures.ghost === true;
   if (path === "/office" || path.startsWith("/office/")) return selectedFeatures.office === true;
   if (path === "/kanban") return selectedFeatures.kanban === true;
   if (path === "/agentchat") return selectedFeatures.agent_chat === true;
   return true;
 }
 for (const link of document.querySelectorAll('[data-nav]')) {
-  if (!featureAllowed(link.dataset.nav) || (nativeInstall && link.dataset.nav === '/ghost') || (link.dataset.nav === '/native/status' && !nativeInstall)) {
+  if (!featureAllowed(link.dataset.nav) || (nativeInstall && link.dataset.nav === '/unified/usage') || (link.dataset.nav === '/native/status' && !nativeInstall)) {
     link.hidden = true;
     link.dataset.variantDisabled = '1';
   }
@@ -2453,14 +2388,6 @@ for (const link of document.querySelectorAll('[data-nav]')) {
   }
 }
 for (const link of document.querySelectorAll('[data-dock]')) {
-  if (nativeInstall && link.dataset.dock === '/ghost') {
-    // Keep the mobile shortcut but point it at the one local bot workspace.
-    link.dataset.dock = '/openmausbot';
-    link.href = '#/openmausbot';
-    link.setAttribute('aria-label','OpenMausBot');
-    const label = link.querySelector('span');
-    if (label) label.textContent = 'Bots';
-  }
   if (!featureAllowed(link.dataset.dock)) link.hidden = true;
 }
 
@@ -3760,7 +3687,7 @@ function viewAgentsControl() {
 export const __editorTestSurface = {conceptMetadataCheck, validNativeEmbed, rowsOf, contentOf, createDiscoveryGuard, applyHarnessRefresh, harnessInterval,
   displayLabel, pill, statusPill, categoryChip, metricBlock, dashboardSnapshot, miniatureBrainGraph, fmt, renderOpenChamberCoverage,
   LIVENESS_STATES, livenessState, livenessLabel, livenessNote, sessionRow, sessionsBlock, seatPill, runBlock, runsBlock,
-  diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS, architectureProbeState,
+  diagnosticsTabOf, indexingTabOf, tabStrip, DIAGNOSTICS_TABS, INDEXING_TABS, architectureProbeState, architectureRuntimeChecks,
   featureAllowed,
   debounceForRoute, sequencer, themeCatalog, themeModeOf, sanitizeThemeChoice, applyTheme,
   agentChatParticipants, agentChatThreads, agentChatTimeline, agentChatTime,
@@ -4062,7 +3989,7 @@ async function viewAgentChat() {
     latestButton.textContent = unreadCount ? `↓ ${unreadCount} new message${unreadCount===1?'':'s'} · Jump to latest` : '↓ New messages';
   };
   // Two words give their initials ("Model Scout" -> MS); one word gives its
-  // first two letters ("ghost" -> GH).
+  // first two letters ("scout" -> SC).
   const initials = (name) => {
     const words = String(name || 'AL').trim().split(/[\s·_\-]+/).filter(Boolean);
     if (!words.length) return 'AL';

@@ -64,3 +64,12 @@ harness/kit/runs/
 !.repoql/.gitignore
 !.repoql/concepts/
 .pytest_cache/
+secrets/
+.claude/settings.local.json
+.vs/
+.idea/
+.vscode/
+
+*.zip
+*.msi
+WINDOWS_NATIVE_RELEASE_*.md

@@ -21,14 +21,12 @@ class NativeSourceBoundary(unittest.TestCase):
                      'dashboard/.env.windows.example','dashboard/server.py'):
             with self.subTest(name=name):
                 self.assertFalse(linux_deployment_asset(name))
-    def test_ghost_scheduler_windows_sources_are_complete_only(self):
+    def test_ghost_scheduler_sources_are_excluded_from_all_windows_variants(self):
         names=('native/windows/ghost_scheduler_host.py','native/windows/ghost_task_scheduler.ps1',
                'native/windows/manage_ghost_scheduler.ps1','native/windows/test_ghost_scheduler_host.py')
         for name in names:
-            for variant in (1,3):
+            for variant in (1,2,3,4):
                 self.assertTrue(windows_variant_excludes(name,variant))
-            for variant in (2,4):
-                self.assertFalse(windows_variant_excludes(name,variant))
     def test_legacy_installer_refuses_native_windows(self):
         code=(ROOT/'scripts/install-claude-code.mjs').read_text()
         self.assertIn('NATIVE_WINDOWS_INSTALLER_INCOMPLETE', code)

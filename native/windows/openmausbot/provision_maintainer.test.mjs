@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {tmpdir} from 'node:os';
-import {maintainerPlan,provisionMaintainer,maintainerRoutine} from './provision_maintainer.mjs';
+import {maintainerPlan,provisionMaintainer,maintainerRoutine,verifyMaintainerBot} from './provision_maintainer.mjs';
 
 function fixture(){
  const root=mkdtempSync(join(tmpdir(),'singularity-omb-provision-'));
@@ -49,6 +49,7 @@ function vendorRun({source,observeRoutine=true,drift=null,drop=false}={}){
    }
    return {status:0,stdout:out.map(f=>JSON.stringify(f)).join('\n')+'\n'};
   }
+  if(args[1]==='team'&&args.includes('--check'))return {status:drift?6:0,stdout:'{"ok":true}'};
   if(args[1]==='bots'){
    state.botLists+=1;
    const bot={name:'Singularity Maintainer',team:'Singularity Maintenance',
@@ -58,6 +59,29 @@ function vendorRun({source,observeRoutine=true,drift=null,drop=false}={}){
    return {status:0,stdout:JSON.stringify({bots})};
   }
   return {status:0,stdout:'{"ok":true}'};
+ };
+ return {run,calls,state};
+}
+function botOnlyVendor({source,bots=[]}={}){
+ const calls=[],state={bots:[...bots],teamFiles:[],teamCalls:0};
+ const run=(_exe,args,opts)=>{
+  calls.push(args);
+  assert.equal(opts.env.OMB_PORT,'18211');
+  assert.equal(opts.env.OPENMAUSBOT_URL,undefined);
+  assert.equal(opts.env.OPENMAUSBOT_TOKEN,undefined);
+  if(args[1]==='bots')return {status:0,stdout:JSON.stringify({bots:state.bots})};
+  if(args[1]==='team'&&args.includes('--check')){state.checks=(state.checks||0)+1;return {status:0,stdout:'{"ok":true}'}}
+  if(args[1]==='team'&&args[2]==='apply'){
+   const teamPath=args[3],team=JSON.parse(readFileSync(teamPath,'utf8'));
+   state.teamFiles.push(teamPath);state.teamCalls+=1;
+   assert.deepEqual(team.teams,[{name:'Singularity Maintenance',prune:false}]);
+   assert.equal(team.bots.length,1);
+   const bot=team.bots[0];
+   for(const forbidden of ['soul','model','provider','apiKey','token'])assert.equal(bot[forbidden],undefined);
+   if(!args.includes('--dry-run'))state.bots=[...state.bots,...team.bots];
+   return {status:0,stdout:'{"ok":true}'};
+  }
+  assert.fail('bot-only path must not call chat or routines');
  };
  return {run,calls,state};
 }
@@ -86,6 +110,53 @@ function fakeChild(vendor){
   assert.equal(result.runtimeAgentVerified,false);assert.equal(result.scheduleVerified,false);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
+test('initial-bot verification is read-only: bot list plus config check',()=>{
+ const x=fixture(),v=vendorRun({source:x.source});try{
+  const result=verifyMaintainerBot({...x,run:v.run});
+  assert.equal(result.present,true);assert.equal(result.ambiguous,false);
+  assert.equal(v.calls.length,2);assert.equal(v.calls[0][1],'bots');
+  assert.ok(v.calls[1].includes('--check'));
+  assert.equal(v.calls.some(args=>(args[1]==='team'&&!args.includes('--check'))||args[1]==='mcp'),false);
+ }finally{rmSync(x.root,{recursive:true,force:true})}
+});
+test('initial-bot verification reports drift when the config check exits 6',()=>{
+ const x=fixture(),v=vendorRun({source:x.source,drift:{approval:'full'}});try{
+  const result=verifyMaintainerBot({...x,run:v.run});
+  assert.equal(result.present,true);assert.equal(result.botConfigVerified,false);
+ }finally{rmSync(x.root,{recursive:true,force:true})}
+});
+test('bot-only apply reuses one existing Maintainer without applying or writing state',async()=>{
+ const x=fixture(),v=botOnlyVendor({source:x.source,bots:[
+  {name:'Singularity Maintainer',team:'Existing Team',model:'operator-choice'},
+  {name:'Existing Bot',team:'Personal'}]});try{
+  const result=await provisionMaintainer({...x,apply:true,botOnly:true,run:v.run,allowFixture:true});
+  assert.equal(result.botRegistrationVerified,true);assert.equal(result.botReused,true);
+  assert.equal(result.scheduleRequested,false);assert.equal(result.scheduleVerified,false);
+  assert.equal(v.calls.length,2);assert.equal(v.state.teamCalls,0);
+  assert.equal(v.calls.some(args=>args[1]==='mcp'),false);
+  assert.equal(existsSync(join(x.rcRoot,'state','maintainer-provision')),false);
+ }finally{rmSync(x.root,{recursive:true,force:true})}
+});
+test('bot-only apply creates a missing bot with no persistent Soul or routine state',async()=>{
+ const x=fixture(),v=botOnlyVendor({source:x.source,bots:[{name:'Existing Bot',team:'Personal'}]});try{
+  const result=await provisionMaintainer({...x,apply:true,botOnly:true,run:v.run,allowFixture:true});
+  assert.equal(result.botRegistrationVerified,true);assert.equal(result.botReused,false);
+  assert.equal(result.scheduleRequested,false);assert.equal(result.scheduleVerified,false);
+  assert.equal(result.otherBotsPreserved,true);assert.equal(v.state.teamCalls,2);
+  assert.equal(v.state.checks,1,'post-apply --check readback ran');
+  assert.equal(v.state.bots.length,2);
+  assert.equal(v.calls.some(args=>args[1]==='mcp'),false);
+  assert.equal(v.state.teamFiles.every(path=>existsSync(path)),false,'temporary team files are removed');
+  assert.equal(existsSync(join(x.rcRoot,'state','maintainer-provision')),false);
+ }finally{rmSync(x.root,{recursive:true,force:true})}
+});
+test('bot-only apply refuses duplicate default bots without changing them',async()=>{
+ const x=fixture(),v=botOnlyVendor({source:x.source,bots:[
+  {name:'Singularity Maintainer',team:'A'},{name:'Singularity Maintainer',team:'B'}]});try{
+  await assert.rejects(()=>provisionMaintainer({...x,apply:true,botOnly:true,run:v.run,allowFixture:true}),/OMB_BOT_AMBIGUOUS/);
+  assert.equal(v.calls.length,1);assert.equal(v.state.teamCalls,0);
+ }finally{rmSync(x.root,{recursive:true,force:true})}
+});
 test('maintainer apply uses vendor dryrun and readback and permits no duplicate provisioning',async()=>{
  const x=fixture(),v=vendorRun({source:x.source});
  try{
@@ -93,7 +164,7 @@ test('maintainer apply uses vendor dryrun and readback and permits no duplicate 
   const first=await provisionMaintainer(options);
   assert.equal(first.botRegistrationVerified,true);
   assert.equal(first.botConfigVerified,true);
-  assert.deepEqual(first.botConfigFieldsCompared,['cwd','approval','computer']);
+  assert.deepEqual(first.botConfigFieldsCompared,['team','title','description','soul','approval','computer','cwd']);
   assert.equal(first.otherBotsPreserved,true);
   assert.equal(first.scheduleVerified,true);
   assert.equal(first.scheduleCreated,true);
@@ -104,7 +175,7 @@ test('maintainer apply uses vendor dryrun and readback and permits no duplicate 
   assert.equal(second.scheduleCreated,false,'an existing routine is not created twice');
   assert.equal(v.state.creates,1);
   const vendor=v.calls.filter(a=>a[1]!=='mcp');
-  assert.equal(vendor.length,8);                       // 2x (bots, dry-run, apply, bots)
+  assert.equal(vendor.length,10);                      // 2x (bots, dry-run, apply, bots, check)
   assert.equal(vendor[0][1],'bots');
   assert.ok(vendor[1].includes('--dry-run'));
   assert.equal(vendor[2][2],'apply');
@@ -115,7 +186,7 @@ test('maintainer apply uses vendor dryrun and readback and permits no duplicate 
 test('a bot with the right name but drifted configuration is refused',async()=>{
  const x=fixture(),v=vendorRun({source:x.source,drift:{approval:'full'}});
  try{
-  await assert.rejects(()=>provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true}),/OMB_BOT_APPROVAL_MISMATCH/);
+  await assert.rejects(()=>provisionMaintainer({...x,apply:true,run:v.run,spawnChild:fakeChild(v.run),allowFixture:true}),/OMB_BOT_CONFIG_MISMATCH/);
  }finally{rmSync(x.root,{recursive:true,force:true})}
 });
 test('removing an unrelated bot during apply is refused',async()=>{

@@ -78,8 +78,19 @@ class NativeDashboardProfiles(unittest.TestCase):
                         self.assertEqual(code,200)
                         self.assertEqual(json.loads(data)['error'],'bad_request')
                         operations.assert_not_called()
-                    code,data=request('/api/ghost/status')
-                    self.assertEqual(code,404)
+                    with patch('native_openmausbot.role_names', return_value={
+                        'omb-0123456789abcdef0123456789abcdef': 'Builder',
+                    }) as role_names:
+                        code,data=request('/api/agentchat/avatars', authenticated=False)
+                        self.assertEqual(code,401)
+                        role_names.assert_not_called()
+                        code,data=request('/api/agentchat/avatars')
+                        self.assertEqual(code,200)
+                        self.assertEqual(json.loads(data), {
+                            'names': {'omb-0123456789abcdef0123456789abcdef': 'Builder'},
+                            'agents': {}, 'avatars': [], 'palette': [],
+                        })
+                        role_names.assert_called_once_with(cfg.state_dir)
                     code,data=request('/api/harness/office')
                     self.assertEqual(code,404 if option in (1,3) else 200)
                 finally:

@@ -24,8 +24,6 @@ on:
       - 'native/windows/claude_complete_memory_profiles.test.mjs'
       - 'native/windows/claude_complete_doc_parity.mjs'
       - 'native/windows/claude_complete_doc_parity.test.mjs'
-      - 'native/windows/claude_complete_ghost_scope_probe.mjs'
-      - 'native/windows/claude_complete_ghost_scope_probe.test.mjs'
       - 'scripts/doc-policy.mjs'
       - 'scripts/doc-policy-batch.test.mjs'
       - 'adapters/claude-code/doc-hook.mjs'
@@ -77,8 +75,6 @@ on:
       - 'native/windows/claude_complete_memory_profiles.test.mjs'
       - 'native/windows/claude_complete_doc_parity.mjs'
       - 'native/windows/claude_complete_doc_parity.test.mjs'
-      - 'native/windows/claude_complete_ghost_scope_probe.mjs'
-      - 'native/windows/claude_complete_ghost_scope_probe.test.mjs'
       - 'scripts/doc-policy.mjs'
       - 'scripts/doc-policy-batch.test.mjs'
       - 'adapters/claude-code/doc-hook.mjs'
@@ -173,7 +169,7 @@ jobs:
       - name: Test bridge without Office (options 1 and 3)
         run: cargo test --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features
       - name: Test bridge with Office (options 2 and 4)
-        run: cargo test --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features --features office,ghost
+        run: cargo test --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features --features office
       - name: Test dashboard install option matrix (native host)
         run: python -m unittest discover -s dashboard -p 'test_variant_features.py'
       - name: Test variant HTTP route enforcement (native host)
@@ -190,8 +186,6 @@ jobs:
         run: node --test native/windows/claude_complete_doc_parity.test.mjs
       - name: Verify supervisor task registrar fail-closed source contract
         run: python -m unittest discover -s native/windows -p test_supervisor_registration_source_contract.py -q
-      - name: Verify Ghost and delegated MemoryCore search scope probes (mock service)
-        run: node --test native/windows/claude_complete_ghost_scope_probe.test.mjs
       - name: Verify Option 2 delegated memory mapping, safe seeding and live readback contract (mock service)
         run: node --test native/windows/claude_complete_memory_profiles.test.mjs scripts/setup-agent-profiles.test.mjs
       - name: Validate parent-session Tencent proxy ownership and rollback (fake settings)
@@ -223,7 +217,6 @@ jobs:
           python -m unittest discover -s dashboard -p test_windows_connector_roundtrip.py
           python -m unittest discover -s dashboard -p test_native_auth_broker.py
           python -m unittest discover -s dashboard -p test_native_cpu.py
-          python -m unittest discover -s dashboard -p test_native_ghost.py
           python -m unittest discover -s dashboard -p test_native_readiness.py
       - name: Test source component classification
         run: node --test scripts/bundle-classification.test.mjs
@@ -239,13 +232,8 @@ jobs:
         run: |
           node --test dashboard/tests/dashboard_command_center_test.mjs
           node --test adapters/claude-code/memory-hook.test.mjs
-      - name: Test Ghost calendar draft model and schedule-control HTTP wiring
-        run: |
-          node --test dashboard/static/ghost/schedule_model.test.mjs
-          python -m unittest discover -s dashboard -p test_ghost_schedule_plans.py
-          python -m unittest discover -s dashboard -p test_variant_http.py
-      - name: Test native-compatible Ghost versioned prompt store
-        run: python -m unittest discover -s ghost/prompt-store -p 'test_*.py'
+      - name: Test variant HTTP wiring
+        run: python -m unittest discover -s dashboard -p test_variant_http.py
       - name: Test shared Node/Python documentation ledger safety
         run: |
           node --test scripts/doc-policy-batch.test.mjs scripts/doc-ingest-node.test.mjs adapters/claude-code/doc-hook.test.mjs
@@ -294,7 +282,7 @@ jobs:
         run: python -m unittest discover -s native/windows -p test_repoql_compat.py
       - name: Verify RepoQL 1.7.18 release policy consistency
         run: python -m unittest discover -s native/windows -p test_repoql_release_consistency.py
-      - name: Test Office compatibility and Ghost native source contracts
+      - name: Test Office compatibility native source contracts
         run: python -m unittest discover -s native/windows -p test_office_native_contract.py
       - name: Verify read-only Windows preflight source contract
         run: python -m unittest discover -s native/windows -p test_preflight_contract.py
@@ -345,11 +333,11 @@ jobs:
       - name: Rust lint for lean and complete variants
         run: |
           cargo clippy --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features -- -D warnings
-          cargo clippy --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features --features office,ghost -- -D warnings
+          cargo clippy --manifest-path native/desktop-bridge/Cargo.toml --all-targets --no-default-features --features office -- -D warnings
       - name: Build lean executable without Office (options 1 and 3)
         run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features
       - name: Build complete executable with Office (options 2 and 4)
-        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features --features office,ghost
+        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features --features office
       - name: Upload compiled Windows desktop bridge for isolated acceptance
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
@@ -450,8 +438,8 @@ jobs:
           python -m unittest discover -s native/windows -p test_prepare_option2_candidate.py
           python -m unittest discover -s native/windows -p test_verify_prepared_option2_candidate.py
           python -m unittest discover -s native/windows -p test_claude_complete_acceptance_matrix.py
-      - name: Compile native Rust desktop bridge with Office and Ghost
-        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features --features office,ghost
+      - name: Compile native Rust desktop bridge with Office
+        run: cargo build --release --manifest-path native/desktop-bridge/Cargo.toml --no-default-features --features office
       - name: Compile native Rust process supervisor
         run: cargo build --release --manifest-path native/windows/rust-supervisor/Cargo.toml
       - name: Build and scan source-only Option 2 inventory

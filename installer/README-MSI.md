@@ -129,7 +129,7 @@ That launcher starts the candidate's own local backends and then the dashboard:
 
 No dockerhost, fleet endpoint or production credential is involved, and no
 production port or board is touched: the production Kanzo board (`--home
-C:\Users\Ben\kanzo`, port 4242) and production Office (18128) are separate
+<user-profile>\kanzo`, port 4242) and production Office (18128) are separate
 instances. The RC owns its Kanzo home (`kanzo\`), its Office service/state/logs
 (`office\`) and its Office panel key (`state\office-panel-key`); the dashboard
 proxies all panels through its authenticated same-origin `/embed/<panel>/`

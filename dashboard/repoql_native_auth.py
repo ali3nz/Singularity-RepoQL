@@ -262,7 +262,7 @@ def create_launch_cookie(dashboard_secret: str, now: int | None = None, *, audie
     timestamp = int(time.time() if now is None else now)
     nonce = secrets.token_hex(12)
     data = f"{timestamp}.{nonce}"
-    if audience not in ("repoql", "tencent", "office", "kanzo"):
+    if audience not in ("repoql", "tencent", "office", "kanzo", "openmausbot"):
         raise ValueError("unsupported dashboard cookie audience")
     digest = hmac.new(dashboard_secret.encode(), (audience + ":" + data).encode(), hashlib.sha256).hexdigest()
     return data + "." + digest
@@ -279,7 +279,7 @@ def valid_launch_cookie(cookie_header: str, dashboard_secret: str, now: int | No
         current = int(time.time() if now is None else now)
         if not 0 <= current - timestamp <= max(1, int(max_age)) or not re.fullmatch(r"[a-f0-9]{24}", nonce):
             return False
-        if audience not in ("repoql", "tencent", "office", "kanzo"):
+        if audience not in ("repoql", "tencent", "office", "kanzo", "openmausbot"):
             return False
         data = f"{timestamp}.{nonce}"
         expected = hmac.new(dashboard_secret.encode(), (audience + ":" + data).encode(), hashlib.sha256).hexdigest()

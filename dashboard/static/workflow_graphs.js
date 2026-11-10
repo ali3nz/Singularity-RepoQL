@@ -266,12 +266,11 @@ const ORCHESTRA_MODES = {
       {id:'pools', col:3, tone:'blue', kicker:'Pools', title:'External pools', sub:'Legacy fixed Super mode has α/β only; a separate custom roster supports up to ten seats after cutover.'},
       {id:'hooks', col:4, tone:'amber', kicker:'Hooks', title:'Hooks', sub:'Pre/postflight, telemetry, capture, office sync.'},
       {id:'gates', col:4, tone:'red', kicker:'Gates', title:'Gates', sub:'Lease, deploy intent, asset and capture gates.'},
-      {id:'ghost', col:5, tone:'cyan', kicker:'Persistent', title:'Ghost agent', sub:'Long-running monitoring and delegated tasks.'},
       {id:'audit', col:5, tone:'amber', kicker:'Observe', title:'Telemetry + audit', sub:'Runs, usage, events and performance.'},
       {id:'memory', col:5, tone:'purple', kicker:'Capture', title:'Memory architecture', sub:'MemoryCore history + RepoQL knowledge.'},
       {id:'output', col:5, tone:'cyan', kicker:'Output', title:'Trusted outcome', sub:'Verified answer and reusable learning.'},
     ],
-    edges: [['operator','retrieval','brief'],['retrieval','coord','grounding'],['coord','alpha','delegate'],['coord','beta','optional'],['coord','review','when needed'],['coord','deploy','deploy check'],['alpha','chat','work updates'],['beta','chat','updates'],['review','gates','verdict'],['deploy','gates','preconditions'],['pools','chat','identities'],['chat','hooks','events'],['hooks','ghost','persistent work'],['hooks','audit','telemetry'],['gates','audit','review trail'],['audit','memory','capture triggers'],['memory','output','durable context'],['ghost','output','live state']],
+    edges: [['operator','retrieval','brief'],['retrieval','coord','grounding'],['coord','alpha','delegate'],['coord','beta','optional'],['coord','review','when needed'],['coord','deploy','deploy check'],['alpha','chat','work updates'],['beta','chat','updates'],['review','gates','verdict'],['deploy','gates','preconditions'],['pools','chat','identities'],['chat','hooks','events'],['hooks','audit','telemetry'],['gates','audit','review trail'],['audit','memory','capture triggers'],['memory','output','durable context']],
     callouts: [
       {tone:'green', title:'Super as configured', items:['Fixed Super mode supports one or two seats; custom mode supports a larger roster by explicit selection.','Gamma and delta are not Super seats; no free split is allocated.','Consultation, gates, telemetry and memory are not counted as workers.']},
       {tone:'purple', title:'Embedded memory', items:['Super depends on the same memory plane as every mode.','See the Memory architecture page for the full pipeline.']},
@@ -425,13 +424,6 @@ function pageHTML({eyebrow, title, intro, tabsId, tabsLabel, views, defaultKey})
 let activeBinding = null;
 
 function bindArchitecture(views, tabsId, defaultKey, legend) {
-  if (window.__SINGULARITY_VARIANT__?.variant) {
-    views = Object.fromEntries(Object.entries(views).map(([key, view]) => [key, {
-      ...view,
-      nodes: view.nodes.filter(node => node.id !== 'ghost'),
-      edges: view.edges.filter(edge => edge[0] !== 'ghost' && edge[1] !== 'ghost'),
-    }]));
-  }
   activeBinding?.dispose();
   const root = document;
   const tabs = root.getElementById(tabsId);

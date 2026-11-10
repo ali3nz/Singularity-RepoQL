@@ -1,29 +1,33 @@
 #!/usr/bin/env node
 /**
- * Provision exactly one scoped Windows-local Singularity Maintainer through the
- * vendor's documented `openmausbot team apply` contract, then wire that bot's own
- * routine through the vendor `trigger` tool and read it back with `trigger_info`.
+ * Preserve the legacy scheduled Maintainer provisioner for explicit use, and
+ * provide the Windows installer a separate `--bot-only` bootstrap path. That
+ * path reuses exactly one existing default bot or registers one missing bot
+ * through the vendor's documented `openmausbot team apply` contract. It does
+ * not write a SOUL file, create a routine, or call an AI/model API.
  * No generic OMB API, credentials, bot registry manipulation, additional
- * supervisor, second scheduler or AI calls.
+ * supervisor, or second scheduler.
  *
  * Verified vendor contract (installed bundle + native/windows/openmausbot/headless.py):
  *   team apply <file> [--dry-run] [--json]     creates/updates the named bot
+ *   team apply <file> --check --json           read-only drift comparison (exit 0 match, 6 drift)
  *   bots --json                                readback of registered bots
  *   node cli.js mcp + trigger {action:'create', when:'schedule', for_bot_id,
  *      name, instructions, schedule}           the bot's own routine
  *   trigger_info {action:'list'}               readback: ids, enabled, nextRunAt
  *
- * Plan is read-only. Apply takes one exclusive lock, snapshots the bot list
+ * The legacy scheduled plan is read-only. Its apply takes one exclusive lock, snapshots the bot list
  * before and after, requires the applied configuration (not just the name) and
  * reports scheduleVerified only when trigger_info lists the routine enabled
  * with a future run. Unrelated bots are never pruned; drift is reported.
  */
-import {existsSync, lstatSync, readFileSync, mkdirSync, openSync, writeFileSync,
+import {existsSync, lstatSync, readFileSync, mkdirSync, mkdtempSync, rmSync, openSync, writeFileSync,
         closeSync, fsyncSync, renameSync, unlinkSync} from 'node:fs';
-import {join, resolve, dirname, isAbsolute} from 'node:path';
+import {join, resolve, dirname, isAbsolute, relative} from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {tmpdir} from 'node:os';
 import {ensureMaintainerRoutine, readMaintainerRoutine} from './omb_chat.mjs';
 
 const fail=s=>{throw Error(s)};
@@ -127,15 +131,20 @@ function checkPrior(plan){
   }else if(existsSync(f)||existsSync(t))fail('MAINTAINER_PROVISION_FOREIGN_FILES');
   return {f,t,r};
 }
-function vendorRun(plan,args,run=spawnSync){
+function vendorResult(plan,args,run=spawnSync){
   const env={...process.env,OMB_PORT:String(plan.port)};
   delete env.OPENMAUSBOT_URL;delete env.OPENMAUSBOT_TOKEN;
   const result=run(process.execPath,[plan.vendorCli,...args],{
     cwd:plan.vendorDir,env,encoding:'utf8',timeout:120000,windowsHide:true,
     shell:false,maxBuffer:32768,
   });
+  return {error:result?.error??null,status:result?.status,
+    stdout:String(result?.stdout||'')};
+}
+function vendorRun(plan,args,run=spawnSync){
+  const result=vendorResult(plan,args,run);
   if(result.error||result.status!==0)fail('OMB_VENDOR_COMMAND_FAILED');
-  return String(result.stdout||'');
+  return result.stdout;
 }
 function botList(plan,run){
   let result;
@@ -145,26 +154,126 @@ function botList(plan,run){
   if(!bots)fail('OMB_BOT_READBACK_UNVERIFIED');
   return bots;
 }
+function namedBots(bots){return bots.filter(b=>b&&b.name===botName)}
+function botOnlyTeam(source){
+  return {version:1,teams:[{name:teamName,prune:false}],bots:[{
+    name:botName,team:teamName,title:'Singularity maintenance',
+    description:'Find, repair, verify and report defects in the local Singularity installation',
+    approval:'edits',computer:'off',cwd:source,
+  }]};
+}
+function expectedBotConfigFields(teamPath){
+  let document;
+  try{document=JSON.parse(readFileSync(teamPath,'utf8'))}catch{fail('OMB_TEAM_FILE_INVALID')}
+  if(!Array.isArray(document?.bots)||document.bots.length!==1||document.bots[0]?.name!==botName)
+    fail('OMB_TEAM_FILE_INVALID');
+  return Object.keys(document.bots[0]).filter(field=>field!=='name');
+}
+function teamConfigReadback(plan,teamPath,run){
+  const fields=expectedBotConfigFields(teamPath);
+  // `--check` is the vendor's bounded read-only comparison against the full bot
+  // configuration API. Exit 6 means drift; any other nonzero result means the
+  // readback itself is unavailable or untrusted.
+  const result=vendorResult(plan,['team','apply',teamPath,'--check','--json'],run);
+  if(result.error||![0,6].includes(result.status))fail('OMB_BOT_CONFIG_READBACK_UNVERIFIED');
+  return {verified:result.status===0,fields};
+}
+function withBotOnlyTeam(plan,fn){
+  const tempRoot=mkdtempSync(join(tmpdir(),'singularity-omb-team-'));
+  try{
+    const teamPath=join(tempRoot,'team.json');
+    writeFileSync(teamPath,JSON.stringify(botOnlyTeam(plan.source),null,2)+NL,{flag:'wx',mode:0o600});
+    return fn(teamPath);
+  }finally{removeOwnedTempDirectory(tempRoot)}
+}
+function botOnlyReport(plan,{reused,configFieldsCompared}){
+  return {schema:plan.schema,mode:'BOT_ONLY',bot:botName,
+    botRegistrationVerified:true,botReused:reused,botConfigVerified:true,
+    botConfigFieldsCompared:configFieldsCompared,otherBotsPreserved:true,
+    botOnlyBoundaryVerified:true,scheduleRequested:false,scheduleCreated:false,
+    scheduleVerified:false,chatReportVerified:false,liveRulesLoadedVerified:false,
+    reloadRequired:false};
+}
+function acquireBotOnlyLock(rcRoot,now){
+  const lock=join(tmpdir(),'singularity-omb-initial-bot-'+digest(resolve(rcRoot))+'.lock');
+  let fd;
+  try{fd=openSync(lock,'wx',0o600)}catch(error){
+    if(error?.code==='EEXIST')fail('OMB_INITIAL_BOT_BUSY');
+    throw error;
+  }
+  try{
+    writeFileSync(fd,JSON.stringify({pid:process.pid,at:new Date(now).toISOString()}));
+    fsyncSync(fd);closeSync(fd);fd=null;
+  }catch(error){
+    if(fd!==null)try{closeSync(fd)}catch{/* preserve the write failure */}
+    try{unlinkSync(lock)}catch{/* best-effort cleanup of our failed acquisition */}
+    throw error;
+  }
+  return lock;
+}
+function removeOwnedTempDirectory(path){
+  const root=resolve(tmpdir()),target=resolve(path),rel=relative(root,target);
+  if(!rel||rel==='..'||rel.startsWith('..'+(process.platform==='win32'?'\\':'/'))||isAbsolute(rel))
+    fail('TEMP_PATH_REFUSED');
+  rmSync(target,{recursive:true,force:true});
+}
+export function verifyMaintainerBot({source,rcRoot,run=spawnSync}){
+  const p=maintainerPlan({source,rcRoot,requireLivePid:process.platform==='win32'});
+  const matches=namedBots(botList(p,run));
+  if(matches.length!==1)return {schema:'singularity-omb-initial-bot/v1',mode:'READ_ONLY',bot:botName,
+    present:false,ambiguous:matches.length>1,botRegistrationVerified:false,
+    botConfigVerified:false,botConfigFieldsCompared:[],otherBotsPreserved:true,
+    botOnlyBoundaryVerified:true};
+  const checked=withBotOnlyTeam(p,teamPath=>teamConfigReadback(p,teamPath,run));
+  return {schema:'singularity-omb-initial-bot/v1',mode:'READ_ONLY',bot:botName,
+    present:true,ambiguous:false,botRegistrationVerified:true,
+    botConfigVerified:checked.verified,botConfigFieldsCompared:checked.fields,
+    otherBotsPreserved:true,botOnlyBoundaryVerified:true};
+}
+async function provisionBotOnly(p,{run,now}){
+  let before=botList(p,run),matches=namedBots(before);
+  if(matches.length>1)fail('OMB_BOT_AMBIGUOUS');
+  if(matches.length===1){
+    const checked=withBotOnlyTeam(p,teamPath=>teamConfigReadback(p,teamPath,run));
+    if(!checked.verified)fail('OMB_BOT_CONFIG_MISMATCH');
+    return botOnlyReport(p,{reused:true,configFieldsCompared:checked.fields});
+  }
+  const lock=acquireBotOnlyLock(p.rcRoot,now);
+  try{
+    before=botList(p,run);matches=namedBots(before);
+    if(matches.length>1)fail('OMB_BOT_AMBIGUOUS');
+    if(matches.length===1){
+      const checked=withBotOnlyTeam(p,teamPath=>teamConfigReadback(p,teamPath,run));
+      if(!checked.verified)fail('OMB_BOT_CONFIG_MISMATCH');
+      return botOnlyReport(p,{reused:true,configFieldsCompared:checked.fields});
+    }
+    return withBotOnlyTeam(p,teamPath=>{
+      vendorRun(p,['team','apply',teamPath,'--dry-run','--json'],run);
+      vendorRun(p,['team','apply',teamPath,'--json'],run);
+      const after=botList(p,run);
+      const applied=verifyAppliedBot(after,before,teamPath,p,run);
+      return botOnlyReport(p,{reused:false,configFieldsCompared:applied.configFieldsCompared});
+    });
+  }finally{
+    try{unlinkSync(lock)}catch(error){if(error?.code!=='ENOENT')throw error}
+  }
+}
 /** Readback must describe the configuration we asked for, not just a matching name. */
-function verifyAppliedBot(bots,before,source){
+function verifyAppliedBot(bots,before,teamPath,plan,run){
   const same=bots.filter(b=>b&&b.name===botName);
   if(same.length!==1)fail('OMB_BOT_READBACK_UNVERIFIED');
-  const bot=same[0];
-  if(bot.team!==undefined&&bot.team!==teamName)fail('OMB_BOT_TEAM_MISMATCH');
-  const compared=[];
-  for(const [field,want] of [['cwd',source],['approval','edits'],['computer','off']]){
-    if(bot[field]===undefined)continue;             // this vendor build does not report it
-    if(String(bot[field])!==String(want))fail('OMB_BOT_'+field.toUpperCase()+'_MISMATCH');
-    compared.push(field);
-  }
+  const checked=teamConfigReadback(plan,teamPath,run);
+  if(!checked.verified)fail('OMB_BOT_CONFIG_MISMATCH');
   const after=new Set(bots.map(b=>b.name));
   for(const b of before)if(b?.name&&!after.has(b.name))fail('OMB_UNRELATED_BOT_REMOVED');
-  return {configFieldsCompared:compared,otherBotsPreserved:true};
+  return {configFieldsCompared:checked.fields,otherBotsPreserved:true};
 }
 
-export async function provisionMaintainer({source,rcRoot,apply=false,run=spawnSync,spawnChild,allowFixture=false,now=Date.now()}){
+export async function provisionMaintainer({source,rcRoot,apply=false,botOnly=false,run=spawnSync,spawnChild,allowFixture=false,now=Date.now()}){
   if(apply&&process.platform!=='win32'&&!allowFixture)fail('WINDOWS_ONLY_MUTATION');
+  if(botOnly&&!apply)fail('BOT_ONLY_REQUIRES_APPLY');
   const p=maintainerPlan({source,rcRoot,now,requireLivePid:process.platform==='win32'});
+  if(botOnly)return provisionBotOnly(p,{run,now});
   const response={schema:p.schema,mode:apply?'APPLY':'READ_ONLY',
     bot:p.plannedBot,model:p.model,existingBotsPreserved:true,routine:p.routine.name,
     runtimeAgentVerified:false,scheduleVerified:false,chatReportVerified:false};
@@ -190,7 +299,7 @@ export async function provisionMaintainer({source,rcRoot,apply=false,run=spawnSy
     vendorRun(p,['team','apply',t,'--dry-run','--json'],run);
     vendorRun(p,['team','apply',t,'--json'],run);
     const bots=botList(p,run);
-    const applied=verifyAppliedBot(bots,before,p.source);
+    const applied=verifyAppliedBot(bots,before,t,p,run);
     // The routine belongs to the bot itself: create it through the vendor trigger
     // tool, then confirm with trigger_info. A failure here does not undo the bot,
     // and is reported as unverified rather than assumed.
@@ -221,12 +330,23 @@ export async function verifyMaintainerSchedule({rcRoot,spawnChild,now=Date.now()
 }
 
 async function main(args){
-  const kv={};let apply=false,verifySchedule=false;
+  const kv={};let apply=false,verifySchedule=false,verifyBot=false,botOnly=false;
   for(let i=0;i<args.length;i++){
     if(args[i]==='--apply'){if(apply)fail('USAGE');apply=true;continue}
     if(args[i]==='--verify-schedule'){if(verifySchedule)fail('USAGE');verifySchedule=true;continue}
+    if(args[i]==='--verify-bot'){if(verifyBot)fail('USAGE');verifyBot=true;continue}
+    if(args[i]==='--bot-only'){if(botOnly)fail('USAGE');botOnly=true;continue}
     if(!['--source','--rc-root'].includes(args[i])||kv[args[i]]||!args[i+1])fail('USAGE');
     kv[args[i]]=args[++i];
+  }
+  if(verifyBot&&(verifySchedule||apply||botOnly))fail('USAGE');
+  if(verifySchedule&&(apply||botOnly))fail('USAGE');
+  if(botOnly&&!apply)fail('USAGE');
+  if(verifyBot){
+    if(!kv['--source']||!kv['--rc-root'])fail('USAGE');
+    const v=verifyMaintainerBot({source:kv['--source'],rcRoot:kv['--rc-root']});
+    process.stdout.write(JSON.stringify(v)+NL);
+    return;
   }
   if(verifySchedule){
     if(!kv['--rc-root'])fail('USAGE');
@@ -236,10 +356,10 @@ async function main(args){
     return;
   }
   if(!kv['--source']||!kv['--rc-root'])fail('USAGE');
-  const r=await provisionMaintainer({source:kv['--source'],rcRoot:kv['--rc-root'],apply});
+  const r=await provisionMaintainer({source:kv['--source'],rcRoot:kv['--rc-root'],apply,botOnly});
   process.stdout.write(JSON.stringify(r)+NL);
   // A bot without its verified routine is not an installed Maintainer.
-  if(apply&&r.scheduleVerified!==true)process.exitCode=1;
+  if(apply&&!botOnly&&r.scheduleVerified!==true)process.exitCode=1;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{await main(process.argv.slice(2))}

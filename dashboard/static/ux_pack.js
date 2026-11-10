@@ -16,7 +16,6 @@
     ["Host", "/api/status", "/diagnostics"],
     ...(nativeInstall ? [] : [
       ["Harness", "/api/harness/health", "/harness"],
-      ["Ghost", "/api/ghost/status", "/openmausbot?bot=ghost"],
     ]),
   ];
   async function probe([name, url, link]) {

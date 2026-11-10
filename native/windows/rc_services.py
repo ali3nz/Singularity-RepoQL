@@ -15,7 +15,7 @@ acceptance. This module starts what the candidate can own:
 
   * **Kanzo board** - the real local `kanzo.exe` board staged into the RC root
     and started with an RC-owned `--home` and an RC port. The production board
-    (`C:\\Users\\Ben\\kanzo`, port 4242) is never opened, written or bound.
+    (`<user-profile>\\kanzo`, port 4242) is never opened, written or bound.
   * **Claude Office** - the locally installed Claude Office distribution started
     from an RC-owned service config, state, log directory and port. The RC owns
     its API/ingest keys and DB; the installed distribution is read only.

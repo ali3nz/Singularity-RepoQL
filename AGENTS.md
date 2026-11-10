@@ -9,8 +9,8 @@ installed under `~/.claude/rules/`. Do not imply that this repository-level
 
 Develop, build, install, and test the product directly on native Windows using
 Codex. A local Claude application is not a development or acceptance prerequisite.
-The current Windows installer ships one complete Claude Code package with Ghost
-and Office. Historical four-profile source tools may remain. Verify optional
+The current Windows installer ships one complete Claude Code package with Office
+(Ghost is retired from the Windows product). Historical four-profile source tools may remain. Verify optional
 Claude and OpenChamber integration claims separately; never infer compatibility
 from a source test or silently remove an advertised integration.
 
@@ -84,7 +84,7 @@ value.
    readback, delegated memory capture, and native Code-tab usage as
    **distinct evidence**. A passing HTTP health check is not release approval.
 8. Prefer Rust for app-owned Windows components. Do not guess third-party
-   service APIs or silently replace external Office, Ghost, Tencent, RepoQL
+   service APIs or silently replace external Office, Tencent, RepoQL
    or Kanzo binaries. Preserve the existing thin integration shims until native
    equivalents compile and pass corresponding tests.
 

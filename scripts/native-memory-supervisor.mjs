@@ -1093,6 +1093,8 @@ async function main(argv) {
     await new Promise((resolve) => {
       let stopping = false;
       let checking = false;
+      let failedProbes = 0;
+      const MAX_FAILED_PROBES = 3;
       const shutdown = async () => {
         if (stopping) return;
         stopping = true;
@@ -1104,11 +1106,22 @@ async function main(argv) {
         checking = true;
         try {
           const status = await statusStack(config);
-          if (!status.ok) {
-            process.stderr.write(`memory stack degraded: ${status.code}\n`);
-            clearInterval(timer);
-            await stopStack(config);
-            process.exit(1);
+          if (status.ok) {
+            failedProbes = 0;
+          } else {
+            // One slow probe (2 s timeout) under load must not tear down the
+            // whole stack: require consecutive failures and name the culprit.
+            failedProbes += 1;
+            const bad = (status.processes || [])
+              .filter((p) => p.ownership !== "verified" || p.health !== "ok")
+              .map((p) => `${p.name}:${p.ownership === "verified" ? p.health : p.ownership}`)
+              .join(",");
+            process.stderr.write(`memory stack degraded (${failedProbes}/${MAX_FAILED_PROBES}): ${status.code} ${bad}\n`);
+            if (failedProbes >= MAX_FAILED_PROBES) {
+              clearInterval(timer);
+              await stopStack(config);
+              process.exit(1);
+            }
           }
         } catch (error) {
           process.stderr.write(`memory stack status failed: ${error.message}\n`);

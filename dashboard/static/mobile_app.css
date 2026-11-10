@@ -78,8 +78,7 @@
   }
   .command-links-visual .command-workspace .command-card-illustration,
   .command-links-visual .command-workspace-feature .command-card-illustration,
-  .command-links-visual .command-workspace:not(.command-workspace-feature) .command-card-illustration,
-  .command-links-priority .command-workspace-feature[data-accent="ghost"] .command-card-illustration {
+  .command-links-visual .command-workspace:not(.command-workspace-feature) .command-card-illustration{
     position:absolute;left:6%;right:auto!important;top:5px;width:88%!important;height:71%;
     opacity:.95!important;filter:drop-shadow(0 4px 17px color-mix(in srgb,var(--tile-accent) 77%,transparent));
   }
@@ -96,12 +95,6 @@
   .command-overview-card {min-height:91px;border-radius:14px;}
   .command-overview-card strong {font-variant-numeric:tabular-nums;}
   .command-more {border-radius:17px;}
-  .ghost-operations-tile {border-radius:21px;padding:12px;min-height:115px;gap:8px;
-    box-shadow:0 10px 25px rgba(134,52,230,.18);}
-  .ghost-operations-tile-icon {width:51px;height:51px;}
-  .ghost-operations-tile-copy strong {font-size:18px;}
-  .ghost-operations-tile-copy > span {font-size:11px;}
-  .ghost-operations-tile-arrow {width:32px;height:32px;}
   /* A compact feed stays dominant; color identifies chat versus Kanzo updates. */
   .messenger-mode-feed .messenger-toolbar {background:linear-gradient(110deg,#091d31,#161239);}
   .messenger-mode-feed .messenger-message {border-radius:16px;border-color:rgba(168,111,255,.48);
