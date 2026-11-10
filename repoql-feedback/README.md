@@ -8,4 +8,4 @@ Delivery is via the RepoQL `feedback` command (needs a signed-in RepoQL account 
 
 | Report | Status | Notes |
 | --- | --- | --- |
-| [2026-11-10-session0-host-blocks-interactive-host.md](2026-11-10-session0-host-blocks-interactive-host.md) | **NOT SENT** (2026-11-10) | `feedback` returned "Not authenticated"; `account whoami` reports not logged in. Send after `rql account login`, then change this row to SENT with the date. |
+| [2026-11-10-session0-host-blocks-interactive-host.md](2026-11-10-session0-host-blocks-interactive-host.md) | **SENT** (2026-11-10) | `rql feedback` returned "Feedback accepted." with diagnostics attached. |
