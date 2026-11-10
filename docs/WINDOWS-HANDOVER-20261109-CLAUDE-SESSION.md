@@ -326,3 +326,32 @@ Not yet verified: the stop path after closing Claude, and reboot behaviour.
 - Code reviewer agent is pinned to haiku, effort high (integration test updated).
 - Test caveat: one `test_claude_agents_control` error is a Windows symlink privilege (WinError 1314), environmental.
 - Release remains BLOCKED; nothing here is certified.
+
+## Outstanding work register (consolidated 2026-11-10)
+
+Everything below is **not done or not verified**. Release remains BLOCKED; nothing is certified or production-ready.
+
+### Dashboard / Office
+1. **Office WebSocket through the panel proxy.** `dashboard/native_panel_proxy.py` remaps `/embed/<kind>` fetches but does not upgrade WebSockets, so `/embed/office/ws/...` fails. Needs a WS upgrade/tunnel or a confirmed polling fallback.
+2. **Office React #418** hydration warning and one 502 persist.
+3. **`OFFICE_TASK_OWNERSHIP_DRIFT`**: `manage_claude_office.ps1` reports drift; `Start -SkipOffice` does not start the Office task (the watcher now starts it while Claude runs).
+4. **Panels never verified live:** Memory Graph, Connectors, Indexing, Tencent iframe.
+5. **Agent Chat panels** show "state directory unavailable" (`%LOCALAPPDATA%\Singularity\AgentChat` absent; relay not part of the Windows install). Accurate state; decide whether to ship the relay or hide the panels.
+
+### Services and tasks
+6. **CPU collector:** task `Singularity-CpuHistoryCollector` runs, but `/api/cpu` still returns `native_windows_cpu_history_no_verified_samples`. Confirm samples accrue; if not, debug the collector.
+7. **Session watcher:** stop path (60 s after Claude closes) and reboot/logon behaviour unverified. Watcher must be stopped during Reinstall.
+8. **Host task path persistence:** `Singularity-RepoQL-Host` must serve `%LOCALAPPDATA%\Singularity\Workspace`; fixed by hand on this machine only. The repo installer does not define that task, so a rebuilt machine needs `rql serve --path <Workspace>` set manually (or add it to the installer).
+9. **Housekeeping:** supervisor-runtime.log "supervisor failed"; duplicate `kanzo.exe` processes; stray listeners on 18521 and 62522 (owners not identified).
+10. **Persistence of extras:** `WindowsNative\extras` (watcher, CPU collector wrapper/launcher) is written by the register scripts, not by the installer; a clean install must run them.
+
+### Tests not run / known failures
+11. Full dashboard and lifecycle suites were **not run elevated**. Non-elevated: dashboard 257 run, 1 failure + 6 errors; lifecycle contract 2 failures (`SeSecurityPrivilege`).
+12. `test_claude_agents_control`: 1 error, Windows symlink privilege (WinError 1314), environmental.
+13. Run only focused tests during development; full regression awaits the operator's staged final testing.
+
+### Release gate (per AGENTS.md, all NOT_RUN unless noted)
+Native Rust build and binary provenance; RepoQL MCP plus 17 plugin skills; Kanzo MCP (local Windows 4242 only); both connector sweeps; 9 agents and 10 local skills; 4 hook events; 7 Office event types; delegated and fresh-session memory; real authenticated dashboard UI session; logon task; reboot; upgrade; uninstall. Publisher signing not claimed.
+
+### Decisions already made (do not reopen)
+Ghost retired on Windows (9 agents). Loopback needs no token. Kanzo is the local Windows instance only. Code reviewer is haiku/high. Maintainer bot needs an enforced independent review gate. RepoQL defects get a report in `repoql-feedback/`.
