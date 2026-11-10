@@ -198,7 +198,10 @@ export function initNavigationUI() {
       wrap.tabIndex = 0;
       wrap.setAttribute('role', 'region');
       wrap.setAttribute('aria-label', 'Data table, scroll horizontally for more columns');
-      if (wrap.querySelector('table.data')) {
+      if (wrap.classList.contains('ac-stack')) {
+        const heads = [...wrap.querySelectorAll('thead th')].map(th => th.textContent.trim());
+        wrap.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (heads[i] && !td.hasAttribute('colspan')) td.dataset.label = heads[i]; }));
+      } else if (wrap.querySelector('table.data')) {
         const help = document.createElement('p');
         help.className = 'table-swipe-hint';
         help.textContent = 'Swipe sideways to see more columns';

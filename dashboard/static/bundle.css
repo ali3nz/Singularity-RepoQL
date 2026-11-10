@@ -8371,5 +8371,8 @@ html[data-theme="charcoal"] .main:has(.messenger-shell) .messenger-shell{
   .ac-stack table.data td { border:0; padding:2px 0; overflow-wrap:anywhere; font-size:14px; }
   .ac-stack table.data td:first-child { font-weight:600; }
   .ac-stack table.data tr[hidden] { display:none; }
+  .ac-stack table.data td[data-label]:not(:first-child)::before { content:attr(data-label); display:block; font-size:11px; letter-spacing:.04em; text-transform:uppercase; opacity:.6; margin-top:4px; }
+  .ac-stack table.data td .btn { width:100%; min-height:44px; margin-top:6px; }
+  .ac-stack table.data tr { padding:12px 0; }
 }
 

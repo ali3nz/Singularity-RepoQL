@@ -950,8 +950,8 @@
     },
     {
       "path": "dashboard/static/bundle.css",
-      "sha256": "ad98c59e3d9e1654caa120138209ae3e550f54efc97c3e47d6c022a0fa1d510b",
-      "bytes": 594268
+      "sha256": "c4baf0075e2edf18daba5d4a7bbe5de069d3a8c4508625da0c70a4660b6f0176",
+      "bytes": 594598
     },
     {
       "path": "dashboard/static/bundle.sources",
@@ -995,8 +995,8 @@
     },
     {
       "path": "dashboard/static/navigation_ui.js",
-      "sha256": "22e8d148e4ee5518b84706b70eb389060fa0c5eeb9083a5fd6680d6a831d56f7",
-      "bytes": 10040
+      "sha256": "abfe3b6502934755cd9fa5c1e33b8ebe9b61a9d18848c8507a6e50d5607e8797",
+      "bytes": 10367
     },
     {
       "path": "dashboard/static/observability.js",
@@ -1015,8 +1015,8 @@
     },
     {
       "path": "dashboard/static/overrides.css",
-      "sha256": "d1c1de10b7630e9c01e470c75e9fc4cd340cba7c37cc09c2f7ed96258fc58aee",
-      "bytes": 81983
+      "sha256": "bac505c0a219c1e8ea23db66da48e5eadd8f456d550202826ceee46550ff9a9d",
+      "bytes": 82313
     },
     {
       "path": "dashboard/static/polish.js",
