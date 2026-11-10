@@ -1,0 +1,1 @@
+{"schema":"singularity-claude-complete-gate-evidence/v1","gate":"repoql_connectors_kanzo_memorycore_active","result":"PASS","source_commit":"368d40ad3d82239104d79b1c3a743459d4a9ddbd","evidence_name":"repoql_connectors_kanzo_memorycore_active.evidence.txt","evidence_sha256":"9431a29e229b446d4e7c62817131d397327004e731185f4b20a81bb4aff593bf"}

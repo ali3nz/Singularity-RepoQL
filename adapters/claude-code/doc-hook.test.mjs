@@ -168,7 +168,7 @@ test("stop blocks an incomplete recorded assessment (ledger evidence, bounded)",
 });
 
 test("stop verifies a ledger-evidence-backed complete assessment and allows completion", async () => {
-  const dir = workspace(false);
+  const dir = workspace(true);
   try {
     mkdirSync(join(dir, "docs"), { recursive: true });
     writeFileSync(join(dir, "docs", "r.md"), "# Runbook ready\n");
@@ -178,6 +178,7 @@ test("stop verifies a ledger-evidence-backed complete assessment and allows comp
       session: "s-ok", files: ["README.md"], docStatus: "DOC_NOT_REQUIRED",
       docReason: "typo fix only", captureStatus: "NO_LESSON",
     }));
+    await runDocHook(["session-start"], { env: {}, stdin: JSON.stringify({ session_id: "s-ok", cwd: dir }) });
     const res = await runDocHook(["stop"], { env: {}, stdin: JSON.stringify({ session_id: "s-ok", cwd: dir }) });
     assert.equal(res.exitCode, 0);
     assert.equal(res.stdout, null);

@@ -1,0 +1,1 @@
+2026-11-11: same marker, searched under configured Ghost identity (agent ghost), another agent id and another team: 0 hits each. L0 conversation search only; Ghost runtime not started.

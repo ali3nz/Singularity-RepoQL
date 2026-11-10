@@ -1,0 +1,1 @@
+{"schema":"singularity-claude-complete-gate-evidence/v1","gate":"kanzo_project_mcp","result":"PASS","source_commit":"368d40ad3d82239104d79b1c3a743459d4a9ddbd","evidence_name":"kanzo_project_mcp.evidence.txt","evidence_sha256":"d2cdd4bd60a5adbd5a78142478fa01fbd09b38f991cd150440609da33c4c7be0"}

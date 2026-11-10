@@ -181,7 +181,11 @@ export function evaluateAssessment(assess, opts = {}) {
   const material = [...new Map([...classifyFiles(files).material, ...(observed?.material || [])]
     .map(f => [observedKey(f), norm(f)])).values()];
   const status = assess.docStatus;
-  if (status === "DOC_NOT_REQUIRED" && observed && observed.observable === false) {
+  // A hook-written automatic pass in a directory with no git has nothing to observe
+  // and no declared material: refusing it would block every chat/no-op session.
+  const gitlessAutomatic = assess.automatic === true && !material.length &&
+    (observed?.unobservable || []).length > 0 && observed.unobservable.every(u => u.code === "GIT_UNAVAILABLE");
+  if (status === "DOC_NOT_REQUIRED" && observed && observed.observable === false && !gitlessAutomatic) {
     const codes = [...new Set((observed.unobservable || []).map(u => u.code))].join(", ") || "UNKNOWN";
     findings.push(`FINDING: DOC_NOT_REQUIRED refused — workspace changes could not be independently observed (${codes}).`);
   }
@@ -560,7 +564,7 @@ export async function observeWorkspace(dir, session, { execImpl = null, env = pr
     if (!baselineRec) unobservable.push({ code: "BASELINE_MISSING" });
     if (baselineRec) {
       const head = await readHead(root, execImpl);
-      if (!baselineRec.head) unobservable.push({ code: "BASELINE_HEAD_MISSING" });
+      if (!baselineRec.head) { if (head) unobservable.push({ code: "BASELINE_HEAD_MISSING" }); }
       else if (!head) unobservable.push({ code: "HEAD_UNAVAILABLE" });
       else if (head !== baselineRec.head) {
         const diff = await runGit(root, ["diff", "--name-only", "--no-renames", "-z", `${baselineRec.head}..${head}`], execImpl, 15000);

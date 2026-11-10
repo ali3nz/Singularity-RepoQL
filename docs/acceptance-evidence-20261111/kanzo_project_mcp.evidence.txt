@@ -1,0 +1,1 @@
+2026-11-11: Kanzo MCP list_tasks/get_task answered live for project repoql (get_task for foreign project fleet#1165 returned not found). Lifecycle (claim/doing/close) NOT exercised.

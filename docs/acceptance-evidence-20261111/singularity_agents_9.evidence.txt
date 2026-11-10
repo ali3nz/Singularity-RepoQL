@@ -1,0 +1,1 @@
+2026-11-11: 9 Singularity agent definitions present in installed Claude config. Definition drift code AGENT_DEFINITION_DRIFT still reported by verify.

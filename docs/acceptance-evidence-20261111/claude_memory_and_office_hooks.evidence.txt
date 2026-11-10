@@ -1,0 +1,1 @@
+2026-11-11: memory-hook.mjs real entry point exit 0, 2 messages captured, idempotent retry and session-end verified. office-hook.mjs 7 event kinds delivered with auth header to an isolated capture server, no prompt leak. doc-hook not part of this receipt.

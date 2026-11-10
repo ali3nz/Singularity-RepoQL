@@ -63,10 +63,26 @@ upgrade, uninstall.
 
 The installer was not built or modified.
 
-## Later verification pass (EVIDENCE, read-only)
+## Later verification pass (EVIDENCE)
 
-- `verify_source_release.py`: stale Ghost-gating check replaced (bridge gates Ghost as `all(feature = "ghost", not(windows))`); now `ok: true`.
+Static and fixture checks:
+- `verify_source_release.py`: stale Ghost-gating check replaced; now `ok: true`.
 - Rust lock provenance valid; `cargo test --locked` 32/32 (unified-gateway-rust) and 24/24 (desktop-bridge, `--features office`).
-- `verify_option2_connectors.py` against RepoQL 1.7.18: registry complete; `kanzo` and `memorycore` connectors **installed but not active**; `liveMcpCallsVerified: false`; `releaseReady: false`.
-- Haiku review fixes applied: `DOC_NOT_REQUIRED` now refused when no session baseline exists (`BASELINE_MISSING`); HEAD diff uses `--no-renames`; native MemoryCore key path must sit under the base directory. Focused doc-policy/selflearn/doc-program/doc-repoql tests: 0 failures.
-- Still **NOT_RUN** (need installer, services, reboot or uninstall, which require owner sign-off): native release build and binary provenance, live connector calls, 17 plugin skills, 17 agents / 10 skills install check, memory/office hook entry points, Office event types, fresh-session recall, Ghost isolation, authenticated dashboard UI, logon task, reboot, upgrade, uninstall, live MemoryCore drafting call, publisher signing. `fleet#1165` remains unreadable from this session.
+- Haiku review fixes applied (`BASELINE_MISSING`, `--no-renames`, key path under base dir); focused doc-policy/selflearn/doc-program/doc-repoql tests: 0 failures. `gitlessAutomatic` exception in doc-policy with doc-hook tests 48/48.
+
+Live checks run on 2026-11-11 (receipts in `docs/acceptance-evidence-20261111/`; the matrix now shows 9 gates REPORTED_PASS_UNREVIEWED, 15 NOT_RUN, 0 FAIL; `release_ready: false`):
+- Connectors `kanzo://board` and `memorycore://data` are **active** in RepoQL 1.7.18 and answered live calls (this supersedes the earlier "installed but not active" sweep).
+- Installed inventory: 9 agents, 10 skills, 17 official plugin skills present. Definition drift codes remain (below).
+- memory-hook real entry point: exit 0, 2 messages captured, idempotent retry and session-end. office-hook: all 7 event kinds delivered with auth to an isolated capture server, no prompt leak.
+- Fresh-process recall: marker found under the main identity; 0 hits under the configured Ghost identity, another agent and another team (L0 conversation search only; the Ghost runtime was not started).
+- Workflow rule refresh with backup (see above).
+
+Disclosures:
+- A first Office sweep sent 7 throwaway events (session `cc-sweep-test-1234abcd`) to the live Office because an inherited `OFFICE_CONFIG` overrode the capture endpoint; it was re-run isolated.
+- A throwaway memory record (session `acceptance-probe-20261111-memhook`) exists in live `claude-code-main` memory.
+- The memory gateway key was printed in a session transcript; **rotate it**.
+
+Blocked or still NOT_RUN:
+- **Live MemoryCore drafting call.** The native lane resolves and reaches the live gateway (port 18431), but the gateway returned 502 "all extraction providers failed": Cohere quota exhausted (429) and NVIDIA aborts after headers. External provider blocker, not a code defect.
+- Verify drift persists: SOURCE_PROVENANCE_DRIFT, HOOK_SESSIONSTART_DRIFT, HOOK_STOP_DRIFT, AGENT_DEFINITION_DRIFT, SKILL_DEFINITION_DRIFT; plugin is 1.7.12 vs pinned 1.7.18. The installed doc-hook stop still misses post-baseline commits.
+- Need installer, services, reboot or uninstall (owner sign-off): native release build/provenance, Kanzo lifecycle, authenticated dashboard UI, Ghost runtime, logon task, reboot, upgrade, uninstall, publisher signing. `fleet#1165` remains unreadable from this session.

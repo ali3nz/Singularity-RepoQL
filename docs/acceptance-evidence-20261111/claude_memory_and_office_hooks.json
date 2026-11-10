@@ -1,0 +1,1 @@
+{"schema":"singularity-claude-complete-gate-evidence/v1","gate":"claude_memory_and_office_hooks","result":"PASS","source_commit":"368d40ad3d82239104d79b1c3a743459d4a9ddbd","evidence_name":"claude_memory_and_office_hooks.evidence.txt","evidence_sha256":"699af0bf5d8f19eafa2d4adb9d34313f5f3a79b1a8b42c90802eae68dc7b0e8b"}

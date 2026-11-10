@@ -1,0 +1,1 @@
+{"schema":"singularity-claude-complete-gate-evidence/v1","gate":"ghost_negative_scope_isolation","result":"PASS","source_commit":"368d40ad3d82239104d79b1c3a743459d4a9ddbd","evidence_name":"ghost_negative_scope_isolation.evidence.txt","evidence_sha256":"75771a2793f5646051cec88955f93493485084cfec197ffa8725e5a6e8a37269"}

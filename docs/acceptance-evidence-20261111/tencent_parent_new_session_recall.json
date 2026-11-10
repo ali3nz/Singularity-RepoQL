@@ -1,0 +1,1 @@
+{"schema":"singularity-claude-complete-gate-evidence/v1","gate":"tencent_parent_new_session_recall","result":"PASS","source_commit":"368d40ad3d82239104d79b1c3a743459d4a9ddbd","evidence_name":"tencent_parent_new_session_recall.evidence.txt","evidence_sha256":"1e3287b24ab2378438ce3b52b67f7a551e3e21112c583797f64789a486d2fd90"}
