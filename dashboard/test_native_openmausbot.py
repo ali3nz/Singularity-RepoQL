@@ -10,7 +10,7 @@ from unittest.mock import patch
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from native_openmausbot import operations, overview, role_names
+from native_openmausbot import operations, overview, role_names, set_model
 
 
 class MockOMB(BaseHTTPRequestHandler):
@@ -231,6 +231,24 @@ class NativeOperationsTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     operations(Path('.'), start, end)
             reader.assert_not_called()
+
+
+class SetModelValidationTest(unittest.TestCase):
+    def test_rejects_malformed_requests_without_contacting_the_service(self):
+        with patch('native_openmausbot._reader') as reader:
+            for body in [{}, {'id': 'bad/id', 'instance': 'a', 'model': 'm'},
+                         {'id': 'bot_A', 'instance': ' ', 'model': 'm'},
+                         {'id': 'bot_A', 'instance': 'a', 'model': 5}]:
+                with self.assertRaises(ValueError):
+                    set_model(Path('.'), body)
+            reader.assert_not_called()
+
+    def test_refuses_a_model_the_provider_does_not_offer(self):
+        catalogue = {'available': True, 'providers': [{'id': 'p', 'name': 'P', 'available': True, 'models': [{'id': 'm1', 'label': 'M1'}]}]}
+        with patch('native_openmausbot.models', return_value=catalogue), patch('native_openmausbot._reader') as reader:
+            with self.assertRaises((ValueError, RuntimeError)):
+                set_model(Path('.'), {'id': 'bot_A', 'instance': 'p', 'model': 'other'})
+            reader.return_value.patch.assert_not_called()
 
 
 if __name__=='__main__': unittest.main()

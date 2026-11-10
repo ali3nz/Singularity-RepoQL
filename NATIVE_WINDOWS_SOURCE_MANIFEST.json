@@ -740,8 +740,8 @@
     },
     {
       "path": "dashboard/native_openmausbot.py",
-      "sha256": "3919dc03c6c5e565168f7d91b5deb16d6a5affe77feea2d3059d254f7750c6e9",
-      "bytes": 10592
+      "sha256": "25d5b93a61f3c7816846d31cdea7e02216661629a5f4932b924f92e5ae6af3e3",
+      "bytes": 14199
     },
     {
       "path": "dashboard/native_panel_proxy.py",
@@ -790,8 +790,8 @@
     },
     {
       "path": "dashboard/server.py",
-      "sha256": "1c715c6dc9eef8b40e8655d2ad6c7fb496d418cfc5aec4c356f93a4af6584ee9",
-      "bytes": 133143
+      "sha256": "67c561a4fd6fb54568de80b02221abd33e26d998528ff714a2fe4b103f8dc9b5",
+      "bytes": 133513
     },
     {
       "path": "dashboard/setup_health.py",
@@ -950,8 +950,8 @@
     },
     {
       "path": "dashboard/static/bundle.css",
-      "sha256": "c4baf0075e2edf18daba5d4a7bbe5de069d3a8c4508625da0c70a4660b6f0176",
-      "bytes": 594598
+      "sha256": "a9ec02c05678dc1ec16f00dd383ea293fcad72bb7e5ed730456bf88c3390e247",
+      "bytes": 595673
     },
     {
       "path": "dashboard/static/bundle.sources",
@@ -960,8 +960,8 @@
     },
     {
       "path": "dashboard/static/claude_agents_control.js",
-      "sha256": "846a7497136fc25ccf1c4f4de99ddd603291cf0b763df55359a5b8ddcdbe7613",
-      "bytes": 16225
+      "sha256": "72945aa2c35a0d36fe9e8f0540e676024439d873bee3a84f7b836a27d7a55ffe",
+      "bytes": 20443
     },
     {
       "path": "dashboard/static/index.html",
@@ -1015,8 +1015,8 @@
     },
     {
       "path": "dashboard/static/overrides.css",
-      "sha256": "bac505c0a219c1e8ea23db66da48e5eadd8f456d550202826ceee46550ff9a9d",
-      "bytes": 82313
+      "sha256": "a8d12d38cc51eb1080ed829180af64f29586bd606870ccdfbe53626dc2281938",
+      "bytes": 83388
     },
     {
       "path": "dashboard/static/polish.js",
@@ -1145,8 +1145,8 @@
     },
     {
       "path": "dashboard/test_native_openmausbot.py",
-      "sha256": "cf717fdfa09b7f16d9c5556aa815e2271a3ea15e5e7cd9469d51247ca73ee406",
-      "bytes": 12959
+      "sha256": "71636fa602767ce55438a4ee201da042e93b25352a17de884ce15460b45a56b9",
+      "bytes": 14075
     },
     {
       "path": "dashboard/test_native_openmausbot_embed.py",

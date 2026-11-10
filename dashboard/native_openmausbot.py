@@ -1,8 +1,10 @@
 """Windows-local OpenMausBot inventory, only through the authenticated dashboard.
 
-This adapter is observational. Bot creation, Pi registration, Tencent and Kanzo
-claims remain governed by their real service contracts and cannot be inferred
-from a row in the inventory. Never requests a model or another computer.
+This adapter reads the inventory and may change one bot's model through the
+loopback service's own validated PATCH (provider signed in, model offered).
+Bot creation, Pi registration, Tencent and Kanzo claims remain governed by their
+real service contracts and cannot be inferred from a row in the inventory.
+Never requests another computer.
 """
 from __future__ import annotations
 import datetime as dt
@@ -42,13 +44,17 @@ def _reader(state_dir: Path):
         except (ValueError, OSError):
             raise RuntimeError('credential_invalid')
 
-    def get(path: str):
+    def call(method: str, path: str, payload=None):
         connection = http.client.HTTPConnection('127.0.0.1', port, timeout=2)
         try:
             headers = {'Accept': 'application/json', 'Host': f'127.0.0.1:{port}'}
             if token:
                 headers['Authorization'] = 'Bearer ' + token
-            connection.request('GET', path, headers=headers)
+            data = None
+            if payload is not None:
+                data = json.dumps(payload).encode('utf8')
+                headers['Content-Type'] = 'application/json'
+            connection.request(method, path, body=data, headers=headers)
             reply = connection.getresponse()
             if reply.status != 200:
                 raise RuntimeError('service_not_authorised' if reply.status in (401, 403) else 'service_unavailable')
@@ -60,7 +66,61 @@ def _reader(state_dir: Path):
             return json.loads(body)
         finally:
             connection.close()
+
+    def get(path: str):
+        return call('GET', path)
+    get.patch = lambda path, payload: call('PATCH', path, payload)
     return get
+
+
+def _selection(raw) -> dict:
+    if type(raw) is not dict:
+        return {'instance': '', 'model': ''}
+    return {'instance': str(raw.get('instanceId') or '')[:200], 'model': str(raw.get('model') or '')[:500]}
+
+
+def models(state_dir: Path) -> dict:
+    """Providers and models the local OpenMausBot service can run, read-only."""
+    try:
+        data = _reader(state_dir)('/api/instances')
+        if type(data) is not dict or type(data.get('instances')) is not list:
+            raise RuntimeError('inventory_invalid')
+        providers = []
+        for item in data['instances'][:60]:
+            if type(item) is not dict or not isinstance(item.get('instanceId'), str):
+                continue
+            options = ((item.get('models') or {}).get('options') or []) if type(item.get('models')) is dict else []
+            snapshot = item.get('snapshot') if type(item.get('snapshot')) is dict else {}
+            providers.append({
+                'id': item['instanceId'][:200],
+                'name': str(item.get('displayName') or item['instanceId'])[:120],
+                'available': snapshot.get('state') == 'available',
+                'models': [{'id': str(o['id'])[:500], 'label': str(o.get('label') or o['id'])[:200]}
+                           for o in options[:200] if type(o) is dict and isinstance(o.get('id'), str)]})
+        providers.sort(key=lambda p: (not p['available'], p['name'].lower()))
+        return {'available': True, 'providers': providers}
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+        return {'available': False, 'providers': []}
+
+
+def set_model(state_dir: Path, body: dict) -> dict:
+    """Change one bot's model through OpenMausBot's own validated endpoint."""
+    bot_id, instance, model = body.get('id'), body.get('instance'), body.get('model')
+    if not (isinstance(bot_id, str) and _ID.fullmatch(bot_id) and isinstance(instance, str)
+            and isinstance(model, str) and instance.strip() and model.strip()):
+        raise ValueError('bot id, provider and model are required')
+    catalogue = models(state_dir)
+    provider = next((p for p in catalogue['providers'] if p['id'] == instance), None)
+    if provider is None or not provider['available'] or model not in {m['id'] for m in provider['models']}:
+        raise ValueError('that provider/model is not available on this computer')
+    try:
+        reply = _reader(state_dir).patch('/api/bots/' + bot_id, {'modelSelection': {'instanceId': instance, 'model': model}})
+    except (OSError, RuntimeError, json.JSONDecodeError) as exc:
+        raise RuntimeError('OpenMausBot did not accept the change') from exc
+    saved = _selection((reply.get('bot') or {}).get('modelSelection') if type(reply) is dict and type(reply.get('bot')) is dict else None)
+    if saved != {'instance': instance, 'model': model}:
+        raise RuntimeError('OpenMausBot did not confirm the new model')
+    return {'ok': True, 'id': bot_id, 'model': saved}
 
 
 def overview(state_dir: Path) -> dict:
@@ -78,7 +138,8 @@ def overview(state_dir: Path) -> dict:
             if type(bot) is not dict or not isinstance(bot.get('id'), str) or not _ID.fullmatch(bot['id']):
                 continue
             bots.append({'id': bot['id'], 'name': str(bot.get('name') or 'Unnamed bot')[:120],
-                         'working': bool(bot.get('busy')), 'thread_id': str(bot.get('threadId') or '')[:128],
+                         'working': bool(bot.get('busy')), 'model': _selection(bot.get('modelSelection')),
+                         'chief_of_staff': bool(bot.get('chiefOfStaff')), 'thread_id': str(bot.get('threadId') or '')[:128],
                          'registration': 'not_verified', 'duo': 'not_verified',
                          'kanzo': 'not_verified', 'memory': 'not_verified'})
         return {'available': True, 'bots': bots, 'total': len(fleet['bots']),

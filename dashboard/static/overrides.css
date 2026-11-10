@@ -1060,3 +1060,18 @@ html[data-theme="charcoal"] .main:has(.messenger-shell) .messenger-shell{
   .ac-stack table.data td .btn { width:100%; min-height:44px; margin-top:6px; }
   .ac-stack table.data tr { padding:12px 0; }
 }
+
+/* Agents Control: inline model pickers and OpenMausBot cards */
+.ac-model-select{min-width:170px;max-width:100%}
+.ac-status{display:block;font-size:12px;min-height:16px;margin-top:4px;color:var(--muted,#8a8f98)}
+.ac-status.ok{color:#2f9e63}.ac-status.bad{color:#d64545}
+.ac-bot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.ac-bot-card{border:1px solid var(--border,#3a3f48);border-radius:12px;padding:14px;display:grid;gap:10px}
+.ac-bot-card header{display:flex;align-items:center;gap:10px}
+.ac-bot-avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:rgba(124,92,255,.18);flex:none}
+.ac-bot-title{flex:1;min-width:0;display:grid}
+.ac-bot-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-bot-role{font-size:12px;color:var(--muted,#8a8f98)}
+.ac-bot-card .ac-field{display:grid;gap:4px;font-size:13px}
+.ac-bot-card .ac-model-select{width:100%}
+@media(max-width:600px){.ac-bot-grid{grid-template-columns:1fr}.ac-model-select{width:100%}}

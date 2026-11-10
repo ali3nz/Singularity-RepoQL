@@ -1551,6 +1551,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/openmausbot/overview":
                 from native_openmausbot import overview
                 return overview(app.config.state_dir)
+            if path == "/api/openmausbot/models":
+                from native_openmausbot import models
+                return models(app.config.state_dir)
             if path == "/api/openmausbot/ops":
                 import time as _time
                 from openmausbot_ops import build
@@ -1662,6 +1665,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/claude/agents/save":
             from claude_agents_control import save_agent
             return self.mutation("Claude Code agent definition", lambda: save_agent(body))
+        if path == "/api/openmausbot/bots/model":
+            from native_openmausbot import set_model
+            return self.mutation("OpenMausBot bot model", lambda: set_model(app.config.state_dir, body))
         if path == "/api/claude/agents/restore":
             from claude_agents_control import restore_agent
             return self.mutation("Claude Code agent restore", lambda: restore_agent(body))
