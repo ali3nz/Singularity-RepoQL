@@ -277,3 +277,17 @@ Evidence (focused only): `maintenance_repair` 51/51 (two new tests for items 2 a
 - The live :18100 dashboard serves the installed snapshot under `WindowsNative\current`, which predates the current `dashboard/static/` (no `tintedBrain` blue/violet memory brain, old Charcoal calm theme). The source tree is newer than both the installed copy and Dockerhost; no port was needed. Source is pushed in bdd6ed6.
 - `RefreshSource` is refused (`NATIVE_STAGE_IDENTITY_OR_PIN_INVALID`) because the installed stage is a legacy Ghost-era snapshot. The authorized path is `manage_native_windows.ps1 -Mode Reinstall -SkipOffice -Apply -Confirm:$false` with the existing bridge, supervisor, rql, python, workspace and supervisor.json inputs.
 - **Blocked (not done):** Reinstall aborted before any mutation (receipt still `installed_not_started`) with `NATIVE_DASHBOARD_MANAGER_FAILED`. Cause: unregistering `Singularity-ClaudeComplete-Dashboard` returns Access denied from a non-elevated session; the task ACL grants Ben read-only and delete/write only to Administrators/SYSTEM. An elevated PowerShell is required to run the Reinstall. Nothing was reinstalled and the dashboard is not currently listening on :18100.
+
+### Reinstall result (2026-11-10)
+
+The live dashboard on :18100 now serves the refreshed design (`observability.js` carries `tintedBrain`, `bundle.css?v=bd-20261110-windows`). Dashboard, Kanzo, OpenMausBot, RepoQL-Host, Rust supervisor and Unified Gateway tasks are Running.
+
+Blockers cleared on the way, useful for the next reinstall:
+
+- The desktop bridge must be built with `cargo build --release --features office` (Ghost-free). A default build reports `featureGhost=true` and stage fails with `BRIDGE_BUILD_FEATURE_MISMATCH`.
+- `-SourceRoot` must be an extracted variant source archive, not the repo checkout. The checkout's `NATIVE_WINDOWS_SOURCE_MANIFEST.json` is a dev leftover with `features.ghost=true` and fails `SOURCE_FEATURE_MISMATCH`. Build it with `py -3 native/windows/build_source_variants.py --output-dir <dir> --variant 2` and extract the zip.
+- Omit `-SupervisorConfig` so the manager generates it; a stale path fails `SUPERVISOR_CONFIG_REQUIRED`.
+- Stop the Unified Gateway task before Reinstall (file lock), run elevated, then `-Mode Start`.
+- `Invoke-Stage` masks inner errors as `NATIVE_STAGE_OPERATION_FAILED`; use a transcript to see them.
+
+Still not certified: release remains BLOCKED. Office health is false and no Ghost host is present by design.
