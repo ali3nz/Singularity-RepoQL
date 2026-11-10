@@ -1100,8 +1100,8 @@
     },
     {
       "path": "dashboard/test_native_auth_broker.py",
-      "sha256": "b0fd436119aa16aa089f722a5c1d776b8a6b24d51a890dadb4c3de9a67d39a73",
-      "bytes": 3315
+      "sha256": "9695f2d3b86f4612445d6f895490d3880fc54b178bbaa617cddedecf920c2287",
+      "bytes": 3356
     },
     {
       "path": "dashboard/test_native_bot_ops_routes.mjs",

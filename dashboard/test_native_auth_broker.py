@@ -11,11 +11,11 @@ import native_panel_proxy as panel
 
 class AuthBrokerTests(unittest.TestCase):
     def test_launch_cookies_are_panel_audience_scoped(self):
-        for source in ('repoql', 'tencent', 'office', 'kanzo'):
+        for source in ('repoql', 'tencent', 'office', 'kanzo', 'openmausbot'):
             with self.subTest(source=source):
                 cookie = auth.create_launch_cookie('test-private-secret', now=123_456, audience=source)
                 header = f'{auth.COOKIE_NAME}={cookie}'
-                for target in ('repoql', 'tencent', 'office', 'kanzo'):
+                for target in ('repoql', 'tencent', 'office', 'kanzo', 'openmausbot'):
                     self.assertEqual(auth.valid_launch_cookie(header, 'test-private-secret', now=123_500, max_age=60, audience=target), source == target)
                 self.assertFalse(auth.valid_launch_cookie(header, 'test-private-secret', now=123_518, max_age=60, audience=source))
 
@@ -28,6 +28,7 @@ class AuthBrokerTests(unittest.TestCase):
         self.assertTrue(panel.authenticated(handler, 'office'))
         self.assertFalse(panel.authenticated(handler, 'tencent'))
         self.assertFalse(panel.authenticated(handler, 'kanzo'))
+        self.assertFalse(panel.authenticated(handler, 'openmausbot'))
 
     def test_windows_native_issuer_never_persists_capability_to_disk(self):
         with tempfile.TemporaryDirectory() as tmp:
