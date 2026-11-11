@@ -8452,3 +8452,7 @@ html[data-theme] #dash .command-links-priority>.command-workspace:nth-child(n+4)
   html[data-theme] #dash .command-links-priority>.command-workspace:last-child:nth-child(odd){grid-column:1/-1}
 }
 
+/* Office tile: plain office-room crop like the other tiles (no illustration) */
+html[data-theme] #dash .command-links-priority > .command-workspace[href="#/office"] .command-card-illustration,
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/office"] .command-card-illustration{background-image:none!important}
+

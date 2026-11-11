@@ -784,7 +784,7 @@ function dashboardSnapshot() {
     '/architecture/orchestra': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="44" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><rect x="118" y="74" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><rect x="196" y="104" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><path d="M105 65h13c8 0 14 6 14 14v0M183 95h13c8 0 14 6 14 14v0" stroke="currentColor" stroke-opacity=".75" stroke-width="3" stroke-linecap="round"/><circle cx="72" cy="65" r="6" fill="currentColor"/><circle cx="150" cy="95" r="6" fill="currentColor"/><circle cx="228" cy="125" r="6" fill="currentColor"/></svg>`,
   };
   const featureCards = new Set();
-  const tileShots = {'/openmausbot':'bots','/agentchat':'lounge','/unified/graph':'memory','/office':'office'};
+  const tileShots = {'/openmausbot':'bots','/agentchat':'lounge','/unified/graph':'memory','/office':'office-room'};
   const referenceDocuments = [
     ['RepoQL Cheat Sheet','/repoql/cheat-sheet'],
     ['Memory Architecture','/architecture/memory'],
