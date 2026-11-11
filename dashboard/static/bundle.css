@@ -8553,3 +8553,15 @@ html[data-theme-mode="dark"] #app .command-link:hover {
 }
 html[data-theme-mode="dark"] #app .native-panel-shell { border-width: 1px; border-style: solid; border-radius: 14px; overflow: hidden; }
 
+
+/* ==== command center tiles v5: tighter crops, hero galaxy, more punch (2026-11-12) ==== */
+html[data-theme] #app[data-page-route="/"] .command-workspace .command-card-shot{opacity:1;object-position:center}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/agent-viewer"] .command-card-shot{width:62%;object-position:center;filter:saturate(1.2) brightness(1.08)}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/unified/graph"] .command-card-shot{width:46%;object-position:center;filter:saturate(1.3) drop-shadow(0 0 14px rgba(199,125,255,.55))}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/office"] .command-card-shot{width:58%}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/openmausbot"] .command-card-shot,
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/agentchat"] .command-card-shot{width:56%}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace{
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--tile-accent) 30%,transparent),0 0 26px -4px color-mix(in srgb,var(--tile-accent) 50%,transparent),0 12px 30px -10px color-mix(in srgb,var(--tile-accent) 70%,transparent)!important}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace:hover .command-card-shot{transform:scale(1.05);transition:transform .5s ease}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-card-content strong{text-shadow:0 0 16px color-mix(in srgb,var(--tile-accent) 55%,transparent)}
