@@ -17,6 +17,7 @@ import {
   SCHEMA,
   SupervisorError,
   applyKnowledgeLoopbackSource,
+  applyKnowledgeWindowsPaths,
   assertKnowledgeLoopback,
   ensureSecret,
   isLoopbackHost,
@@ -465,4 +466,17 @@ test("supervisor dry-run cannot start/stop/restart or mutate services", () => {
   }
   assert.equal(parseCli(["prepare", "--config", "C:\\dummy.json", "--dry-run"]).dryRun, true);
   assert.throws(() => parseCli(["stop", "--config", "C:\\dummy.json", "--clean"]), /only for prepare/);
+});
+
+test("applyKnowledgeWindowsPaths fixes separators, is idempotent, and refuses unknown upstream", () => {
+  const src = [
+    'const dirWithSep = base.endsWith("/") ? base : base + "/";',
+    'const prefix = wikiDir.endsWith("/") ? wikiDir : wikiDir + "/";',
+    'return abs.slice(prefix.length).replace(/\\.md$/, "");',
+  ].join("\n");
+  const out = applyKnowledgeWindowsPaths(src);
+  assert.match(out, /base\.endsWith\(\(process\.platform === "win32"/);
+  assert.match(out, /replace\(\/\\\\\/g, "\/"\)\.replace/);
+  assert.equal(applyKnowledgeWindowsPaths(out), out);
+  assert.throws(() => applyKnowledgeWindowsPaths("nothing relevant"), /matched nothing/);
 });

@@ -31,6 +31,7 @@
 import { spawn as spawnChild, execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
+  copyFileSync,
   chmodSync,
   closeSync,
   cpSync,
@@ -972,6 +973,34 @@ export function applyKnowledgeLoopbackSource(sourceText) {
   );
 }
 
+
+/**
+ * Windows-only fixes to the built MemoryKnowledge bundle (staged copy only):
+ *  - wiki path checks assume "/" separators; with backslash paths every wiki
+ *    write failed with "invalid path: traversal detected".
+ *  - page refs must stay "/"-separated.
+ * Idempotent. Needs Node 22 (better-sqlite3 is built for it) and is started
+ * through knowledge-windows-main.mjs because dist/server.mjs only auto-starts
+ * when import.meta.url matches a POSIX argv[1].
+ */
+export function applyKnowledgeWindowsPaths(distText) {
+  const SEP = '(process.platform === "win32" ? "\\\\" : "/")';
+  let out = distText;
+  let hits = 0;
+  out = out.replace(/(\w+)\.endsWith\("\/"\) \? \1 : \1 \+ "\/"/g, (_m, v) => {
+    hits += 1;
+    return `${v}.endsWith(${SEP}) ? ${v} : ${v} + ${SEP}`;
+  });
+  out = out.replace(/abs\.slice\(prefix\.length\)\.replace\(\/\\\.md\$\/, ""\)/, () => {
+    hits += 1;
+    return 'abs.slice(prefix.length).replace(/\\\\/g, "/").replace(/\\.md$/, "")';
+  });
+  if (hits === 0 && !out.includes('process.platform === "win32"')) {
+    throw new SupervisorError("knowledge Windows path transform matched nothing (upstream changed?)", "PROVENANCE");
+  }
+  return out;
+}
+
 export function assertKnowledgeLoopback(distText) {
   if (!/hostname:\s*process\.env\.HOST\s*\?\?\s*["']127\.0\.0\.1["']/.test(distText)) {
     throw new SupervisorError(
@@ -1024,7 +1053,13 @@ export async function prepareStack(config, { clean = false, dryRun = false, exec
       const npm = config.npmCli11 ?? config.npmCli;
       exec(config.node, [npm, "install", "--no-audit", "--no-fund"], { cwd: step.buildDir });
       exec(config.node, [npm, "run", "build"], { cwd: step.buildDir });
-      assertKnowledgeLoopback(readFileSync(join(step.buildDir, "dist", "server.mjs"), "utf8"));
+      const distFile = join(step.buildDir, "dist", "server.mjs");
+      assertKnowledgeLoopback(readFileSync(distFile, "utf8"));
+      if (process.platform === "win32") {
+        writeFileSync(distFile, applyKnowledgeWindowsPaths(readFileSync(distFile, "utf8")));
+        copyFileSync(join(dirname(fileURLToPath(import.meta.url)), "knowledge-windows-main.mjs"), join(step.buildDir, "ks_main.mjs"));
+        log(`${step.name}: applied Windows path transform and ks_main.mjs launcher`);
+      }
     } else if (step.kind === "panel") {
       exec(config.node, [config.npmCli, "install", "--no-audit", "--no-fund"], { cwd: step.buildDir });
       exec(config.node, [config.npmCli, "run", "build"], { cwd: step.buildDir });
