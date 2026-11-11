@@ -1,8 +1,12 @@
 """Focused source and pure helper checks; NOT Windows Task Scheduler acceptance."""
 import tempfile
 import unittest
+import json
+import os
+import subprocess
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[2]
 # verify_option2_connectors imports native.windows.repoql_compat, so the repo
@@ -10,10 +14,54 @@ ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from claude_complete_dashboard_host import environment
+from claude_complete_dashboard_host import environment, _assert_no_reparse
 from verify_option2_connectors import evaluate
 
 class Option2DashboardWiring(unittest.TestCase):
+    def test_explicit_runtime_root_preserves_native_paths(self):
+        with tempfile.TemporaryDirectory() as t, patch.dict(os.environ, {'LOCALAPPDATA': t}):
+            local=Path(t)
+            source=local/'Singularity'/'DashboardRuntime'/'release'/'source'
+            for name in ('dashboard/server.py','connectors/memorycore/manifest.yaml','connectors/kanzo/manifest.yaml'):
+                p=source/name; p.parent.mkdir(parents=True,exist_ok=True); p.write_text('fixture')
+            runtime=local/'Singularity'/'WindowsNative'/'current'; runtime.mkdir(parents=True)
+            rql=local/'rql.exe'; rql.write_bytes(b'fixture')
+            state=local/'state'; state.mkdir()
+            owner=runtime.parent/'memory/state/secrets/admin-user-key'
+            owner.parent.mkdir(parents=True); owner.write_text('fixture')
+            office=runtime.parent/'office'; (office/'service').mkdir(parents=True)
+            (office/'office-install.json').write_text(json.dumps({'schema':'singularity-windows-office/v1','installRoot':str(office),'port':18222}))
+            (office/'service/service.json').write_text(json.dumps({'port':18222}))
+            old=environment(source,rql,local,state,18100,windows=True)
+            self.assertEqual(old['SINGULARITY_WINDOWS_GATEWAY_EXE'],str(source.parent/'bin/unified-repoql-control.exe'))
+            self.assertNotIn('SINGULARITY_TENCENT_OWNER_KEY_FILE',old)
+            env=environment(source,rql,local,state,18100,windows=True,native_runtime_root=runtime)
+            self.assertEqual(env['SINGULARITY_WINDOWS_GATEWAY_EXE'],str(runtime/'bin/unified-repoql-control.exe'))
+            self.assertEqual(env['SINGULARITY_TENCENT_OWNER_KEY_FILE'],str(owner))
+            self.assertEqual(env['SINGULARITY_OFFICE_PORT'],'18222')
+            preferred=state.parent/'Office'; (preferred/'service').mkdir(parents=True)
+            (preferred/'office-install.json').write_text(json.dumps({'schema':'singularity-windows-office/v1','installRoot':str(preferred),'port':18223}))
+            (preferred/'service/service.json').write_text(json.dumps({'port':18223}))
+            self.assertEqual(environment(source,rql,local,state,18100,windows=True,native_runtime_root=runtime)['SINGULARITY_OFFICE_PORT'],'18223')
+            for unsafe in (Path('relative'), Path(r'\\server\share'), local/'missing', source):
+                with self.subTest(unsafe=unsafe), self.assertRaises(ValueError):
+                    environment(source,rql,local,state,18100,windows=True,native_runtime_root=unsafe)
+            with patch('claude_complete_dashboard_host._assert_no_reparse', side_effect=ValueError('DASHBOARD_REPARSE_PATH_REFUSED')):
+                with self.assertRaisesRegex(ValueError,'DASHBOARD_REPARSE_PATH_REFUSED'):
+                    environment(source,rql,local,state,18100,windows=True,native_runtime_root=runtime)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows junction test')
+    def test_runtime_root_refuses_junction_ancestor(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); real=root/'real'; real.mkdir(); link=root/'link'
+            result=subprocess.run(['cmd.exe','/c','mklink','/J',str(link),str(real)],
+                                  stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+            if result.returncode:
+                self.skipTest('directory junction creation unavailable')
+            child=link/'Singularity'/'WindowsNative'/'current'; child.mkdir(parents=True)
+            with self.assertRaisesRegex(ValueError,'DASHBOARD_REPARSE_PATH_REFUSED'):
+                _assert_no_reparse(child)
+
     def test_launcher_pins_option_two_and_loopback(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
@@ -69,6 +117,10 @@ class Option2DashboardWiring(unittest.TestCase):
         self.assertIn('if ($Variant -notin @(2,4) -or -not $legacyNativeBridgeExe -or -not $legacyGhostControlConfig)',manager)
         self.assertIn('Assert-TaskOwned $existing[0] $owned',manager)
         self.assertIn('Assert-TaskOwned $task[0] $owned',manager)
+        self.assertIn("$NativeRuntimeRoot=Assert-Path $NativeRuntimeRoot 'NATIVE_RUNTIME_ROOT' $true",manager)
+        self.assertIn("if ($NativeRuntimeRoot) { $arguments+=' --native-runtime-root",manager)
+        self.assertIn("p.add_argument('--native-runtime-root',type=Path)",launcher)
+        self.assertIn('native_runtime_root=a.native_runtime_root',launcher)
 
     def test_connector_inventory_fails_without_two_active_unique_rows(self):
         one=lambda scheme,active: {'id':scheme,'status':'active' if active else 'installed','active':active}

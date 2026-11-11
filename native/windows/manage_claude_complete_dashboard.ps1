@@ -8,7 +8,7 @@ Windows runtime acceptance still requires independent browser authentication.
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact='High')]
 param(
   [ValidateSet('Plan','Register','Verify','Start','Stop','Remove')][string]$Mode='Plan',
-  [string]$StagedSource='', [string]$PythonExe='', [string]$RepoqlExe='',
+  [string]$StagedSource='', [string]$PythonExe='', [string]$RepoqlExe='', [string]$NativeRuntimeRoot='',
   [string]$NativeBridgeExe='', [string]$GhostControlConfig='',
   [string]$Workspace='', [ValidateRange(1,4)][int]$Variant=2,
   [int]$Port=18100, [switch]$Apply
@@ -170,6 +170,11 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   $PythonExe=Assert-Path $PythonExe 'PYTHON'
   $RepoqlExe=Assert-Path $RepoqlExe 'REPOQL'
   $Workspace=Assert-Path $Workspace 'WORKSPACE' $true
+  if ($NativeRuntimeRoot) {
+    $NativeRuntimeRoot=Assert-Path $NativeRuntimeRoot 'NATIVE_RUNTIME_ROOT' $true
+    $expectedRuntimeRoot=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Singularity/WindowsNative/current'))
+    if (-not $NativeRuntimeRoot.Equals($expectedRuntimeRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'DASHBOARD_RUNTIME_ROOT_INVALID' }
+  }
   if ([IO.Path]::GetFileName($PythonExe) -notin @('python.exe','python3.exe')) { throw 'DASHBOARD_PYTHON_EXE_REQUIRED' }
   if ([IO.Path]::GetFileName($RepoqlExe) -ne 'rql.exe' -or $Port -lt 1024 -or $Port -gt 65535) { throw 'DASHBOARD_DEPENDENCY_INVALID' }
   $entry=Assert-Path (Join-Path $StagedSource 'native/windows/claude_complete_dashboard_host.py') 'DASHBOARD_ENTRY'
@@ -185,8 +190,9 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   $pythonw=Assert-Path (Join-Path (Split-Path -Parent $PythonExe) 'pythonw.exe') 'DASHBOARD_PYTHONW'
   $silentHost=Assert-Path (Join-Path $StagedSource 'native/windows/silent_python_host.py') 'DASHBOARD_SILENT_HOST'
   $arguments='-B "'+$silentHost+'" --log "'+(Join-Path $state 'dashboard-runtime.log')+'" -- "'+$entry+'" --source-root "' +$StagedSource+'" --rql-exe "'+$RepoqlExe+'" --workspace "'+$Workspace+'" --state-dir "'+$state+'" --port '+$Port+' --variant '+$Variant
+  if ($NativeRuntimeRoot) { $arguments+=' --native-runtime-root "'+$NativeRuntimeRoot+'"' }
   $arguments+=' --mode serve'
-  foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state)) {
+  foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state,$NativeRuntimeRoot)) {
     if ($value.Contains('"') -or $value.Contains([char]10) -or $value.Contains([char]13)) {
       throw 'DASHBOARD_ARGUMENTS_INVALID'
     }

@@ -148,3 +148,18 @@ Verification: `test_agentchat_recent_presence`, `test_agentchat_windows_file_ide
 check was run, so the port is source-verified only.
 
 Ghost modules (`ghost_bridge.py`, `ghost_schedule_plans.py`, `native_ghost.py`, `static/ghost/`) were removed from the Windows dashboard; Ghost is not part of the Windows product.
+
+## Workspace artwork publication, 12 November 2026
+
+Selectively published the workspace artwork from commits `f94841a`, `5c64009`,
+and `6d93655`: five equal workspace tiles, local WebP artwork, the cropped Office
+room image, OpenMausBot artwork on desktop and mobile, charcoal accents, and the
+Agent Chat / Bot Schedules navigation names. The Agent Jobs link remains in the
+sidebar. The merge retains main's removal of the separate native-panel link and
+its continuously animated on-screen Brain graph. Broader memory and installer
+changes are excluded from this publication.
+
+The dashboard launcher accepts an optional native runtime root for independently
+staged dashboard source. Its default layout is unchanged; an explicit root is
+restricted to the existing per-user WindowsNative/current installation, retaining
+its gateway identity, memory owner path and Office fallback.

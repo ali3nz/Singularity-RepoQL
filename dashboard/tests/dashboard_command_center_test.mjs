@@ -32,7 +32,7 @@ globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 const { dashboardSnapshot, miniatureBrainGraph } = (await import('../static/app.js')).__editorTestSurface;
 const ready = dashboardSnapshot({service:{verdict:'ready',queued_operations:2},indexing:{active:1,failed_rows:3},repositories:{unavailable:0},errors:{indexing_failures:3}});
 
-const expectedOrder = ['Agent Chat','Memory Graph','Office Viewer'];
+const expectedOrder = ['OpenMausBot','Bot Schedules','Agent Chat','Memory Graph','Office Viewer'];
 for (const expected of [...expectedOrder, 'Reference documents', 'System knowledge', 'Diagnostics', 'RepoQL Cheat Sheet', 'AI Usage', 'Memory Architecture', 'Orchestration Architecture']) {
   assert.ok(ready.includes(expected), expected);
 }
@@ -41,9 +41,9 @@ for (const diagnosticLabel of ['Harness Control Center', 'Live Agents', 'Executi
 }
 assert.ok(!ready.includes('System status'));
 assert.ok(!ready.includes('RepoQL health'));
-assert.ok(ready.includes('Launch your core workspaces.'));
+assert.ok(ready.includes('Primary workspaces'));
 assert.ok(ready.includes('Operations overview'));
-assert.equal((ready.match(/class="command-overview-value"/g)||[]).length,5,'five source-backed status fields');
+assert.equal((ready.match(/class="command-overview-value"/g)||[]).length,4,'four source-backed status fields');
 assert.ok(!ready.includes('Designed for faster access'), 'promotional hero subtitle should be absent');
 assert.ok(!ready.includes('11 workspaces'))
 assert.ok(!ready.includes('Built for your workflow'))
@@ -60,6 +60,9 @@ assert.deepEqual(cards.filter(card => card[1].includes('command-workspace-featur
 for (const card of cards) {
   assert.match(card[4], /class="command-card-icon" aria-hidden="true"/, `icon badge missing for ${card[3]}`);
   assert.match(card[4], /class="command-card-illustration" aria-hidden="true"/, `decorative illustration missing for ${card[3]}`);
+  const art = {'/openmausbot/chat':'openmausbot','/openmausbot':'bots','/agentchat':'lounge','/unified/graph':'memory','/office':'office-room'}[card[3]];
+  assert.ok(art, `unexpected workspace route ${card[3]}`);
+  assert.match(card[4], new RegExp(`/assets/tiles/${art}\\.webp[^\"]*\"[^>]*alt=\"\"`), `local decorative artwork missing for ${card[3]}`);
 }
 assert.equal((ready.match(/class="command-card-illustration"/g) || []).length, expectedOrder.length, 'all workspace cards should now carry decorative artwork');
 assert.equal(new Set(cards.map(card => card[3])).size, expectedOrder.length, 'all destinations remain distinct');
@@ -75,7 +78,7 @@ for (const [label, route] of [['RepoQL Dashboard','/repoql/control'],['Tencent D
 assert.equal((ready.match(/<details class="command-more block"[^>]* open>/g) || []).length, 3, 'all command center sections should start open');
 assert.ok(!ready.includes('lower-priority diagnostics'), 'diagnostics should not be ranked as low priority');
 const sidebar = fs.readFileSync(new URL('../static/index.html', import.meta.url), 'utf8');
-assert.equal((sidebar.match(/<details class="nav-more"[^>]* open>/g) || []).length, 3, 'all sidebar sections should start open');
+assert.deepEqual([...sidebar.matchAll(/<details class="nav-more" id="([^"]+)"/g)].map(match => match[1]), ['nav-reference','nav-knowledge','nav-more'], 'three distinct sidebar sections remain available; saved state controls expansion');
 
 assert.ok(!ready.includes('Neural control surface'), 'decorative marketing copy should be absent');
 assert.ok(ready.includes('href="#/diagnostics"'));
@@ -84,9 +87,8 @@ assert.ok(ready.includes('href="#/knowledge/connectors"'));
 assert.ok(ready.includes('href="#/links"'));
 assert(!ready.includes('data-live="true"'), 'illustrated cards must not invent live state');
 
-const hostile = dashboardSnapshot({service:{verdict:'<img src=x onerror=alert(1)>'}});
-assert.ok(!hostile.includes('<img'));
-assert.ok(hostile.includes('Launch your core workspaces.'));
+// dashboardSnapshot is a fixed workspace shell; it does not accept service data.
+assert.equal(dashboardSnapshot(), ready, 'workspace shell does not depend on supplied service state');
 const miniature = miniatureBrainGraph();
 assert.equal((miniature.match(/<circle class="mini-/g)||[]).length,74,'static graph thumbnail preserves illustrative density');
 assert.equal(miniature,miniatureBrainGraph(),'illustrative preview is deterministic');
@@ -97,7 +99,7 @@ assert(home.includes("api('/api/embed/kanzo/handshake'"),'optional counts come f
 assert(home.includes("api('/api/agentchat/presence'"),'agent count comes from Agent Chat presence');
 assert(home.includes('void loadOverview()'),'dashboard mounts before optional status requests');
 assert(!home.includes('schedule('),'dashboard navigation must not start telemetry polling');
-console.log('Dashboard command center contracts PASS (priority, visual thumbnails, no diagnostics gate, XSS escaping)');
+console.log('Dashboard command center contracts PASS (priority, visual thumbnails, no diagnostics gate, local decorative artwork)');
 
 if (process.env.RENDER_DASHBOARD_FIXTURE) {
   const skeleton=fs.readFileSync(new URL('../static/index.html',import.meta.url),'utf8');
