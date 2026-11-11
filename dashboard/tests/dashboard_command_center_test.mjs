@@ -32,7 +32,7 @@ globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 const { dashboardSnapshot, miniatureBrainGraph } = (await import('../static/app.js')).__editorTestSurface;
 const ready = dashboardSnapshot({service:{verdict:'ready',queued_operations:2},indexing:{active:1,failed_rows:3},repositories:{unavailable:0},errors:{indexing_failures:3}});
 
-const expectedOrder = ['Kanban Board','Agent Lounge','Memory Graph','Office Viewer'];
+const expectedOrder = ['Agent Chat','Memory Graph','Office Viewer'];
 for (const expected of [...expectedOrder, 'Reference documents', 'System knowledge', 'Diagnostics', 'RepoQL Cheat Sheet', 'AI Usage', 'Memory Architecture', 'Orchestration Architecture']) {
   assert.ok(ready.includes(expected), expected);
 }
@@ -54,9 +54,9 @@ assert(positions.every((pos, index) => pos >= 0 && (index === 0 || pos > positio
 const cards = [...ready.matchAll(/<a class="command-link command-workspace([^"]*)" data-accent="([^"]+)" href="#([^"]+)">([\s\S]*?)<\/a>/g)];
 assert.equal(cards.length, 5, 'only five operational workspaces are primary cards');
 assert.equal((ready.match(/class=\"command-rank\"/g) || []).length, 0, 'numeric rank badges should be absent from the curated cards');
-const featuredRoutes = ['/kanban', '/unified/graph'];
+const featuredRoutes = [];
 assert.deepEqual(cards.filter(card => card[1].includes('command-workspace-feature')).map(card => card[3]), featuredRoutes,
-  'Kanban and Memory Graph are the primary featured cards');
+  'all five primary tiles are equal; none is featured');
 for (const card of cards) {
   assert.match(card[4], /class="command-card-icon" aria-hidden="true"/, `icon badge missing for ${card[3]}`);
   assert.match(card[4], /class="command-card-illustration" aria-hidden="true"/, `decorative illustration missing for ${card[3]}`);

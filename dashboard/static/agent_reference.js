@@ -31,7 +31,7 @@ export function renderAgentReferencePage() {
     <div class="arch-hero-copy"><span class="arch-eyebrow">Reference · Agents</span><h1>Agent roles</h1>
       <p>The agents defined in Pi Chamber and what each one is for. The roster and model settings are read live; the role descriptions are written guidance.</p></div>
     <div class="cs-hero-side"><nav class="cs-jump" aria-label="Related">
-      <a href="#/harness/agents">Agent control</a><a href="#/agentchat">Agent Lounge</a><a href="#/architecture/orchestra">Orchestration</a></nav></div>
+      <a href="#/harness/agents">Agent control</a><a href="#/agentchat">Agent Chat</a><a href="#/architecture/orchestra">Orchestration</a></nav></div>
   </section>
   <section class="cheat-section" id="ar-roster"><h2>Pi Chamber agents <span class="ar-count" id="ar-count"></span></h2>
     <div class="ar-grid" id="ar-grid" aria-live="polite"><p class="small muted">Loading agents…</p></div>

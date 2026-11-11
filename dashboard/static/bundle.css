@@ -7985,7 +7985,6 @@ html[data-theme="charcoal"] .page-head>div:first-child{min-width:0}
 
 @media (max-width:760px){
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/openmausbot"]{order:1!important}
-  html[data-theme] #dash .command-links-priority > .command-workspace[href="#/kanban"]{order:2!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/agentchat"]{order:4!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/unified/graph"]{order:5!important}
   html[data-theme] #dash .command-links-priority > .command-workspace[href="#/office"]{order:6!important}
@@ -8390,4 +8389,66 @@ html[data-theme="charcoal"] .main:has(.messenger-shell) .messenger-shell{
 .ac-bot-card .ac-field{display:grid;gap:4px;font-size:13px}
 .ac-bot-card .ac-model-select{width:100%}
 @media(max-width:600px){.ac-bot-grid{grid-template-columns:1fr}.ac-model-select{width:100%}}
+
+/* command center: real page screenshots as tile art (ported from the dockerhost dashboard) */
+html[data-theme] #dash .command-workspace .command-card-shot{display:none}
+html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace{position:relative}
+html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace .command-card-shot{
+  display:block;position:absolute;z-index:0;right:0;top:0;bottom:0;width:54%;height:100%;object-fit:cover;object-position:left top;
+  opacity:.9;pointer-events:none;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 46%);mask-image:linear-gradient(90deg,transparent 0,#000 46%)}
+html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace:has(.command-card-shot) .command-card-illustration{background-image:none!important}
+html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace:has(.command-card-shot) .command-card-illustration svg{display:none!important}
+html[data-theme] #app[data-page-route="/"] .command-workspace .command-card-shot[src*="kanban"]{filter:brightness(.9) saturate(1.2)}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/unified/graph"] .command-card-shot{width:34%;object-position:center}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/office"] .command-card-shot{width:50%;object-position:center}
+html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace:hover .command-card-shot{opacity:1}
+@media (max-width:760px){
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace .command-card-shot{
+    left:0;right:0;width:100%;height:100%;object-position:center top;opacity:.95;
+    -webkit-mask-image:linear-gradient(180deg,#000 8%,rgba(0,0,0,.25) 78%);mask-image:linear-gradient(180deg,#000 8%,rgba(0,0,0,.25) 78%)}
+}
+
+/* charcoal accent colours (ported from the dockerhost dashboard) */
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot/chat"]{--tile-accent:#b79bff}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/openmausbot"]{--tile-accent:#ff9f5a}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/agentchat"]{--tile-accent:#4da3ff}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/unified/graph"]{--tile-accent:#c77dff}
+html[data-theme="charcoal"] #dash .command-links-priority > .command-workspace[href="#/office"]{--tile-accent:#ffc247}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace{
+  border:1px solid color-mix(in srgb,var(--tile-accent) 62%,#26262a)!important;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--tile-accent) 14%,transparent),0 10px 28px -10px color-mix(in srgb,var(--tile-accent) 55%,transparent)!important;
+  background-color:#121214!important}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace:hover{
+  border-color:var(--tile-accent)!important;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--tile-accent) 40%,transparent),0 14px 34px -8px color-mix(in srgb,var(--tile-accent) 75%,transparent)!important}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-card-kicker{color:var(--tile-accent)!important;font-weight:700;letter-spacing:.04em}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-card-content strong{color:#fff!important}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-card-cta{color:var(--tile-accent)!important;font-weight:600}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-card-icon{color:var(--tile-accent)!important;
+  background:color-mix(in srgb,var(--tile-accent) 20%,#16161a)!important;border-color:color-mix(in srgb,var(--tile-accent) 70%,transparent)!important;
+  box-shadow:0 0 14px color-mix(in srgb,var(--tile-accent) 45%,transparent)}
+/* operations overview: brighter numbers and accents */
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card .command-overview-name{color:var(--tile-accent,#7be0c0);font-weight:700}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent="work"]{--tile-accent:#4ade80}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent="chat"]{--tile-accent:#ffb02e}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent="memory"]{--tile-accent:#c77dff}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-card[data-accent="repoql"]{--tile-accent:#38d6f5}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-overview-value{text-shadow:0 0 18px color-mix(in srgb,var(--tile-accent,#fff) 55%,transparent)}
+html[data-theme="charcoal"] #app[data-page-route="/"] .command-more > summary{color:#f1f1f4}
+
+/* Command Center tiles: five equal tiles, every row filled (desktop 3+2, tablet/phone 2+2+1, narrow 1). */
+html[data-theme] #dash .command-links-priority{grid-template-columns:repeat(6,minmax(0,1fr))}
+html[data-theme] #dash .command-links-priority>.command-workspace{grid-column:span 2;min-height:200px}
+html[data-theme] #dash .command-links-priority>.command-workspace:nth-child(n+4){grid-column:span 3}
+@media (max-width:1320px){
+  html[data-theme] #dash .command-links-priority{grid-template-columns:repeat(2,minmax(0,1fr))}
+  html[data-theme] #dash .command-links-priority>.command-workspace,
+  html[data-theme] #dash .command-links-priority>.command-workspace:nth-child(n+4){grid-column:span 1}
+  html[data-theme] #dash .command-links-priority>.command-workspace:last-child:nth-child(odd){grid-column:1/-1}
+}
+@media (max-width:650px){
+  html[data-theme] #dash .command-links-priority{grid-template-columns:minmax(0,1fr)}
+  html[data-theme] #dash .command-links-priority>.command-workspace,
+  html[data-theme] #dash .command-links-priority>.command-workspace:last-child:nth-child(odd){grid-column:1/-1}
+}
 

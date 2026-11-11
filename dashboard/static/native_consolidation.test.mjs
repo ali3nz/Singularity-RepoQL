@@ -62,7 +62,7 @@ for (let variant of [1,2,3,4]) {
   const command=t.dashboardSnapshot();
   assert.match(command,/href="#\/openmausbot"/);
   assert.match(command,/href="#\/openmausbot\/chat"/);
-  assert.match(command,/>Bot Operations</);
+  assert.match(command,/>Bot Schedules</);
   assert.doesNotMatch(command,/href="#\/ghost"/);
   assert.match(command,/href="#\/architecture\/orchestra"/);
   assert.doesNotMatch(command,/href="#\/harness(?:\/|"|\?)/);
@@ -77,10 +77,10 @@ for (let variant of [1,2,3,4]) {
   await checkArchitecture(t, true);
   const workspaces = [...command.matchAll(/class="command-link command-workspace[^"]*"[^>]*href="#([^"]+)"/g)]
     .map(([,route]) => route);
-  assert.deepEqual(workspaces, ['/openmausbot/chat','/kanban','/openmausbot','/agentchat','/unified/graph','/office']);
+  assert.deepEqual(workspaces, ['/openmausbot/chat','/openmausbot','/agentchat','/unified/graph','/office']);
   const visibleNavigate = navigateEntries.filter(entry => t.featureAllowed(entry.route));
   assert.deepEqual(visibleNavigate.map(entry => entry.label), [
-    'Command center','Kanban Board','OpenMausBot','Bot Operations','Agent Lounge',
+    'Command center','Agent Jobs','OpenMausBot','Bot Schedules','Agent Chat',
     ...(complete ? ['Office Viewer'] : []),'Memory Graph',
   ]);
   for (const entry of visibleNavigate) assert.match(entry.markup, /<svg\b/);

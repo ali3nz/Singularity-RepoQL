@@ -335,8 +335,8 @@ function markNav(path) {
   links.forEach(link => link.classList.toggle('active', link === active));
   const mobileTitle=document.getElementById('mobile-page-title');
   if (mobileTitle) {
-    const names={'/':'Command Center','/kanban':'Kanban Board','/openmausbot':'Bot Operations','/openmausbot/chat':'OpenMausBot',
-      '/agentchat':'Agent Lounge','/unified/graph':'Memory Graph','/office':'Office Viewer'};
+    const names={'/':'Command Center','/kanban':'Agent Jobs','/openmausbot':'Bot Schedules','/openmausbot/chat':'OpenMausBot',
+      '/agentchat':'Agent Chat','/unified/graph':'Memory Graph','/office':'Office Viewer'};
     mobileTitle.textContent=names[target] || active?.textContent.trim() || 'RepoQL';
   }
   // Canonical sidebar destination is also the visual route identity. Detail
@@ -748,9 +748,8 @@ function miniatureBrainGraph() {
 function dashboardSnapshot() {
   const destinations = [
     ['OpenMausBot','/openmausbot/chat','Open the OpenMausBot workspace to chat with and manage your bots.','chat','Bot operations'],
-    ['Kanban Board','/kanban','Track work items, priorities and delivery flow.','work','Delivery'],
-    ['Bot Operations','/openmausbot','See every bot\'s schedule, recent runs and anything needing attention.','chat','Bot operations'],
-    ['Agent Lounge','/agentchat','Follow agent conversations and recent job updates.','chat','Agent activity'],
+    ['Bot Schedules','/openmausbot','See every bot\'s schedule, recent runs and anything needing attention.','chat','Bot operations'],
+    ['Agent Chat','/agentchat','Follow agent conversations and recent job updates.','chat','Agent activity'],
     ['Memory Graph','/unified/graph','Explore live knowledge links across RepoQL, Tencent and memories.','memory','Knowledge'],
     ['Office Viewer','/office','Open the live protected office scene.','office','Workspace'],
   ];
@@ -784,7 +783,8 @@ function dashboardSnapshot() {
     '/architecture/memory': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".32"><path d="M150 35 86 63l64 28 64-28-64-28Z"/><path d="M86 95l64 28 64-28"/><path d="M86 127l64 28 64-28"/></g><path d="M106 71h88M106 103h88M106 135h88" stroke="currentColor" stroke-opacity=".45" stroke-linecap="round"/><circle cx="150" cy="63" r="5" fill="currentColor"/><circle cx="150" cy="95" r="5" fill="currentColor"/><circle cx="150" cy="127" r="5" fill="currentColor"/></svg>`,
     '/architecture/orchestra': `<svg viewBox="0 0 300 190" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="44" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><rect x="118" y="74" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><rect x="196" y="104" width="65" height="42" rx="12" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".35"/><path d="M105 65h13c8 0 14 6 14 14v0M183 95h13c8 0 14 6 14 14v0" stroke="currentColor" stroke-opacity=".75" stroke-width="3" stroke-linecap="round"/><circle cx="72" cy="65" r="6" fill="currentColor"/><circle cx="150" cy="95" r="6" fill="currentColor"/><circle cx="228" cy="125" r="6" fill="currentColor"/></svg>`,
   };
-  const featureCards = new Set(['/kanban','/unified/graph']);
+  const featureCards = new Set();
+  const tileShots = {'/openmausbot':'bots','/agentchat':'lounge','/unified/graph':'memory','/office':'office'};
   const referenceDocuments = [
     ['RepoQL Cheat Sheet','/repoql/cheat-sheet'],
     ['Memory Architecture','/architecture/memory'],
@@ -830,6 +830,7 @@ function dashboardSnapshot() {
       <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || REPOQL_ICON}</span>
       <span class="command-card-content"><span class="command-card-kicker">${esc(kicker)}</span><strong>${esc(title)}</strong><span class="command-card-description">${esc(description)}</span><span class="command-card-cta">Open workspace <span aria-hidden="true">↗</span></span></span>
       <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || ''}</span>
+      ${tileShots[link] ? `<img class="command-card-shot" src="/assets/tiles/${tileShots[link]}.webp?v=ts3" alt="" loading="lazy" decoding="async">` : ''}
     </a>`).join('')}</div>
   </section>
   <details class="command-more block" data-accent="office" open>
@@ -891,7 +892,7 @@ async function viewDashboard() {
     if (health) {
       const tasksN = tasks ? tasks.length : 0;
       const items = [
-        ['Kanzo board', tasks ? 'up' : 'down', tasks ? `${tasksN} tasks` : 'not responding', '#/kanban'],
+        ['Agent Jobs', tasks ? 'up' : 'down', tasks ? `${tasksN} tasks` : 'not responding', '#/kanban'],
         ['Agent Chat', roster ? 'up' : 'down', roster ? `${roster.length} agents known` : 'not responding', '#/agentchat'],
         ['Diagnostics', 'link', 'runtime and service details', '#/diagnostics'],
       ];
@@ -3139,7 +3140,7 @@ function nativeViewerFrameState(body, frameSelector, statusSelector) {
 
 async function viewKanban(params = {}) {
   const phone=window.matchMedia?.('(max-width:760px)').matches===true;
-  APP.innerHTML = pageHead('Kanban Board', '') +
+  APP.innerHTML = pageHead('Agent Jobs', '') +
     `<section id="kanban-body" class="kn-shell"><div class="loading">Connecting to Kanzo…</div></section>`;
   const body = document.getElementById('kanban-body');
   try {
@@ -3420,7 +3421,7 @@ async function viewUnifiedGraph() {
 // URLs come only from authenticated server configuration (never query parameters).
 async function viewNativePanel(kind) {
   const tencent = kind === 'tencent';
-  const name = tencent ? 'Tencent Dashboard' : kind === 'kanzo' ? 'Kanban Board' : 'RepoQL Dashboard';
+  const name = tencent ? 'Tencent Dashboard' : kind === 'kanzo' ? 'Agent Jobs' : 'RepoQL Dashboard';
   APP.innerHTML = pageHead(name, 'Original application embedded without modifying its controls or credentials.') +
     `<section id="native-panel-host" class="native-panel-shell"><div class="loading">Loading native panel configuration…</div></section>`;
   const host = document.getElementById('native-panel-host');
@@ -3798,9 +3799,9 @@ function loungeDateVisible(timestamp, range, now=Date.now()) {
 // Messenger-style, read-only viewer. The durable agentchat inboxes remain the
 // source of truth. This view never acknowledges mail or sends for an agent.
 async function viewAgentChat() {
-  APP.innerHTML = pageHead('Agent Lounge', '', '<a class="btn small" href="#/openmausbot">OpenMausBot</a>') + `
-    <section class="messenger-shell messenger-mode-threads" id="ac-shell" aria-label="Agent Lounge">
-      <header class="messenger-toolbar" aria-label="Agent Lounge controls">
+  APP.innerHTML = pageHead('Agent Chat', '', '<a class="btn small" href="#/openmausbot">OpenMausBot</a>') + `
+    <section class="messenger-shell messenger-mode-threads" id="ac-shell" aria-label="Agent Chat">
+      <header class="messenger-toolbar" aria-label="Agent Chat controls">
         <div class="messenger-modes" role="group" aria-label="Lounge view">
           <button type="button" id="ac-view-chats" aria-pressed="true">Conversations</button>
           <button type="button" id="ac-view-feed" aria-pressed="false">Activity</button>
@@ -3838,7 +3839,7 @@ async function viewAgentChat() {
           <button id="ac-clear-agent" type="button" class="messenger-thread-action" hidden>Clear focus</button>
           <span class="messenger-live-marker" aria-hidden="true"></span>
         </header>
-        <div id="ac-stream" class="messenger-messages" role="log" aria-label="Agent Lounge messages" aria-live="off"></div>
+        <div id="ac-stream" class="messenger-messages" role="log" aria-label="Agent Chat messages" aria-live="off"></div>
         <button type="button" id="ac-latest" class="messenger-latest" hidden>↓ New messages</button>
       </section>
     </section>`;
