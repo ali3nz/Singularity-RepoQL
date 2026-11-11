@@ -8565,3 +8565,16 @@ html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .com
   box-shadow:0 0 0 1px color-mix(in srgb,var(--tile-accent) 30%,transparent),0 0 26px -4px color-mix(in srgb,var(--tile-accent) 50%,transparent),0 12px 30px -10px color-mix(in srgb,var(--tile-accent) 70%,transparent)!important}
 html[data-theme="charcoal"] #app[data-page-route="/"] .command-links-visual .command-workspace:hover .command-card-shot{transform:scale(1.05);transition:transform .5s ease}
 html[data-theme="charcoal"] #app[data-page-route="/"] .command-card-content strong{text-shadow:0 0 16px color-mix(in srgb,var(--tile-accent) 55%,transparent)}
+
+/* ==== command center tiles v6: phone view, full-bleed pictures behind the text (2026-11-12) ==== */
+@media (max-width:760px){
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace .command-card-shot,
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace[href] .command-card-shot{
+    left:0;right:0;top:0;bottom:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:.85;
+    -webkit-mask-image:linear-gradient(180deg,#000 0,#000 35%,rgba(0,0,0,.28) 85%);mask-image:linear-gradient(180deg,#000 0,#000 35%,rgba(0,0,0,.28) 85%)}
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace[href="#/unified/graph"] .command-card-shot{object-position:center 40%;opacity:.8}
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace[href="#/agent-viewer"] .command-card-shot{object-position:center 45%}
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace[href="#/office"] .command-card-shot{object-position:center 40%}
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace .command-card-shot[src*="/bots."],
+  html[data-theme] #app[data-page-route="/"] .command-links-visual .command-workspace .command-card-shot[src*="/lounge."]{object-position:left top;opacity:.6}
+}
