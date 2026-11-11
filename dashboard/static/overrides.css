@@ -1144,7 +1144,7 @@ html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/office"] .
 /* ==== command center tiles v5: tighter crops, hero galaxy, more punch (2026-11-12) ==== */
 html[data-theme] #app[data-page-route="/"] .command-workspace .command-card-shot{opacity:1;object-position:center}
 html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/agent-viewer"] .command-card-shot{width:62%;object-position:center;filter:saturate(1.2) brightness(1.08)}
-html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/unified/graph"] .command-card-shot{width:46%;object-position:center;filter:saturate(1.3) drop-shadow(0 0 14px rgba(199,125,255,.55))}
+html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/unified/graph"] .command-card-shot{width:46%;object-position:center;filter:none}
 html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/office"] .command-card-shot{width:58%}
 html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/openmausbot"] .command-card-shot,
 html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/agentchat"] .command-card-shot{width:56%}
