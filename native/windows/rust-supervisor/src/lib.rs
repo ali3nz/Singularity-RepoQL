@@ -358,6 +358,21 @@ fn health_probe(port: u16, path: &str, component: &str) -> bool {
     health_reply_matches(&bytes[..len], component)
 }
 
+/// Opt-in child output capture: when SINGULARITY_SUPERVISOR_LOG_DIR is set, each component's
+/// stdout/stderr is appended to `<dir>/component-<id>.log` (truncated past 4 MiB at start).
+fn component_log(id: &str) -> Option<(Stdio, Stdio)> {
+    let dir = std::env::var_os("SINGULARITY_SUPERVISOR_LOG_DIR")?;
+    if !id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_') { return None; }
+    let path = std::path::Path::new(&dir).join(format!("component-{id}.log"));
+    let big = std::fs::metadata(&path).map(|m| m.len() > 4 * 1024 * 1024).unwrap_or(false);
+    let mut opts = std::fs::OpenOptions::new();
+    opts.create(true);
+    if big { opts.write(true).truncate(true); } else { opts.append(true); }
+    let file = opts.open(&path).ok()?;
+    let dup = file.try_clone().ok()?;
+    Some((Stdio::from(file), Stdio::from(dup)))
+}
+
 pub fn run(stack: Stack) -> Result<(), String> {
     validate(&stack)?;
     let job = owned_job::Job::new()?;
@@ -376,7 +391,11 @@ pub fn run(stack: Stack) -> Result<(), String> {
             for key in ["SystemRoot", "WINDIR", "PATH", "PATHEXT", "COMSPEC", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "HOMEDRIVE", "HOMEPATH", "PROGRAMDATA", "SYSTEMDRIVE", "PROCESSOR_ARCHITECTURE"] {
                 if let Some(value) = std::env::var_os(key) { cmd.env(key, value); }
             }
-            cmd.envs(&c.env).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+            cmd.envs(&c.env).stdin(Stdio::null());
+            match component_log(&c.id) {
+                Some((out, err)) => { cmd.stdout(out).stderr(err); }
+                None => { cmd.stdout(Stdio::null()).stderr(Stdio::null()); }
+            }
             // Atomic with respect to child user code: create suspended, assign
             // to owned Job Object, then resume the verified primary thread.
             let child = job.spawn_contained(&mut cmd).map_err(|err| format!("{}: {err}", c.id))?;

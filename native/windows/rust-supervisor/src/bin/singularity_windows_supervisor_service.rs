@@ -63,6 +63,9 @@ mod svc {
             0,
         ));
         log(&cfg, "service running");
+        if let Some(dir) = std::path::Path::new(&cfg).parent() {
+            std::env::set_var("SINGULARITY_SUPERVISOR_LOG_DIR", dir);
+        }
         let result = load(&cfg).and_then(run);
         match result {
             Ok(()) => {

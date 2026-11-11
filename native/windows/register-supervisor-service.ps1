@@ -27,7 +27,9 @@ param(
   [string]$Binary,
   [pscredential]$Credential,
   [switch]$LocalSystem,
-  [switch]$Uninstall
+  [switch]$Uninstall,
+  [int[]]$HealthPorts = @(18431, 18421, 18126),
+  [int]$HealthTimeoutSec = 120
 )
 $ErrorActionPreference = 'Stop'
 $name = 'SingularitySupervisor'
@@ -94,7 +96,38 @@ sc.exe config $name start= delayed-auto | Out-Null
 sc.exe failure $name reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
 sc.exe failureflag $name 1 | Out-Null   # also restart on non-zero exit, not only crashes
 
+function Test-Stack {
+  foreach ($port in $HealthPorts) {
+    try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:$port/health"; if ($r.StatusCode -ne 200) { return $false } }
+    catch { return $false }
+  }
+  return $true
+}
+
 Start-Service $name
-Start-Sleep 5
+$deadline = (Get-Date).AddSeconds($HealthTimeoutSec)
+$healthy = $false
+while ((Get-Date) -lt $deadline) {
+  Start-Sleep 3
+  if ((Get-Service $name).Status -eq 'Running' -and (Test-Stack)) { $healthy = $true; break }
+}
 Get-Service $name | Format-Table Name, Status, StartType -AutoSize | Out-String | Write-Host
-Write-Host "service log: $(Join-Path (Split-Path $Config) 'supervisor-service.log')"
+$logDir = Split-Path $Config
+if ($healthy) {
+  Write-Host "OK: the Singularity stack is running under the $name service."
+  Write-Host "logs: $logDir\supervisor-service.log and $logDir\component-*.log"
+} else {
+  # Never leave the user without a working stack: put the old scheduled task back.
+  Write-Host 'The service did not bring the stack up. Rolling back to the previous scheduled task.' -ForegroundColor Yellow
+  foreach ($f in 'supervisor-service.log', 'component-memory.log') {
+    $path = Join-Path $logDir $f
+    if (Test-Path $path) { Write-Host "--- $f (last 15 lines)"; Get-Content $path -Tail 15 }
+  }
+  Stop-Service $name -Force -ErrorAction SilentlyContinue
+  Set-Service $name -StartupType Disabled
+  if (Get-ScheduledTask $legacyTask -ErrorAction SilentlyContinue) {
+    Enable-ScheduledTask $legacyTask | Out-Null
+    Start-ScheduledTask $legacyTask
+  }
+  throw 'Service install rolled back; the previous setup was restored.'
+}
