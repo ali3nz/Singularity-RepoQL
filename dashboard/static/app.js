@@ -3819,8 +3819,7 @@ async function viewAgentChat() {
       </header>
       <details class="lounge-presence" id="ac-presence">
         <summary><span><span class="lounge-pulse" aria-hidden="true"></span> Agents on duty</span>
-          <span class="lounge-presence-end"><span id="ac-presence-summary">Checking presence…</span>
-            <svg class="lounge-presence-chevron" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></summary>
+          <span class="lounge-presence-end"><span id="ac-presence-summary">Checking presence…</span></span></summary>
         <div id="ac-presence-list" class="lounge-roster" role="list" aria-label="Current agent activity"></div>
         <p class="lounge-presence-note">Online status uses recent Agent Chat activity. Aliases and task descriptions are agent announcements, not proof of a Kanzo claim.</p>
       </details>
@@ -3847,7 +3846,8 @@ async function viewAgentChat() {
   const presenceDetails = document.getElementById('ac-presence');
   const presenceSummary = document.getElementById('ac-presence-summary');
   const presenceList = document.getElementById('ac-presence-list');
-  presenceDetails.open = false;
+  presenceDetails.open = true;   // the name strip is always visible; only the cards collapse
+  presenceDetails.querySelector('summary')?.addEventListener('click', e => e.preventDefault());
 
   const conversations = document.getElementById('ac-conversations');
   const stream = document.getElementById('ac-stream');
@@ -3883,6 +3883,7 @@ async function viewAgentChat() {
   let lastPresencePoll = 0;
   let lastRosterKey = '';
   let selectedAgent = '';
+  const dutyOpen = new Set();   // agents whose card is expanded; everyone else shows as a name chip
   const renderPresence = () => {
     if (!presenceList.isConnected) return;
     const agents = Array.isArray(presence?.agents) ? presence.agents : [];
@@ -3891,7 +3892,7 @@ async function viewAgentChat() {
     presenceSummary.textContent = presence?.available ? `${working} working · ${current.length-working} recently seen` : 'Presence unavailable';
     const announcement = loungeAnnouncements(records);
     const rows = current.sort((a,b) => (a.status === 'working' ? -1 : 1) - (b.status === 'working' ? -1 : 1) || a.role.localeCompare(b.role));
-    const signature = JSON.stringify([selectedAgent, ...rows.map(a => [a.role,a.status,announcement.get(a.role)?.id])]);
+    const signature = JSON.stringify([selectedAgent, [...dutyOpen], ...rows.map(a => [a.role,a.status,announcement.get(a.role)?.id])]);
     if (signature === lastRosterKey) return;
     lastRosterKey = signature;
     if (!rows.length) {
@@ -3905,14 +3906,18 @@ async function viewAgentChat() {
       const parts=task?.match(/^([a-z0-9_-]{1,60})#([1-9][0-9]{0,9})$/);
       const taskLink=parts ? `<a class="lounge-task-link" href="#/kanban?task=${encodeURIComponent(parts[2])}" title="Open reported task in Kanzo board">${esc(task)}</a>` : '';
       const label = recent ? note.alias : agentDisplayName(a.role, agentNames);
+      if (!dutyOpen.has(a.role)) {
+        return `<button type="button" class="lounge-duty-chip${selectedAgent===a.role?' selected':''}" role="listitem" data-duty-toggle="${esc(a.role)}" aria-expanded="false" title="Show details">
+          <span class="lounge-online-dot ${a.status}" aria-label="${a.status}"></span><span class="lounge-duty-name">${esc(label)}</span></button>`;
+      }
       return `<div class="lounge-person${selectedAgent===a.role?' selected':''}" role="listitem" data-agent-role="${esc(a.role)}">
         ${agentAvatar({role: a.role, name: label,
           avatar: agentAvatars[a.role]?.avatar, avatar_default: agentAvatars[a.role]?.avatar_default},
           esc, {pickable: true})}
-        <div class="lounge-person-body"><button type="button" class="lounge-agent-select" data-select-agent="${esc(a.role)}" aria-pressed="${String(selectedAgent===a.role)}" aria-label="${selectedAgent===a.role?'Show all agents':'Focus on agent'} ${esc(label)}"><strong>${esc(label)}</strong></button>
+        <div class="lounge-person-body"><button type="button" class="lounge-agent-select" data-duty-toggle="${esc(a.role)}" aria-expanded="true" title="Collapse"><strong>${esc(label)}</strong></button>
           <span><button type="button" class="lounge-copy-role" data-copy-role="${esc(a.role)}" title="Copy Agent Chat address">@${esc(a.role)}</button> · ${a.status==='working'?'Working':'Recently seen'}</span>
           ${recent&&note.work?`<small title="Self-reported task">${esc(note.work)}</small>`:''}
-          ${taskLink}</div><span class="lounge-online-dot ${a.status}" aria-label="${a.status}"></span></div>`;
+          ${taskLink}${mode==='feed'?`<button type="button" class="lounge-focus-btn" data-select-agent="${esc(a.role)}" aria-pressed="${String(selectedAgent===a.role)}">${selectedAgent===a.role?'Show all':'Filter feed'}</button>`:''}</div><span class="lounge-online-dot ${a.status}" aria-label="${a.status}"></span></div>`;
     }).join('');
   };
   presenceList.addEventListener('click', async event => {
@@ -3938,6 +3943,14 @@ async function viewAgentChat() {
         const prior=button.textContent;button.textContent='Copied';
         setTimeout(()=>{if(button.isConnected)button.textContent=prior;},1500);
       } catch { button.title='Copy is not available in this browser'; }
+      return;
+    }
+    const toggle = event.target.closest?.('button[data-duty-toggle]');
+    if (toggle) {
+      const r = toggle.dataset.dutyToggle || '';
+      if (dutyOpen.has(r)) dutyOpen.delete(r); else dutyOpen.add(r);
+      renderPresence();
+      [...presenceList.querySelectorAll('button[data-duty-toggle]')].find(b => b.dataset.dutyToggle === r)?.focus({preventScroll:true});
       return;
     }
     const selectButton=event.target.closest?.('button[data-select-agent]');
@@ -4026,7 +4039,7 @@ async function viewAgentChat() {
           {className: 'messenger-avatar messenger-avatar-small'})}
         <div class="messenger-message-content"><div class="messenger-sender">${esc(senderName)}</div>
           <div class="messenger-bubble ${long && !open ? 'messenger-bubble-collapsed' : ''}">${esc(m.text || '')}</div>
-          ${long && mode !== 'feed' ? `<button type="button" class="messenger-expand" data-expand-message="${Number(m.id)}" aria-expanded="${open}">${open ? 'Show less' : 'Read full message'}</button>` : ''}
+          ${long && mode !== 'feed' ? `<button type="button" class="messenger-expand" data-expand-message="${Number(m.id)}" aria-expanded="${open}">${open ? 'less' : '…more'}</button>` : ''}
           <div class="messenger-message-meta">${esc(agentChatTime(m.created_at) || `#${m.id}`)}${to ? ` · To ${esc(to)}` : ''}</div>
         </div></article>`;
   };
@@ -4145,6 +4158,13 @@ async function viewAgentChat() {
     } else stream.innerHTML = `<p class="messenger-empty-thread">${feedMode
       ? (term ? 'No messages match your search.' : 'No recent messages yet.')
       : (term ? 'No conversations match your search.' : 'Select a conversation to see its messages.')}</p>`;
+    // the toggle only earns its place when the collapsed bubble is really cut off
+    stream.querySelectorAll('.messenger-bubble-collapsed').forEach(b => {
+      if (b.scrollHeight <= b.clientHeight + 1) {
+        b.classList.remove('messenger-bubble-collapsed');
+        b.parentElement?.querySelector('.messenger-expand')?.remove();
+      }
+    });
     if (changedView || nearBottom) stream.scrollTop = stream.scrollHeight;
     else stream.scrollTop = previousScroll;
     updateUnread();

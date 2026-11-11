@@ -2543,9 +2543,9 @@ html[data-theme-mode="light"] .lounge-copy-role {color:#176789;}
  outline:2px solid #74eaff;outline-offset:3px}
 .messenger-bubble-collapsed {display:-webkit-box;-webkit-line-clamp:7;line-clamp:7;-webkit-box-orient:vertical;
  overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
-.messenger-expand {align-self:flex-start;background:transparent;border:1px solid rgba(96,216,250,.34);
- color:#8de9ff;border-radius:9px;padding:7px 12px;margin-top:6px;min-height:38px;cursor:pointer;font-size:12px}
-.messenger-expand:hover {background:rgba(68,191,234,.12)}
+.messenger-expand {align-self:flex-start;background:transparent;border:0;
+ color:#8de9ff;border-radius:6px;padding:2px 6px;margin:2px 0 0 4px;min-height:0;cursor:pointer;font-size:12px;opacity:.85}
+.messenger-expand:hover {opacity:1;text-decoration:underline}
 .messenger-kanzo {align-self:center;display:flex;gap:10px;max-width:min(96%,680px);width:100%;
  padding:12px 15px;border-radius:14px;border:1px solid rgba(75,218,214,.26);
  background:linear-gradient(115deg,rgba(15,47,55,.91),rgba(24,26,55,.89));box-shadow:0 8px 26px rgba(0,0,0,.17)}
@@ -2883,7 +2883,7 @@ body::before {
    keyboard focus and coarse touch targets remain readable on dark surfaces. */
 .messenger-message-meta,.messenger-conversation-time,.messenger-thread-title span { color:#b2c7df; }
 .messenger-message .messenger-sender { color:#c1d6ef; }
-.messenger-pause,.messenger-expand { min-height:38px; }
+.messenger-pause { min-height:38px; }
 .command-more summary { min-height:46px; }
 .command-mini-chip { min-height:42px; }
 @media (pointer:coarse) {
@@ -4242,6 +4242,26 @@ html:not([data-theme-mode="light"]) .messenger-bubble,
 html:not([data-theme-mode="light"]) .messenger-mode-feed .messenger-bubble,
 html:not([data-theme-mode="light"]) .messenger-message-alt .messenger-bubble{background:#242426!important;background-image:none!important;border-color:#36363a!important}
 html:not([data-theme-mode="light"]) .messenger-date-divider{background:#222225!important}
+
+/* agents on duty: always-visible name chips; tap one to expand its card */
+.lounge-presence summary {cursor:default;min-height:36px;}
+.lounge-roster {flex-wrap:wrap;overflow-x:visible;align-items:flex-start;padding:2px 16px 10px;gap:8px;}
+.lounge-duty-chip {all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+ padding:5px 12px;border-radius:999px;border:1px solid rgba(89,187,231,.28);background:rgba(29,56,81,.55);
+ color:#e6f3ff;font-size:12.5px;font-weight:650;max-width:100%;}
+.lounge-duty-chip:hover{background:rgba(44,84,118,.7)}
+.lounge-duty-chip:focus-visible,.lounge-agent-select:focus-visible{outline:2px solid var(--cyan,#53c1e1);outline-offset:2px}
+.lounge-duty-chip .lounge-online-dot{margin-top:0}
+.lounge-duty-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lounge-duty-chip.selected{border-color:#53c1e1}
+.lounge-agent-select{all:unset;cursor:pointer;min-width:0}
+.lounge-focus-btn{all:unset;cursor:pointer;align-self:flex-start;font-size:11px;color:#8ee7ff;padding:2px 0}
+.lounge-focus-btn:hover{text-decoration:underline}
+.lounge-person{flex:1 1 220px}
+.messenger-mode-feed .lounge-roster{flex-wrap:nowrap}
+.messenger-mode-feed .lounge-duty-chip{width:100%;border-radius:10px}
+.messenger-mode-feed .lounge-person{flex:0 0 auto;max-width:none}
+html[data-theme-mode="light"] .lounge-duty-chip{background:#e4f1fb;border-color:#b9d6e8;color:#17324e}
 
 
 /* ==== mobile_app.css ==== */
@@ -8455,4 +8475,81 @@ html[data-theme] #dash .command-links-priority>.command-workspace:nth-child(n+4)
 /* Office tile: plain office-room crop like the other tiles (no illustration) */
 html[data-theme] #dash .command-links-priority > .command-workspace[href="#/office"] .command-card-illustration,
 html[data-theme] #app[data-page-route="/"] .command-workspace[href="#/office"] .command-card-illustration{background-image:none!important}
+
+
+/* ==== glow.css ==== */
+/* Glow layer (2026-11-12): carries the Command Center tile look - accent outline plus a soft
+   accent glow - across every dashboard page, in two strengths so it never gets noisy:
+     OUTLINE  calm reading surfaces (blocks, tables, reference/knowledge cards)
+     GLOW     things you act on or glance at (stat tiles, clickable cards, hero panels)
+   Colour comes from each page's own accent (--pa, set per route in theme.css) so every page
+   keeps its identity. Dark themes only; light themes keep their quiet shadows. */
+html[data-theme-mode="dark"] .main { --pa: var(--page-accent, var(--role-repoql, #6ca6ff)); --gl: var(--pa); --gl-base: var(--g-line, var(--line, #2a2a2e)); }
+
+/* Tile hues for pages that have a Command Center tile, so page and tile match. */
+html[data-theme-mode="dark"] .main[data-page-route="/agentchat"] { --page-accent: #4da3ff; }
+html[data-theme-mode="dark"] .main[data-page-route^="/openmausbot"],
+html[data-theme-mode="dark"] .main[data-page-route^="/bots"] { --page-accent: #ff9f5a; }
+html[data-theme-mode="dark"] .main[data-page-route="/kanban"] { --page-accent: #4ade80; }
+html[data-theme-mode="dark"] .main[data-page-route="/office"] { --page-accent: #ffc247; }
+html[data-theme-mode="dark"] .main[data-page-route="/agent-viewer"] { --page-accent: #38d6f5; }
+html[data-theme-mode="dark"] .main[data-page-route^="/unified/graph"],
+html[data-theme-mode="dark"] .main[data-page-route^="/knowledge"],
+html[data-theme-mode="dark"] .main[data-page-route^="/architecture/memory"] { --page-accent: #c77dff; }
+
+/* ---- OUTLINE tier: calm, always-on accent edge, brighter on hover ---- */
+html[data-theme-mode="dark"] #app :is(.block, .table-wrap, .kn-column, .cheat-section, .theme-panel, .arch-insp-section, .workflow-stage, .card, .kn-cards > *, .grid-cards > *) {
+  border-color: color-mix(in srgb, var(--gl) 40%, var(--gl-base)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gl) 6%, transparent) !important;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+html[data-theme-mode="dark"] #app :is(.block, .table-wrap, .kn-column, .cheat-section, .arch-insp-section):hover {
+  border-color: color-mix(in srgb, var(--gl) 58%, var(--gl-base)) !important;
+}
+
+/* ---- GLOW tier: tile treatment - 62% accent edge and a soft accent halo ---- */
+html[data-theme-mode="dark"] #app :is(.usage-stat, .unified-metric, .metric, .arch-stat, .command-overview-card, .connector-card, .workflow-link-card, .ghost-operations-tile, .block.link, .ug-hero-panel, .ug-stats > *, .graph-stats > *) {
+  border-color: color-mix(in srgb, var(--gl) 62%, var(--gl-base)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gl) 14%, transparent), 0 10px 26px -12px color-mix(in srgb, var(--gl) 55%, transparent) !important;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+html[data-theme-mode="dark"] #app :is(.connector-card, .workflow-link-card, .ghost-operations-tile, .block.link, .command-overview-card):hover,
+html[data-theme-mode="dark"] #app :is(.connector-card, .workflow-link-card, .ghost-operations-tile, .block.link):focus-visible {
+  border-color: var(--gl) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gl) 40%, transparent), 0 14px 32px -10px color-mix(in srgb, var(--gl) 72%, transparent) !important;
+  transform: translateY(-1px);
+}
+/* State blocks glow in their state colour (errors, warnings, healthy) */
+html[data-theme-mode="dark"] #app .block:is(.accent-red, .accent-amber, .accent-green) {
+  border-color: color-mix(in srgb, var(--pa) 60%, var(--gl-base)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pa) 12%, transparent), 0 10px 26px -14px color-mix(in srgb, var(--pa) 50%, transparent) !important;
+}
+/* Active filter / view tabs get a small glow so the selected one reads at a glance */
+html[data-theme-mode="dark"] #app :is(.seg button.active, .seg button[aria-pressed="true"], .tab.active, .tabs .active) {
+  box-shadow: 0 0 14px -2px color-mix(in srgb, var(--gl) 55%, transparent) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-mode="dark"] #app :is(.connector-card, .workflow-link-card, .ghost-operations-tile, .block.link):hover { transform: none; }
+}
+
+/* ---- Per-page surfaces found by walking every route ---- */
+/* OUTLINE: reference, knowledge, cheat-sheet, roles, agent cards, chat shell, ops cards */
+html[data-theme-mode="dark"] #app :is(.ops-card, .ar-card, .cs-cmd, .cs-tool, .cs-prompt, .cs-step, .cheat-skill, .cs-guide-table-wrap, .ac-card, .workflow-node, .arch-node, .arch-guide, .arch-callout, .workflow-callout, .arch-runtime, .messenger-shell, .lounge-presence, .lounge-filters, .command-more, .command-overview, .ug-sheet, .graph-stage, .lm2-card) {
+  border-color: color-mix(in srgb, var(--gl) 38%, var(--gl-base)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gl) 5%, transparent) !important;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+html[data-theme-mode="dark"] #app :is(.ar-card, .cs-cmd, .cs-tool, .ac-card, .ops-card, .workflow-node, .arch-node):hover {
+  border-color: color-mix(in srgb, var(--gl) 60%, var(--gl-base)) !important;
+}
+/* GLOW: hero banners, embedded app windows, live agents, harness shortcuts, selected agent cards */
+html[data-theme-mode="dark"] #app :is(.arch-hero, .cs-hero, .ug-hero, .native-panel-shell, .command-link, .lm2-card.live) {
+  border-color: color-mix(in srgb, var(--gl) 58%, var(--gl-base)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gl) 12%, transparent), 0 12px 30px -14px color-mix(in srgb, var(--gl) 55%, transparent) !important;
+}
+html[data-theme-mode="dark"] #app .command-link:hover {
+  border-color: var(--gl) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gl) 38%, transparent), 0 14px 32px -10px color-mix(in srgb, var(--gl) 70%, transparent) !important;
+}
+html[data-theme-mode="dark"] #app .native-panel-shell { border-width: 1px; border-style: solid; border-radius: 14px; overflow: hidden; }
 
