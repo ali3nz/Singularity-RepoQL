@@ -26,7 +26,8 @@ param(
   [string]$Config,
   [string]$Binary,
   [pscredential]$Credential,
-  [switch]$LocalSystem,
+  [switch]$RunAsUser,   # advanced: run the stack inside the service as the user (needs their password)
+  [switch]$LocalSystem, # kept for compatibility; this is now the default
   [switch]$Uninstall,
   [int[]]$HealthPorts = @(18431, 18421, 18126),
   [int]$HealthTimeoutSec = 120
@@ -67,7 +68,8 @@ if ($Uninstall) {
 foreach ($p in @($Binary, $Config)) { if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "missing: $p" } }
 if (-not [IO.Path]::IsPathRooted($Config)) { throw 'Config must be an absolute path' }
 
-if ($LocalSystem) { $acct = $null }
+$watchdog = -not ($RunAsUser -or $Credential)
+if ($watchdog) { $acct = $null }
 else {
   if (-not $Credential) { $Credential = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" -Message 'Windows password for the service account (not stored)' }
   $acct = $Credential.UserName
@@ -75,14 +77,15 @@ else {
 }
 
 # Stop whoever else owns the stack ports before the service takes over.
-if (Get-ScheduledTask $legacyTask -ErrorAction SilentlyContinue) {
+if (-not $watchdog -and (Get-ScheduledTask $legacyTask -ErrorAction SilentlyContinue)) {
   Stop-ScheduledTask $legacyTask -ErrorAction SilentlyContinue
   Disable-ScheduledTask $legacyTask | Out-Null
 }
 $existing = Get-Service $name -ErrorAction SilentlyContinue
 if ($existing) { Stop-Service $name -Force -ErrorAction SilentlyContinue; sc.exe delete $name | Out-Null; Start-Sleep 2 }
 
-$bin = "`"$Binary`" service `"$Config`""
+$mode = if ($watchdog) { 'watchdog' } else { 'service' }
+$bin = "`"$Binary`" $mode `"$Config`""
 if ($acct) {
   New-Service -Name $name -BinaryPathName $bin -DisplayName 'Singularity Supervisor' `
     -Description 'Singularity RepoQL memory stack supervisor (fail-closed, restarts on failure).' `

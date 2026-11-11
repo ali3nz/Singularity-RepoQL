@@ -1,6 +1,7 @@
 //! Windows Service entrypoint (SCM). Install with register-supervisor-service.ps1.
 //!
-//!   singularity-windows-supervisor-service.exe service <absolute-config-json>
+//!   singularity-windows-supervisor-service.exe service  <absolute-config-json>   (runs the stack itself; needs the user's password to run as them)
+//!   singularity-windows-supervisor-service.exe watchdog <absolute-config-json>   (SYSTEM service, no password: keeps the user's boot task healthy)
 //!
 //! The supervisor stays fail-closed: if any owned child exits, `run` returns and
 //! this process exits non-zero so the SCM failure actions restart the whole stack.
@@ -19,6 +20,9 @@ mod svc {
 
     const NAME: &str = "SingularitySupervisor";
     static CONFIG: OnceLock<PathBuf> = OnceLock::new();
+    static WATCHDOG: OnceLock<bool> = OnceLock::new();
+    const TASK: &str = "Singularity-Rust-Native-Supervisor";
+    const PORTS: [u16; 3] = [18431, 18421, 18126];
     define_windows_service!(ffi_service_main, service_main);
 
     fn log(cfg: &std::path::Path, text: &str) {
@@ -66,6 +70,10 @@ mod svc {
         if let Some(dir) = std::path::Path::new(&cfg).parent() {
             std::env::set_var("SINGULARITY_SUPERVISOR_LOG_DIR", dir);
         }
+        if WATCHDOG.get().copied().unwrap_or(false) {
+            watch(&cfg);
+            std::process::exit(0);
+        }
         let result = load(&cfg).and_then(run);
         match result {
             Ok(()) => {
@@ -81,10 +89,47 @@ mod svc {
         }
     }
 
+    fn healthy(port: u16) -> bool {
+        use std::io::Read;
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+        let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(2)) else { return false };
+        let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
+        if s.write_all(format!("GET /health HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n").as_bytes()).is_err() { return false }
+        let mut buf = [0u8; 64];
+        let n = s.read(&mut buf).unwrap_or(0);
+        std::str::from_utf8(&buf[..n]).map(|t| t.starts_with("HTTP/1.1 200") || t.starts_with("HTTP/1.0 200")).unwrap_or(false)
+    }
+
+    fn schtasks(verb: &str) {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("schtasks.exe").args([verb, "/TN", TASK])
+            .creation_flags(0x0800_0000).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+    }
+
+    /// Password-free supervision: the stack runs as the user via the boot task; this SYSTEM service
+    /// starts that task at boot and restarts it when the stack stops answering (3 bad checks in a row).
+    fn watch(cfg: &std::path::Path) {
+        log(cfg, "watchdog running");
+        let mut bad = 0u32;
+        loop {
+            if PORTS.iter().all(|p| healthy(*p)) { bad = 0; } else { bad += 1; }
+            if bad >= 3 {
+                log(cfg, "stack unhealthy; restarting task");
+                schtasks("/End");
+                std::thread::sleep(Duration::from_secs(5));
+                schtasks("/Run");
+                bad = 0;
+                std::thread::sleep(Duration::from_secs(90)); // grace while the stack boots
+            }
+            std::thread::sleep(Duration::from_secs(15));
+        }
+    }
+
     fn cfg_for_stop() -> PathBuf { CONFIG.get().cloned().unwrap_or_default() }
 
-    pub fn start(cfg: PathBuf) -> i32 {
+    pub fn start(cfg: PathBuf, watchdog: bool) -> i32 {
         let _ = CONFIG.set(cfg);
+        let _ = WATCHDOG.set(watchdog);
         match service_dispatcher::start(NAME, ffi_service_main) { Ok(()) => 0, Err(_) => 1 }
     }
 }
@@ -93,8 +138,8 @@ mod svc {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let [mode, path] = args.as_slice() else { std::process::exit(2) };
-    if mode != "service" || !std::path::Path::new(path).is_absolute() || path.starts_with(r"\\") { std::process::exit(2); }
-    std::process::exit(svc::start(std::path::PathBuf::from(path)));
+    if (mode != "service" && mode != "watchdog") || !std::path::Path::new(path).is_absolute() || path.starts_with(r"\\") { std::process::exit(2); }
+    std::process::exit(svc::start(std::path::PathBuf::from(path), mode == "watchdog"));
 }
 #[cfg(not(windows))]
 fn main() { std::process::exit(2); }
