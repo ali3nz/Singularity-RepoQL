@@ -400,6 +400,24 @@ fn memory_category(uri: &str) -> &'static str {
     else if rest.starts_with("personas/") { "memory-persona" }
     else { "memory" }
 }
+// Each memory row becomes a Tencent node and a RepoQL document node sharing one canonical URI.
+fn mirror_memories_as_tencent(data: &Value, nodes: &mut HashMap<String, Value>) -> usize {
+    let mut n=0;
+    for r in selected(data, &["rows"]) {
+        let uri = match str_field(r, &["uri"]) { Some(v) => v, None => continue };
+        let label = str_field(r, &["headline"]).map(str::trim).filter(|v| !v.is_empty())
+            .or_else(|| str_field(r, &["name", "title"]).map(str::trim).filter(|v| !v.is_empty()))
+            .unwrap_or(uri);
+        let rest = uri.strip_prefix(MEMORY_PREFIX).unwrap_or(uri);
+        let raw = format!("memorycore/{rest}");
+        let before = nodes.len();
+        add_node(nodes, "tencent", &raw, label, memory_category(uri), Some(uri));
+        if let Some(t)=nodes.get_mut(&node_id("tencent", &raw)) { t["provenance"]=Value::String("memorycore_fallback".into()); }
+        add_node(nodes, "repoql", uri, label, "document", Some(uri));
+        if nodes.len()>before {n+=1;}
+    }
+    n
+}
 fn normalize_memory_rows(data: &Value, nodes: &mut HashMap<String, Value>) {
     for r in selected(data, &["rows"]) {
         let uri = match str_field(r, &["uri"]) { Some(v) => v, None => continue };
@@ -606,6 +624,20 @@ fn graph(c: &Config, query: &HashMap<String,String>) -> Value {
             }
         }
         sources.push(json!({"name":"tencent","available":count>0,"wiki_count":count,"error":if targets.is_empty() && errors.is_empty(){vec!["no_wikis_for_identity".to_owned()]}else{errors}}));
+    }
+    // Fallback for an install whose wiki has no graph yet (the wiki graph is built by an LLM ingest that
+    // needs a configured key): MemoryCore's own memories are the Tencent-side data every Windows install
+    // has. Show them as Tencent nodes; RepoQL indexes the same memorycore:// documents, so each one is
+    // paired with its RepoQL document node by the identical canonical URI below. Marked in provenance.
+    if query.get("tencent").map(|v|v!="false").unwrap_or(true) && !nodes.values().any(|n|n["source_system"]=="tencent") {
+        let path=format!("/api/memory-docs?prefix={}",MEMORY_PREFIX);
+        match repoql(c,&path) {
+            Ok(data) => {
+                let n=mirror_memories_as_tencent(&data,&mut nodes);
+                sources.push(json!({"name":"tencent_memory_fallback","available":true,"rows":n,"error":null}));
+            },
+            Err(e) => sources.push(json!({"name":"tencent_memory_fallback","available":false,"rows":0,"error":e})),
+        }
     }
     // Cross-system edges require identical explicit source URI evidence; never infer from a label.
     let mut by_uri: HashMap<String, Vec<String>>=HashMap::new();
@@ -1290,6 +1322,15 @@ mod tests {
     #[test] fn wiki_list_ids_are_extracted_defensively(){let k=["wiki_id","id"];let l=["wikis","items"];assert_eq!(ids_from_list(&json!({"wikis":[{"wiki_id":"a"},{"id":"b"},{"id":"a"},{"x":1}]}),&k,&l),vec!["a","b"]);assert!(ids_from_list(&json!(null),&k,&l).is_empty());assert_eq!(ids_from_list(&json!([{"team_id":"t"}]),&["team_id"],&l),vec!["t"]);}
     #[test] fn write_actions_are_not_reads(){assert!(!readonly_action("meta/agent/delete"));assert!(!readonly_action("chat-memory/clear"));assert!(readonly_action("knowledge/wiki/graph"));}
     #[test] fn repoql_graph_is_namespaced(){let mut n=HashMap::new();let mut e=Vec::new();normalize_repoql(&json!({"rows":[{"source_uri":"x","target_uri":"y","type":"REFERS_TO"}]}),&mut n,&mut e);assert_eq!(e.len(),1);assert_eq!(n.len(),2);assert_eq!(e[0]["source"],"repoql:x");}
+    #[test] fn memory_fallback_pairs_a_tencent_node_with_its_repoql_document(){
+        let data=json!({"rows":[{"uri":"memorycore://data/scenes/a.md","headline":"Scene A"}]});
+        let mut n=HashMap::new();
+        assert_eq!(mirror_memories_as_tencent(&data,&mut n),1);
+        let tx=n.values().find(|v|v["source_system"]=="tencent").unwrap();
+        let rq=n.values().find(|v|v["source_system"]=="repoql").unwrap();
+        assert_eq!(tx["canonical_uri"],rq["canonical_uri"]);
+        assert_eq!(tx["provenance"],"memorycore_fallback");
+    }
     #[test] fn hub_doc_slug_follows_the_wiki_sync_rule(){
         assert_eq!(hub_doc_slug("agent-guides/Fleet Lifecycle.md"),Some("agent-guides-fleet-lifecycle".into()));
         assert_eq!(hub_doc_slug("README.md"),Some("readme".into()));
