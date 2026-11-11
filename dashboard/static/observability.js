@@ -310,7 +310,9 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
   const coarse=window.matchMedia?.('(pointer:coarse)')?.matches===true;
   let onScreen=true,animTimer=0;
   // Only the travelling pulses animate, and only while the graph is on screen.
-  const animating=()=>viewMode==='neural'&&!reduced?.matches&&!document.hidden&&onScreen&&pulseList.length>0;
+  // Brain mode is always alive while it is on screen (operator 2026-11-11): the impulses keep travelling
+  // without any drag or click. It stops when the tab is hidden, the canvas is off screen or the page is left.
+  const animating=()=>viewMode==='neural'&&!document.hidden&&onScreen&&canvas.isConnected&&!canvas.hidden&&(pulseList.length>0||rendered.nodes.length>0);
   function schedule(){
     if(disposed||raf||document.hidden||canvas.hidden||!canvas.isConnected)return;
     clearTimeout(animTimer);
@@ -385,7 +387,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
       }else ctx.strokeStyle=active?'rgba(190,250,255,.95)':isCross?`rgba(255,196,110,${faded?.10:.42})`:
         e.source_system==='tencent'?`rgba(170,130,255,${faded?.05:neural?.13:.26})`:`rgba(70,215,250,${faded?.05:neural?.13:.26})`;
       ctx.lineWidth=(active?1.8:isCross?1.05:.7)*lw;ctx.stroke();
-      if(neural&&(active||(isCross&&hash(e.id||`${e.source}:${e.target}`)%(coarse?5:3)===0)))
+      if(neural&&pulses.length<(coarse?110:260)&&(active||hash(e.id||`${e.source}:${e.target}`)%(isCross?(coarse?3:2):(coarse?14:9))===0))
         pulses.push({a,b,k,cx:mx-(b.y-a.y)*bend,cy:my+(b.x-a.x)*bend,active,ph:rand(e.id||e.source+e.target)});
     }
     pulseList=pulses;
@@ -449,6 +451,15 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
     const sc=zoom/sceneView.zoom;
     ctx.save();ctx.translate(w/2+pan.x,h/2+pan.y);ctx.scale(sc,sc);ctx.translate(-w/2-sceneView.px-m,-h/2-sceneView.py-m);
     ctx.drawImage(scene,0,0,w+2*m,h+2*m);ctx.restore();
+    if(neural&&rendered.nodes.length){
+      // Neurons fire: a rolling subset of nodes flashes in time, drawn over the cached scene each frame.
+      ctx.save();ctx.translate(w/2+pan.x,h/2+pan.y);ctx.scale(zoom,zoom);ctx.globalCompositeOperation='lighter';
+      const nl=rendered.nodes,step=Math.max(1,Math.floor(nl.length/(coarse?40:90))),fr=Math.max(1,Math.min(1.9,.8/zoom));
+      for(let i=0;i<nl.length;i+=step){const n=nl[i],ph=((now*.0006+rand(String(n.id)))%1),k=Math.sin(ph*Math.PI);
+        if(k<.15)continue;
+        drawGlow(n.source_system==='tencent'?'rgba(214,160,255,.85)':'rgba(130,235,255,.85)',n.x,n.y,(5+9*k)*fr,'rgba(120,120,255,0)');}
+      ctx.restore();
+    }
     if(neural&&pulseList.length){
       ctx.save();ctx.translate(w/2+pan.x,h/2+pan.y);ctx.scale(zoom,zoom);ctx.globalCompositeOperation='lighter';
       const pr=Math.max(1,Math.min(1.9,.8/zoom));
@@ -456,7 +467,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
         const phase=(now*(calm?.00014:.00022)+p.ph)%1,q=1-phase,{a,b}=p;let px,py;
         if(p.k){const {c1,c2}=p.k;px=q*q*q*a.x+3*q*q*phase*c1.x+3*q*phase*phase*c2.x+phase*phase*phase*b.x;py=q*q*q*a.y+3*q*q*phase*c1.y+3*q*phase*phase*c2.y+phase*phase*phase*b.y}
         else{px=q*q*a.x+2*q*phase*p.cx+phase*phase*b.x;py=q*q*a.y+2*q*phase*p.cy+phase*phase*b.y}
-        drawGlow(p.active?'rgba(255,255,255,.95)':calm?'rgba(226,232,240,.6)':'rgba(120,255,240,.8)',px,py,(p.active?9:6)*pr,calm?'rgba(226,232,240,0)':'rgba(60,240,230,0)');
+        drawGlow(p.active?'rgba(255,255,255,.95)':calm?'rgba(226,232,240,.6)':'rgba(120,255,240,.8)',px,py,(p.active?10:7.5)*pr,calm?'rgba(226,232,240,0)':'rgba(60,240,230,0)');
       }
       ctx.restore();
     }
