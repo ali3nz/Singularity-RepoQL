@@ -567,7 +567,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
     if(use3d)return;
     if(viewMode!=='neural'){viewMode='neural';positions=layoutNeuralGraph(graph);recalc();}
     try{
-      if(!three){const mod=await import('./brain3d_view.js?v=3d4');
+      if(!three){const mod=await import('./brain3d_view.js?v=3d5');
         const made=await mod.createBrain3D(canvas,{onPick:id=>{selected=id?rendered.nodes.find(n=>n.id===id)||null:null;selectedEdge=null;notify();schedule()}});
         if(disposed){made.dispose();return}three=made}
       if(!want3d){three.hide();return}
