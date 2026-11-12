@@ -825,8 +825,8 @@
     },
     {
       "path": "dashboard/static/app.js",
-      "sha256": "1d3e613ece07523815128fb70ae3ad5140c1bec9b37bda1dbfc780eed38505dc",
-      "bytes": 289576
+      "sha256": "67a315c7d16daed25984fad5c8c93799152920bab81f4f5304217aa9c4a6f376",
+      "bytes": 289579
     },
     {
       "path": "dashboard/static/app_test.mjs",
@@ -940,8 +940,8 @@
     },
     {
       "path": "dashboard/static/brain3d_view.js",
-      "sha256": "97bf110137994a2b2c7011e81cb0e653c74f2542a500d64ff3cec544ed7c9b33",
-      "bytes": 26056
+      "sha256": "3f035f3a4792f022536d052f611cfd1548b9d82f696b3a069b80a8eb97989ce7",
+      "bytes": 27050
     },
     {
       "path": "dashboard/static/brain_asset.js",
@@ -975,8 +975,8 @@
     },
     {
       "path": "dashboard/static/index.html",
-      "sha256": "6c6abb5d4ee9e07c00a53ecc02fc297aa67620250d7c72fa1bbc355f66b0fe2d",
-      "bytes": 15040
+      "sha256": "470f635d883d8c79dcc8a398e5de543ae19fb4d3949d64f32a95f566d199ee3a",
+      "bytes": 15043
     },
     {
       "path": "dashboard/static/kanban_native.js",
@@ -1010,7 +1010,7 @@
     },
     {
       "path": "dashboard/static/observability.js",
-      "sha256": "5ae271d3fa6ac6d666d9ec9b94429f35720b07bf6cde42c88397e3fb958791bd",
+      "sha256": "235d259ec6d28b1d0375dfa314119e475a58312a0d55e25d00a75b887258f005",
       "bytes": 41361
     },
     {

@@ -97,6 +97,14 @@ export async function createBrain3D(base,{onPick}={}){
   const overlay=document.createElement('div');Object.assign(overlay.style,{position:'absolute',display:'none',pointerEvents:'none',font:'600 12px system-ui,sans-serif'});
   overlay.innerHTML='<span data-k="rq" style="position:absolute;left:14px;top:12px;color:#ffb36b"></span><span data-k="tx" style="position:absolute;right:14px;top:12px;color:#ff8f8f"></span><span data-k="cap" style="position:absolute;left:12px;bottom:12px;padding:6px 12px;border-radius:13px;background:rgba(3,8,17,.78);color:#a9d8ea;font-size:11px"></span><span data-k="lab" style="position:absolute;left:0;top:0;display:none;padding:3px 8px;border-radius:7px;background:rgba(10,14,22,.86);color:#fff;font-size:12px;white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis"></span><span data-k="load" style="position:absolute;left:0;right:0;top:46%;text-align:center;color:#a9d8ea;font-size:13px"></span>';
   canvas.after(overlay);
+  // Topic names stay hidden until a node is clicked; this chip turns the up-close name tags on (remembered per browser).
+  let showNames=false;try{showNames=localStorage.getItem('repoql.brain3d.names')==='1'}catch{}
+  const nameBtn=document.createElement('button');nameBtn.type='button';
+  Object.assign(nameBtn.style,{position:'absolute',right:'12px',bottom:'12px',padding:'6px 12px',border:'1px solid rgba(169,216,234,.35)',borderRadius:'13px',background:'rgba(3,8,17,.78)',color:'#a9d8ea',font:'600 11px system-ui,sans-serif',cursor:'pointer',pointerEvents:'auto'});
+  const syncNameBtn=()=>{nameBtn.textContent=showNames?'Names: on':'Names: off';nameBtn.setAttribute('aria-pressed',String(showNames))};syncNameBtn();
+  nameBtn.addEventListener('pointerdown',e=>e.stopPropagation());
+  nameBtn.addEventListener('click',()=>{showNames=!showNames;try{localStorage.setItem('repoql.brain3d.names',showNames?'1':'0')}catch{}syncNameBtn();schedule()});
+  overlay.appendChild(nameBtn);
   const q=k=>overlay.querySelector(`[data-k="${k}"]`);
   q('load').textContent='Loading brain…';canvas.style.display='block';overlay.style.display='block';sync2d();
   let mesh;try{mesh=await loadMesh()}catch(e){canvas.remove();overlay.remove();throw e}
@@ -205,7 +213,7 @@ export async function createBrain3D(base,{onPick}={}){
   }
   // up close, name the biggest topics that are on screen (greedy, no overlap) so zooming in reveals something readable
   const tags=[];let tagK=0;
-  function nameTags(inside){const r=dist/D0,want=r<.62&&gNodes&&nodes.length;
+  function nameTags(inside){const r=dist/D0,want=showNames&&r<.62&&gNodes&&nodes.length;
     if(!want){for(const t of tags)t.style.display='none';return}
     const cand=[];for(let i=0;i<nodes.length;i++){const sp=project(i,inside);if(!sp||sp.x<20||sp.x>W-20||sp.y<24||sp.y>H-34)continue;
       const wgt=(nodes[i].degree||0)+(nodes[i].id===activeId?1e6:0)-sp.w*.002;cand.push([wgt,sp,i])}

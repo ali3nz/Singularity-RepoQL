@@ -1,4 +1,4 @@
-import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261113-3d';
+import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261113-names';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
 import {openAvatarPicker, agentAvatar} from './agent_avatars.js';
 import {viewOpenMausBot} from './openmausbot_panel.js';
