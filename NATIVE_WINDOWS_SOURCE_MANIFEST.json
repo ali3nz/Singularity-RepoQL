@@ -825,7 +825,7 @@
     },
     {
       "path": "dashboard/static/app.js",
-      "sha256": "71b92a5b081b7377a58ab7fe3544ba1d12e821aacd3846e56588e0c1d1daf9ab",
+      "sha256": "2113e114678acccc4bdc2ef2de2460db1857889e99b3af95da1484d51947495f",
       "bytes": 292335
     },
     {
@@ -975,8 +975,8 @@
     },
     {
       "path": "dashboard/static/index.html",
-      "sha256": "820fd2b082b3c6556002f01ab4060034beacd587b4f4a53f7704b02326d59dd2",
-      "bytes": 15041
+      "sha256": "b1ff97b032c0dd992ab0c173a81e717f311c382a90111cba489cb8705df5a0c7",
+      "bytes": 15042
     },
     {
       "path": "dashboard/static/kanban_native.js",
