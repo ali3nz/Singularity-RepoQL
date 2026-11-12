@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import time
+from collections import deque
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from urllib.parse import urlsplit
 BOT_ID = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 MAX_FRAME = 256 * 1024
 MAX_INVENTORY = 2_000_000
+MAX_SEEN_EVENTS = 4096
+EVENT_ID = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 ALLOWED_OFFICE_HOSTS = {"claude-office", "product-office", "127.0.0.1", "::1"}
 
 
@@ -114,6 +117,18 @@ class OfficeMapper:
         self.bots = {}
         self.threads = {}
         self.active = set()
+        # A process-local replay guard; a restart loses this cache, so original
+        # source timestamps remain essential to prevent a stale seat reappearing.
+        self.seen = set()
+        self.seen_order = deque()
+        self.pending_event = None
+
+    def acknowledge(self, event_id):
+        if event_id not in self.seen:
+            self.seen.add(event_id)
+            self.seen_order.append(event_id)
+            if len(self.seen_order) > MAX_SEEN_EVENTS:
+                self.seen.remove(self.seen_order.popleft())
 
     def remember_bot(self, bot):
         if not isinstance(bot, dict):
@@ -133,12 +148,12 @@ class OfficeMapper:
             if isinstance(tid, str) and BOT_ID.fullmatch(tid):
                 self.threads[tid] = bot_id
 
-    def seat_event(self, bot_id, event_type, extra=None):
+    def seat_event(self, bot_id, event_type, extra=None, timestamp=None):
         office_id = office_session_id(bot_id)
         return {
             "event_type": event_type,
             "session_id": office_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
             "data": {
                 "agent_id": office_id,
                 "native_agent_id": bot_id,
@@ -151,6 +166,7 @@ class OfficeMapper:
         }
 
     def mapped_events(self, frame):
+        self.pending_event = None
         kind = frame.get("kind")
         if kind == "bot.deleted":
             bot_id = frame.get("botId")
@@ -167,17 +183,25 @@ class OfficeMapper:
         if kind == "bot":
             bot = frame.get("bot")
             bot_id = bot.get("id") if isinstance(bot, dict) else None
-            was_known = bot_id in self.bots if isinstance(bot_id, str) else False
             self.remember_bot(bot)
-            if not isinstance(bot_id, str) or bot_id not in self.bots or was_known:
-                return []
-            # A newly created bot joins the Office even before its first model
-            # turn. Use the same identity for the subsequent actual activity.
-            return [self.seat_event(bot_id, "session_start"),
-                    self.seat_event(bot_id, "stop")]
+            return []
         if kind != "runtime" or not isinstance(frame.get("event"), dict):
             return []
         event = frame["event"]
+        event_id, raw_time = event.get("eventId"), event.get("createdAt")
+        if not isinstance(event_id, str) or not EVENT_ID.fullmatch(event_id) or event_id in self.seen:
+            return []
+        if not isinstance(raw_time, str) or len(raw_time) > 80:
+            return []
+        try:
+            stamp = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+            if stamp.tzinfo is None or stamp.utcoffset() is None:
+                return []
+            stamp = stamp.astimezone(timezone.utc)
+            if stamp.timestamp() > time.time() + 60:
+                return []
+        except (ValueError, OverflowError, OSError):
+            return []
         thread_id = event.get("threadId")
         bot_id = self.threads.get(thread_id)
         if not bot_id:
@@ -196,6 +220,7 @@ class OfficeMapper:
             office_type, extra = "post_tool_use", {"tool_name": "tool", "success": event.get("ok") is True}
         else:
             return []
+        self.pending_event = event_id
         if typ == "turn.started":
             already = any(owner == bot_id for owner, _ in self.active)
             self.active.add((bot_id, thread_id))
@@ -208,7 +233,7 @@ class OfficeMapper:
             # duplicate the stop already emitted at turn completion.
             if any(owner == bot_id for owner, _ in self.active) or (typ == "session.exited" and not was_active):
                 return []
-        return [self.seat_event(bot_id, office_type, extra)]
+        return [self.seat_event(bot_id, office_type, extra, stamp.isoformat())]
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -234,6 +259,21 @@ def request_json(opener, endpoint, token):
 
 class OfficeRefused(Exception):
     pass
+
+
+def initial_inventory(opener, endpoint, token):
+    """Allow bounded startup time for the local OpenMausBot service."""
+    for attempt in range(5):
+        try:
+            return request_json(opener, endpoint, token)
+        except urllib.error.HTTPError as exc:
+            if not 500 <= exc.code < 600:
+                raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            pass
+        if attempt == 4:
+            raise RuntimeError("initial inventory unavailable") from None
+        time.sleep(5 * (2 ** attempt))
 
 
 class OfficeDeliveryUnavailable(Exception):
@@ -270,7 +310,7 @@ def run() -> int:
     office_key = read_office_key(os.environ["OFFICE_KEYS_JSON"])
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect)
     mapper = OfficeMapper()
-    for bot in request_json(opener, origin + "/api/bots?messages=0", token):
+    for bot in initial_inventory(opener, origin + "/api/bots?messages=0", token):
         mapper.remember_bot(bot)
     since = None
     delay = 5
@@ -292,11 +332,17 @@ def run() -> int:
                         since = cursor
                     if frame.get("kind") == "hello" and frame.get("resumed") is False:
                         # Gap in cursor replay: rebuild identity map once.
+                        previous = mapper
                         mapper = OfficeMapper()
+                        mapper.seen = previous.seen
+                        mapper.seen_order = previous.seen_order
                         for bot in request_json(opener, origin + "/api/bots?messages=0", token):
                             mapper.remember_bot(bot)
-                    for event in mapper.mapped_events(frame):
+                    events = mapper.mapped_events(frame)
+                    for event in events:
                         send_office(opener, office, office_key, event)
+                    if mapper.pending_event:
+                        mapper.acknowledge(mapper.pending_event)
         except OfficeRefused:
             print("Claude Office refused events; bridge stopped without retry", file=sys.stderr)
             return 2

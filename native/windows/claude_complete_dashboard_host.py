@@ -74,7 +74,9 @@ def _native_office_environment(source_root: Path, state_dir: Path, runtime_root:
 
 def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, port: int, *, variant=2, windows=True,
                 native_bridge_exe: Path | None = None, ghost_control_config: Path | None = None,
-                native_runtime_root: Path | None = None):
+                native_runtime_root: Path | None = None, openmausbot_port: int = 18211):
+    if type(openmausbot_port) is not int or not 1024 <= openmausbot_port <= 65534:
+        raise ValueError('DASHBOARD_OPENMAUSBOT_PORT_INVALID')
     paths=(source_root,rql,workspace,state_dir)
     if not windows or not all(p.is_absolute() for p in paths):
         raise ValueError('NATIVE_WINDOWS_ABSOLUTE_PATH_REQUIRED')
@@ -103,7 +105,7 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         raise ValueError('DASHBOARD_DEPENDENCY_MISSING')
     env = {
         'SINGULARITY_WINDOWS_NATIVE':'1',
-        'SINGULARITY_WINDOWS_OMB_PORT':'18211',
+        'SINGULARITY_WINDOWS_OMB_PORT':str(openmausbot_port),
         'SINGULARITY_LOCAL_ACCOUNT_AUTH':'1',
         'PYTHONDONTWRITEBYTECODE':'1',
         'SINGULARITY_INSTALL_VARIANT':str(variant),
@@ -147,13 +149,14 @@ def main(argv=None):
         p.add_argument('--'+arg,required=True,type=Path)
     p.add_argument('--port',type=int,default=18100)
     p.add_argument('--variant',type=int,choices=(1,2,3,4),default=2)
+    p.add_argument('--openmausbot-port',type=int,default=18211)
     # Retained for older scheduled-task command lines; deliberately ignored.
     p.add_argument('--native-bridge-exe',type=Path)
     p.add_argument('--ghost-control-config',type=Path)
     p.add_argument('--native-runtime-root',type=Path)
     p.add_argument('--mode',choices=('serve','check'),default='serve')
     a=p.parse_args(argv)
-    env=environment(a.source_root,a.rql_exe,a.workspace,a.state_dir,a.port,variant=a.variant,windows=(os.name=='nt'), native_runtime_root=a.native_runtime_root)
+    env=environment(a.source_root,a.rql_exe,a.workspace,a.state_dir,a.port,variant=a.variant,windows=(os.name=='nt'), native_runtime_root=a.native_runtime_root, openmausbot_port=a.openmausbot_port)
     os.environ.update(env)
     # Import only from the verified staged dashboard path, not from PATH or cwd.
     sys.path.insert(0,str(a.source_root/'dashboard'))

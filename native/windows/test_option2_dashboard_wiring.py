@@ -1,4 +1,5 @@
 """Focused source and pure helper checks; NOT Windows Task Scheduler acceptance."""
+import base64
 import tempfile
 import unittest
 import json
@@ -89,6 +90,14 @@ class Option2DashboardWiring(unittest.TestCase):
             env=environment(stage,root/'rql.exe',root,root/'state',18100,windows=True)
             self.assertEqual(env['SINGULARITY_INSTALL_VARIANT'],'2')
             self.assertEqual(env['SINGULARITY_BIND'],'127.0.0.1')
+            self.assertEqual(env['SINGULARITY_WINDOWS_OMB_PORT'],'18211')
+            for selected in (1024,8799,65534):
+                result=environment(stage,root/'rql.exe',root,root/'state',18100,windows=True,openmausbot_port=selected)
+                self.assertEqual(result['SINGULARITY_WINDOWS_OMB_PORT'],str(selected))
+            for selected in (True,False,1023,65535,'8799',None,8799.0):
+                with self.subTest(selected=selected), self.assertRaisesRegex(ValueError,'DASHBOARD_OPENMAUSBOT_PORT_INVALID'):
+                    environment(stage,root/'rql.exe',root,root/'state',18100,windows=True,openmausbot_port=selected)
+
             for variant in (1,2,3,4):
                 result=environment(stage,root/'rql.exe',root,root/'state',18100,
                                    variant=variant,windows=True,**ghost_args)
@@ -98,6 +107,36 @@ class Option2DashboardWiring(unittest.TestCase):
                 self.assertFalse(any('GHOST' in key or 'NATIVE_BRIDGE' in key for key in result))
             with self.assertRaises(ValueError):environment(stage,root/'rql.exe',root,root/'state',80,windows=True,**ghost_args)
             with self.assertRaises(ValueError):environment(stage,root/'rql.exe',root,root/'state',18100,variant=5,windows=True,**ghost_args)
+
+    @unittest.skipUnless(os.name == 'nt', 'PowerShell receipt contract')
+    def test_openmausbot_receipt_port_matches_real_argument_tokens(self):
+        manager=ROOT/'native/windows/manage_claude_complete_dashboard.ps1'
+        script=r"""
+$ast=[System.Management.Automation.Language.Parser]::ParseFile('__MANAGER__',[ref]$null,[ref]$null)
+$fn=$ast.Find({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Assert-ReceiptOpenMausBotPort'},$true)
+Invoke-Expression $fn.Extent.Text
+$cases=@(
+  @{json='{"arguments":"legacy --mode serve"}'; ok=$true},
+  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 8799 --mode serve"}'; ok=$true},
+  @{json='{"openMausBotPort":1024,"arguments":"-B host --openmausbot-port 1024 --mode serve"}'; ok=$true},
+  @{json='{"openMausBotPort":65534,"arguments":"-B host --openmausbot-port 65534 --mode serve"}'; ok=$true},
+  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 18211 --mode serve"}'; ok=$false},
+  @{json='{"openMausBotPort":true,"arguments":"-B host --openmausbot-port 1 --mode serve"}'; ok=$false},
+  @{json='{"openMausBotPort":"8799","arguments":"-B host --openmausbot-port 8799 --mode serve"}'; ok=$false},
+  @{json='{"openMausBotPort":65535,"arguments":"-B host --openmausbot-port 65535 --mode serve"}'; ok=$false},
+  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 8799 --openmausbot-port 8799 --mode serve"}'; ok=$false},
+  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 8799 --mode serve extra"}'; ok=$false}
+)
+foreach ($case in $cases) {
+  $accepted=$true
+  try { Assert-ReceiptOpenMausBotPort ($case.json | ConvertFrom-Json) } catch { $accepted=$false }
+  if ($accepted -ne $case.ok) { exit 1 }
+}
+"""
+        script=script.replace('__MANAGER__',str(manager).replace("'","''"))
+        encoded=base64.b64encode(script.encode('utf-16le')).decode('ascii')
+        result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
 
     def test_dashboard_registration_keeps_option_two_default_and_sets_selected_variant(self):
         manager=(ROOT/'native/windows/manage_claude_complete_dashboard.ps1').read_text()

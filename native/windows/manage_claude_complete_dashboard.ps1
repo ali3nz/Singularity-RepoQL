@@ -11,7 +11,7 @@ param(
   [string]$StagedSource='', [string]$PythonExe='', [string]$RepoqlExe='', [string]$NativeRuntimeRoot='',
   [string]$NativeBridgeExe='', [string]$GhostControlConfig='',
   [string]$Workspace='', [ValidateRange(1,4)][int]$Variant=2,
-  [int]$Port=18100, [switch]$Apply
+  [int]$Port=18100, [ValidateRange(1024,65534)][int]$OpenMausBotPort=18211, [switch]$Apply
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -60,10 +60,32 @@ function Get-TaskCandidates {
   catch { throw 'DASHBOARD_SCHEDULER_UNAVAILABLE' }
   return @($all | Where-Object { $_.TaskName -eq $taskName })
 }
+function Assert-ReceiptOpenMausBotPort($receipt) {
+  $property=$receipt.PSObject.Properties['openMausBotPort']
+  if (-not $property) { return } # Existing receipts and their original arguments remain valid.
+  $value=$property.Value
+  if (($value -isnot [int] -and $value -isnot [long]) -or $value -lt 1024 -or $value -gt 65534) {
+    throw 'DASHBOARD_OPENMAUSBOT_RECEIPT_INVALID'
+  }
+  # Registration emits only space-separated bare tokens and quoted paths,
+  # and refuses embedded quotes. Reject malformed input before tokenizing.
+  $arguments=[string]$receipt.arguments
+  if ($arguments -notmatch '^(?:"[^"]*"|[^\s"]+)(?:\s+(?:"[^"]*"|[^\s"]+))*$') {
+    throw 'DASHBOARD_OPENMAUSBOT_RECEIPT_INVALID'
+  }
+  $tokens=@([regex]::Matches($arguments,'"[^"]*"|[^\s"]+') | ForEach-Object { $_.Value })
+  $matches=@(for ($i=0; $i -lt $tokens.Count; $i++) { if ($tokens[$i] -ceq '--openmausbot-port') { $i } })
+  if ($matches.Count -ne 1 -or $matches[0] -ne $tokens.Count-4 -or
+      $tokens[$matches[0]+1] -cne [string]$value -or
+      $tokens[$matches[0]+2] -cne '--mode' -or $tokens[$matches[0]+3] -cne 'serve') {
+    throw 'DASHBOARD_OPENMAUSBOT_RECEIPT_INVALID'
+  }
+}
 function Get-OwnedReceipt {
   if (-not (Test-Path -LiteralPath $receiptFile -PathType Leaf)) { throw 'DASHBOARD_OWNERSHIP_RECEIPT_MISSING' }
   Assert-ReceiptAcl
   $receipt=Get-Content -LiteralPath $receiptFile -Raw -Encoding UTF8 | ConvertFrom-Json
+  Assert-ReceiptOpenMausBotPort $receipt
   $receiptVariant=if ($null -eq $receipt.variant) { 2 } else { [int]$receipt.variant }
   $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
   if (-not $identity -or -not $identity.User -or [string]$receipt.userId -notin @($identity.Name,$identity.User.Value)) { throw 'DASHBOARD_OWNERSHIP_RECEIPT_OWNER_MISMATCH' }
@@ -191,7 +213,7 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   $silentHost=Assert-Path (Join-Path $StagedSource 'native/windows/silent_python_host.py') 'DASHBOARD_SILENT_HOST'
   $arguments='-B "'+$silentHost+'" --log "'+(Join-Path $state 'dashboard-runtime.log')+'" -- "'+$entry+'" --source-root "' +$StagedSource+'" --rql-exe "'+$RepoqlExe+'" --workspace "'+$Workspace+'" --state-dir "'+$state+'" --port '+$Port+' --variant '+$Variant
   if ($NativeRuntimeRoot) { $arguments+=' --native-runtime-root "'+$NativeRuntimeRoot+'"' }
-  $arguments+=' --mode serve'
+  $arguments+=' --openmausbot-port '+$OpenMausBotPort+' --mode serve'
   foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state,$NativeRuntimeRoot)) {
     if ($value.Contains('"') -or $value.Contains([char]10) -or $value.Contains([char]13)) {
       throw 'DASHBOARD_ARGUMENTS_INVALID'
@@ -214,7 +236,7 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
     # Write the ownership receipt BEFORE registration. On interruption, an
     # orphaned receipt/task blocks further changes for manual reconciliation.
     $receipt=[ordered]@{schema=$receiptSchema;option=$Variant;variant=$Variant;taskName=$taskName;pythonExe=$pythonw;arguments=$arguments;
-      workspace=$Workspace;userId=$user;nativeBridgeExe=$NativeBridgeExe;ghostControlConfig=$GhostControlConfig}
+      workspace=$Workspace;userId=$user;openMausBotPort=$OpenMausBotPort;nativeBridgeExe=$NativeBridgeExe;ghostControlConfig=$GhostControlConfig}
     $receipt | ConvertTo-Json -Compress | Set-Content -LiteralPath $receiptFile -Encoding UTF8 -NoNewline
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
     $result=@(Get-TaskCandidates)
