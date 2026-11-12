@@ -31,7 +31,7 @@ mod tests {
             assert_eq!(p["features"]["repoql_dashboard"], true);
             assert_eq!(p["features"]["tencent_connector"], true);
             assert_eq!(p["features"]["kanban"], true);
-            assert_eq!(p["features"]["agent_chat"], true);
+            assert_eq!(p["features"]["agent_chat"], false); // Agent Chat is not shipped in the Windows product
             assert_eq!(p["features"]["office"], id == "2" || id == "4");
             assert_eq!(p["rustOfficeFeature"], id == "2" || id == "4");
             assert_eq!(p["features"]["ghost"], false);

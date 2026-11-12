@@ -66,7 +66,7 @@ def report(config, *, profile=None, probes=None):
         'repoql_version': _status(verified=probe('repoql_version',check_repoql), reason='repoql_1_7_18_not_verified'),
         'tencent_session': _status(verified=probe('tencent_session',check_tencent), reason='tencent_login_not_verified'),
         'kanban_http': _status(verified=probe('kanban_http',_ping_kanzo), reason='kanzo_ping_not_verified'),
-        'agent_chat_state': _status(verified=probe('agent_chat_state',check_chat), reason='agent_chat_state_unavailable'),
+        'agent_chat_state': _status(enabled=flags['agent_chat'],verified=flags['agent_chat'] and probe('agent_chat_state',check_chat), reason='agent_chat_state_unavailable'),
         'harness_rust_coordinator': _status(verified=probe('harness_rust_coordinator',check_harness), reason='authenticated_rust_coordinator_unavailable'),
         'unified_graph_gateway': _status(verified=probe('unified_graph_gateway',check_unified), reason='unified_gateway_not_verified'),
         'claude_office_http': _status(enabled=flags['office'],verified=flags['office'] and probe('claude_office_http',check_office), reason='office_login_not_verified'),
