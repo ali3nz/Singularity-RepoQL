@@ -43,7 +43,7 @@ Set-Content -LiteralPath $launcher -Value @('import sys, runpy', "sys.path.inser
 Set-Content -LiteralPath $wrapper -Value $env_lines -Encoding ascii
 if ($Mode -eq 'Once') { & cmd.exe /c "`"$wrapper`" `"$pyc`" --once"; "exit=$LASTEXITCODE"; return }
 $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"`"$wrapper`" `"$py`"`""
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName $name

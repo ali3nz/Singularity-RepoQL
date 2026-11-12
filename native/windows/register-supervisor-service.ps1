@@ -71,7 +71,7 @@ if (-not [IO.Path]::IsPathRooted($Config)) { throw 'Config must be an absolute p
 $watchdog = -not ($RunAsUser -or $Credential)
 if ($watchdog) { $acct = $null }
 else {
-  if (-not $Credential) { $Credential = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" -Message 'Windows password for the service account (not stored)' }
+  if (-not $Credential) { $Credential = Get-Credential -UserName ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -Message 'Windows password for the service account (not stored)' }
   $acct = $Credential.UserName
   Grant-LogonAsService $acct
 }

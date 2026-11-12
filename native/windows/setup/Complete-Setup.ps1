@@ -446,8 +446,34 @@ function Invoke-Install {
   Invoke-ClaudeConfiguration
   Invoke-Shortcut
   Invoke-DashboardVerification
+  Invoke-Hardening
+}
+function Invoke-Hardening([switch]$Remove) {
+  # Reliability layer: password-free SYSTEM watchdog service, S4U boot tasks, hidden (no console) launches.
+  # Never fatal: the product already works without it, so a failure here is reported, not thrown.
+  $nativeDir=Join-Path $current 'source\native\windows'
+  if (-not (Test-Path -LiteralPath $nativeDir -PathType Container)) { $nativeDir=$PSScriptRoot | Split-Path }
+  $steps=@(
+    @{n='supervisor_service';f='register-supervisor-service.ps1';a=@('-Root',$installRoot)},
+    @{n='boot_tasks';f='register-boot-tasks.ps1';a=@()},
+    @{n='hidden_launch';f='hide-console-tasks.ps1';a=@()})
+  if ($Remove) { $steps=@($steps[0]); $steps[0].a=@('-Root',$installRoot,'-Uninstall') }
+  foreach ($step in $steps) {
+    $script=Join-Path $nativeDir $step.f
+    if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { Add-Result $step.n 'skipped' 'script_missing'; continue }
+    if ($step.n -eq 'supervisor_service' -and -not $Remove) {
+      $svcExe=Join-Path $installRoot 'current\bin\singularity_windows_supervisor_service.exe'
+      if (-not (Test-Path -LiteralPath $svcExe -PathType Leaf)) { Add-Result $step.n 'skipped' 'service_binary_not_staged'; continue }
+    }
+    try {
+      $argv=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$script)+$step.a
+      & powershell @argv 2>&1 | Out-Null
+      if ($LASTEXITCODE -ne 0) { Add-Result $step.n 'warning' ('exit_'+$LASTEXITCODE) } else { Add-Result $step.n 'ok' 'applied' }
+    } catch { Add-Result $step.n 'warning' $_.Exception.Message }
+  }
 }
 function Invoke-Uninstall {
+  Invoke-Hardening -Remove
   Invoke-OpenMausBot 'Unregister'
   Remove-RemoteTunnels
   Remove-KanzoTask

@@ -15,7 +15,7 @@ class SchedulerSourceContract(unittest.TestCase):
         self.assertIn("SUPERVISOR_SCHEDULER_UNAVAILABLE_REFUSE_MUTATION", self.code)
 
     def test_existing_task_strict_ownership(self):
-        for part in ["$actions.Count -eq 1", "$triggers.Count -eq 1",
+        for part in ["$actions.Count -eq 1", "$triggerMatches", "MSFT_TaskBootTrigger",
                      "MSFT_TaskLogonTrigger", "Principal.RunLevel -eq 'Limited'",
                      "Settings.Enabled -eq $true", "AMBIGUOUS_SUPERVISOR_TASK_REFUSED"]:
             self.assertIn(part, self.code)
@@ -28,6 +28,6 @@ class SchedulerSourceContract(unittest.TestCase):
     def test_register_checks_full_postcondition(self):
         self.assertIn("Register-ScheduledTask -TaskName $taskName", self.code)
         self.assertIn("TASK_REGISTRATION_NOT_VERIFIED", self.code)
-        self.assertIn("$afterTriggers.Count -ne 1", self.code)
+        self.assertIn("$afterTriggers.Count -ne 2", self.code)
 
 if __name__ == "__main__": unittest.main()

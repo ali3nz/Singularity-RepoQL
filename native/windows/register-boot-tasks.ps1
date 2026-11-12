@@ -1,6 +1,6 @@
 #Requires -RunAsAdministrator
 <# Make the headless Singularity tasks start at boot (S4U, no password, no desktop needed). The RepoQL host is NOT included: it must stay an interactive logon task. Run after register-supervisor-service.ps1. #>
-[CmdletBinding()] param([string]$User = "$env:USERDOMAIN\$env:USERNAME")
+[CmdletBinding()] param([string]$User = ([Security.Principal.WindowsIdentity]::GetCurrent().Name))
 $ErrorActionPreference = "Stop"
 $names = 'Singularity-ClaudeComplete-Dashboard','Singularity-Cloudflare-Dashboard-Adapter','Singularity-Memory-Knowledge','Singularity-OMB-Office-Bridge','Singularity-Windows-Unified-Gateway'
 
