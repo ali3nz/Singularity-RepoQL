@@ -46,27 +46,25 @@ float a=u_alpha+(1.-u_alpha)*(.07+.5*rim);if(!gl_FrontFacing)a*=.5;
 gl_FragColor=vec4(col,a);}`;
 const PT_VS=`attribute vec3 a_p0;attribute vec3 a_p1;attribute vec4 a_c;attribute float a_s;
 uniform mat4 u_mvp;uniform float u_in;uniform float u_time;uniform float u_k;uniform float u_dpr;
-varying vec4 v_c;varying float v_big;
-void main(){vec3 p=mix(a_p0,a_p1,u_in);vec4 c=u_mvp*vec4(p,1.);v_big=smoothstep(6.5,13.,a_c.w);
+varying vec4 v_c;
+void main(){vec3 p=mix(a_p0,a_p1,u_in);vec4 c=u_mvp*vec4(p,1.);
 float tw=.85+.15*sin(u_time*1.6+a_c.r*31.+a_p0.x*.07);
 float grow=a_s>1.5?2.2:(a_s>.5?1.5:1.);
 gl_PointSize=clamp(a_c.w*grow*u_k/max(c.w,1.),1.6*u_dpr,46.*u_dpr);
-float al=a_s<-.5?.28:(a_s>.5?1.:(.5+.3*tw+.2*v_big));
+float al=a_s<-.5?.28:(a_s>.5?1.:.55+.3*tw);
 v_c=vec4(a_c.rgb,al);gl_Position=c;}`;
-const PT_FS=`precision mediump float;varying vec4 v_c;varying float v_big;uniform float u_over;
+const PT_FS=`precision mediump float;varying vec4 v_c;uniform float u_over;
 void main(){vec2 q=gl_PointCoord-.5;float d=length(q)*2.;if(d>1.)discard;
 float core=smoothstep(1.,.35,d);float halo=exp(-d*d*3.2)*.5;
-vec3 rgb=mix(v_c.rgb,vec3(1.,.95,.85),smoothstep(.4,0.,d)*(.07+.55*v_big));
-float ring=smoothstep(.1,0.,abs(d-.8))*v_big;halo*=1.+1.4*v_big;
-float a=(core*.9+halo+ring*.8)*v_c.a;gl_FragColor=vec4(rgb*a,clamp(a,0.,1.)*u_over);}`;
+vec3 rgb=mix(v_c.rgb,vec3(1.,.95,.85),smoothstep(.4,0.,d)*.22);
+float a=(core*.9+halo)*v_c.a;gl_FragColor=vec4(rgb*a,clamp(a,0.,1.)*u_over);}`;
 const LN_VS=`attribute vec3 a_p0;attribute vec3 a_p1;attribute vec4 a_e;attribute vec4 a_c;
-uniform mat4 u_mvp;uniform float u_in;uniform float u_time;uniform float u_ea;uniform float u_xo;varying vec4 v_c;
+uniform mat4 u_mvp;uniform float u_in;uniform float u_time;uniform float u_ea;varying vec4 v_c;
 void main(){vec3 p=mix(a_p0,a_p1,u_in);
 float k=fract(u_time*.16+a_e.y);float dd=abs(a_e.x-k);dd=min(dd,1.-dd);float pulse=smoothstep(.14,0.,dd);
 vec4 c=a_c;float flag=a_e.z;
 if(flag>1.5){c=vec4(1.,.86,.62,.9);}else if(flag<-.5){c.a*=.25;}
-if(u_xo>.5&&a_e.w<.5&&flag<1.5)c.a*=.07;
-c.rgb*=1.+(a_e.w>.5?2.6:1.5)*pulse;c.a*=(.6+.9*pulse)*u_ea;v_c=c;gl_Position=u_mvp*vec4(p,1.);}`;
+c.rgb*=1.+1.5*pulse;c.a*=(.6+.9*pulse)*u_ea;v_c=c;gl_Position=u_mvp*vec4(p,1.);}`;
 const LN_FS=`precision mediump float;varying vec4 v_c;uniform float u_over;void main(){gl_FragColor=vec4(v_c.rgb*v_c.a,v_c.a*u_over);}`;
 
 function program(gl,vs,fs){const mk=(t,s)=>{const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh};
@@ -98,7 +96,7 @@ function heightMap(mesh){
   for(let pass=0;pass<4;pass++)for(let gy=0;gy<GH;gy++)for(let gx=0;gx<GW;gx++){const k=gy*GW+gx;if(top[k]>-1e8)continue;
     let t=-1e9,b=1e9;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=GW||y>=GH)continue;const q=y*GW+x;if(top[q]>-1e8){t=Math.max(t,top[q]);b=Math.min(b,bot[q])}}
     if(t>-1e8){top[k]=t;bot[k]=b}}
-  return {has(x,y){const gx=clamp(Math.floor((x-X0)/CELL),0,GW-1),gy=clamp(Math.floor((y-Y0)/CELL),0,GH-1);return top[gy*GW+gx]>-1e8},at(x,y){const gx=clamp(Math.floor((x-X0)/CELL),0,GW-1),gy=clamp(Math.floor((y-Y0)/CELL),0,GH-1),k=gy*GW+gx;
+  return {at(x,y){const gx=clamp(Math.floor((x-X0)/CELL),0,GW-1),gy=clamp(Math.floor((y-Y0)/CELL),0,GH-1),k=gy*GW+gx;
     return top[k]>-1e8?{top:top[k],bot:bot[k]}:{top:120,bot:-120}}};
 }
 
@@ -116,19 +114,9 @@ export async function createBrain3D(base,{onPick}={}){
   canvas.after(overlay);
   // Topic names stay hidden until a node is clicked; this chip turns the up-close name tags on (remembered per browser).
   let showNames=false;try{showNames=localStorage.getItem('repoql.brain3d.names')==='1'}catch{}
-  const nameBtn=document.createElement('button');nameBtn.type='button';
-  Object.assign(nameBtn.style,{position:'absolute',right:'12px',bottom:'12px',padding:'6px 12px',border:'1px solid rgba(169,216,234,.35)',borderRadius:'13px',background:'rgba(3,8,17,.78)',color:'#a9d8ea',font:'600 11px system-ui,sans-serif',cursor:'pointer',pointerEvents:'auto'});
-  const syncNameBtn=()=>{nameBtn.textContent=showNames?'Names: on':'Names: off';nameBtn.setAttribute('aria-pressed',String(showNames))};syncNameBtn();
-  nameBtn.addEventListener('pointerdown',e=>e.stopPropagation());
-  nameBtn.addEventListener('click',()=>{showNames=!showNames;try{localStorage.setItem('repoql.brain3d.names',showNames?'1':'0')}catch{}syncNameBtn();schedule()});
-  overlay.appendChild(nameBtn);
-  // Cross-system focus: dims every link inside one system so only RepoQL<->Tencent links stand out.
-  let crossOnly=false;try{crossOnly=localStorage.getItem('repoql.brain3d.cross')==='1'}catch{}
-  const xBtn=document.createElement('button');xBtn.type='button';xBtn.style.cssText=nameBtn.style.cssText;xBtn.style.bottom='52px';
-  let xCount=0;const syncX=()=>{xBtn.textContent=(crossOnly?'Cross links only: on':'Cross links only: off')+(xCount?' · '+xCount.toLocaleString():'');xBtn.setAttribute('aria-pressed',String(crossOnly))};syncX();
-  xBtn.addEventListener('pointerdown',e=>e.stopPropagation());
-  xBtn.addEventListener('click',()=>{crossOnly=!crossOnly;try{localStorage.setItem('repoql.brain3d.cross',crossOnly?'1':'0')}catch{}syncX();schedule()});
-  overlay.appendChild(xBtn);
+  // The Names switch lives in the page's Filters panel; it talks to the view through a window event.
+  const onOpt=e=>{if(e.detail&&e.detail.names!==undefined){showNames=!!e.detail.names;schedule()}};
+  window.addEventListener('brain3d-option',onOpt);
   const q=k=>overlay.querySelector(`[data-k="${k}"]`);
   q('load').textContent='Loading brain…';canvas.style.display='block';overlay.style.display='block';sync2d();
   let mesh;try{mesh=await loadMesh()}catch(e){canvas.remove();overlay.remove();throw e}
@@ -161,66 +149,31 @@ export async function createBrain3D(base,{onPick}={}){
   function buildGraph(rendered){
     nodes=rendered.nodes;nodeIdx=new Map();const n=nodes.length;
     const p0=new Float32Array(n*3),p1=new Float32Array(n*3),col=new Float32Array(n*4);
-    nodes.forEach((nd,i)=>nodeIdx.set(nd.id,i));
-    // connection counts drive size, brightness and how little a topic is nudged when the layout is spread out
-    const deg=new Float32Array(n);for(const e of rendered.edges){const a=nodeIdx.get(e.source),b=nodeIdx.get(e.target);if(a!==undefined&&b!==undefined){deg[a]++;deg[b]++}}
-    let mxd=1;for(let i=0;i<n;i++){deg[i]=Math.max(deg[i],nodes[i].degree||0);if(deg[i]>mxd)mxd=deg[i]}
-    const hub=new Float32Array(n);for(let i=0;i<n;i++)hub[i]=Math.log1p(deg[i])/Math.log1p(mxd);
-    // spread: relax overlapping topics apart (small ones move most, hubs hold their place) while a spring keeps each
-    // community near its layout position, and nothing leaves the cortex footprint
-    const X=new Float32Array(n),Y=new Float32Array(n),X0=new Float32Array(n),Y0=new Float32Array(n);
-    nodes.forEach((nd,i)=>{X[i]=X0[i]=nd.x;Y[i]=Y0[i]=-nd.y});
-    const R=coarse?15:13,cell=R,gw=Math.ceil(700/cell)+2;
-    for(let it=0;it<16&&n>1;it++){
-      const grid=new Map();for(let i=0;i<n;i++){const k=Math.floor((X[i]+350)/cell)+gw*Math.floor((Y[i]+430)/cell);let a=grid.get(k);if(!a)grid.set(k,a=[]);a.push(i)}
-      const dX=new Float32Array(n),dY=new Float32Array(n);
-      for(let i=0;i<n;i++){const cx=Math.floor((X[i]+350)/cell),cy=Math.floor((Y[i]+430)/cell);
-        for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){const a=grid.get(cx+ox+gw*(cy+oy));if(!a)continue;
-          for(const j of a){if(j<=i)continue;let dx=X[i]-X[j],dy=Y[i]-Y[j],d=Math.hypot(dx,dy);const want=R*(.7+.5*Math.max(hub[i],hub[j]));if(d>=want)continue;
-            if(d<.01){dx=hash('sx'+i+j)-.5;dy=hash('sy'+i+j)-.5;d=Math.hypot(dx,dy)||1}
-            const push=(want-d)*.5/d,mi=1/(1+hub[i]*4),mj=1/(1+hub[j]*4),m=mi+mj;
-            dX[i]+=dx*push*mi/m*2;dY[i]+=dy*push*mi/m*2;dX[j]-=dx*push*mj/m*2;dY[j]-=dy*push*mj/m*2}}}
-      for(let i=0;i<n;i++){const m=1/(1+hub[i]*4);let nx=X[i]+dX[i]+(X0[i]-X[i])*.035*(1+hub[i]*3),ny=Y[i]+dY[i]+(Y0[i]-Y[i])*.035*(1+hub[i]*3);
-        if(hm.has(nx,ny)){X[i]=nx;Y[i]=ny}else if(hm.has(X0[i]*.5+nx*.5,Y0[i]*.5+ny*.5)){X[i]=X0[i]*.5+nx*.5;Y[i]=Y0[i]*.5+ny*.5}}
-    }
-    nodes.forEach((nd,i)=>{const h=hm.at(X[i],Y[i]),hh=hash(nd.id);
-      p0.set([X[i],Y[i],h.top+2],i*3);
-      // hubs sink less so they stay readable from outside; the rest fill the thickness of the cortex
-      const dz=(.16+.6*hash('z'+nd.id))*(1-.55*hub[i]);p1.set([X[i],Y[i],h.top-(h.top-h.bot)*dz],i*3);
-      const c=COL[sysOf(nd)];col.set([c[0],c[1],c[2],2.8+12.5*Math.pow(hub[i],1.35)+hh*.6],i*4)});
-    // edges: cross-system links first (drawn as a 3-strand braid in a gradient between the two systems' colours),
-    // then the links between the best-connected topics; faint, short links in the same system are what gets dropped
+    nodes.forEach((nd,i)=>{nodeIdx.set(nd.id,i);const X=nd.x,Y=-nd.y,h=hm.at(X,Y),hh=hash(nd.id);
+      p0.set([X,Y,h.top+2],i*3);p1.set([X,Y,h.top-(h.top-h.bot)*(.16+.6*hash('z'+nd.id))],i*3+3-3);
+      const c=COL[sysOf(nd)],hub=nd.degree>8;col.set([c[0],c[1],c[2],hub?Math.min(15,7+nd.degree*.12):3.4+hh*1.6],i*4)});
+    // edges: cross-system and hub links first, bounded so the buffer stays small on phones
     const cap=coarse?2200:3400,list=rendered.edges.filter(e=>nodeIdx.has(e.source)&&nodeIdx.has(e.target));
-    const imp=e=>Math.sqrt(hub[nodeIdx.get(e.source)]*hub[nodeIdx.get(e.target)]);
-    list.sort((a,b)=>((b.source_system==='cross')-(a.source_system==='cross'))||(imp(b)-imp(a)));edges=list.slice(0,cap);
-    const SEG=coarse?5:7,vertsPer=SEG*2;let V=0;const range=[];
-    edges.forEach(e=>{const st=e.source_system==='cross'?3:1;range.push([V,st*vertsPer]);V+=st*vertsPer});
+    list.sort((a,b)=>(b.source_system==='cross')-(a.source_system==='cross'));edges=list.slice(0,cap);
+    const SEG=coarse?5:7,vertsPer=SEG*2,V=edges.length*vertsPer;
     const e0=new Float32Array(V*3),e1=new Float32Array(V*3),eE=new Float32Array(V*4),eC=new Float32Array(V*4);
+    const eFlag=new Float32Array(V);
     let w=0;const curve=(a0,b0,lift,j,t)=>{const mt=1-t;return [mt*mt*a0[0]+2*mt*t*(((a0[0]+b0[0])/2)+j[0])+t*t*b0[0],mt*mt*a0[1]+2*mt*t*(((a0[1]+b0[1])/2)+j[1])+t*t*b0[1],mt*mt*a0[2]+2*mt*t*(((a0[2]+b0[2])/2)+lift+j[2])+t*t*b0[2]]};
-    const shift=(P,dx,dy)=>[P[0]+dx,P[1]+dy,P[2]];
-    let crossCount=0;
     edges.forEach((e,ei)=>{const a=nodeIdx.get(e.source),b=nodeIdx.get(e.target);
       const A0=[p0[a*3],p0[a*3+1],p0[a*3+2]],B0=[p0[b*3],p0[b*3+1],p0[b*3+2]],A1=[p1[a*3],p1[a*3+1],p1[a*3+2]],B1=[p1[b*3],p1[b*3+1],p1[b*3+2]];
       const len=Math.hypot(A0[0]-B0[0],A0[1]-B0[1]);const lift=Math.min(36,len*.12);
       const hj=hash(e.id||e.source+e.target),j=[(hj-.5)*len*.18,(hash('y'+(e.id||e.source))-.5)*len*.18,(hash('w'+(e.id||e.target))-.5)*30];
-      const cross=e.source_system==='cross',ph=hash('p'+(e.id||ei)),im=imp(e);
-      const ca=COL[sysOf(nodes[a])],cb=COL[sysOf(nodes[b])];
-      const sys=e.source_system==='tencent'?COL.tx:COL.rq;
-      const nx=-(B0[1]-A0[1])/(len||1),ny=(B0[0]-A0[0])/(len||1);
-      const strands=cross?[-1.5,0,1.5]:[0];if(cross)crossCount++;
-      for(const off of strands){const ox=nx*off,oy=ny*off;
-        for(let s=0;s<SEG;s++){const ta=s/SEG,tb=(s+1)/SEG;
-          for(let k=0;k<2;k++){const t=k?tb:ta,s0=curve(shift(A0,ox,oy),shift(B0,ox,oy),lift,j,t),s1=curve(shift(A1,ox,oy),shift(B1,ox,oy),0,j,t);
-            e0.set(s0,w*3);e1.set(s1,w*3);eE.set([t,ph,0,cross?1:0],w*4);
-            if(cross){const m=t,mid=Math.sin(Math.PI*m)*.75;eC.set([ca[0]+(cb[0]-ca[0])*m+(1-(ca[0]+(cb[0]-ca[0])*m))*mid,ca[1]+(cb[1]-ca[1])*m+(.9-(ca[1]+(cb[1]-ca[1])*m))*mid,ca[2]+(cb[2]-ca[2])*m+(.6-(ca[2]+(cb[2]-ca[2])*m))*mid,off===0?.8:.4],w*4)}
-            else eC.set([sys[0],sys[1],sys[2],.045+.4*Math.pow(im,1.1)],w*4);
-            w++}}}});
+      const cross=e.source_system==='cross',c=cross?[1,.84,.58,.2]:e.source_system==='tencent'?[1,.28,.32,.2]:[1,.58,.2,.2];
+      const ph=hash('p'+(e.id||ei));
+      for(let s=0;s<SEG;s++){const ta=s/SEG,tb=(s+1)/SEG;
+        for(let k=0;k<2;k++){const t=k?tb:ta,s0=curve(A0,B0,lift,j,t),s1=curve(A1,B1,0,j,t);
+          e0.set(s0,w*3);e1.set(s1,w*3);eE.set([t,ph,0,0],w*4);eC.set(c,w*4);w++}}});
     free();
     gNodes={n,b0:mkBuf(gl.ARRAY_BUFFER,p0),b1:mkBuf(gl.ARRAY_BUFFER,p1),bc:mkBuf(gl.ARRAY_BUFFER,col),bs:mkBuf(gl.ARRAY_BUFFER,new Float32Array(n),gl.DYNAMIC_DRAW),state:new Float32Array(n),p0,p1};
-    gLines={V,b0:mkBuf(gl.ARRAY_BUFFER,e0),b1:mkBuf(gl.ARRAY_BUFFER,e1),be:mkBuf(gl.ARRAY_BUFFER,eE),bc:mkBuf(gl.ARRAY_BUFFER,eC),bf:null,eE,SEG:vertsPer,range};
+    gLines={V,b0:mkBuf(gl.ARRAY_BUFFER,e0),b1:mkBuf(gl.ARRAY_BUFFER,e1),be:mkBuf(gl.ARRAY_BUFFER,eE),bc:mkBuf(gl.ARRAY_BUFFER,eC),bf:null,eE,SEG:vertsPer};
     const cnt={rq:0,tx:0,mem:0};for(const nd of nodes)cnt[sysOf(nd)]++;
     q('rq').textContent=`RepoQL · ${cnt.rq.toLocaleString()}`;q('tx').textContent=`Tencent · ${cnt.tx.toLocaleString()}`;
-    q('cap').textContent=`${n.toLocaleString()}${rendered.omitted?' of '+rendered.totalVisibleBeforeProjection.toLocaleString():''} topics · ${rendered.edges.length.toLocaleString()} links · 3D view`;xCount=crossCount;syncX();
+    q('cap').textContent=`${n.toLocaleString()}${rendered.omitted?' of '+rendered.totalVisibleBeforeProjection.toLocaleString():''} topics · ${rendered.edges.length.toLocaleString()} links · 3D view`;
     activeId=undefined;schedule();
   }
   function free(){for(const g of [gNodes,gLines]){if(!g)continue;for(const k of ['b0','b1','bc','bs','be'])if(g[k])gl.deleteBuffer(g[k])}gNodes=gLines=null}
@@ -232,8 +185,8 @@ export async function createBrain3D(base,{onPick}={}){
     const st=gNodes.state;for(let i=0;i<nodes.length;i++){const id=nodes[i].id;st[i]=!activeId?0:id===activeId?2:neighbours.has(id)?1:-1}
     gl.bindBuffer(gl.ARRAY_BUFFER,gNodes.bs);gl.bufferData(gl.ARRAY_BUFFER,st,gl.DYNAMIC_DRAW);
     // edge flags: 2 = touches the selection, -1 = faded
-    const flags=new Float32Array(gLines.V);
-    for(let i=0;i<edges.length;i++){const hit=!activeId?0:(edges[i].source===activeId||edges[i].target===activeId)?2:-1,[r0,rn]=gLines.range[i];for(let k=0;k<rn;k++)flags[r0+k]=hit}
+    const per=gLines.SEG,flags=new Float32Array(gLines.V);
+    for(let i=0;i<edges.length;i++){const hit=!activeId?0:(edges[i].source===activeId||edges[i].target===activeId)?2:-1;for(let k=0;k<per;k++)flags[i*per+k]=hit}
     const eE=gLines.eE;for(let i=0;i<gLines.V;i++)eE[i*4+2]=flags[i];
     gl.bindBuffer(gl.ARRAY_BUFFER,gLines.be);gl.bufferData(gl.ARRAY_BUFFER,eE,gl.DYNAMIC_DRAW);schedule();
   }
@@ -260,7 +213,7 @@ export async function createBrain3D(base,{onPick}={}){
     gl.uniform1f(bp.u.u_alpha,alpha);drawShell();offAttrs(bp);
     // neural layers: additive light
     const over=sstep(.45,.8,alpha);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);const time=(now-t0)/1000;
-    if(gLines&&gLines.V){gl.useProgram(lp.p);gl.uniformMatrix4fv(lp.u.u_mvp,false,mvp);gl.uniform1f(lp.u.u_in,inside);gl.uniform1f(lp.u.u_time,time);gl.uniform1f(lp.u.u_over,over);gl.uniform1f(lp.u.u_xo,crossOnly?1:0);gl.uniform1f(lp.u.u_ea,.55+.45*(1-over));
+    if(gLines&&gLines.V){gl.useProgram(lp.p);gl.uniformMatrix4fv(lp.u.u_mvp,false,mvp);gl.uniform1f(lp.u.u_in,inside);gl.uniform1f(lp.u.u_time,time);gl.uniform1f(lp.u.u_over,over);gl.uniform1f(lp.u.u_ea,.55+.45*(1-over));
       attr(lp.a.a_p0,gLines.b0,3);attr(lp.a.a_p1,gLines.b1,3);attr(lp.a.a_e,gLines.be,4);attr(lp.a.a_c,gLines.bc,4);gl.drawArrays(gl.LINES,0,gLines.V);offAttrs(lp)}
     if(gNodes&&gNodes.n){gl.useProgram(pp.p);gl.uniformMatrix4fv(pp.u.u_mvp,false,mvp);gl.uniform1f(pp.u.u_in,inside);gl.uniform1f(pp.u.u_time,time);gl.uniform1f(pp.u.u_over,over);
       gl.uniform1f(pp.u.u_k,canvas.height/(2*Math.tan(FOV/2)));gl.uniform1f(pp.u.u_dpr,canvas.width/Math.max(1,W));
@@ -338,7 +291,7 @@ export async function createBrain3D(base,{onPick}={}){
     hide(){shown=false;canvas.style.display='none';overlay.style.display='none';cancelAnimationFrame(raf);raf=0},
     stats(){return {dist,D0,nodes:nodes.length,edges:edges.length,verts:mesh.nV,tris:mesh.nT}},
     setView(v){if(v.yaw!==undefined)yaw=v.yaw;if(v.pitch!==undefined)pitch=v.pitch;if(v.zoomRatio!==undefined){distTarget=dist=D0*v.zoomRatio;userMoved=true}schedule()},
-    dispose(){disposed=true;cancelAnimationFrame(raf);seen?.disconnect();ro?.disconnect();document.removeEventListener('visibilitychange',onVis);free();
+    dispose(){disposed=true;window.removeEventListener('brain3d-option',onOpt);cancelAnimationFrame(raf);seen?.disconnect();ro?.disconnect();document.removeEventListener('visibilitychange',onVis);free();
       for(const b of [bPos,bNrm,bSul,bIdx])gl.deleteBuffer(b);gl.getExtension('WEBGL_lose_context')?.loseContext();canvas.remove();overlay.remove()}
   };
 }

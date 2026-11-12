@@ -1,4 +1,4 @@
-import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261113-links';
+import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261113-cmp';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
 import {openAvatarPicker, agentAvatar} from './agent_avatars.js';
 import {viewOpenMausBot} from './openmausbot_panel.js';
@@ -3197,16 +3197,21 @@ async function viewUnifiedGraph() {
   const NET_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="6" r="2.2"/><circle cx="18" cy="5" r="2.2"/><circle cx="12" cy="13" r="2.6"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="M6.8 7.2 10.3 11.4M16.3 6.6 13.6 11M7 17.9l3-3M14.5 14.6l3 2.4"/></svg>';
   const BRAIN_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.6A3.2 3.2 0 0 0 5 17a3 3 0 0 0 4 2.6V3.5z"/><path d="M15 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.6A3.2 3.2 0 0 1 19 17a3 3 0 0 1-4 2.6V3.5z"/><path d="M9 9H7.2M9 14H6.8M15 9h1.8M15 14h2.2"/></svg>';
   APP.innerHTML=`<section class="ug-hero ug-hero-minimal"><h1>Live memory graph</h1></section>
-    <div class="ug-toolbar graph-controls">
-      <div class="ug-toolbar-group ug-toolbar-primary"><div class="ug-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+    <div class="ug-toolbar graph-controls ug-compact">
+      <button type="button" class="ug-filters-toggle" id="ug-filters-toggle" aria-expanded="false" aria-controls="ug-toolbar-secondary">Filters and view options</button>
+      <div class="ug-toolbar-group ug-toolbar-secondary" id="ug-toolbar-secondary">
+        <div class="ug-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
         <input id="ug-search" class="input wide" type="search" placeholder="Find a topic, entity or relationship" aria-label="Search graph"></div>
         <div class="ug-chips" role="group" aria-label="Sources">
           <label class="graph-toggle ug-chip rq"><input type="checkbox" id="ug-repoql" checked><i></i>RepoQL</label>
           <label class="graph-toggle ug-chip tx"><input type="checkbox" id="ug-tencent" checked><i></i>Tencent</label>
           <label class="graph-toggle ug-chip mem"><input type="checkbox" id="ug-memories" checked><i></i>Memories</label>
           <label class="graph-toggle ug-chip cross"><input type="checkbox" id="ug-cross" checked><i></i>Cross-system</label>
-        </div></div>
-      <div class="ug-toolbar-group ug-toolbar-secondary" id="ug-toolbar-secondary"><label class="ug-clarity-label" for="ug-detail-level">Detail
+        </div>
+        <div class="ug-chips" role="group" aria-label="3D options">
+          <label class="graph-toggle ug-chip"><input type="checkbox" id="ug-3d-names"><i></i>Names</label>
+        </div>
+        <label class="ug-clarity-label" for="ug-detail-level">Detail
           <select id="ug-detail-level" class="select" aria-label="Graph detail level">
             <option value="overview">Overview · key topics</option>
             <option value="all" selected>Explore all loaded topics</option>
@@ -3231,8 +3236,8 @@ async function viewUnifiedGraph() {
           </div>
           <a class="btn small" href="#/openmausbot">Bot learning</a>
           <button class="btn primary" id="ug-reload">↻ Refresh</button>
-        </div></div>
-      <button type="button" class="ug-filters-toggle" id="ug-filters-toggle" aria-expanded="false" aria-controls="ug-toolbar-secondary">Filters and view options</button>
+        </div>
+      </div>
     </div>
     <div class="unified-graph-layout">
       <div class="graph-stage ug-stage-shell">
@@ -3288,6 +3293,24 @@ async function viewUnifiedGraph() {
     el('ug-detail-level').value='all';
     el('ug-connections').value='all';
   }
+  if(!document.getElementById('ug-compact-css')){const st=document.createElement('style');st.id='ug-compact-css';
+    st.textContent='html .ug-toolbar.ug-compact.graph-controls{display:block!important;padding:0!important;margin-bottom:8px!important;border:0!important;background:none!important;box-shadow:none!important}'
+    +'html .ug-toolbar.ug-compact .ug-filters-toggle{display:flex!important;align-items:center;justify-content:space-between;width:100%;min-height:34px!important;margin:0!important;padding:0 12px;border:1px solid rgba(120,140,175,.28);border-radius:10px;background:rgba(14,22,36,.9);color:#cfe0f5;font:600 13px system-ui,sans-serif;cursor:pointer}'
+    +'html .ug-toolbar.ug-compact .ug-filters-toggle::after{content:"\\25BE";opacity:.7;transition:transform .18s}'
+    +'html .ug-toolbar.ug-compact .ug-filters-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}'
+    +'html .ug-toolbar.ug-compact .ug-toolbar-secondary:not(.open){display:none!important}'
+    +'html .ug-toolbar.ug-compact .ug-toolbar-secondary.open{display:flex!important;flex-wrap:wrap;gap:6px 8px;align-items:center;justify-content:flex-start;margin-top:6px;padding:8px;border:1px solid rgba(120,140,175,.22);border-radius:10px;background:rgba(10,16,28,.92)}'
+    +'.ug-compact .ug-search{flex:1 1 100%}.ug-compact .ug-search .input{min-height:34px!important;padding-top:4px;padding-bottom:4px}'
+    +'html .ug-compact .ug-chips{display:contents!important}html .ug-compact .graph-toggle.ug-chip{flex:0 0 auto!important;width:auto!important;padding:3px 10px!important;min-height:28px!important;font-size:12px}'
+    +'.ug-compact .select,.ug-compact .btn{min-height:32px!important;padding-top:3px!important;padding-bottom:3px!important;font-size:12px!important}'
+    +'.ug-compact .ug-clarity-label,.ug-compact .ug-limit{font-size:11px;gap:4px}'
+    +'.ug-compact .ug-tools{margin-left:0!important;gap:6px;flex-wrap:wrap}'
+    +'.ug-compact .ug-viz{min-height:32px}.ug-compact .ug-viz-btn{min-height:28px!important;padding:2px 8px!important;font-size:12px}'
+    +'html .ug-hero.ug-hero-minimal{padding-top:4px!important;padding-bottom:4px!important;margin-bottom:6px!important}.ug-hero-minimal h1{font-size:20px!important;margin:0!important}';
+    document.head.appendChild(st);}
+  {const nm=el('ug-3d-names');if(nm){try{nm.checked=localStorage.getItem('repoql.brain3d.names')==='1'}catch{}
+    nm.addEventListener('change',()=>{try{localStorage.setItem('repoql.brain3d.names',nm.checked?'1':'0')}catch{}window.dispatchEvent(new CustomEvent('brain3d-option',{detail:{names:nm.checked}}))});}
+}
   el('ug-filters-toggle')?.addEventListener('click',(e)=>{const t=e.currentTarget,o=t.getAttribute('aria-expanded')!=='true';t.setAttribute('aria-expanded',String(o));el('ug-toolbar-secondary')?.classList.toggle('open',o);});
   let viewer=null;
   // Phones slide the same inspector up as a sheet; desktop keeps the side panel.
