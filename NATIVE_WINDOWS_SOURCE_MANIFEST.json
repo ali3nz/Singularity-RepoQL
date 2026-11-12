@@ -825,8 +825,8 @@
     },
     {
       "path": "dashboard/static/app.js",
-      "sha256": "bd5d13c9ad62862aa2c54864bdd0354c5a264d0cfb2e8938306ac9976ecc2002",
-      "bytes": 291953
+      "sha256": "1d3e613ece07523815128fb70ae3ad5140c1bec9b37bda1dbfc780eed38505dc",
+      "bytes": 289576
     },
     {
       "path": "dashboard/static/app_test.mjs",
@@ -939,9 +939,19 @@
       "bytes": 16456
     },
     {
+      "path": "dashboard/static/brain3d_view.js",
+      "sha256": "97bf110137994a2b2c7011e81cb0e653c74f2542a500d64ff3cec544ed7c9b33",
+      "bytes": 26056
+    },
+    {
       "path": "dashboard/static/brain_asset.js",
       "sha256": "e6bf93fb6426fff16032b9c59b74f569f5d6b3de57d7f863b5a38d2b81101200",
       "bytes": 7731
+    },
+    {
+      "path": "dashboard/static/brain_mesh.bin",
+      "sha256": "aa4c485f7a15c3a11b244069d865e799fd4bc80dde70ed730229d947311047d3",
+      "bytes": 1802300
     },
     {
       "path": "dashboard/static/brain_top.webp",
@@ -965,8 +975,8 @@
     },
     {
       "path": "dashboard/static/index.html",
-      "sha256": "45d3518db5939c57e466371a2c0604af041f9b40589db324244af1933c72ce33",
-      "bytes": 15141
+      "sha256": "6c6abb5d4ee9e07c00a53ecc02fc297aa67620250d7c72fa1bbc355f66b0fe2d",
+      "bytes": 15040
     },
     {
       "path": "dashboard/static/kanban_native.js",
@@ -1000,8 +1010,8 @@
     },
     {
       "path": "dashboard/static/observability.js",
-      "sha256": "18b73673c2863cb4143517eefec77066fd3f9363463f191baf3b25f79493a86e",
-      "bytes": 39442
+      "sha256": "5ae271d3fa6ac6d666d9ec9b94429f35720b07bf6cde42c88397e3fb958791bd",
+      "bytes": 41361
     },
     {
       "path": "dashboard/static/openmausbot_ops.js",

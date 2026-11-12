@@ -1,4 +1,4 @@
-import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261111-alive';
+import {createKnowledgeGraph, relationshipDetails, sparkChart, numeric, brainOutline} from './observability.js?v=rq-20261113-3d';
 import {renderKnowledgeGuide} from './repoql_guidance.js';
 import {openAvatarPicker, agentAvatar} from './agent_avatars.js';
 import {viewOpenMausBot} from './openmausbot_panel.js';
@@ -3221,6 +3221,7 @@ async function viewUnifiedGraph() {
         <div class="ug-viz" id="ug-mode" role="radiogroup" aria-label="Visualisation">
           <button type="button" role="radio" class="ug-viz-btn" data-mode="network" aria-checked="false">${NET_ICON}<span>Network</span></button>
           <button type="button" role="radio" class="ug-viz-btn" data-mode="neural" aria-checked="true">${BRAIN_ICON}<span>Brain</span></button>
+          <button type="button" role="radio" class="ug-viz-btn" data-mode="3d" aria-checked="false">${BRAIN_ICON}<span>3D</span></button>
           <i class="ug-viz-glider" aria-hidden="true"></i>
         </div>
         <div class="ug-tools">
@@ -3260,7 +3261,7 @@ async function viewUnifiedGraph() {
   const alive=()=>!disposed&&Boolean(el('ug-canvas'));
   const setText=(id,value)=>{const node=el(id); if(node) node.textContent=value;};
   function refreshStageMeta(filtered=null){
-    const mode=el('ug-mode')?.dataset.active==='neural'?'Brain mode':'Network mode';
+    const mode=({neural:'Brain mode','3d':'3D mode'})[el('ug-mode')?.dataset.active]||'Network mode';
     const detail=el('ug-detail-level')?.value==='all'?'all loaded topics':'overview';
     const links=el('ug-connections')?.value==='all'?'all visible links':'focus links';
     setText('ug-stage-caption', `${mode} · ${links} · ${detail} · ${el('ug-limit')?.value||'500'} node sample`);
@@ -3276,8 +3277,8 @@ async function viewUnifiedGraph() {
   // Brain is the default (operator 2026-10-26); an explicit later choice persists under the v2 key.
   const phoneShell=window.matchMedia?.('(max-width:768px), (hover:none) and (pointer:coarse)');
   // Phones start on the plain network layout; the saved choice still wins.
-  let initialMode=phoneShell?.matches?'network':'neural';try{const saved=localStorage.getItem('repoql.graph.mode.v2');if(saved==='network'||saved==='neural')initialMode=saved;}catch{}
-  const setModeUI=(mode)=>{el('ug-mode').dataset.active=mode;el('ug-mode').querySelectorAll('[data-mode]').forEach(b=>{const on=b.dataset.mode===mode;b.setAttribute('aria-checked',String(on));b.tabIndex=on?0:-1;});};
+  let initialMode='3d';try{const saved=localStorage.getItem('repoql.graph.mode.v3');if(saved==='network'||saved==='neural'||saved==='3d')initialMode=saved;}catch{}
+  const setModeUI=(mode)=>{el('ug-mode').dataset.active=mode;document.documentElement.dataset.ugMode=mode==='3d'?'neural':mode;if(!document.getElementById('ug-3d-switch')){const st=document.createElement('style');st.id='ug-3d-switch';st.textContent='#ug-mode{grid-template-columns:1fr 1fr 1fr!important}#ug-mode .ug-viz-glider{width:calc(33.333% - 2.7px)!important}#ug-mode[data-active="neural"] .ug-viz-glider{transform:translateX(100%)!important}#ug-mode[data-active="3d"] .ug-viz-glider{transform:translateX(200%)!important}';document.head.appendChild(st);}el('ug-mode').querySelectorAll('[data-mode]').forEach(b=>{const on=b.dataset.mode===mode;b.setAttribute('aria-checked',String(on));b.tabIndex=on?0:-1;});};
   setModeUI(initialMode);
   // Phones and touch tablets render the same 2D canvas as desktop; only the
   // starting projection is smaller so a 390px stage stays readable.
@@ -3308,6 +3309,7 @@ async function viewUnifiedGraph() {
     renderInspector(node,edge);
     if(node||edge)openSheet();else closeSheet();
   }});
+  if(initialMode==='3d')Promise.resolve().then(()=>viewer.settled?.()).then(()=>{const actual=viewer.getMode();if(actual!==initialMode){setModeUI(actual);refreshStageMeta()}});
   function renderInspector(node,edge){const area=el('ug-detail');if(!area)return;
     if(!node&&!edge){area.innerHTML='<div class="ug-empty-insp"><div class="ug-empty-orb"></div><strong>Explore your memory</strong><span>Choose a topic to reveal its actual links. The layout is illustrative; source records and relationships remain authoritative.</span></div>';return;}
     const item=node||edge,key=node?node.id:edgeKey(edge),notes=annotations[key]||{},label=notes.display_label||'',
@@ -3409,10 +3411,10 @@ async function viewUnifiedGraph() {
   el('ug-fit').addEventListener('click',()=>viewer.fit());
   el('ug-zoom-in').addEventListener('click',()=>viewer.zoomBy(1.3));
   el('ug-zoom-out').addEventListener('click',()=>viewer.zoomBy(1/1.3));
-  const chooseMode=(mode)=>{setModeUI(mode);viewer.setMode(mode);refreshStageMeta();try{localStorage.setItem('repoql.graph.mode.v2',mode)}catch{}};
+  const chooseMode=(mode)=>{setModeUI(mode);Promise.resolve(viewer.setMode(mode)).then(()=>{const actual=viewer.getMode();if(actual!==mode)setModeUI(actual);refreshStageMeta();try{localStorage.setItem('repoql.graph.mode.v3',actual)}catch{}})};
   el('ug-mode').addEventListener('click',e=>{const b=e.target.closest('button[data-mode]');if(b)chooseMode(b.dataset.mode)});
   el('ug-mode').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();
-    const next=el('ug-mode').dataset.active==='neural'?'network':'neural';chooseMode(next);el('ug-mode').querySelector(`[data-mode="${next}"]`)?.focus();});
+    const order=['network','neural','3d'],at=order.indexOf(el('ug-mode').dataset.active),next=order[(at+(e.key==='ArrowRight'?1:2))%3];chooseMode(next);el('ug-mode').querySelector(`[data-mode="${next}"]`)?.focus();});
   state.cleanup=()=>{disposed=true;document.removeEventListener('keydown',sheetKeys);phoneShell?.removeEventListener?.('change',sheetFit);closeSheet();viewer.dispose()};
   await load().catch(e=>{if(alive())toast('Graph',e.message,'error')});schedule(()=>{if(!document.hidden && alive())load().catch(e=>{if(alive())toast('Graph refresh',e.message,'error')})},120000);
 }
