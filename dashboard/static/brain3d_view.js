@@ -19,14 +19,29 @@ const BRAIN_VS=`attribute vec3 a_pos;attribute vec3 a_nrm;attribute float a_sulc
 uniform mat4 u_mvp;uniform mat4 u_view;uniform float u_inv;
 varying vec3 v_n;varying vec3 v_v;varying float v_s;
 void main(){vec3 p=a_pos*u_inv;v_n=(u_view*vec4(a_nrm,0.)).xyz;v_v=(u_view*vec4(p,1.)).xyz;v_s=a_sulc;gl_Position=u_mvp*vec4(p,1.);}`;
-const BRAIN_FS=`precision mediump float;
+// Cortex shading. Fold depth (sulc) darkens the sulci, and where the derivatives extension exists its gradient
+// also tilts the normal so the fold walls pick up light and shadow like real relief. Colours are unchanged.
+const brainFS=dx=>(dx?'#extension GL_OES_standard_derivatives : enable\n':'')+`
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
 varying vec3 v_n;varying vec3 v_v;varying float v_s;uniform float u_alpha;
 void main(){vec3 n=normalize(v_n);if(!gl_FrontFacing)n=-n;
-float f=clamp(dot(n,normalize(-v_v)),0.,1.);float rim=pow(1.-f,2.3);
-float light=.5+.5*dot(n,normalize(vec3(-.3,.5,.8)));
-float groove=1.-.26*v_s;
-vec3 body=mix(vec3(.05,.2,.46),vec3(.17,.52,.94),light)*groove;
-vec3 col=body+vec3(.22,.72,1.)*rim*.85;
+`+(dx?`vec3 dpx=dFdx(v_v),dpy=dFdy(v_v);float dsx=dFdx(v_s),dsy=dFdy(v_s);
+vec3 r1=cross(dpy,n),r2=cross(n,dpx);float det=dot(dpx,r1);
+vec3 gr=sign(det)*(dsx*r1+dsy*r2);n=normalize(abs(det)*n-38.*gr);
+`:'')+`vec3 V=normalize(-v_v);
+float f=clamp(dot(n,V),0.,1.);float rim=pow(1.-f,2.3);
+vec3 L=normalize(vec3(-.35,.55,.75));
+float nl=dot(n,L);float light=clamp(mix(.5+.5*nl,max(nl,0.),.55),0.,1.);
+float sul=smoothstep(.3,.9,v_s);
+float ao=1.-.72*sul;float crown=1.+.14*(1.-sul);
+vec3 H=normalize(L+V);float spec=pow(max(dot(n,H),0.),48.)*(1.-.9*sul);
+float fill=max(dot(n,normalize(vec3(.6,-.35,.45))),0.);
+vec3 body=mix(vec3(.04,.15,.40),vec3(.19,.56,.96),light)*ao*crown+vec3(.03,.11,.26)*fill*ao;
+vec3 col=body+vec3(.22,.72,1.)*rim*.8*(1.-.4*sul)+vec3(.5,.88,1.)*spec*.16;
 float a=u_alpha+(1.-u_alpha)*(.07+.5*rim);if(!gl_FrontFacing)a*=.5;
 gl_FragColor=vec4(col,a);}`;
 const PT_VS=`attribute vec3 a_p0;attribute vec3 a_p1;attribute vec4 a_c;attribute float a_s;
@@ -109,7 +124,8 @@ export async function createBrain3D(base,{onPick}={}){
   q('load').textContent='Loading brain…';canvas.style.display='block';overlay.style.display='block';sync2d();
   let mesh;try{mesh=await loadMesh()}catch(e){canvas.remove();overlay.remove();throw e}
   const hm=heightMap(mesh);
-  const bp=program(gl,BRAIN_VS,BRAIN_FS),pp=program(gl,PT_VS,PT_FS),lp=program(gl,LN_VS,LN_FS);
+  const hasDx=!!gl.getExtension('OES_standard_derivatives');let bp;try{bp=program(gl,BRAIN_VS,brainFS(hasDx))}catch(e){bp=program(gl,BRAIN_VS,brainFS(false))}
+  const pp=program(gl,PT_VS,PT_FS),lp=program(gl,LN_VS,LN_FS);
   const mkBuf=(target,data,usage)=>{const b=gl.createBuffer();gl.bindBuffer(target,b);gl.bufferData(target,data,usage||gl.STATIC_DRAW);return b};
   const bPos=mkBuf(gl.ARRAY_BUFFER,mesh.pos),bNrm=mkBuf(gl.ARRAY_BUFFER,mesh.nrm),bSul=mkBuf(gl.ARRAY_BUFFER,mesh.sul),bIdx=mkBuf(gl.ELEMENT_ARRAY_BUFFER,mesh.idx);
   q('load').textContent='';

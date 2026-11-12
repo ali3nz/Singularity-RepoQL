@@ -825,7 +825,7 @@
     },
     {
       "path": "dashboard/static/app.js",
-      "sha256": "67a315c7d16daed25984fad5c8c93799152920bab81f4f5304217aa9c4a6f376",
+      "sha256": "0afaa06b213e3593212f45e73b35b100ce2aac49e0a2990dd2bf45074e1aebcc",
       "bytes": 289579
     },
     {
@@ -940,8 +940,8 @@
     },
     {
       "path": "dashboard/static/brain3d_view.js",
-      "sha256": "3f035f3a4792f022536d052f611cfd1548b9d82f696b3a069b80a8eb97989ce7",
-      "bytes": 27050
+      "sha256": "c321a1d077a82ba2dff5f509103692010ce7b112b42037a40d3eab2b71989d1b",
+      "bytes": 28057
     },
     {
       "path": "dashboard/static/brain_asset.js",
@@ -975,7 +975,7 @@
     },
     {
       "path": "dashboard/static/index.html",
-      "sha256": "470f635d883d8c79dcc8a398e5de543ae19fb4d3949d64f32a95f566d199ee3a",
+      "sha256": "3bb6a270eac7c9cf55c5dbaee12973c78679a54188744d6453ab1ea4b6733793",
       "bytes": 15043
     },
     {
@@ -1010,7 +1010,7 @@
     },
     {
       "path": "dashboard/static/observability.js",
-      "sha256": "235d259ec6d28b1d0375dfa314119e475a58312a0d55e25d00a75b887258f005",
+      "sha256": "14c32e0cbc84100aab646e7685a5ff908995045e7883cee6891819b7f16e3021",
       "bytes": 41361
     },
     {
