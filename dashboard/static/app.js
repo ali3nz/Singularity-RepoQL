@@ -830,7 +830,7 @@ function dashboardSnapshot() {
       <span class="command-card-icon" aria-hidden="true">${iconBadges[link] || REPOQL_ICON}</span>
       <span class="command-card-content"><span class="command-card-kicker">${esc(kicker)}</span><strong>${esc(title)}</strong><span class="command-card-description">${esc(description)}</span><span class="command-card-cta">Open workspace <span aria-hidden="true">↗</span></span></span>
       <span class="command-card-illustration" aria-hidden="true">${cardIllustrations[link] || ''}</span>
-      ${tileShots[link] ? `<img class="command-card-shot" src="/assets/tiles/${tileShots[link]}.webp?v=ts8" alt="" loading="lazy" decoding="async">` : ''}
+      ${tileShots[link] ? `<img class="command-card-shot" src="/assets/tiles/${tileShots[link]}.webp?v=ts9" alt="" loading="lazy" decoding="async">` : ''}
     </a>`).join('')}</div>
   </section>
   <details class="command-more block" data-accent="office" open>
