@@ -11,7 +11,7 @@
 // P0 fix (2026-10-23): judgePacket/judgeExpandedCancellation were referenced
 // without ever being imported, so EVERY buildVerdict call threw and every hook
 // returned HOOK_THROW (the whole advisory path was dead while flags read ON).
-import { judgePacket, judgeExpandedCancellation } from "./answerability.mjs";
+import { judgePacket, judgeExpandedCancellation, llmRefine } from "./answerability.mjs";
 
 export const PACKET_BUDGET_DEFAULT_BYTES = 1500; // ≈375 tokens FAST default
 

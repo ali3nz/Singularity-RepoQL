@@ -1,0 +1,780 @@
+--- a/src/core/record/l1-writer.ts	2026-10-09 20:39:57.000000000 +1300
++++ b/src/core/record/l1-writer.ts	2026-11-11 22:43:03.508742458 +1300
+@@ -136,6 +136,15 @@
+   merged_timestamps?: string[];
+ }
+ 
++/**
++ * Result of writeMemory. `fresh` means a new row was inserted; `replay` means the id
++ * already existed and was upserted in place (no new JSONL line); `skipped` means no write.
++ */
++export type WriteMemoryResult =
++  | { outcome: "fresh"; record: MemoryRecord; cleanupPending: string[] }
++  | { outcome: "replay"; record: MemoryRecord; cleanupPending: string[] }
++  | { outcome: "skipped"; record: null };
++
+ const TAG = "[memory-tdai][l1-writer]";
+ 
+ // ============================
+@@ -150,6 +159,52 @@
+ }
+ 
+ /**
++ * Derive a deterministic L1 record id from a memory's stable identity.
++ *
++ * Re-extracting the same conversation window must land on the same id so the
++ * write is idempotent: both stores key on `record.id` (SQLite upserts on the
++ * primary key, TCVDB upserts on the document id), so a replay overwrites its
++ * own row instead of appending a duplicate. JSONL stays append-only and
++ * memory-cleaner reconciles it against the vector store as before.
++ *
++ * Fields are length-prefixed rather than delimiter-joined: with a bare
++ * separator, ("ab","c") and ("a","bc") would produce the same material.
++ *
++ * Supplied ids win — callers (and the dedup LLM's update/merge targets) never
++ * get their `record_id` overwritten by this derivation.
++ */
++export function deriveL1RecordId(params: {
++  sessionKey: string;
++  sessionId?: string;
++  taskId?: string;
++  teamId?: string;
++  userId?: string;
++  agentId?: string;
++  type: MemoryType;
++  content: string;
++}): string {
++  const fields = [
++    "l1id:v1",
++    params.teamId || DEFAULT_ISOLATION_ID,
++    params.agentId || DEFAULT_ISOLATION_ID,
++    params.userId || DEFAULT_ISOLATION_ID,
++    params.sessionId || DEFAULT_ISOLATION_ID,
++    params.taskId ?? "",
++    params.sessionKey,
++    params.type,
++    normalizeIdentityText(params.content),
++  ];
++  const material = fields.map((field) => `${field.length}:${field}`).join("|");
++  const digest = crypto.createHash("sha256").update(material, "utf8").digest("hex");
++  return `m_${digest.slice(0, 32)}`;
++}
++
++/** Collapse presentation-only differences so a retry hashes to the same id. */
++function normalizeIdentityText(content: string): string {
++  return content.normalize("NFC").trim().replace(/\s+/g, " ");
++}
++
++/**
+  * Write a memory record according to the dedup decision.
+  *
+  * - store: append new record
+@@ -178,27 +233,16 @@
+   embeddingService?: EmbeddingService;
+   /** StorageAdapter for file operations (COS/local). Falls back to fs when absent. */
+   storage?: StorageAdapter;
+-}): Promise<MemoryRecord | null> {
++}): Promise<WriteMemoryResult> {
+   const { memory, decision, baseDir, sessionKey, sessionId, taskId, teamId, userId, agentId, logger, vectorStore, embeddingService, storage } = params;
+ 
+   if (decision.action === "skip") {
+     logger?.debug?.(`${TAG} Skipping memory: ${memory.content.slice(0, 50)}...`);
+-    return null;
++    return { outcome: "skipped", record: null };
+   }
+ 
+   const now = new Date().toISOString();
+ 
+-  let nextVersion = 0;
+-  if ((decision.action === "update" || decision.action === "merge") && decision.target_ids.length > 0 && vectorStore) {
+-    try {
+-      const existing = await vectorStore.queryL1Records({ recordIds: decision.target_ids });
+-      const maxVersion = existing.reduce((max, row) => Math.max(max, row.version ?? 0), 0);
+-      nextVersion = maxVersion + 1;
+-    } catch (err) {
+-      logger?.warn?.(`${TAG} Failed to read existing memory version, defaulting to v0: ${err instanceof Error ? err.message : String(err)}`);
+-    }
+-  }
+-
+   // Determine final content, type, priority based on action
+   let finalContent: string;
+   let finalType: MemoryType;
+@@ -218,8 +262,80 @@
+     finalTimestamps = [now];
+   }
+ 
++  // Resolve the id before the version lookup, so the lookup reads the row this write will replace.
++  const recordId =
++    decision.record_id ||
++    deriveL1RecordId({
++      sessionKey,
++      sessionId,
++      taskId,
++      teamId,
++      userId,
++      agentId,
++      type: finalType,
++      content: finalContent,
++    });
++
++  // A failed lookup throws rather than writing version 0, which would regress an existing record.
++  // Callers catch and log the error, so the failure stays scoped to this one memory.
++  let nextVersion = 0;
++  let existingRowFound = false;
++  // Shard the existing row was first written to, from its created_time, plus that timestamp.
++  // The surviving row's created_time is carried into the replayed record below: SQLite leaves
++  // created_time untouched on conflict, but TCVDB and MongoDB overwrite it on every upsert, and
++  // rewriting it would move a later replay's shard lookup off the line it actually wrote.
++  let replayShardDate: string | undefined;
++  let replayCreatedAt: string | undefined;
++  if ((decision.action === "update" || decision.action === "merge") && vectorStore) {
++    // Include the surviving id: after a first update the targets are gone, and only the survivor shows a replay.
++    const lookupIds = Array.from(new Set([...decision.target_ids, recordId]));
++    try {
++      const existing = await vectorStore.queryL1Records({ recordIds: lookupIds });
++      const others = existing.filter((row) => row.record_id !== recordId);
++      const survivor = existing.find((row) => row.record_id === recordId);
++      if (survivor && survivor.content === finalContent) {
++        // Replay: the survivor already holds this write, so keep its version and report it as a replay.
++        // This holds even when superseded targets remain, e.g. after a failed cleanup, so a retry
++        // only retries the cleanup and never bumps the version or appends another JSONL line.
++        existingRowFound = true;
++        nextVersion = survivor.version ?? 0;
++        if (survivor.created_time) {
++          const survivorCreatedAt = new Date(survivor.created_time);
++          if (!Number.isNaN(survivorCreatedAt.getTime())) {
++            replayCreatedAt = survivorCreatedAt.toISOString();
++            replayShardDate = formatLocalDate(survivorCreatedAt);
++          }
++        }
++      } else if (others.length > 0 || survivor) {
++        // A real update: bump past every row it rewrites, including the survivor if it is a target.
++        const maxVersion = existing.reduce((max, row) => Math.max(max, row.version ?? 0), 0);
++        nextVersion = maxVersion + 1;
++      } else {
++        nextVersion = 1;
++      }
++    } catch (err) {
++      throw new Error(`${TAG} Failed to read existing memory version for update/merge: ${err instanceof Error ? err.message : String(err)}`);
++    }
++  } else if (decision.action === "store" && vectorStore) {
++    // Replay of an id already stored: keep its version so a store never regresses it.
++    try {
++      const existing = await vectorStore.queryL1Records({ recordIds: [recordId] });
++      existingRowFound = existing.length > 0;
++      if (existing[0]?.created_time) {
++        const existingCreatedAt = new Date(existing[0].created_time);
++        if (!Number.isNaN(existingCreatedAt.getTime())) {
++          replayCreatedAt = existingCreatedAt.toISOString();
++          replayShardDate = formatLocalDate(existingCreatedAt);
++        }
++      }
++      nextVersion = existing.reduce((max, row) => Math.max(max, row.version ?? 0), 0);
++    } catch (err) {
++      throw new Error(`${TAG} Failed to read existing memory version for replay of ${recordId}: ${err instanceof Error ? err.message : String(err)}`);
++    }
++  }
++
+   const record: MemoryRecord = {
+-    id: decision.record_id || generateMemoryId(),
++    id: recordId,
+     content: finalContent,
+     type: finalType,
+     priority: finalPriority,
+@@ -227,7 +343,9 @@
+     source_message_ids: memory.source_message_ids,
+     metadata: memory.metadata,
+     timestamps: finalTimestamps,
+-    createdAt: now,
++    // A replay keeps the created_time it was first stored with, so the journal shard a replay
++    // looks in is the one the line was written to even on stores whose upsert overwrites it.
++    createdAt: existingRowFound && replayCreatedAt ? replayCreatedAt : now,
+     updatedAt: now,
+     version: nextVersion,
+     sessionKey,
+@@ -241,7 +359,14 @@
+     agentId: agentId || DEFAULT_ISOLATION_ID,
+   };
+ 
+-  const shardDate = formatLocalDate(new Date());
++  // Shard from the same instant as createdAt (the survivor's, on a replay), so a replay's
++  // created_time lookup always names the shard the line was written to.
++  const shardDate = formatLocalDate(new Date(now));
++  // A survivor whose created_time is missing or unparseable (legacy or hand-seeded row) cannot
++  // name the shard its line was written to, so the replay checks and repairs this write's shard
++  // instead of silently dropping the journal line. Writer-created rows always carry an ISO
++  // created_time, so this fallback only covers rows that predate the record-identity contract.
++  if (existingRowFound && !replayShardDate) replayShardDate = shardDate;
+   const recordKey = StoragePaths.record(shardDate);
+ 
+   // Helper: append a JSONL line
+@@ -272,85 +397,166 @@
+     }
+   };
+ 
+-  if ((decision.action === "update" || decision.action === "merge") && decision.target_ids.length > 0) {
+-    // Remove target records from VectorStore (real-time deletion for retrieval accuracy).
+-    // JSONL is append-only — old records remain in files and are cleaned up periodically
+-    // by memory-cleaner (which reconciles against VectorStore as source of truth).
+-    if (vectorStore) {
++  // Persist first, then retire what this record supersedes.
++  //
++  // The old order removed the targets from the vector store before the
++  // replacement was durable anywhere: a failing write left neither the old
++  // rows nor the new one, and the next extraction had nothing to reconcile
++  // against. The new row now lands in the vector store before anything it
++  // replaces is deleted, and a target that equals the surviving id is never
++  // deleted (an update/merge decision can name the row it is rewriting).
++  const supersedes = decision.action === "update" || decision.action === "merge";
++  const supersededIds = supersedes ? decision.target_ids.filter((id) => id !== record.id) : [];
++
++  // A replay of an id already in the vector store is a no-op for JSONL: the row is already there.
++  const replay = existingRowFound;
++  // Superseded targets the vector store did not delete. The replacement is already stored, so
++  // the write still succeeds; the caller can retry the same decision to finish the cleanup.
++  let cleanupPending: string[] = [];
++  // The journal line is appended only once the vector store has accepted the row (or directly when
++  // there is no vector store). A rejected upsert then leaves no journal line, so a retry cannot
++  // append the same record twice.
++  const appendJournal = async () => {
++    if (replay) {
++      // A replay repairs a journal line lost after an earlier upsert: append only when the id is absent from its shard.
++      if (!replayShardDate) return;
+       try {
+-        const deleteFilter = teamId || userId || agentId || sessionId
+-          ? { teamId, userId, agentId, sessionId: sessionId || undefined, sessionKey }
+-          : undefined;
+-        if (deleteFilter) {
+-          await vectorStore.deleteL1Batch(decision.target_ids, deleteFilter);
+-        } else {
+-          await vectorStore.deleteL1Batch(decision.target_ids);
++        // Same targets as appendRecord: StorageAdapter when wired, otherwise the local fs fallback.
++        const fs = await import("node:fs/promises");
++        const path = await import("node:path");
++        const key = StoragePaths.record(replayShardDate);
++        const recordsDir = path.default.join(baseDir, "records");
++        const localFile = path.default.join(recordsDir, `${replayShardDate}.jsonl`);
++        // Only a missing fs shard counts as empty. Any other read failure reaches the warning below
++        // without appending, so an unreadable journal is never treated as lacking the line.
++        const text = storage
++          ? ((await storage.readFile(key)) ?? "")
++          : await fs.default.readFile(localFile, "utf-8").catch((err: NodeJS.ErrnoException) => {
++              if (err?.code === "ENOENT") return "";
++              throw err;
++            });
++        const lines = text.split("\n");
++        const present = lines.some((line) => {
++          if (!line.trim()) return false;
++          try {
++            return (JSON.parse(line) as { id?: string }).id === record.id;
++          } catch {
++            return false;
++          }
++        });
++        if (!present) {
++          if (storage) {
++            await storage.appendFile(key, JSON.stringify(record) + "\n");
++          } else {
++            await fs.default.mkdir(recordsDir, { recursive: true });
++            await fs.default.appendFile(localFile, JSON.stringify(record) + "\n", "utf-8");
++          }
+         }
+-        logger?.debug?.(`${TAG} VectorStore: deleted ${decision.target_ids.length} target record(s) for ${decision.action}`);
+       } catch (err) {
+-        logger?.warn?.(
+-          `${TAG} VectorStore delete failed for ${decision.action}: ${err instanceof Error ? err.message : String(err)}`,
+-        );
++        logger?.warn?.(`${TAG} JSONL replay repair failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+       }
++      return;
+     }
+     try {
+       await appendRecord(JSON.stringify(record) + "\n");
+     } catch (err) {
+       logger?.warn?.(`${TAG} JSONL append failed (non-fatal, VDB write continues): ${err instanceof Error ? err.message : String(err)}`);
+     }
+-    logger?.debug?.(`${TAG} ${decision.action} memory: removed [${decision.target_ids.join(",")}] from VectorStore → ${record.id}: ${finalContent.slice(0, 80)}...`);
+-  } else {
+-    // store: append a new line
+-    try {
+-      await appendRecord(JSON.stringify(record) + "\n");
+-    } catch (err) {
+-      logger?.warn?.(`${TAG} JSONL append failed (non-fatal, VDB write continues): ${err instanceof Error ? err.message : String(err)}`);
+-    }
+-    logger?.debug?.(`${TAG} Stored memory ${record.id}: ${finalContent.slice(0, 80)}...`);
+-  }
++  };
+ 
+   // === Vector Store dual-write ===
+   if (vectorStore) {
++    logger?.debug?.(
++      `${TAG} [vec-dual-write] START id=${record.id}, contentLen=${record.content.length}, ` +
++      `content="${record.content.slice(0, 80)}..."`,
++    );
++
++    let embedding: Float32Array | undefined;
++
++    if (embeddingService) {
++      try {
++        embedding = await embeddingService.embed(record.content);
++        logger?.debug?.(
++          `${TAG} [vec-dual-write] Embedding OK: dims=${embedding.length}, ` +
++          `norm=${Math.sqrt(Array.from(embedding).reduce((s, v) => s + v * v, 0)).toFixed(4)}`,
++        );
++      } catch (embedErr) {
++        // Embedding failed — pass undefined to upsert() which writes
++        // metadata + FTS only, skipping the vec0 table.
++        logger?.warn(
++          `${TAG} [vec-dual-write] Embedding FAILED for id=${record.id}, ` +
++          `will write metadata only: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`,
++        );
++      }
++    }
++
++    // Atomic stores delete superseded targets in the same transaction as the
++    // upsert; the rest fall back to the two-step path below.
++    const atomic = vectorStore.atomicSupersede === true && supersededIds.length > 0;
++    const atomicFilter = teamId || userId || agentId || sessionId
++      ? { teamId, userId, agentId, sessionId: sessionId || undefined, sessionKey }
++      : undefined;
++
++    let upsertOk = false;
+     try {
+-      logger?.debug?.(
+-        `${TAG} [vec-dual-write] START id=${record.id}, contentLen=${record.content.length}, ` +
+-        `content="${record.content.slice(0, 80)}..."`,
++      upsertOk = atomic
++        ? await vectorStore.upsertL1(record, embedding, { ids: supersededIds, filter: atomicFilter })
++        : await vectorStore.upsertL1(record, embedding);
++    } catch (err) {
++      throw new Error(
++        `L1 vector upsert threw for id=${record.id}: ${err instanceof Error ? err.message : String(err)}`,
++      );
++    }
++    logger?.debug?.(`${TAG} [vec-dual-write] upsert result=${upsertOk} id=${record.id}`);
++
++    if (!upsertOk) {
++      // upsertL1 reports false only for a real failure (degraded store or a
++      // rejected write), never for an idempotent replay: both stores upsert on
++      // record.id. Propagate it — a memory the caller believes is stored but
++      // retrieval cannot see is worse than a write that reports failure.
++      throw new Error(
++        `L1 vector upsert rejected id=${record.id} (no JSONL line appended, superseded targets kept)`,
+       );
++    }
+ 
+-      let embedding: Float32Array | undefined;
++    await appendJournal();
+ 
+-      if (embeddingService) {
+-        try {
+-          embedding = await embeddingService.embed(record.content);
+-          logger?.debug?.(
+-            `${TAG} [vec-dual-write] Embedding OK: dims=${embedding.length}, ` +
+-            `norm=${Math.sqrt(Array.from(embedding).reduce((s, v) => s + v * v, 0)).toFixed(4)}`,
+-          );
+-        } catch (embedErr) {
+-          // Embedding failed — pass undefined to upsert() which writes
+-          // metadata + FTS only, skipping the vec0 table.
+-          logger?.warn(
+-            `${TAG} [vec-dual-write] Embedding FAILED for id=${record.id}, ` +
+-            `will write metadata only: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`,
++    if (supersededIds.length > 0 && !atomic) {
++      const deleteFilter = teamId || userId || agentId || sessionId
++        ? { teamId, userId, agentId, sessionId: sessionId || undefined, sessionKey }
++        : undefined;
++      try {
++        // Stores return false on a degraded or failed delete instead of throwing; treat it as leftover.
++        const deleted = deleteFilter
++          ? await vectorStore.deleteL1Batch(supersededIds, deleteFilter)
++          : await vectorStore.deleteL1Batch(supersededIds);
++        if (deleted === false) {
++          cleanupPending = supersededIds;
++          logger?.warn?.(
++            `${TAG} VectorStore delete returned false for ${decision.action}; ${supersededIds.length} superseded target(s) left for retry`,
+           );
++        } else {
++          logger?.debug?.(`${TAG} VectorStore: deleted ${supersededIds.length} target record(s) for ${decision.action}`);
+         }
++      } catch (err) {
++        // The replacement is already stored: leaving a stale target behind is
++        // recoverable by memory-cleaner, unlike the reverse.
++        cleanupPending = supersededIds;
++        logger?.warn?.(
++          `${TAG} VectorStore delete failed for ${decision.action}: ${err instanceof Error ? err.message : String(err)}`,
++        );
+       }
+-
+-      const upsertOk = await vectorStore.upsertL1(record, embedding);
+-      logger?.debug?.(`${TAG} [vec-dual-write] upsert result=${upsertOk} id=${record.id}`);
+-    } catch (err) {
+-      // Vector write failure should NOT block the main JSONL write
+-      logger?.warn?.(
+-        `${TAG} [vec-dual-write] FAILED (JSONL already written) id=${record.id}: ${err instanceof Error ? err.message : String(err)}`,
+-      );
+     }
+   } else {
+     logger?.debug?.(
+       `${TAG} [vec-dual-write] SKIPPED id=${record.id}: vectorStore=${!!vectorStore}`,
+     );
++    await appendJournal();
+   }
+ 
+-  return record;
++  logger?.debug?.(`${TAG} ${decision.action} memory ${record.id}: ${finalContent.slice(0, 80)}...`);
++
++  return { outcome: replay ? "replay" : "fresh", record, cleanupPending };
+ }
+ 
+ // ============================
+--- a/src/core/record/l1-extractor.ts	2026-10-15 00:02:53.455182938 +1300
++++ b/src/core/record/l1-extractor.ts	2026-11-11 19:06:38.000000000 +1300
+@@ -15,7 +15,7 @@
+ import type { ConversationMessage } from "../conversation/l0-recorder.js";
+ import { formatExtractionPrompt, getExtractMemoriesSystemPrompt, type MemoryPromptMode } from "../prompts/l1-extraction.js";
+ import { batchDedup } from "./l1-dedup.js";
+-import { writeMemory, generateMemoryId } from "./l1-writer.js";
++import { writeMemory, deriveL1RecordId, type WriteMemoryResult } from "./l1-writer.js";
+ import type { ExtractedMemory, MemoryRecord, MemoryType, DedupDecision } from "./l1-writer.js";
+ import { CleanContextRunner } from "../../utils/clean-context-runner.js";
+ import { sanitizeJsonForParse, shouldExtractL1 } from "../../utils/sanitize.js";
+@@ -298,14 +298,27 @@
+     extracted = extracted.slice(0, maxMemoriesPerSession);
+   }
+ 
+-  // Assign temporary IDs to extracted memories (needed for batch dedup)
++  // Assign deterministic IDs to extracted memories (needed for batch dedup).
++  // A replay of the same window derives the same id, so the write upserts onto
++  // the row it produced last time instead of duplicating it. The dedup LLM may
++  // still retarget update/merge decisions; anything it leaves alone keeps this id.
+   const memoriesWithIds = extracted.map((m) => ({
+     ...m,
+-    record_id: generateMemoryId(),
++    record_id: deriveL1RecordId({
++      sessionKey,
++      sessionId,
++      taskId,
++      teamId,
++      userId,
++      agentId,
++      type: m.type,
++      content: m.content,
++    }),
+   }));
+ 
+   // Step 2: Batch Conflict Detection + Write
+   let storedRecords: MemoryRecord[];
++  const writeFailures: string[] = [];
+   let dedupLatencyMs: number | null = null;
+   const generationFinishedAt = Date.now();
+   const generationIdentity = buildGenerationLogIdentity(
+@@ -367,14 +380,26 @@
+         vectorStore: options.vectorStore,
+         embeddingService: options.embeddingService,
+         storage,
++        writeFailures,
+       });
+ 
+     } catch (err) {
+-      logger?.warn?.(`${TAG} Batch dedup failed, storing all as new: ${err instanceof Error ? err.message : String(err)}`);
+-      storedRecords = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, taskId, teamId, userId, agentId, logger, options.vectorStore, options.embeddingService, storage);
++      // Fail closed: storing the batch blind would persist a reworded repeat as a
++      // new row (its derived id differs from the existing row's id). Report the
++      // failure instead, so the caller holds the L1 cursor and retries the window.
++      const dedupError = err instanceof Error ? err.message : String(err);
++      logger?.warn?.(`${TAG} Conflict detection unavailable; extraction reported as failed so the L1 cursor is held for retry: ${dedupError}`);
++      for (const memoryWithId of memoriesWithIds) {
++        writeFailures.push(`${memoryWithId.record_id}: conflict detection unavailable: ${dedupError}`);
++      }
++      storedRecords = [];
+     }
+   } else {
+-    storedRecords = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, taskId, teamId, userId, agentId, logger, options.vectorStore, options.embeddingService, storage);
++    storedRecords = await storeAllDirectly(memoriesWithIds, baseDir, sessionKey, sessionId, taskId, teamId, userId, agentId, logger, options.vectorStore, options.embeddingService, storage, writeFailures);
++  }
++
++  if (writeFailures.length > 0) {
++    logger?.warn?.(`${TAG} ${writeFailures.length} memory write(s) failed; extraction reported as failed so the L1 cursor is held for retry`);
+   }
+ 
+   const logStorage = storage ?? new StorageAdapter(new LocalStorageBackend(baseDir));
+@@ -406,13 +431,13 @@
+     logger,
+     writeLog: () => generationLogStore.write(generationLog, generationIdentity.key),
+     writeRefs: options.vectorStore?.upsertMemoryGenerationRefs && storedRecords.length > 0
+-      ? () => options.vectorStore!.upsertMemoryGenerationRefs!(storedRecords.map((record) => ({
++      ? async () => { await options.vectorStore!.upsertMemoryGenerationRefs!(storedRecords.map((record) => ({
+           generation_ref_id: buildMemoryGenerationRefId("l1", record.id),
+           layer: "l1" as const,
+           memory_id: record.id,
+           ...generation,
+           created_at_ms: generationFinishedAt,
+-        })))
++        }))); }
+       : undefined,
+   });
+ 
+@@ -437,7 +462,7 @@
+       })),
+       memoriesByType,
+       totalDurationMs: Date.now() - l1StartMs,
+-      success: true,
++      success: writeFailures.length === 0,
+       error: null,
+     });
+   }
+@@ -470,7 +495,7 @@
+   }
+ 
+   return {
+-    success: true,
++    success: writeFailures.length === 0,
+     extractedCount: extracted.length,
+     storedCount: storedRecords.length,
+     records: storedRecords,
+@@ -744,8 +769,9 @@
+   vectorStore?: IMemoryStore;
+   embeddingService?: EmbeddingService;
+   storage?: StorageAdapter;
++  writeFailures: string[];
+ }): Promise<MemoryRecord[]> {
+-  const { memoriesWithIds, decisions, baseDir, sessionKey, sessionId, taskId, teamId, userId, agentId, logger, vectorStore, embeddingService, storage } = params;
++  const { memoriesWithIds, decisions, baseDir, sessionKey, sessionId, taskId, teamId, userId, agentId, logger, vectorStore, embeddingService, storage, writeFailures } = params;
+   const storedRecords: MemoryRecord[] = [];
+ 
+   // Build a map from record_id → decision
+@@ -762,7 +788,7 @@
+     };
+ 
+     try {
+-      const record = await writeMemory({
++      const result: WriteMemoryResult = await writeMemory({
+         memory: memoryWithId,
+         decision,
+         baseDir,
+@@ -778,12 +804,21 @@
+         storage,
+       });
+ 
+-      if (record) {
+-        storedRecords.push(record);
++      if (result.outcome === "fresh") {
++        storedRecords.push(result.record);
++      }
++      if (result.outcome !== "skipped" && result.cleanupPending.length > 0) {
++        writeFailures.push(`${memoryWithId.record_id}: ${result.cleanupPending.length} superseded target(s) still in the vector store`);
++        logger?.warn?.(
++          `${TAG} ${result.cleanupPending.length} superseded target(s) for ${memoryWithId.record_id} still in the vector store ` +
++          `(coexistence window; a replay of the same record finishes cleanup): ${result.cleanupPending.join(", ")}`,
++        );
+       }
+     } catch (err) {
++      const message = err instanceof Error ? err.message : String(err);
++      writeFailures.push(`${memoryWithId.record_id}: ${message}`);
+       logger?.warn?.(
+-        `${TAG} Write failed for memory "${memoryWithId.content.slice(0, 50)}...": ${err instanceof Error ? err.message : String(err)}`,
++        `${TAG} Write failed for memory "${memoryWithId.content.slice(0, 50)}...": ${message}`,
+       );
+     }
+   }
+@@ -807,12 +842,13 @@
+   vectorStore?: IMemoryStore,
+   embeddingService?: EmbeddingService,
+   storage?: StorageAdapter,
++  writeFailures: string[] = [],
+ ): Promise<MemoryRecord[]> {
+   const storedRecords: MemoryRecord[] = [];
+ 
+   for (const memoryWithId of memoriesWithIds) {
+     try {
+-      const record = await writeMemory({
++      const result: WriteMemoryResult = await writeMemory({
+         memory: memoryWithId,
+         decision: {
+           record_id: memoryWithId.record_id,
+@@ -831,12 +867,21 @@
+         embeddingService,
+         storage,
+       });
+-      if (record) {
+-        storedRecords.push(record);
++      if (result.outcome === "fresh") {
++        storedRecords.push(result.record);
++      }
++      if (result.outcome !== "skipped" && result.cleanupPending.length > 0) {
++        writeFailures.push(`${memoryWithId.record_id}: ${result.cleanupPending.length} superseded target(s) still in the vector store`);
++        logger?.warn?.(
++          `${TAG} ${result.cleanupPending.length} superseded target(s) for ${memoryWithId.record_id} still in the vector store ` +
++          `(coexistence window; a replay of the same record finishes cleanup): ${result.cleanupPending.join(", ")}`,
++        );
+       }
+     } catch (err) {
++      const message = err instanceof Error ? err.message : String(err);
++      writeFailures.push(`${memoryWithId.record_id}: ${message}`);
+       logger?.warn?.(
+-        `${TAG} Write failed for memory "${memoryWithId.content.slice(0, 50)}...": ${err instanceof Error ? err.message : String(err)}`,
++        `${TAG} Write failed for memory "${memoryWithId.content.slice(0, 50)}...": ${message}`,
+       );
+     }
+   }
+--- a/src/core/record/l1-dedup.ts	2026-10-09 20:39:57.000000000 +1300
++++ b/src/core/record/l1-dedup.ts	2026-11-11 19:06:30.000000000 +1300
+@@ -188,14 +188,11 @@
+     const decisions = parseBatchResult(result, memories, logger);
+     return decisions;
+   } catch (err) {
+-    logger?.warn?.(
+-      `${TAG} Batch conflict detection failed, defaulting all to store: ${err instanceof Error ? err.message : String(err)}`,
+-    );
+-    return memories.map((m) => ({
+-      record_id: m.record_id,
+-      action: "store" as const,
+-      target_ids: [],
+-    }));
++    const reason = err instanceof Error ? err.message : String(err);
++    logger?.warn?.(`${TAG} Batch conflict detection failed: ${reason}`);
++    // Fail closed: an all-"store" default here would duplicate a reworded repeat.
++    // Throwing lets the extractor hold the L1 cursor and retry the window.
++    throw new Error(`conflict detection failed: ${reason}`, { cause: err as Error });
+   }
+ }
+ 
+@@ -325,8 +322,8 @@
+     // Same safeguards as l1-extractor:
+     //   • non-greedy `*?` + explicit `</think>` requirement — truncated
+     //     think tags (max_tokens cap) fall through as-is instead of eating
+-    //     the rest of the response, and the fallbackStoreAll safety net in
+-    //     the caller then quietly stores everything (dedup no-op).
++    //     the rest of the response and producing a bogus judgment; the
++    //     extractor then reports the window as failed and retries it.
+     //   • `g` flag — multi-segment thinking is fully stripped.
+     //   • Preserve untouched `raw` for the [l1-dedup-debug] log path so
+     //     ops can still see original wire content when they need to debug
+@@ -348,7 +345,7 @@
+     const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+     if (!arrayMatch) {
+       logger?.warn?.(`${TAG} No JSON array found in conflict detection response`);
+-      return fallbackStoreAll(memories);
++      throw new Error("conflict detection returned no JSON array");
+     }
+ 
+     // Sanitize control characters inside JSON string literals that LLM may produce
+@@ -357,7 +354,7 @@
+ 
+     if (!Array.isArray(parsed)) {
+       logger?.warn?.(`${TAG} Conflict detection response is not an array`);
+-      return fallbackStoreAll(memories);
++      throw new Error("conflict detection response is not an array");
+     }
+ 
+     // Build decisions from LLM output
+@@ -406,18 +403,10 @@
+ 
+     return decisions;
+   } catch (err) {
+-    logger?.warn?.(`${TAG} Failed to parse conflict detection result: ${err instanceof Error ? err.message : String(err)}`);
+-    return fallbackStoreAll(memories);
++    const reason = err instanceof Error ? err.message : String(err);
++    logger?.warn?.(`${TAG} Failed to parse conflict detection result: ${reason}`);
++    // Fail closed: an unparseable judgment is not a judgment. Storing here would
++    // duplicate a reworded repeat; the extractor turns this into a held cursor.
++    throw new Error(`conflict detection result unparseable: ${reason}`, { cause: err as Error });
+   }
+ }
+-
+-/**
+- * Fallback: store all memories when parsing fails.
+- */
+-function fallbackStoreAll(memories: Array<ExtractedMemory & { record_id: string }>): DedupDecision[] {
+-  return memories.map((m) => ({
+-    record_id: m.record_id,
+-    action: "store" as const,
+-    target_ids: [],
+-  }));
+-}
+--- a/src/core/store/sqlite/memory-store.ts	2026-10-25 20:06:20.613274469 +1300
++++ b/src/core/store/sqlite/memory-store.ts	2026-11-11 19:06:30.000000000 +1300
+@@ -229,6 +229,8 @@
+ 
+   /** @see IMemoryStore.supportsDeferredEmbedding */
+   readonly supportsDeferredEmbedding = true;
++  /** upsertL1 deletes superseded targets in the same transaction. */
++  readonly atomicSupersede = true;
+ 
+   /**
+    * When `true`, the store is in a degraded state (e.g. sqlite-vec failed to
+@@ -565,7 +567,7 @@
+         scene_name=excluded.scene_name,
+         team_id=excluded.team_id,
+         task_id=excluded.task_id,
+-        version=excluded.version,
++        version=MAX(l1_records.version, excluded.version),
+         timestamp_str=excluded.timestamp_str,
+         timestamp_start=excluded.timestamp_start,
+         timestamp_end=excluded.timestamp_end,
+@@ -1200,7 +1202,11 @@
+    * failure never propagates to the caller / main OpenClaw flow.
+    * Returns `true` on success, `false` on failure (logged as warning).
+    */
+-  upsertL1(record: MemoryRecord, embedding: Float32Array | undefined): boolean {
++  upsertL1(
++    record: MemoryRecord,
++    embedding: Float32Array | undefined,
++    supersede?: { ids: string[]; filter?: IsolationFilter },
++  ): boolean {
+     if (this.degraded) {
+       this.logger?.warn(`${TAG} [L1-upsert] SKIPPED (degraded mode) id=${record.id}`);
+       return false;
+@@ -1301,6 +1307,21 @@
+           }
+         }
+ 
++        // Superseded targets are removed in the same transaction, so a failed
++        // delete rolls back the upsert too: no window where old and new coexist.
++        for (const id of supersede?.ids ?? []) {
++          if (id === recordId) continue;
++          if (supersede?.filter) {
++            const meta = this.stmtGetMeta.get(id) as { user_id?: string; agent_id?: string; session_id?: string; session_key?: string } | undefined;
++            if (!meta || !rowMatchesIsolation(meta, supersede.filter)) continue;
++          }
++          this.stmtDeleteMeta.run(id);
++          if (this.vecTablesReady) this.stmtDeleteVec!.run(id);
++          if (this.ftsAvailable) {
++            try { this.stmtL1FtsDelete.run(id); } catch { /* non-fatal */ }
++          }
++        }
++
+         this.db.exec("COMMIT");
+       } catch (err) {
+         try {
+--- a/src/core/store/tcvdb/memory-store.ts	2026-10-09 20:39:57.000000000 +1300
++++ b/src/core/store/tcvdb/memory-store.ts	2026-11-11 19:06:30.000000000 +1300
+@@ -661,7 +661,7 @@
+ 
+   private async _upsertL1Async(record: MemoryRecord): Promise<void> {
+     await this._ensureInit();
+-    if (this.degraded) return;
++    if (this.degraded) throw new Error("tcvdb store degraded: L1 write skipped");
+ 
+     const tsStr = record.timestamps[0] ?? "";
+     const tsStart = record.timestamps.length > 0
+--- a/src/core/store/types.ts	2026-10-09 20:39:57.000000000 +1300
++++ b/src/core/store/types.ts	2026-11-11 19:06:30.000000000 +1300
+@@ -611,7 +611,16 @@
+ 
+   // ── L1 Write ─────────────────────────────────────────────
+ 
+-  upsertL1(record: MemoryRecord, embedding?: Float32Array): MaybePromise<boolean>;
++  /**
++   * True when `upsertL1` honours `supersede` by deleting the targets in the same
++   * transaction as the upsert. Stores without it need a separate delete call.
++   */
++  readonly atomicSupersede?: boolean;
++  upsertL1(
++    record: MemoryRecord,
++    embedding?: Float32Array,
++    supersede?: { ids: string[]; filter?: IsolationFilter },
++  ): MaybePromise<boolean>;
+   deleteL1(recordId: string, filter?: IsolationFilter): MaybePromise<boolean>;
+   deleteL1Batch(recordIds: string[], filter?: IsolationFilter): MaybePromise<boolean>;
+   deleteL1Expired(cutoffIso: string): MaybePromise<number>;

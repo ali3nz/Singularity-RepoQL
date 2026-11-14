@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import threading
 
@@ -87,6 +88,39 @@ def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _verified_agent_fields(metadata: dict, owner_name: str) -> dict:
+    """Optional independent Rust check; no agent body or file paths enter Rust."""
+    binary = os.environ.get('SINGULARITY_CLAUDE_AGENT_FIELDS_RUST_BINARY', '')
+    if not binary:
+        return metadata
+    path = Path(binary)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        raise RuntimeError('claude_agent_rust_binary_invalid')
+    parent = path.parent
+    while parent != parent.parent:
+        if parent.is_symlink():
+            raise RuntimeError('claude_agent_rust_binary_invalid')
+        parent = parent.parent
+    request = json.dumps({"schema": "singularity-claude-agent-fields/v1",
+                          "owner_name": owner_name, "metadata": metadata},
+                         separators=(',', ':'), ensure_ascii=False)
+    if len(request.encode('utf8')) > 128 * 1024:
+        raise RuntimeError('claude_agent_rust_request_too_large')
+    child_env = {key: value for key, value in os.environ.items()
+                 if key.upper() in {'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'HOME'}}
+    try:
+        result = subprocess.run([str(path)], input=request, capture_output=True, text=True,
+                                timeout=8, check=False, shell=False, env=child_env)
+        if result.returncode or len(result.stdout) > 128 * 1024:
+            raise RuntimeError('claude_agent_rust_execution_failed')
+        actual = json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise RuntimeError('claude_agent_rust_execution_failed') from exc
+    if actual != {"metadata": metadata}:
+        raise RuntimeError('claude_agent_rust_parity_mismatch')
+    return metadata
+
+
 def _frontmatter(data: str, name: str) -> dict:
     match = re.match(r"\A---\r?\n([\s\S]*?)\r?\n---\r?\n", data)
     if not match or not data[match.end():].strip():
@@ -111,8 +145,9 @@ def _frontmatter(data: str, name: str) -> dict:
         raise ValueError("invalid_agent_model")
     if name == "singularity-code-reviewer" and re.search(r"\b(?:Edit|Write|Bash)\b", result.get("tools", "")):
         raise ValueError("reviewer_must_remain_read_only")
-    return {key: result.get(key, "") for key in
-            ("name", "description", "model", "effort", "tools", "permissionMode")}
+    metadata = {key: result.get(key, "") for key in
+                ("name", "description", "model", "effort", "tools", "permissionMode")}
+    return _verified_agent_fields(metadata, name)
 
 
 def _read(path: Path) -> bytes:
@@ -315,6 +350,50 @@ def _required_entry(spec: dict, servers: list) -> dict:
     return entry
 
 
+def _project_required_native(servers: list, required: dict) -> dict:
+    """Verified native read-only projection; never forwards MCP config bodies."""
+    expected = {
+        "required": required,
+        "requiredMissing": [key for key, value in required.items() if value["status"] == "missing"],
+        "requiredNotVerified": [key for key, value in required.items() if value["status"] == "not_verified"],
+        "verification": "configuration_only_no_live_tool_calls",
+        "liveHealthClaimed": False,
+    }
+    binary = os.environ.get('SINGULARITY_CLAUDE_MCP_INVENTORY_RUST_BINARY', '')
+    if not binary:
+        return expected
+    names = [server["name"] for server in servers]
+    if len(names) > 1024 or any(type(name) is not str or len(name) > 100 or
+                                any(ord(c) < 32 or 0x7f <= ord(c) <= 0x9f for c in name)
+                                for name in names):
+        raise RuntimeError('claude_mcp_rust_invalid_names')
+    path = Path(binary)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        raise RuntimeError('claude_mcp_rust_binary_invalid')
+    parent = path.parent
+    while parent != parent.parent:
+        if parent.is_symlink():
+            raise RuntimeError('claude_mcp_rust_binary_invalid')
+        parent = parent.parent
+    request = json.dumps({"schema": "singularity-claude-mcp-inventory/v1", "names": names},
+                         separators=(',', ':'), ensure_ascii=False)
+    if len(request.encode('utf8')) > 128 * 1024:
+        raise RuntimeError('claude_mcp_rust_request_too_large')
+    child_env = {key: value for key, value in os.environ.items()
+                 if key.upper() in {'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'HOME'}}
+    try:
+        result = subprocess.run([str(path)], input=request, capture_output=True, text=True,
+                                timeout=8, check=False, shell=False, env=child_env)
+        if result.returncode or len(result.stdout) > 16384:
+            raise RuntimeError('claude_mcp_rust_execution_failed')
+        actual = json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise RuntimeError('claude_mcp_rust_execution_failed') from exc
+    if actual != expected:
+        raise RuntimeError('claude_mcp_rust_parity_mismatch')
+    return actual
+
+
 def mcp_inventory() -> dict:
     """Configured registration names only. Never return commands, env or tokens."""
     _native()
@@ -338,11 +417,7 @@ def mcp_inventory() -> dict:
             continue
     required = {key: _required_entry(spec, servers)
                 for key, spec in _REQUIRED_INTEGRATIONS.items()}
-    return {"servers": servers, "required": required,
-            "requiredMissing": [key for key, value in required.items() if value["status"] == "missing"],
-            "requiredNotVerified": [key for key, value in required.items() if value["status"] == "not_verified"],
-            "verification": "configuration_only_no_live_tool_calls",
-            "liveHealthClaimed": False}
+    return {"servers": servers, **_project_required_native(servers, required)}
 
 
 def policy_inventory() -> dict:

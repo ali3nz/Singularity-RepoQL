@@ -16,6 +16,8 @@
 //   - The scoped business-user key never appears in logs, errors or argv. It
 //     lives only in the user settings file (mode 0600) or an apiKeyHelper.
 
+import {nativeMemoryPolicyEnabled, requestNativeMemoryPolicy} from "../../harness/kit/lib/native-memory-policy.mjs";
+
 const MEMORY_ENV = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"];
 
 // Endpoint resolution: explicit env override > upstream .env PROXY_PORT > 8096.
@@ -55,6 +57,38 @@ export function isMainMemoryOwnConfig(settings, baseUrl) {
     String(env.ANTHROPIC_BASE_URL).replace(/\/$/, "") === String(baseUrl).replace(/\/$/, ""));
 }
 
+// Only boolean routing evidence crosses the native policy boundary. The
+// settings object may contain provider tokens or a private gateway URL; never
+// send either to the child process, including via error detail or fixtures.
+export function mainMemoryPolicyFacts(settings, baseUrl) {
+  const env = (settings && typeof settings.env === "object") ? settings.env : {};
+  const endpoint = env.ANTHROPIC_BASE_URL;
+  return {
+    ownsEndpoint: isMainMemoryOwnConfig(settings, baseUrl),
+    endpointPresent: Boolean(endpoint),
+    foreignEndpoint: Boolean(endpoint && baseUrl && String(endpoint).replace(/\/$/, "") !== String(baseUrl).replace(/\/$/, "")),
+    apiKey: env.ANTHROPIC_API_KEY !== undefined,
+    bedrock: env.ANTHROPIC_BEDROCK_BASE_URL !== undefined || env.CLAUDE_CODE_USE_BEDROCK !== undefined,
+    vertex: env.ANTHROPIC_VERTEX_BASE_URL !== undefined || env.CLAUDE_CODE_USE_VERTEX !== undefined,
+    foundry: env.CLAUDE_CODE_USE_FOUNDRY !== undefined,
+    helper: typeof settings?.apiKeyHelper === "string" && Boolean(settings.apiKeyHelper.trim()),
+  };
+}
+
+function checkedNativeMainMemory(command, payload, expected) {
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const value = requestNativeMemoryPolicy(command, payload).value;
+  const keys = Object.keys(expected).sort();
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(keys) ||
+      keys.some(k => Array.isArray(expected[k]) ?
+        !Array.isArray(value[k]) || JSON.stringify(value[k]) !== JSON.stringify(expected[k]) :
+        value[k] !== expected[k])) {
+    throw new Error("NATIVE_MAIN_MEMORY_POLICY_DIVERGENCE");
+  }
+  return value;
+}
+
 /**
  * Merge (or refuse) main-agent proxy routing into a settings object.
  * opts: { baseUrl, token (NEVER logged), model, replaceProvider }
@@ -66,25 +100,40 @@ export function ensureMainMemoryIntegration(input, opts) {
   if (!baseUrl) throw new Error("ensureMainMemoryIntegration requires baseUrl");
   const settings = structuredClone(input) || {};
   settings.env = (settings.env && typeof settings.env === "object") ? settings.env : {};
+  const facts = mainMemoryPolicyFacts(settings, baseUrl);
+  // The reference still owns mutation and consent. Native decides only the
+  // sanitized plan, which must agree EXACTLY before the result is returned.
+  const finish = (reference, writeUrl, writeToken, writeModel) => {
+    const checked = checkedNativeMainMemory("main-memory-plan", {
+      facts, replaceProvider: Boolean(replaceProvider),
+      writeUrl, writeToken, writeModel,
+    }, {mode:reference.mode,changed:reference.changed,reasons:reference.reasons});
+    return {...reference,mode:checked.mode,changed:checked.changed,reasons:checked.reasons};
+  };
 
   if (isMainMemoryOwnConfig(settings, baseUrl)) {
-    let touched = false;
-    if (token && !settings.env.ANTHROPIC_AUTH_TOKEN) { settings.env.ANTHROPIC_AUTH_TOKEN = token; touched = true; }
-    if (model && !settings.env.ANTHROPIC_MODEL) { settings.env.ANTHROPIC_MODEL = model; touched = true; }
-    return { settings, changed: touched, mode: "verified-existing", reasons: [] };
+    const writeToken = Boolean(token && !settings.env.ANTHROPIC_AUTH_TOKEN);
+    const writeModel = Boolean(model && !settings.env.ANTHROPIC_MODEL);
+    if (writeToken) settings.env.ANTHROPIC_AUTH_TOKEN = token;
+    if (writeModel) settings.env.ANTHROPIC_MODEL = model;
+    return finish({ settings, changed: writeToken || writeModel, mode: "verified-existing", reasons: [] }, false,writeToken,writeModel);
   }
 
   const conflicts = detectProviderConflicts(settings, { baseUrl });
   if (conflicts.length && !replaceProvider) {
-    return { settings, changed: false, mode: "refused-conflict",
-      reasons: [...conflicts, "explicit --replace-provider consent required to change provider routing"] };
+    return finish({ settings, changed: false, mode: "refused-conflict",
+      reasons: [...conflicts, "explicit --replace-provider consent required to change provider routing"] }, false,false,false);
   }
 
-  let changed = false;
-  if (settings.env.ANTHROPIC_BASE_URL !== baseUrl) { settings.env.ANTHROPIC_BASE_URL = baseUrl; changed = true; }
-  if (token && settings.env.ANTHROPIC_AUTH_TOKEN !== token) { settings.env.ANTHROPIC_AUTH_TOKEN = token; changed = true; }
-  if (model && settings.env.ANTHROPIC_MODEL !== model) { settings.env.ANTHROPIC_MODEL = model; changed = true; }
-  return { settings, changed, mode: conflicts.length ? "merged-over-replace-consent" : "merged", reasons: conflicts };
+  const writeUrl = settings.env.ANTHROPIC_BASE_URL !== baseUrl;
+  const writeToken = Boolean(token && settings.env.ANTHROPIC_AUTH_TOKEN !== token);
+  const writeModel = Boolean(model && settings.env.ANTHROPIC_MODEL !== model);
+  if (writeUrl) settings.env.ANTHROPIC_BASE_URL = baseUrl;
+  if (writeToken) settings.env.ANTHROPIC_AUTH_TOKEN = token;
+  if (writeModel) settings.env.ANTHROPIC_MODEL = model;
+  return finish({settings,changed:writeUrl || writeToken || writeModel,
+    mode:conflicts.length ? "merged-over-replace-consent" : "merged", reasons:conflicts},
+    writeUrl,writeToken,writeModel);
 }
 
 /** Values restore-able at uninstall: only keys that still hold what we wrote. */
@@ -101,16 +150,26 @@ export function mainMemoryOwnedEnv(record, settings) {
 export function removeMainMemoryIntegration(settings, record, prev = {}) {
   const s = structuredClone(settings) || {};
   const env = (s.env && typeof s.env === "object") ? s.env : {};
+  const written = (record && record.mainMemory && record.mainMemory.envWritten) || {};
+  // These are the ONLY three keys the original installer can own. No recorded
+  // provider value, credential or previous setting reaches the native CLI.
+  const keys = MEMORY_ENV.map(key => ({
+    key, present:env[key] !== undefined,
+    matchesReceipt:written[key] !== undefined && env[key] === written[key],
+    restorePrevious:prev[key] !== undefined && prev[key] !== "",
+  }));
   const changedKeys = [];
-  for (const k of MEMORY_ENV) {
-    if (env[k] === undefined) continue;
-    const ours = mainMemoryOwnedEnv(record, s)[k] !== undefined;
-    if (!ours) continue; // not the value we wrote (user changed it): never touch
-    if (prev[k] !== undefined && prev[k] !== "") env[k] = prev[k]; // restore previous value
+  const operations = [];
+  for (const row of keys) {
+    if (!row.present || !row.matchesReceipt) continue;
+    const k = row.key;
+    if (row.restorePrevious) env[k] = prev[k];
     else delete env[k];
     changedKeys.push(k);
+    operations.push({key:k,action:row.restorePrevious ? "restore" : "remove"});
   }
-  return { settings: s, changedKeys };
+  const checked=checkedNativeMainMemory("main-memory-uninstall",{keys},{changedKeys,operations});
+  return { settings: s, changedKeys: checked.changedKeys };
 }
 
 /**
@@ -123,11 +182,13 @@ export function classifyMainMemoryState(settings, baseUrl, probe = null) {
   const env = (settings && typeof settings.env === "object") ? settings.env : {};
   const conflicts = detectProviderConflicts(settings, { baseUrl });
   const ours = isMainMemoryOwnConfig(settings, baseUrl);
-  if (ours && conflicts.length) return { state: "CONFLICTED", detail: `${ours ? "our endpoint is set but overridden elsewhere" : "other routing present"}: ${conflicts.join("; ")}` };
+  const finishOffline = result => checkedNativeMainMemory("main-memory-state",
+    {facts:mainMemoryPolicyFacts(settings,baseUrl)},result);
+  if (ours && conflicts.length) return finishOffline({ state: "CONFLICTED", detail: `${ours ? "our endpoint is set but overridden elsewhere" : "other routing present"}: ${conflicts.join("; ")}` });
   if (!ours) {
-    return { state: env.ANTHROPIC_BASE_URL ? "CONFLICTED" : "DISABLED", detail: conflicts.join("; ") };
+    return finishOffline({ state: env.ANTHROPIC_BASE_URL ? "CONFLICTED" : "DISABLED", detail: conflicts.join("; ") });
   }
-  if (probe === null) return { state: "CONFIGURED", detail: "settings point at the Singularity proxy; run with --probe for VERIFIED" };
+  if (probe === null) return finishOffline({ state: "CONFIGURED", detail: "settings point at the Singularity proxy; run with --probe for VERIFIED" });
   // Tiered probe outcome: only probes that actually reached the model provider
   // through the authenticated proxy produce VERIFIED. A health-only, auth-fail
   // or generic upstream-error result is DEGRADED — never a false "verified".

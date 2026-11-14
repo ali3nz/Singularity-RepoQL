@@ -28,6 +28,7 @@
 import { findDuplicateConcept, findSemanticNearMatches, isUniversalRelevance } from "./concept-capture.mjs";
 import { hasIndependentProvenance, isDerivedProvenance, precedenceRank } from "./memory-candidate-v2.mjs";
 import { evaluateTombstones } from "./memory-tombstone.mjs"; // ticket 191: rejected-value enforcement
+import { nativeMemoryPolicyEnabled, nativeConflictSignal, nativeExtractInvariant, nativeParseCapsule } from "./native-memory-policy.mjs";
 
 export const CONFLICT_DISPOSITIONS = new Set(["NO_CONFLICT", "DUPLICATE", "SUPERSEDES", "CONTRADICTS", "UNCERTAIN", "TOMBSTONED"]);
 // Sol-review triggers (turn-2 narrowing to the operator plan's exact table):
@@ -36,7 +37,7 @@ export const SOL_TRIGGERS = new Set(["NEW_GLOBAL_RULE", "RULE_CONTRADICTION", "H
 
 // Extract the invariant claim from a capsule body (existing capsule format:
 // "**Invariant**\n<text until next **Bold** heading>").
-export function extractInvariant(body) {
+function jsExtractInvariant(body) {
   const m = String(body ?? "").match(/\*\*Invariant\*\*\s*\n([\s\S]*?)(?=\n\*\*|$)/);
   return (m?.[1] ?? "").trim();
 }
@@ -45,7 +46,7 @@ export function extractInvariant(body) {
 // purpose (no YAML dep; the capsule emitter writes simple one-line keys + the
 // verified: block). Returns { description, category, relevance, verification, ttl,
 // verifiedDate, title } — unknown keys ignored, unparseable file returns {}.
-export function parseCapsule(body) {
+function jsParseCapsule(body) {
   const out = { title: null, description: null, category: null, relevance: null, verification: null, ttl: null, verifiedDate: null };
   if (body == null) return out;
   const text = String(body);
@@ -82,7 +83,7 @@ const ANTONYMS = [
   ["enabled", "disabled"], ["up", "down"], ["true", "false"], ["is", "is not"],
   ["retired", "active"], ["deprecated", "supported"], ["primary", "retired"], ["allowed", "rejected"],
 ];
-export function contradictionSignal(claimA, claimB) {
+function jsContradictionSignal(claimA, claimB) {
   const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   const a = norm(claimA), b = norm(claimB);
   if (!a || !b) return null;
@@ -106,7 +107,7 @@ export function contradictionSignal(claimA, claimB) {
 // ("window is 14 days" vs "window is 30 days"). Near-matches with divergent
 // numbers are possible changed-value facts — NEVER silently merged (delta 4
 // would expire one side on a wrong premise); they hold for review instead.
-export function numericDivergenceSignal(claimA, claimB) {
+function jsNumericDivergenceSignal(claimA, claimB) {
   const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   const a = norm(claimA), b = norm(claimB);
   if (!a || !b) return null;
@@ -116,6 +117,28 @@ export function numericDivergenceSignal(claimA, claimB) {
   const numsB = b.match(/\d+/g) ?? [];
   if (!numsA.length) return null;
   return numsA.some((n, i) => n !== numsB[i]) ? `numeric divergence (${numsA.join("/")} vs ${numsB.join("/")})` : null;
+}
+
+// Rust may replace these pure calculations when explicitly enabled. The
+// production conflict/review decision remains owned by this module.
+export function extractInvariant(body) {
+  return nativeMemoryPolicyEnabled() ? nativeExtractInvariant(String(body ?? "")) : jsExtractInvariant(body);
+}
+
+export function parseCapsule(body) {
+  return nativeMemoryPolicyEnabled() ? nativeParseCapsule(body == null ? null : String(body)) : jsParseCapsule(body);
+}
+
+export function contradictionSignal(claimA, claimB) {
+  return nativeMemoryPolicyEnabled()
+    ? nativeConflictSignal("contradiction-signal", String(claimA ?? ""), String(claimB ?? ""))
+    : jsContradictionSignal(claimA, claimB);
+}
+
+export function numericDivergenceSignal(claimA, claimB) {
+  return nativeMemoryPolicyEnabled()
+    ? nativeConflictSignal("numeric-divergence", String(claimA ?? ""), String(claimB ?? ""))
+    : jsNumericDivergenceSignal(claimA, claimB);
 }
 
 function dupShapeToDisposition(dup) {

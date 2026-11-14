@@ -1,3 +1,4 @@
+import { nativeMemoryPolicyEnabled, nativeRejectedClaimIndex, nativeExactTombstoneIndex } from "./native-memory-policy.mjs";
 // lib/memory-tombstone.mjs — Agent Memory Atlas hardening (hub ticket 191; Sol
 // Gate 1 consult 2026-10-01T01-44-22-411-252347, verdict CONTRADICTED -> the
 // three Gate-1 corrections are APPLIED here, not just noted):
@@ -295,6 +296,21 @@ export function loadTombstones(dir = TOMBSTONES_DIR_DEFAULT) {
 
 // ---- matching ---------------------------------------------------------------
 // Simple URI-glob overlap: ** crosses segments, * matches within one segment.
+// fleet#1202 — retrieval-side subject lookup. A tombstone rejects the subject's
+// claim permanently; only an ACTIVE, in-scope tombstone applies (a retired one
+// does not, and a tombstone scoped to another URI prefix does not). The subject
+// is the capsule name, which the retrieval boundary can derive from a
+// concept:// URI without guessing at claim text. Scope uses the same matcher as
+// the capture path; an empty/unknown candidate scope stays conservative.
+export function tombstoneForSubject(name, tombstones = [], scope = null) {
+  const want = String(name ?? "").trim().toLowerCase();
+  if (!want) return null;
+  return (Array.isArray(tombstones) ? tombstones : []).find((t) => t
+    && String(t.subject ?? "").trim().toLowerCase() === want
+    && String(t.status ?? "active").toLowerCase() === "active"
+    && scopeApplies(t.scope, scope)) ?? null;
+}
+
 export function scopeApplies(tombstoneScope, candidateScope) {
   const ts = String(tombstoneScope ?? "*").trim() || "*";
   if (ts === "*") return true;
@@ -310,6 +326,13 @@ export function scopeApplies(tombstoneScope, candidateScope) {
 // canonicalizer (a digest match with a divergent canonical claim is a corruption
 // signal -> surfaced, never silently treated as a match).
 export function evaluateTombstones({ subject, field = null, claim, scope = null, tombstones = [] }) {
+  if (nativeMemoryPolicyEnabled()) {
+    const idx = nativeExactTombstoneIndex({ subject, field, claim, scope, tombstones });
+    if (idx == null) return { blocked: false, tombstone: null, reason: null };
+    const t = tombstones[idx];
+    return { blocked: true, tombstone: t,
+      reason: `rejected-value tombstone ${t.name ?? t.file ?? "?"}: subject=${canonicalText(subject)} field=${canonicalText(field) ?? "-"} claim="${canonicalText(claim).slice(0, 120)}" (evidence: ${t.evidence ?? "?"}, approvedBy: ${t.approvedBy ?? "?"})` };
+  }
   const digest = rejectionDigestOf({ subject, field, claim });
   for (const t of tombstones) {
     if (String(t.status ?? "active") !== "active") continue;
@@ -339,6 +362,14 @@ export function evaluateTombstones({ subject, field = null, claim, scope = null,
 // a subject). Used as the SECOND check at record-identity planes (capture
 // chokepoint, conversation review) after the full Sol match.
 export function claimIsRejected({ claim, scope = null, tombstones = [] }) {
+  if (nativeMemoryPolicyEnabled()) {
+    const idx = nativeRejectedClaimIndex({ claim, scope, tombstones });
+    if (idx == null) return { blocked: false, tombstone: null, reason: null };
+    const t = tombstones[idx];
+    const c = canonicalText(claim);
+    return { blocked: true, tombstone: t,
+      reason: `rejected-value tombstone ${t.name ?? t.file ?? "?"}: exact rejected value "${c.slice(0, 120)}" (evidence: ${t.evidence ?? "?"}, approvedBy: ${t.approvedBy ?? "?"})` };
+  }
   const c = canonicalText(claim);
   if (!c) return { blocked: false, tombstone: null, reason: null };
   for (const t of tombstones) {

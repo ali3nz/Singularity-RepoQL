@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { runMemoryHook, redactSecrets } from "./memory-hook.mjs";
 
 // A stub MemoryCore that records calls and answers like the shipped core.
-function stubMemoryCore({ searchResults = [], atomicResults = [], searchError = null } = {}) {
+function stubMemoryCore({ searchResults = [], atomicResults = [], searchError = null, atomicError = null } = {}) {
   const calls = [];
   const rows = []; // rows written via /conversation/add, keyed by task_id
   const impl = async (url, init = {}) => {
@@ -20,6 +20,7 @@ function stubMemoryCore({ searchResults = [], atomicResults = [], searchError = 
       return new Response(JSON.stringify({ code: 0, data: { messages: searchResults } }), { status: 200 });
     }
     if (url.endsWith("/v3/atomic/search")) {
+      if (atomicError) throw new TypeError("fetch failed");
       return new Response(JSON.stringify({ code: 0, data: { items: atomicResults } }), { status: 200 });
     }
     if (url.endsWith("/v3/conversation/query")) {
@@ -59,22 +60,46 @@ const stopPayload = (agentType, extra = {}) => JSON.stringify({
   ...extra,
 });
 
-test("SubagentStart: bounded recall is returned as additionalContext with correct identity", async () => {
-  const mem = stubMemoryCore({ searchResults: [{ content: "review rule: always check exit codes before continuing", timestamp: "2026-10-01T00:00:00Z" }], atomicResults: [{ content: "lesson: reconcile before write" }] });
+test("SubagentStart: L1-first bounded recall preserves identity and avoids unnecessary L0", async () => {
+  const mem = stubMemoryCore({ searchResults: [{ content: "unused L0" }], atomicResults: Array.from({ length: 9 }, (_, i) => ({ content: `lesson ${i}: reconcile before write ${"x".repeat(500)}` })) });
   const res = await runMemoryHook(["subagent-start"], { env: env(), stdin: startPayload("singularity-code-reviewer"), fetchImpl: mem.fetchImpl, now: NOW });
   assert.equal(res.exitCode, 0);
-  assert.ok(res.stdout?.includes("additionalContext"));
   const out = JSON.parse(res.stdout);
   assert.equal(out.hookSpecificOutput.hookEventName, "SubagentStart");
-  assert.ok(out.hookSpecificOutput.additionalContext.includes("check exit codes"));
-  assert.ok(out.hookSpecificOutput.additionalContext.includes("reconcile before write"));
-  // identity: mapped role, default team/user
-  const search = mem.calls.find((c) => c.url.endsWith("/v3/conversation/search"));
+  const context = out.hookSpecificOutput.additionalContext;
+  assert.ok(context.includes("reconcile before write"));
+  assert.equal(context.split("- [L1").length - 1, 5);
+  assert.ok(!context.includes("lesson 5:"));
+  assert.ok(!context.includes("x".repeat(401)));
+  assert.ok(context.includes("Advisory context only"));
+  assert.equal(mem.calls.length, 1);
+  const search = mem.calls[0];
+  assert.ok(search.url.endsWith("/v3/atomic/search"));
   assert.equal(search.body.agent_id, "code-reviewer");
   assert.equal(search.body.team_id, "openchamber-agents");
   assert.equal(search.body.user_id, "pilot-operator");
-  assert.equal(search.body.limit, 4); // bounded recall
+  assert.equal(search.body.limit, 5);
 });
+
+for (const mode of ["empty", "unusable", "unavailable"]) {
+  test(`SubagentStart: ${mode} L1 falls back once to at most three L0 items`, async () => {
+    const mem = stubMemoryCore({
+      atomicResults: mode === "unusable" ? [null, { content: "   " }, { content: {} }] : [],
+      atomicError: mode === "unavailable" ? true : null,
+      searchResults: Array.from({ length: 7 }, (_, i) => ({ content: `fallback ${i}` })),
+    });
+    const res = await runMemoryHook(["subagent-start"], { env: env(), stdin: startPayload("singularity-code-reviewer"), fetchImpl: mem.fetchImpl, now: NOW });
+    assert.equal(res.exitCode, 0);
+    assert.equal(mem.calls.length, 2);
+    assert.ok(mem.calls[0].url.endsWith("/v3/atomic/search"));
+    assert.ok(mem.calls[1].url.endsWith("/v3/conversation/search"));
+    assert.equal(mem.calls[1].body.limit, 3);
+    const context = JSON.parse(res.stdout).hookSpecificOutput.additionalContext;
+    assert.equal(context.split("- [L0").length - 1, 3);
+    assert.ok(!context.includes("fallback 3"));
+    if (mode === "unavailable") assert.match(res.stderr.join(" "), /L1 recall unavailable/);
+  });
+}
 
 test("SubagentStart: identity overrides route recall to the configured team/user", async () => {
   const mem = stubMemoryCore({ searchResults: [] });

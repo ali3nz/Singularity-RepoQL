@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 import stat
 
+from rust_release_policy import checked_policy
+
 SCHEMA = 'singularity-option2-upgrade-dependency-plan/v1'
 RECEIPTS = {
     'claude': ('.claude/.singularity-native-claude-journal.json', None),
@@ -105,7 +107,7 @@ def upgrade_plan(stage_root: Path, claude_home: Path, workspace: Path,
     can_stage_fresh = dependencies_clear and not statuses['current'] and not statuses['retired']
     can_replace_owned = (dependencies_clear and statuses['current'] and
                          not statuses['previous'] and not statuses['retired'])
-    return {
+    reference = {
         'schema': SCHEMA, 'option': 2,
         'receipt_presence': statuses,
         'supervisor_task_state_from_scheduler': task_state,
@@ -117,6 +119,11 @@ def upgrade_plan(stage_root: Path, claude_home: Path, workspace: Path,
         'performed_changes': False, 'windows_runtime_verified': False,
         'release_ready': False,
     }
+    return checked_policy('upgrade-plan-stdin', {
+        'receipts': statuses,
+        'taskState': task_state,
+        'dashboardTaskState': dashboard_task_state,
+    }, reference)
 
 
 def main(argv=None) -> int:

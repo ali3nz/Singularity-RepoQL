@@ -156,6 +156,50 @@ class Fixtures(unittest.TestCase):
         self.assertEqual(result["status"], "DOC_INGEST_INDEXED")
 
     # ── F: a synthetic new runbook is ingested and verified searchable ───────
+    def test_intent_is_durable_before_remote_write_and_keeps_previous_active(self):
+        from unittest.mock import patch
+
+        name = "durable-intent.md"
+        doc = self.make_runbook(name, "First verified source.")
+        stub = StubMemory(searchable_after=0)
+        stub.start()
+        self.assertTrue(stub.started.wait(2))
+        self.set_gateway(stub)
+        root = str(self.root / "docs")
+        prior = mdi.ingest_file(doc, root_arg=root)["rev"]
+        self.make_runbook(name, "Updated source to be reconciled after interruption.")
+        expected = mdi.sha(doc.read_text())[:8]
+
+        def interrupt(*args):
+            entry = self.ledger_entry(name)
+            self.assertEqual(entry["active_rev"], prior)
+            self.assertEqual(entry["revs"][expected]["status"], "DOC_INGEST_PENDING")
+            self.assertTrue(entry["revs"][expected]["task_ids"])
+            raise KeyboardInterrupt
+
+        with patch.object(mdi, "write_chunk", side_effect=interrupt) as write:
+            with self.assertRaises(KeyboardInterrupt):
+                mdi.ingest_file(doc, root_arg=root)
+        write.assert_called_once()
+        self.assertEqual(self.ledger_entry(name)["revs"][expected]["status"], "DOC_INGEST_PENDING")
+        self.assertEqual(mdi.ingest_file(doc, root_arg=root)["status"], "DOC_INGEST_INDEXED")
+        self.assertEqual(self.ledger_entry(name)["active_rev"], expected)
+
+    def test_failed_checkpoint_prevents_remote_write(self):
+        from unittest.mock import patch
+
+        doc = self.make_runbook("checkpoint-refused.md", "No write without a local intent.")
+        stub = StubMemory(searchable_after=0)
+        stub.start()
+        self.assertTrue(stub.started.wait(2))
+        self.set_gateway(stub)
+        with patch.object(mdi, "_publish_locked_ledger", side_effect=mdi.Blocked("checkpoint refused")), \
+             patch.object(mdi, "write_chunk") as write:
+            with self.assertRaisesRegex(mdi.Blocked, "checkpoint refused"):
+                mdi.ingest_file(doc, root_arg=str(self.root / "docs"))
+        write.assert_not_called()
+        self.assertFalse(mdi._lock().exists())
+
     def test_f_new_runbook_ingested_and_verified(self):
         p = self.make_runbook("runbook-f.md", "Operating procedure: run the synthetic validation, then record observed output.")
         stub, report = self.run_ingest("docs/runbook-f.md", searchable_after=0.4)

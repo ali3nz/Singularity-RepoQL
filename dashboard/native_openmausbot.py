@@ -12,6 +12,7 @@ import datetime as dt
 import http.client
 import json
 import os
+import subprocess
 from pathlib import Path
 import re
 import time
@@ -79,26 +80,76 @@ def _selection(raw) -> dict:
     return {'instance': str(raw.get('instanceId') or '')[:200], 'model': str(raw.get('model') or '')[:500]}
 
 
+def _project_models_python(data) -> dict:
+    """Reference model-catalogue projection, without touching local credentials."""
+    if type(data) is not dict or type(data.get('instances')) is not list:
+        raise RuntimeError('inventory_invalid')
+    providers = []
+    for item in data['instances'][:60]:
+        if type(item) is not dict or not isinstance(item.get('instanceId'), str):
+            continue
+        options = ((item.get('models') or {}).get('options') or []) if type(item.get('models')) is dict else []
+        snapshot = item.get('snapshot') if type(item.get('snapshot')) is dict else {}
+        providers.append({
+            'id': item['instanceId'][:200],
+            'name': str(item.get('displayName') or item['instanceId'])[:120],
+            'available': snapshot.get('state') == 'available',
+            'models': [{'id': str(o['id'])[:500], 'label': str(o.get('label') or o['id'])[:200]}
+                       for o in options[:200] if type(o) is dict and isinstance(o.get('id'), str)]})
+    providers.sort(key=lambda p: (not p['available'], p['name'].lower()))
+    return {'available': True, 'providers': providers}
+
+
+def _public_models(data) -> dict:
+    """Allowlist displayed fields. Private service metadata is not sent to Rust."""
+    items = []
+    for item in data['instances'][:60]:
+        if type(item) is not dict or not isinstance(item.get('instanceId'), str):
+            continue
+        options = ((item.get('models') or {}).get('options') or []) if type(item.get('models')) is dict else []
+        snapshot = item.get('snapshot') if type(item.get('snapshot')) is dict else {}
+        items.append({'instanceId': item['instanceId'],
+                      'displayName': str(item.get('displayName') or item['instanceId']),
+                      'available': snapshot.get('state') == 'available',
+                      'options': [{'id': o['id'], 'label': str(o.get('label') or o['id'])}
+                                  for o in options[:200] if type(o) is dict and isinstance(o.get('id'), str)]})
+    return {'instances': items}
+
+
+def _native_checked_inventory(mode: str, payload: dict, expected: dict) -> dict:
+    """Strict Rust opt-in with Python fallback and no service tokens or raw responses."""
+    binary = os.environ.get('SINGULARITY_OPENMAUS_INVENTORY_RUST_BINARY', '')
+    if not binary:
+        return expected
+    executable = Path(binary)
+    if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
+        raise RuntimeError('openmaus_inventory_rust_binary_invalid')
+    request = json.dumps({'mode': mode, 'payload': payload}, ensure_ascii=False)
+    if len(request.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('openmaus_inventory_rust_input_too_large')
+    try:
+        process = subprocess.run([str(executable)], input=request, text=True,
+                                 encoding='utf-8', capture_output=True, timeout=10,
+                                 shell=False, check=False)
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('openmaus_inventory_rust_execution_failed') from exc
+    if process.returncode != 0 or len(process.stdout.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('openmaus_inventory_rust_execution_failed')
+    try:
+        actual = json.loads(process.stdout)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError('openmaus_inventory_rust_invalid_json') from exc
+    if actual != expected:
+        raise RuntimeError('openmaus_inventory_rust_mismatch')
+    return actual
+
+
 def models(state_dir: Path) -> dict:
-    """Providers and models the local OpenMausBot service can run, read-only."""
+    """Providers/models offered by the authenticated local OpenMausBot service."""
     try:
         data = _reader(state_dir)('/api/instances')
-        if type(data) is not dict or type(data.get('instances')) is not list:
-            raise RuntimeError('inventory_invalid')
-        providers = []
-        for item in data['instances'][:60]:
-            if type(item) is not dict or not isinstance(item.get('instanceId'), str):
-                continue
-            options = ((item.get('models') or {}).get('options') or []) if type(item.get('models')) is dict else []
-            snapshot = item.get('snapshot') if type(item.get('snapshot')) is dict else {}
-            providers.append({
-                'id': item['instanceId'][:200],
-                'name': str(item.get('displayName') or item['instanceId'])[:120],
-                'available': snapshot.get('state') == 'available',
-                'models': [{'id': str(o['id'])[:500], 'label': str(o.get('label') or o['id'])[:200]}
-                           for o in options[:200] if type(o) is dict and isinstance(o.get('id'), str)]})
-        providers.sort(key=lambda p: (not p['available'], p['name'].lower()))
-        return {'available': True, 'providers': providers}
+        reference = _project_models_python(data)
+        return _native_checked_inventory('models', _public_models(data), reference)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
         return {'available': False, 'providers': []}
 
@@ -123,29 +174,48 @@ def set_model(state_dir: Path, body: dict) -> dict:
     return {'ok': True, 'id': bot_id, 'model': saved}
 
 
+def _project_overview_python(fleet) -> dict:
+    """Reference bot inventory. Does not claim registration or memory readiness."""
+    if type(fleet) is not dict or type(fleet.get('bots')) is not list:
+        raise RuntimeError('inventory_invalid')
+    bots = []
+    for bot in fleet['bots'][:100]:
+        if type(bot) is not dict or not isinstance(bot.get('id'), str) or not _ID.fullmatch(bot['id']):
+            continue
+        bots.append({'id': bot['id'], 'name': str(bot.get('name') or 'Unnamed bot')[:120],
+                     'working': bool(bot.get('busy')), 'model': _selection(bot.get('modelSelection')),
+                     'chief_of_staff': bool(bot.get('chiefOfStaff')), 'thread_id': str(bot.get('threadId') or '')[:128],
+                     'registration': 'not_verified', 'duo': 'not_verified',
+                     'kanzo': 'not_verified', 'memory': 'not_verified'})
+    return {'available': True, 'bots': bots, 'total': len(fleet['bots']),
+            'truncated': len(fleet['bots']) > 100,
+            'source': 'windows_loopback_openmausbot',
+            'note': 'Bot presence is not native provisioning, Kanzo, Duo or Tencent verification.'}
+
+
+def _public_bots(fleet) -> dict:
+    """Only the fields already visible in the authenticated dashboard."""
+    rows = []
+    for bot in fleet['bots'][:100]:
+        if type(bot) is not dict or not isinstance(bot.get('id'), str) or not _ID.fullmatch(bot['id']):
+            continue
+        rows.append({'id': bot['id'], 'name': str(bot.get('name') or 'Unnamed bot'),
+                     'working': bool(bot.get('busy')), 'model': _selection(bot.get('modelSelection')),
+                     'chief_of_staff': bool(bot.get('chiefOfStaff')),
+                     'thread_id': str(bot.get('threadId') or '')})
+    return {'bots': rows, 'total': len(fleet['bots']), 'truncated': len(fleet['bots']) > 100}
+
+
 def overview(state_dir: Path) -> dict:
-    """At most two bounded loopback GETs, no retries, no paths from clients."""
+    """At most two bounded loopback GETs, without retries or client-supplied paths."""
     try:
         get = _reader(state_dir)
         health = get('/api/health')
         if type(health) is not dict or health.get('app') != 'openmausbot':
             return {'available': False, 'reason': 'unexpected_local_service', 'bots': []}
         fleet = get('/api/bots?messages=0')
-        if type(fleet) is not dict or type(fleet.get('bots')) is not list:
-            raise RuntimeError('inventory_invalid')
-        bots = []
-        for bot in fleet['bots'][:100]:
-            if type(bot) is not dict or not isinstance(bot.get('id'), str) or not _ID.fullmatch(bot['id']):
-                continue
-            bots.append({'id': bot['id'], 'name': str(bot.get('name') or 'Unnamed bot')[:120],
-                         'working': bool(bot.get('busy')), 'model': _selection(bot.get('modelSelection')),
-                         'chief_of_staff': bool(bot.get('chiefOfStaff')), 'thread_id': str(bot.get('threadId') or '')[:128],
-                         'registration': 'not_verified', 'duo': 'not_verified',
-                         'kanzo': 'not_verified', 'memory': 'not_verified'})
-        return {'available': True, 'bots': bots, 'total': len(fleet['bots']),
-                'truncated': len(fleet['bots']) > 100,
-                'source': 'windows_loopback_openmausbot',
-                'note': 'Bot presence is not native provisioning, Kanzo, Duo or Tencent verification.'}
+        reference = _project_overview_python(fleet)
+        return _native_checked_inventory('bots', _public_bots(fleet), reference)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         reason = str(exc) if isinstance(exc, RuntimeError) and str(exc) in (
             'service_unavailable', 'service_not_authorised', 'response_too_large', 'inventory_invalid',

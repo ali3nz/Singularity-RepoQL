@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone, timedelta
 import json
+from rust_readonly_bridge import run_checked, RustReadOnlyBridgeError
 from pathlib import Path
 
 SCHEMA = 'singularity-runtime-parity/v1'
@@ -103,9 +104,21 @@ def main():
     parser.add_argument('--production', type=Path, required=True)
     parser.add_argument('--windows', type=Path, required=True)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--rust-binary', type=Path, help='opt-in compiled Rust comparator; verified against Python source')
     args = parser.parse_args()
+    now = datetime.now(timezone.utc)
     result = compare(json.loads(args.production.read_text(encoding='utf-8')),
-                     json.loads(args.windows.read_text(encoding='utf-8')))
+                     json.loads(args.windows.read_text(encoding='utf-8')), now=now)
+    if args.rust_binary is not None:
+        try:
+            result = run_checked(args.rust_binary, [
+                'parity', '--production', str(args.production), '--windows', str(args.windows),
+                '--now', now.isoformat()], result)
+        except RustReadOnlyBridgeError:
+            # A native mismatch is not an ordinary negative receipt: don't
+            # overwrite an existing acceptance report with a trusted-looking one.
+            print(json.dumps({'ready': False, 'error': 'RUST_PARITY_COMPARISON_UNVERIFIED'}))
+            raise SystemExit(2)
     if args.output:
         args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     else:

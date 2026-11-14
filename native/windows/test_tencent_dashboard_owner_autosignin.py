@@ -21,7 +21,7 @@ class TencentAutoSignInContract(unittest.TestCase):
     def _setup(self, root):
         base = Path(root) / 'Singularity'
         source = base / 'WindowsNative' / 'current' / 'source'
-        for item in ('dashboard/server.py','connectors/kanzo/manifest.yaml','connectors/memorycore/manifest.yaml'):
+        for item in ('dashboard/server.py','dashboard/dashboard_route_policy.py','dashboard/native_listener.py','connectors/kanzo/manifest.yaml','connectors/memorycore/manifest.yaml'):
             dest = source / item
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text('fixture')

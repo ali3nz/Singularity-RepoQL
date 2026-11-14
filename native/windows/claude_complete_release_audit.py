@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual archive-level release contract for native Claude Code option 2.
+"""Actual archive-level release contract for the full native Claude Code product.
 
 Fails CLOSED for an executable release. Passing source checks cannot certify
 an installed GUI, pinned external Office frontend/backend, or service parity.
@@ -44,6 +44,7 @@ REQUIRED = (
     'native/windows/install_claude_complete.ps1',
     'native/windows/uninstall_claude_complete.ps1',
     'native/windows/plan_option2_upgrade.py',
+    'native/windows/rust_release_policy.py',
     'native/windows/verify_supervisor_task.ps1',
     'native/windows/test_supervisor_registration_source_contract.py',
     'native/windows/test_verify_installed_contract.py',
@@ -81,12 +82,12 @@ def inspect(archive: Path) -> dict:
         option=manifest.get('variant')
         issues=[]
         if option != 2 or manifest.get('gui') != 'claude-desktop-code':
-            issues.append('Option 2 Claude Code complete source profile required')
+            issues.append('Single full Claude Code source profile required')
         if manifest.get('repoql',{}).get('requiredVersion') != '1.7.18':
             issues.append('RepoQL 1.7.18 pin missing')
         if manifest.get('features',{}).get('office') is not True or manifest.get('features',{}).get('ghost') is not False:
             issues.append('Complete Office-only feature flags missing (Ghost must be retired)')
-        missing=[p for p in (*REQUIRED,*(f'adapters/claude-code/agents/{a}.md' for a in AGENTS),*(f'openchamber/skills/{name}/SKILL.md' for name in SKILLS)) if p not in names]
+        missing=[p for p in (*REQUIRED,*(f'adapters/claude-code/agents/{a}.md' for a in AGENTS),*(f'adapters/claude-code/skills/{name}/SKILL.md' for name in SKILLS)) if p not in names]
         if missing:issues.append(f'{len(missing)} required Claude Code source assets absent')
         office_app=any(p.startswith(('office/frontend/','office/backend/')) for p in names)
         executable=any(p.lower().endswith(('.exe','.msi','.msix')) for p in names)
@@ -97,7 +98,7 @@ def inspect(archive: Path) -> dict:
             'Claude Code settings/agents now have an opt-in native config installer, but actual Windows CLI/Desktop Code-tab execution, MCP and hooks remain untested',
             'Pinned Claude Office frontend/backend is external, not included or verified on Windows',
             'Tencent MemoryCore, RepoQL connectors and complete self-learning parity not accepted',
-            'Option 2 now has opt-in delegated profile seed and live readback tooling; actual Tencent live readbacks, main-session proxy capture and Ghost isolation not yet demonstrated',
+            'Claude Code Full has opt-in delegated profile seed and live readback tooling; actual Tencent live readbacks, main-session proxy capture not yet demonstrated',
             'Read-only dual-doc readback tool included; real Windows Tencent and RepoQL indexing, exact revision and supersession acceptance not yet demonstrated',
             'Ten Singularity skills and 17 official RepoQL plugin skills requested; native Claude Desktop Code-tab discovery and invocation not verified',
             'Native dashboard startup is opt-in and wired to a per-user task; real authenticated HTTP/UI and both RepoQL connector sweeps remain unverified',

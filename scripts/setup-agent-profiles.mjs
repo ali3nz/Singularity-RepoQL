@@ -1,42 +1,20 @@
 #!/usr/bin/env node
-// setup-agent-profiles.mjs — give every shipped OpenChamber agent its own
-// persistent MemoryCore profile, the same way Ghost has one (ghost/ghost-memory.mjs):
-// a team/user/agent scope in MemoryCore plus a seeded charter record, so each
-// agent's memory exists and can be recalled under its own identity.
-//
-// Idempotent: profiles recorded in the ledger are re-verified live (an
-// authenticated search) and only reported "verified" when the charter really
-// exists; a stale ledger entry is re-seeded instead of being presented as a
-// live profile.
-// Ghost is excluded: it already owns its persistent profile (ghost-companion scope,
-// see ghost/setup-ghost.sh) and must not gain a second, conflicting `ghost` scope.
-//
-// Usage:
-//   node scripts/setup-agent-profiles.mjs [--dry-run]
-// Env:
-//   AGENT_PROFILE_TEAM        MemoryCore team_id for agent profiles (default: openchamber-agents)
-//   AGENT_PROFILE_USER        MemoryCore user_id (default: the memory config user, else pilot-operator)
-//   AGENT_PROFILE_IDENTITY_MAP  optional path to an identity snapshot
-//                             ({ agents: { <name>: { team_id, user_id, agent_id } } }). When set, each
-//                             agent is bound to its mapped EXISTING identity: a stored charter there is
-//                             verified (no write); only a missing one is seeded. Agents absent from the
-//                             map fail. AGENT_PROFILE_TEAM/USER are ignored in this mode.
-//   SINGULARITY_MEMORY_CONFIG memory connection config
-//                             (default: data/opencode/config/product-secrets/memory.json)
-// Exit: 0 every profile present; 1 one or more failed; 2 usage error.
+// Claude Code delegated-role MemoryCore profile utility. Existing identity maps
+// remain authoritative; charters are sourced from the Claude Code agent files.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { callMemoryCore, loadGhostMemoryConfig } from "./memory-config-loader.mjs";
+import { callMemoryCore, loadMemoryConfig } from "./memory-config-loader.mjs";
+import { nativeWriterEnabled } from "./native-memorycore-reader.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const DEFAULT_TEAM = "openchamber-agents";
-export const SELF_PROFILED = new Set(["ghost"]);
+export const DEFAULT_TEAM = "singularity-claude-agents";
+export const SELF_PROFILED = new Set(["ghost", "duo", "duel-coordinator", "quad-coordinator", "super"]);
 
 export function listAgents(agentsDir) {
   return readdirSync(agentsDir)
     .filter((f) => f.endsWith(".md"))
-    .map((f) => basename(f, ".md"))
+    .map((f) => basename(f, ".md").replace(/^singularity-/, ""))
     .filter((n) => !SELF_PROFILED.has(n))
     .sort();
 }
@@ -54,8 +32,8 @@ export function agentDescription(mdText) {
 }
 
 export function charterFor(name, mdText) {
-  const desc = agentDescription(mdText) || "OpenChamber agent";
-  return `Persistent MemoryCore profile for OpenChamber agent "${name}" (Singularity-RepoQL). Role: ${desc}`.slice(0, 1500);
+  const desc = agentDescription(mdText) || "Claude Code delegated agent";
+  return `Persistent MemoryCore profile for Claude Code agent "${name}" (Singularity-RepoQL). Role: ${desc}`.slice(0, 1500);
 }
 
 export function identityFor(name, env = process.env, baseIdentity = {}) {
@@ -84,14 +62,14 @@ export function loadIdentityMap(path) {
 }
 
 // A search hit proves a charter only when it is this agent's charter: either the seeder's own
-// session, or the charter wording used by the shared roster ("OpenChamber agent role '<name>'"
+// session, or the charter wording used by the shared roster ("Claude Code agent role '<name>'"
 // or the seeder's "OpenChamber agent \"<name>\""). Any other stored message under the identity
 // (captured chat, notes) must not count, or the profile would be skipped and never seeded.
 export function isCharterFor(message, name, session) {
   if (!message) return false;
   if (message.session_id === session) return true;
   const text = String(message.content ?? message.body ?? "");
-  return text.includes(`OpenChamber agent role '${name}'`) || text.includes(`OpenChamber agent "${name}"`);
+  return text.includes(`Claude Code agent role '${name}'`) || text.includes(`Claude Code agent "${name}"`);
 }
 
 export function readLedger(path) {
@@ -156,7 +134,7 @@ export async function provisionAgentProfiles({
       try {
         live = await callMemoryCore("/v3/conversation/search", {
           ...identity,
-          query: `OpenChamber agent "${name}" charter`,
+          query: `Claude Code agent "${name}" charter`,
           limit: 10,
         }, cfg, fetchImpl);
       } catch (err) {
@@ -185,7 +163,7 @@ export async function provisionAgentProfiles({
       try {
         found = await callMemoryCore("/v3/conversation/search", {
           ...identity,
-          query: `OpenChamber agent "${name}" charter`,
+          query: `Claude Code agent "${name}" charter`,
           limit: 10,
         }, cfg, fetchImpl);
       } catch (err) {
@@ -211,7 +189,9 @@ export async function provisionAgentProfiles({
       }
       // No existing profile under this identity: fall through and seed it.
     }
-    const text = readFileSync(join(agentsDir, `${name}.md`), "utf8");
+    const text = readFileSync(existsSync(join(agentsDir, `singularity-${name}.md`))
+      ? join(agentsDir, `singularity-${name}.md`)
+      : join(agentsDir, `${name}.md`), "utf8");
     const session = `agent-profile-${name}`;
     let r;
     try {
@@ -231,6 +211,25 @@ export async function provisionAgentProfiles({
       results.push({ name, status: "failed", identity, detail: r.message || r.error || `code ${r.code ?? "?"}` });
       continue;
     }
+    if (nativeWriterEnabled()) {
+      // A transport acknowledgement alone does not prove durable memory.
+      // On ambiguous readback leave the ledger unchanged. The next invocation
+      // searches for the charter before considering another write.
+      let persisted;
+      try {
+        persisted = await callMemoryCore('/v3/conversation/search', {
+          ...identity, query: `Claude Code agent "${name}" charter`, limit: 10,
+        }, cfg, fetchImpl);
+      } catch {
+        results.push({ name, status: 'failed', identity, detail: 'native write readback failed' });
+        continue;
+      }
+      if (persisted?.code !== 0 || !Array.isArray(persisted.data?.messages) ||
+          !persisted.data.messages.some(m => isCharterFor(m, name, session))) {
+        results.push({ name, status: 'failed', identity, detail: 'native write not verified in MemoryCore' });
+        continue;
+      }
+    }
     ledger.profiles[name] = { ...identity, session_id: session, seeded_at: now() };
     // Persist after every success so an interrupted run never re-seeds finished agents.
     if (!dryRun) saveLedger();
@@ -245,8 +244,8 @@ async function main(argv) {
     console.error(`unknown arguments: ${unknown.join(" ")}\nusage: setup-agent-profiles.mjs [--dry-run]`);
     return 2;
   }
-  process.env.SINGULARITY_MEMORY_CONFIG ||= join(ROOT, "data/opencode/config/product-secrets/memory.json");
-  const cfg = loadGhostMemoryConfig(process.env);
+  process.env.SINGULARITY_MEMORY_CONFIG ||= join(ROOT, "data/claude-code/memory.json");
+  const cfg = loadMemoryConfig(process.env);
   let identityMap = null;
   if (process.env.AGENT_PROFILE_IDENTITY_MAP) {
     try {
@@ -257,7 +256,7 @@ async function main(argv) {
     }
   }
   const out = await provisionAgentProfiles({
-    agentsDir: join(ROOT, "openchamber/agents"),
+    agentsDir: join(ROOT, "adapters/claude-code/agents"),
     ledgerPath: join(ROOT, "data/agent-profiles/ledger.json"),
     dryRun: argv.includes("--dry-run"),
     env: process.env,

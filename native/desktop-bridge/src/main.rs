@@ -1,13 +1,10 @@
-//! Minimal native stdio MCP surface shared by Claude Desktop's Code tab and
-//! OpenChamber Desktop. The GUI starts this process, not a terminal or CLI.
+//! Minimal native stdio MCP surface shared by Claude Code. The GUI starts this process, not a terminal or CLI.
 //! Memory writes, hooks, orchestration, and provider routing are NOT implemented.
-#[cfg(all(feature = "ghost", not(windows)))]
-mod ghost;
 mod gui_plan;
 #[cfg(feature = "office")]
 mod office;
-mod variant;
 mod repoql_compat;
+mod variant;
 mod windows_cpu;
 use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
@@ -29,7 +26,7 @@ fn build_info() -> Value {
         "schema": "singularity-native-build-info/v1",
         "packageVersion": env!("CARGO_PKG_VERSION"),
         "featureOffice": cfg!(feature = "office"),
-        "featureGhost": cfg!(all(feature = "ghost", not(windows))),
+        "featureGhost": false, // compatibility sentinel for existing Windows stage receipts
     })
 }
 
@@ -45,7 +42,10 @@ struct MemoryConfig {
 }
 
 fn nonempty(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|v| !v.is_empty()).map(str::to_owned)
+    value
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_owned)
 }
 
 fn config_field(obj: &Value, name: &str) -> Option<String> {
@@ -72,28 +72,40 @@ fn load_config() -> Result<MemoryConfig, &'static str> {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .ok_or("SINGULARITY_MEMORY_CONFIG is not set")?;
-    let raw = fs::read_to_string(config_path).map_err(|_| "cannot read MemoryCore configuration")?;
-    let parsed: Value = serde_json::from_str(&raw).map_err(|_| "invalid MemoryCore JSON configuration")?;
+    let raw =
+        fs::read_to_string(config_path).map_err(|_| "cannot read MemoryCore configuration")?;
+    let parsed: Value =
+        serde_json::from_str(&raw).map_err(|_| "invalid MemoryCore JSON configuration")?;
     let url = config_field(&parsed, "hostBaseUrl")
         .or_else(|| config_field(&parsed, "baseUrl"))
         .ok_or("no MemoryCore URL configured")?;
     let base = local_endpoint(&url)?;
     let user_key = config_field(&parsed, "userKey").ok_or("missing scoped MemoryCore user key")?;
-    let gateway = config_field(&parsed, "gatewayKey")
-        .ok_or("missing MemoryCore gateway key")?;
-    let prefix = parsed.get("authPrefix").and_then(Value::as_str).unwrap_or("Bearer ");
+    let gateway = config_field(&parsed, "gatewayKey").ok_or("missing MemoryCore gateway key")?;
+    let prefix = parsed
+        .get("authPrefix")
+        .and_then(Value::as_str)
+        .unwrap_or("Bearer ");
     // Do not allow control characters in auth metadata.
-    if [prefix, gateway.as_str(), user_key.as_str()].iter().any(|s| s.contains('\r') || s.contains('\n')) {
+    if [prefix, gateway.as_str(), user_key.as_str()]
+        .iter()
+        .any(|s| s.contains('\r') || s.contains('\n'))
+    {
         return Err("invalid MemoryCore credential metadata");
     }
     let identity = parsed.get("identity").unwrap_or(&Value::Null);
     let scope = |env_key: &str, field: &str| -> Option<String> {
-        env::var(env_key).ok().and_then(|v| nonempty(Some(&v)))
+        env::var(env_key)
+            .ok()
+            .and_then(|v| nonempty(Some(&v)))
             .or_else(|| config_field(identity, field))
     };
-    let team = scope("SINGULARITY_MEMORY_TEAM", "team_id").ok_or("missing explicit memory team identity")?;
-    let user = scope("SINGULARITY_MEMORY_USER", "user_id").ok_or("missing explicit memory user identity")?;
-    let agent = scope("SINGULARITY_MEMORY_AGENT", "agent_id").ok_or("missing explicit memory agent identity")?;
+    let team = scope("SINGULARITY_MEMORY_TEAM", "team_id")
+        .ok_or("missing explicit memory team identity")?;
+    let user = scope("SINGULARITY_MEMORY_USER", "user_id")
+        .ok_or("missing explicit memory user identity")?;
+    let agent = scope("SINGULARITY_MEMORY_AGENT", "agent_id")
+        .ok_or("missing explicit memory agent identity")?;
     Ok(MemoryConfig {
         base,
         service: config_field(&parsed, "serviceId").unwrap_or_else(|| "default".into()),
@@ -105,7 +117,13 @@ fn load_config() -> Result<MemoryConfig, &'static str> {
     })
 }
 
-fn lookup(cfg: &MemoryConfig, client: &Client, query: &str, layer: &str, limit: usize) -> Result<Value, &'static str> {
+fn lookup(
+    cfg: &MemoryConfig,
+    client: &Client,
+    query: &str,
+    layer: &str,
+    limit: usize,
+) -> Result<Value, &'static str> {
     let endpoint = match layer {
         "L0" => "/v3/conversation/search",
         "L1" => "/v3/atomic/search",
@@ -115,7 +133,8 @@ fn lookup(cfg: &MemoryConfig, client: &Client, query: &str, layer: &str, limit: 
         "team_id": cfg.team, "user_id": cfg.user, "agent_id": cfg.agent,
         "query": query, "limit": limit,
     });
-    let response = client.post(format!("{}{}", cfg.base, endpoint))
+    let response = client
+        .post(format!("{}{}", cfg.base, endpoint))
         .header("authorization", &cfg.auth)
         .header("x-tdai-service-id", &cfg.service)
         .header("x-tdai-user-key", &cfg.user_key)
@@ -128,41 +147,56 @@ fn lookup(cfg: &MemoryConfig, client: &Client, query: &str, layer: &str, limit: 
     // Bound the response before decoding. HTTP peers may be buggy or malicious.
     let mut bounded = response.take(MAX_RESPONSE_BYTES + 1);
     let mut bytes = Vec::new();
-    bounded.read_to_end(&mut bytes).map_err(|_| "MemoryCore response read failed")?;
+    bounded
+        .read_to_end(&mut bytes)
+        .map_err(|_| "MemoryCore response read failed")?;
     if bytes.len() as u64 > MAX_RESPONSE_BYTES {
         return Err("MemoryCore response exceeds maximum size");
     }
-    let response: Value = serde_json::from_slice(&bytes).map_err(|_| "MemoryCore returned invalid JSON")?;
+    let response: Value =
+        serde_json::from_slice(&bytes).map_err(|_| "MemoryCore returned invalid JSON")?;
     parse_search_results(&response, layer, limit)
 }
 
-fn parse_search_results(response: &Value, layer: &str, limit: usize) -> Result<Value, &'static str> {
+fn parse_search_results(
+    response: &Value,
+    layer: &str,
+    limit: usize,
+) -> Result<Value, &'static str> {
     if response.get("code").and_then(Value::as_i64) != Some(0) {
         return Err("MemoryCore rejected the read request");
     }
-    let data = response.get("data").ok_or("MemoryCore response has no data")?;
+    let data = response
+        .get("data")
+        .ok_or("MemoryCore response has no data")?;
     // MemoryCore versions differ: conversations normally use data.messages,
     // atomic memories data.items, while older stores return data directly or
     // data.results. Only surface bounded text, never raw metadata or records.
-    let items = data.as_array().or_else(|| {
-        ["messages", "atoms", "items", "results"]
-            .iter()
-            .find_map(|key| data.get(*key).and_then(Value::as_array))
-    }).ok_or("MemoryCore response has no recognized result list")?;
-    let results: Vec<Value> = items.iter().take(limit).filter_map(|item| {
-        let content = item.as_str().or_else(|| {
-            ["content", "body", "text", "fact"]
+    let items = data
+        .as_array()
+        .or_else(|| {
+            ["messages", "atoms", "items", "results"]
                 .iter()
-                .find_map(|key| item.get(*key).and_then(Value::as_str))
-        })?;
-        Some(json!({
-            "text": content.chars().take(MAX_ITEM_CHARS).collect::<String>(),
-            "timestamp": item.get("timestamp").or_else(|| item.get("recorded_at"))
-                .and_then(Value::as_str).unwrap_or("").chars().take(40).collect::<String>()
-        }))
-    }).collect();
+                .find_map(|key| data.get(*key).and_then(Value::as_array))
+        })
+        .ok_or("MemoryCore response has no recognized result list")?;
+    let results: Vec<Value> = items
+        .iter()
+        .take(limit)
+        .filter_map(|item| {
+            let content = item.as_str().or_else(|| {
+                ["content", "body", "text", "fact"]
+                    .iter()
+                    .find_map(|key| item.get(*key).and_then(Value::as_str))
+            })?;
+            Some(json!({
+                "text": content.chars().take(MAX_ITEM_CHARS).collect::<String>(),
+                "timestamp": item.get("timestamp").or_else(|| item.get("recorded_at"))
+                    .and_then(Value::as_str).unwrap_or("").chars().take(40).collect::<String>()
+            }))
+        })
+        .collect();
     Ok(json!({"layer": layer, "count": results.len(), "items": results}))
-
 }
 
 fn tool_list() -> Value {
@@ -193,13 +227,15 @@ fn call_tool(params: &Value, client: &Client) -> Value {
         _ => return tool_error("query must be between 1 and 400 characters"),
     };
     let layer = args.get("layer").and_then(Value::as_str).unwrap_or("L1");
-    if layer != "L0" && layer != "L1" { return tool_error("layer must be L0 or L1"); }
+    if layer != "L0" && layer != "L1" {
+        return tool_error("layer must be L0 or L1");
+    }
     let limit = match args.get("limit") {
         None => MAX_ITEMS,
         Some(value) => match value.as_u64() {
             Some(n) if n > 0 && n <= MAX_ITEMS as u64 => n as usize,
             _ => return tool_error("limit must be an integer between 1 and 4"),
-        }
+        },
     };
     let cfg = match load_config() {
         Ok(v) => v,
@@ -217,10 +253,14 @@ fn tool_error(reason: &str) -> Value {
 
 fn handle_request(request: &Value, client: &Client) -> Option<Value> {
     let method = request.get("method")?.as_str()?;
-    if method.starts_with("notifications/") { return None; }
+    if method.starts_with("notifications/") {
+        return None;
+    }
     let id = request.get("id")?;
     if request.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
-        return Some(json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32600,"message":"Invalid request"}}));
+        return Some(
+            json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32600,"message":"Invalid request"}}),
+        );
     }
     let params = request.get("params").unwrap_or(&Value::Null);
     let result = match method {
@@ -232,7 +272,11 @@ fn handle_request(request: &Value, client: &Client) -> Option<Value> {
         "ping" => json!({}),
         "tools/list" => tool_list(),
         "tools/call" => call_tool(params, client),
-        _ => return Some(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found"}})),
+        _ => {
+            return Some(
+                json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found"}}),
+            )
+        }
     };
     Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
 }
@@ -245,16 +289,25 @@ fn read_bounded_line<R: BufRead>(reader: &mut R, max: usize) -> io::Result<Optio
     loop {
         let chunk = reader.fill_buf()?;
         if chunk.is_empty() {
-            return if line.is_empty() { Ok(None) } else { Ok(Some(line)) };
+            return if line.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(line))
+            };
         }
         let newline = chunk.iter().position(|v| *v == b'\n');
         let count = newline.map(|v| v + 1).unwrap_or(chunk.len());
         if line.len().saturating_add(count) > max {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "MCP request exceeds size limit"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "MCP request exceeds size limit",
+            ));
         }
         line.extend_from_slice(&chunk[..count]);
         reader.consume(count);
-        if newline.is_some() { return Ok(Some(line)); }
+        if newline.is_some() {
+            return Ok(Some(line));
+        }
     }
 }
 
@@ -272,7 +325,11 @@ fn serve() -> io::Result<()> {
         let request: Value = match serde_json::from_slice(&line) {
             Ok(v) => v,
             Err(_) => {
-                writeln!(stdout, "{}", json!({"jsonrpc":"2.0", "id":null,"error":{"code":-32700,"message":"Parse error"}}))?;
+                writeln!(
+                    stdout,
+                    "{}",
+                    json!({"jsonrpc":"2.0", "id":null,"error":{"code":-32700,"message":"Parse error"}})
+                )?;
                 stdout.flush()?;
                 continue;
             }
@@ -288,21 +345,21 @@ fn serve() -> io::Result<()> {
 fn main() {
     match env::args().nth(1).as_deref() {
         Some("serve") => {
-            if serve().is_err() { std::process::exit(1); }
+            if serve().is_err() {
+                std::process::exit(1);
+            }
         }
         Some("plan") => std::process::exit(gui_plan::run_plan()),
         Some("variant") => std::process::exit(variant::run()),
         Some("build-info") => println!("{}", build_info()),
         Some("repoql-preflight") => std::process::exit(repoql_compat::run()),
-        Some("cpu-sample") => std::process::exit(windows_cpu::run(&env::args().skip(2).collect::<Vec<_>>())),
+        Some("cpu-sample") => {
+            std::process::exit(windows_cpu::run(&env::args().skip(2).collect::<Vec<_>>()))
+        }
         #[cfg(feature = "office")]
         Some("office-auth-check") => std::process::exit(office::auth_check()),
-        #[cfg(all(feature = "ghost", not(windows)))]
-        Some("ghost-control") => std::process::exit(ghost::run(env::args().nth(2).as_deref().unwrap_or(""))),
         #[cfg(feature = "office")]
         Some("office-claude") => office::run("claude", env::args().nth(2).as_deref()),
-        #[cfg(feature = "office")]
-        Some("office-opencode") => office::run("opencode", None),
         Some("--version") => println!("{}", env!("CARGO_PKG_VERSION")),
         _ => {
             eprintln!("This executable is a local MCP server. Configure it in a supported desktop GUI with argument 'serve'.");
@@ -319,7 +376,11 @@ mod tests {
     use std::thread;
 
     fn client() -> Client {
-        Client::builder().timeout(Duration::from_secs(2)).no_proxy().build().unwrap()
+        Client::builder()
+            .timeout(Duration::from_secs(2))
+            .no_proxy()
+            .build()
+            .unwrap()
     }
 
     #[test]
@@ -328,7 +389,7 @@ mod tests {
         assert_eq!(info["schema"], "singularity-native-build-info/v1");
         assert_eq!(info["packageVersion"], env!("CARGO_PKG_VERSION"));
         assert_eq!(info["featureOffice"], cfg!(feature = "office"));
-        assert_eq!(info["featureGhost"], cfg!(all(feature = "ghost", not(windows))));
+        assert_eq!(info["featureGhost"], false);
         assert_eq!(info.as_object().unwrap().len(), 4);
     }
 
@@ -336,34 +397,76 @@ mod tests {
     fn stdio_input_is_byte_bounded() {
         use std::io::Cursor;
         let mut source = Cursor::new(b"first\nsecond\n".as_slice());
-        assert_eq!(read_bounded_line(&mut source, 10).unwrap().unwrap(), b"first\n");
-        assert_eq!(read_bounded_line(&mut source, 10).unwrap().unwrap(), b"second\n");
+        assert_eq!(
+            read_bounded_line(&mut source, 10).unwrap().unwrap(),
+            b"first\n"
+        );
+        assert_eq!(
+            read_bounded_line(&mut source, 10).unwrap().unwrap(),
+            b"second\n"
+        );
         assert!(read_bounded_line(&mut source, 10).unwrap().is_none());
         let mut large = Cursor::new(b"12345678901\n".as_slice());
-        assert_eq!(read_bounded_line(&mut large, 10).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            read_bounded_line(&mut large, 10).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
     }
 
     #[test]
     fn local_endpoint_rejects_network_and_credentials() {
-        for bad in ["http://memory-core:8420", "http://example.com", "https://127.0.0.1:8420", "http://127.0.0.1:8420/v3", "http://user:pass@127.0.0.1:8420", "http://127.0.0.1:8420?key=abc"] {
+        for bad in [
+            "http://memory-core:8420",
+            "http://example.com",
+            "https://127.0.0.1:8420",
+            "http://127.0.0.1:8420/v3",
+            "http://user:pass@127.0.0.1:8420",
+            "http://127.0.0.1:8420?key=abc",
+        ] {
             assert!(local_endpoint(bad).is_err(), "accepted {bad}");
         }
-        assert_eq!(local_endpoint("http://127.0.0.1:8420").unwrap(), "http://127.0.0.1:8420");
+        assert_eq!(
+            local_endpoint("http://127.0.0.1:8420").unwrap(),
+            "http://127.0.0.1:8420"
+        );
     }
 
     #[test]
     fn mcp_initialize_and_tool_schema_work_without_memory_config() {
-        let init = handle_request(&json!({"jsonrpc":"2.0", "id":1, "method":"initialize"}), &client()).unwrap();
-        assert_eq!(init["result"]["serverInfo"]["name"], "singularity-desktop-bridge");
-        let list = handle_request(&json!({"jsonrpc":"2.0", "id":2, "method":"tools/list"}), &client()).unwrap();
-        assert_eq!(list["result"]["tools"][0]["name"], "singularity_memory_search");
-        assert!(handle_request(&json!({"method":"notifications/initialized"}), &client()).is_none());
+        let init = handle_request(
+            &json!({"jsonrpc":"2.0", "id":1, "method":"initialize"}),
+            &client(),
+        )
+        .unwrap();
+        assert_eq!(
+            init["result"]["serverInfo"]["name"],
+            "singularity-desktop-bridge"
+        );
+        let list = handle_request(
+            &json!({"jsonrpc":"2.0", "id":2, "method":"tools/list"}),
+            &client(),
+        )
+        .unwrap();
+        assert_eq!(
+            list["result"]["tools"][0]["name"],
+            "singularity_memory_search"
+        );
+        assert!(
+            handle_request(&json!({"method":"notifications/initialized"}), &client()).is_none()
+        );
     }
 
     #[test]
     fn malformed_requests_do_not_attempt_network_calls() {
-        for args in [json!({"query":""}), json!({"query":"ok","limit":99}), json!({"query":"ok","layer":"all"})] {
-            let reply = call_tool(&json!({"name":"singularity_memory_search", "arguments":args}), &client());
+        for args in [
+            json!({"query":""}),
+            json!({"query":"ok","limit":99}),
+            json!({"query":"ok","layer":"all"}),
+        ] {
+            let reply = call_tool(
+                &json!({"name":"singularity_memory_search", "arguments":args}),
+                &client(),
+            );
             assert_eq!(reply["isError"], true);
         }
     }
@@ -371,10 +474,22 @@ mod tests {
     #[test]
     fn memory_response_parser_accepts_legacy_shapes_and_never_returns_metadata() {
         let cases = [
-            (json!({"code":0,"data":[{"content":"legacy","secretMetadata":"do-not-return"}]}), "legacy"),
-            (json!({"code":0,"data":{"results":[{"text":"result"}]}}), "result"),
-            (json!({"code":0,"data":{"messages":[{"body":"conversation"}]}}), "conversation"),
-            (json!({"code":0,"data":{"items":[{"content":"atomic"}]}}), "atomic"),
+            (
+                json!({"code":0,"data":[{"content":"legacy","secretMetadata":"do-not-return"}]}),
+                "legacy",
+            ),
+            (
+                json!({"code":0,"data":{"results":[{"text":"result"}]}}),
+                "result",
+            ),
+            (
+                json!({"code":0,"data":{"messages":[{"body":"conversation"}]}}),
+                "conversation",
+            ),
+            (
+                json!({"code":0,"data":{"items":[{"content":"atomic"}]}}),
+                "atomic",
+            ),
         ];
         for (input, expected) in cases {
             let result = parse_search_results(&input, "L1", 1).unwrap();
@@ -392,18 +507,29 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let server = thread::spawn(move || {
             let (mut socket, _) = listener.accept().unwrap();
-            socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
             let mut raw = Vec::new();
             let mut buffer = [0u8; 2048];
             loop {
                 let n = socket.read(&mut buffer).unwrap();
                 assert!(n > 0, "client closed the request unexpectedly");
                 raw.extend_from_slice(&buffer[..n]);
-                let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") else { continue; };
+                let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") else {
+                    continue;
+                };
                 let header = String::from_utf8_lossy(&raw[..end + 4]).to_lowercase();
-                let length = header.lines().find_map(|line| line.strip_prefix("content-length:")
-                    .and_then(|n| n.trim().parse::<usize>().ok())).unwrap_or(0);
-                if raw.len() >= end + 4 + length { break; }
+                let length = header
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("content-length:")
+                            .and_then(|n| n.trim().parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+                if raw.len() >= end + 4 + length {
+                    break;
+                }
             }
             let request = String::from_utf8_lossy(&raw).to_lowercase();
             assert!(request.contains("post /v3/atomic/search http/1.1"));
@@ -413,13 +539,20 @@ mod tests {
             write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", result.len(), result).unwrap();
         });
         let cfg = MemoryConfig {
-            base: format!("http://127.0.0.1:{port}"), service: "svc".into(),
-            auth: "Bearer dummy".into(), user_key: "scoped-user".into(),
-            team: "team".into(), user: "user".into(), agent: "agent".into()
+            base: format!("http://127.0.0.1:{port}"),
+            service: "svc".into(),
+            auth: "Bearer dummy".into(),
+            user_key: "scoped-user".into(),
+            team: "team".into(),
+            user: "user".into(),
+            agent: "agent".into(),
         };
         let found = lookup(&cfg, &client(), "safe test", "L1", 1).unwrap();
         assert_eq!(found["count"], 1);
-        assert_eq!(found["items"][0]["text"].as_str().unwrap().chars().count(), MAX_ITEM_CHARS);
+        assert_eq!(
+            found["items"][0]["text"].as_str().unwrap().chars().count(),
+            MAX_ITEM_CHARS
+        );
         server.join().unwrap();
     }
 }

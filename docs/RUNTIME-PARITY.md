@@ -2,6 +2,10 @@
 
 > **Windows release update (2026-10-29):** RepoQL 1.7.18 is now the required native Windows target. This document describes earlier production observations using 1.7.15; those observations must not be relabeled as 1.7.18 test evidence. See `docs/WINDOWS-NATIVE-M18-REPOQL-UPGRADE.md`.
 
+> **Native prompt sync (2026-11-13):** the additional hash-pinned L1 prompt
+> is a staged native prepare transform, not a third image overlay. The historical
+> eight-file image inventory below is unchanged. See `DOCKERHOST-SYNC-2026-11-13.md`.
+
 **Answer first.** This change ports the parts of the live fleet runtime that are
 *mechanism*, not someone's day: two pinned memory-stack overlays, the single
 capture writer, the two read-only RepoQL connectors, the Ghost prompt store and

@@ -95,7 +95,8 @@ identities, and already-seeded profiles are `verified`, not duplicated.
 
 - **Recall (SubagentStart):** when a mapped agent starts, the hook reads the
   payload's `agent_type`, resolves it through the identity map, and queries
-  that agent's own MemoryCore scope — ≤4 L0 + ≤4 L1 items, each clipped. The
+  that agent's own MemoryCore scope — ≤5 L1 items, or ≤3 L0 items only when
+  L1 is empty or unavailable, each clipped. The
   result is returned as hook-specific additional context, clearly stamped
   "advisory only": recalled memory never overrides the current request or
   verified code, and full transcripts or whole memory dumps are never injected.

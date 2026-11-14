@@ -2,21 +2,22 @@
 /**
  * Claude Code Complete (Option 2) delegated MemoryCore profile acceptance.
  * Explicit identity map binds every delegated role (currently six) to EXISTING shared
- * identities. Never seed Ghost or nine main-session roles here.
+ * identities. Never seed main-session roles here.
  *
  * plan    : local, read-only identity/parent-route inspection, no network.
  * verify  : authenticated LIVE readbacks for every delegated role; no writes.
  * seed    : explicit Windows --apply; idempotent seeding and live verification.
  *
  * A successful profile receipt says NOTHING about parent-session capture,
- * Ghost isolation, RepoQL indexing, or Claude Desktop execution.
+ * RepoQL indexing, or Claude Desktop execution.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENT_MAP } from '../../adapters/claude-code/agent-map.mjs';
+import {nativeMemoryPolicyEnabled,requestNativeMemoryPolicy} from '../../harness/kit/lib/native-memory-policy.mjs';
 import { classifyMainMemoryState, resolveMainProxyUrl } from '../../adapters/claude-code/main-memory.mjs';
-import { loadGhostMemoryConfig } from '../../scripts/memory-config-loader.mjs';
+import { loadMemoryConfig } from '../../scripts/memory-config-loader.mjs';
 import { loadIdentityMap, provisionAgentProfiles } from '../../scripts/setup-agent-profiles.mjs';
 
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
@@ -46,8 +47,9 @@ export function validateDelegatedMap(map,parent=null){
     if(!id || !['team_id','user_id','agent_id'].every(field=>
       typeof id[field]==='string' && id[field].trim()===id[field] &&
       id[field].length>=1 && id[field].length<=128))reject('DELEGATED_IDENTITY_MISSING_OR_INVALID');
+    
     if(id.team_id.toLowerCase()==='ghost-companion'||id.agent_id.toLowerCase()==='ghost')
-      reject('GHOST_MEMORY_SCOPE_FORBIDDEN');
+      reject('RETIRED_MEMORY_SCOPE_FORBIDDEN');
     if(parent && [id.team_id,id.user_id,id.agent_id].join('\u0000')===
       [parent.team_id,parent.user_id,parent.agent_id].join('\u0000'))
       reject('DELEGATED_IDENTITY_REUSES_PARENT');
@@ -55,8 +57,20 @@ export function validateDelegatedMap(map,parent=null){
     if(seen.has(key))reject('DELEGATED_IDENTITY_COLLISION');
     seen.add(key);
   }
-  return {delegatedRoles:DELEGATED_ROLES.length,mainRolesExcluded:MAIN_ROLES.length,
-    ghostExcluded:true,identityMapValidated:true};
+  const expected={delegatedRoles:DELEGATED_ROLES.length,mainRolesExcluded:MAIN_ROLES.length,
+    identityMapValidated:true};
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  // Existing JS validation above remains authoritative for invalid inputs.
+  // The Rust command handles only the read-only validated identity shape;
+  // no memory writes, scoped IDs, or authorization decisions are exposed.
+  const actual=requestNativeMemoryPolicy('delegated-identity',{
+    map,parent,delegatedRoles:DELEGATED_ROLES,mainRolesExcluded:MAIN_ROLES.length,
+  }).value;
+  if (!actual || typeof actual!=='object' || Array.isArray(actual) ||
+      Object.keys(actual).length!==Object.keys(expected).length ||
+      Object.entries(expected).some(([key,value])=>actual[key]!==value))
+    reject('NATIVE_DELEGATED_IDENTITY_DIVERGENCE');
+  return actual;
 }
 
 function readJsonObject(path){
@@ -76,9 +90,9 @@ export async function assessDelegatedProfiles({mode='plan',map,cfg,agentsDir,led
   const parent=classifyMainMemoryState(settings,proxyUrl);
   const receipt={schema:'singularity-claude-complete-memory-profiles/v1',variant:2,
     mode,delegatedRoles:DELEGATED_ROLES.length,mainRolesExcluded:MAIN_ROLES.length,
-    ghostExcluded:true,identityMapValidated:true,
+    identityMapValidated:true,
     parentSession:{state:parent.state,liveVerified:false},
-    repoqlVerified:false,officeVerified:false,ghostMemoryIsolationVerified:false,
+    repoqlVerified:false,officeVerified:false,
     claudeDesktopVerified:false,profileReadbacksVerified:false,
     seedOperationsPermitted:false,releaseReady:false,results:[],issues:[]};
   if(parent.state!=='CONFIGURED')receipt.issues.push('PARENT_MEMORY_PROXY_NOT_CONFIGURED');
@@ -108,7 +122,7 @@ export async function assessDelegatedProfiles({mode='plan',map,cfg,agentsDir,led
     if(!receipt.profileReadbacksVerified)receipt.issues.push('POST_SEED_READBACK_INCOMPLETE');
   }
   if(out.failed)receipt.issues.push('DELEGATED_PROFILES_MISSING_OR_UNREACHABLE');
-  if(receipt.profileReadbacksVerified)receipt.issues.push('PARENT_AND_GHOST_LIVE_ACCEPTANCE_OUTSTANDING');
+  if(receipt.profileReadbacksVerified)receipt.issues.push('PARENT_LIVE_ACCEPTANCE_OUTSTANDING');
   return receipt;
 }
 
@@ -133,9 +147,9 @@ async function main(argv){
   const settings=args['--settings']?readJsonObject(args['--settings']):{};
   if(!existsSync(args['--memory-config']))reject('MEMORY_CONFIG_MISSING');
   readJsonObject(args['--memory-config']);
-  const cfg=loadGhostMemoryConfig({SINGULARITY_MEMORY_CONFIG:args['--memory-config']});
+  const cfg=loadMemoryConfig({SINGULARITY_MEMORY_CONFIG:args['--memory-config']});
   const result=await assessDelegatedProfiles({mode,map:identityMap,cfg,settings,
-    agentsDir:args['--agents-dir']||join(ROOT,'openchamber','agents'),
+    agentsDir:args['--agents-dir']||join(ROOT,'adapters','claude-code','agents'),
     ledgerPath:args['--ledger']||join(ROOT,'data','agent-profiles','ledger.json'),
     proxyUrl:args['--proxy-url']||resolveMainProxyUrl(),apply:!!args['--apply']});
   process.stdout.write(JSON.stringify(result,null,2)+'\n');

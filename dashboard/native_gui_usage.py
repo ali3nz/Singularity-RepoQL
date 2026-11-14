@@ -6,6 +6,10 @@ An installer profile may only expose its *own* desktop GUI; another GUI's
 receipts and all provider/Fleet/Freebuff receipts are excluded.
 """
 from __future__ import annotations
+import json
+import os
+from pathlib import Path
+import subprocess
 
 GUI_SOURCE_FOR_GUI = {
     'claude-desktop-code': 'claude-desktop-code',
@@ -14,7 +18,7 @@ GUI_SOURCE_FOR_GUI = {
 GUI_SOURCES = frozenset(GUI_SOURCE_FOR_GUI.values())
 
 
-def project(payload: dict, *, profile: dict | None = None) -> dict:
+def _project_python(payload: dict, *, profile: dict | None = None) -> dict:
     if profile is None:
         from variant_features import features
         profile = features()
@@ -42,7 +46,7 @@ def project(payload: dict, *, profile: dict | None = None) -> dict:
     # must not become HTML, hidden URLs, auth data or another GUI's events.
     sources = [
         {'id': source, 'label': source, 'status': s.get('status') if s.get('status') in ('ok','partial','unavailable') else 'unverified',
-         'events': s.get('events') if type(s.get('events')) is int and s['events'] >= 0 else None,
+         'events': s.get('events') if type(s.get('events')) is int and 0 <= s['events'] <= 2**64 - 1 else None,
          'latest_at': s.get('latest_at') if isinstance(s.get('latest_at'), str) and len(s['latest_at']) <= 40 else None}
         for s in payload.get('sources', []) if isinstance(s, dict) and s.get('id') == source
     ] if isinstance(payload.get('sources'), list) else []
@@ -67,3 +71,65 @@ def project(payload: dict, *, profile: dict | None = None) -> dict:
     return {**result, 'available': True, 'sources': sources, 'recent': recent,
             'measurement_status': 'SAMPLE_ONLY' if recent else 'NO_VERIFIED_GUI_RECEIPTS',
             'collected_at': payload.get('collected_at') if isinstance(payload.get('collected_at'), str) and len(payload['collected_at']) <= 40 else None}
+
+
+def _public_native_payload(payload):
+    """Forward no GUI receipts other than the installed Claude Code identity."""
+    if not isinstance(payload, dict):
+        return None
+    allowed = {'available': payload.get('available') if payload.get('available') is False else True}
+    source = 'claude-desktop-code'
+    rows = payload.get('sources')
+    if isinstance(rows, list):
+        allowed['sources'] = [
+            {key: row[key] if isinstance(row[key], (str, int, float, bool)) or row[key] is None else None
+             for key in ('id', 'status', 'events', 'latest_at') if key in row}
+            for row in rows if isinstance(row, dict) and row.get('id') == source
+        ]
+    rows = payload.get('recent')
+    if isinstance(rows, list):
+        allowed['recent'] = [
+            {key: row[key] if isinstance(row[key], (str, int, float, bool)) or row[key] is None else None
+             for key in ('source', 'timestamp', 'model', 'input_tokens', 'output_tokens') if key in row}
+            for row in rows if isinstance(row, dict) and row.get('source') == source
+        ][:50]
+    value = payload.get('collected_at')
+    if isinstance(value, str):
+        allowed['collected_at'] = value
+    return allowed
+
+
+def _native_checked(payload, profile, expected):
+    """Require exact source-only Python parity before accepting Rust output."""
+    binary = os.environ.get('SINGULARITY_NATIVE_GUI_USAGE_RUST_BINARY', '')
+    if not binary:
+        return expected
+    executable = Path(binary)
+    if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
+        raise RuntimeError('native_gui_usage_rust_binary_invalid')
+    request = json.dumps({'gui': profile.get('gui'), 'payload': _public_native_payload(payload)},
+                         ensure_ascii=False)
+    if len(request.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('native_gui_usage_rust_input_too_large')
+    try:
+        process = subprocess.run([str(executable)], input=request, text=True, encoding='utf-8',
+                                 capture_output=True, timeout=10, shell=False, check=False)
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('native_gui_usage_rust_execution_failed') from exc
+    if process.returncode != 0 or len(process.stdout.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('native_gui_usage_rust_execution_failed')
+    try:
+        actual = json.loads(process.stdout)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError('native_gui_usage_rust_invalid_json') from exc
+    if actual != expected:
+        raise RuntimeError('native_gui_usage_rust_mismatch')
+    return actual
+
+
+def project(payload: dict, *, profile: dict | None = None) -> dict:
+    if profile is None:
+        from variant_features import features
+        profile = features()
+    reference = _project_python(payload, profile=profile)
+    return _native_checked(payload, profile, reference)

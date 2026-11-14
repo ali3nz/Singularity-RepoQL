@@ -11,7 +11,7 @@ The original bundle and trusted bootstrap must be reviewed independently.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
-  [ValidateSet('UpgradePlan','VerifyInstalled','Plan','Stage','Configure','Verify','SupervisorPlan','SupervisorVerify','RegisterSupervisor','RemoveSupervisor','RollbackConfig','RollbackStage','RetireStage','RestoreRetired','ParentPlan','ConfigureParent','VerifyParent','RollbackParent','DashboardPlan','DashboardRegister','DashboardVerify','DashboardStart','DashboardRemove')]
+  [ValidateSet('UpgradePlan','VerifyInstalled','Plan','Stage','Configure','Verify','SupervisorPlan','SupervisorVerify','RegisterSupervisor','RemoveSupervisor','RollbackConfig','RollbackStage','RetireStage','RestoreRetired','ParentPlan','ConfigureParent','VerifyParent','RollbackParent','DashboardPlan','DashboardRegister','DashboardRebind','DashboardVerify','DashboardStart','DashboardRemove')]
   [string]$Mode = 'Plan',
   [string]$Bundle = '',
   [string]$Prepared = '',
@@ -27,14 +27,33 @@ param(
   [string]$ClaudeHome = '',
   [string]$Workspace = '',
   [string]$SupervisorConfig = '',
+  [string]$NativeRuntimeRoot = '',
+  [string]$RebindBackupReceipt = '',
   [int]$DashboardPort = 18100,
+  [switch]$UseRustDashboardRoutes,
+  [switch]$UseRustDashboardListener,
+  [switch]$UseRustUnifiedProxy,
+  [switch]$UseRustDocWriter,
   [string]$InstallRoot = '',
-  [switch]$Apply
+  [string]$RecoveryVerifierExe = '',
+  [string]$RecoveryVerifierSha256 = '',
+  [switch]$Apply,
+  [switch]$NativeSetupConfirmed
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# The Rust GUI has already presented its phase-specific confirmation.
+# A plain switch works with Windows PowerShell 5.1 -File.
+if ($NativeSetupConfirmed) {
+  if (-not $Apply) { throw 'SETUP_CONFIRMATION_REQUIRES_APPLY' }
+  $ConfirmPreference = 'None'
+}
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'NATIVE_WINDOWS_REQUIRED' }
-$mutates = $Mode -in @('Stage','Configure','RegisterSupervisor','RemoveSupervisor','RollbackConfig','RollbackStage','RetireStage','RestoreRetired','ConfigureParent','RollbackParent','DashboardRegister','DashboardStart','DashboardRemove')
+$mutates = $Mode -in @('Stage','Configure','RegisterSupervisor','RemoveSupervisor','RollbackConfig','RollbackStage','RetireStage','RestoreRetired','ConfigureParent','RollbackParent','DashboardRegister','DashboardRebind','DashboardStart','DashboardRemove')
+if (($UseRustDashboardRoutes -or $UseRustDashboardListener -or $UseRustUnifiedProxy) -and $Mode -notin @('DashboardRegister','DashboardRebind')) { throw 'RUST_DASHBOARD_OPTIONS_REQUIRE_REGISTRATION' }
+if ($NativeRuntimeRoot -and $Mode -notin @('DashboardRegister','DashboardRebind')) { throw 'NATIVE_RUNTIME_ROOT_OUT_OF_SCOPE' }
+if ([bool]$RebindBackupReceipt -ne ($Mode -eq 'DashboardRebind')) { throw 'REBIND_BACKUP_REQUIRED_OR_OUT_OF_SCOPE' }
+if ($UseRustDocWriter -and $Mode -notin @('Plan','Configure')) { throw 'RUST_DOC_WRITER_REQUIRES_CONFIGURE' }
 if ($mutates -and -not $Apply) { throw 'EXPLICIT_APPLY_REQUIRED' }
 if (-not $mutates -and $Apply) { throw 'READ_ONLY_MODE_REFUSES_APPLY' }
 if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { throw 'LOCALAPPDATA_REQUIRED' }
@@ -118,6 +137,21 @@ function Assert-StageMatchesPrepared {
     $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
     if ($hash -ne (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -or $hash -ne [string]$receipt.($pair[1])) { throw 'STAGED_BINARY_HASH_DRIFT' }
   }
+  foreach ($name in @('bin/singularity-windows-supervisorw.exe','bin/singularity-dashboard-routes.exe','bin/singularity-dashboard-listener.exe','bin/singularity-doc-ledger-commit.exe','bin/singularity-memorycore-writer.exe','bin/singularity-windows-setup.exe','bin/singularity-source-packager.exe','bin/singularity-unified-proxy.exe')) {
+    $preparedBinaryPath = Join-Path $Prepared $name
+    $stagedBinaryPath = Join-Path $current $name
+    if (Test-Path -LiteralPath $preparedBinaryPath -PathType Leaf) {
+      $binary = Assert-Local $stagedBinaryPath 'STAGED_OPTIONAL_BINARY'
+      $preparedBinary = Assert-Local $preparedBinaryPath 'PREPARED_OPTIONAL_BINARY'
+      if (-not $receipt.PSObject.Properties['additionalBinaries']) { throw 'STAGED_OPTIONAL_BINARY_UNRECORDED' }
+      $rows = @($receipt.additionalBinaries | Where-Object { $_.path -ceq $name })
+      $digest = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
+      if ($rows.Count -ne 1 -or $digest -ine $rows[0].sha256 -or
+          $digest -ine (Get-FileHash -LiteralPath $preparedBinary -Algorithm SHA256).Hash) {
+        throw 'STAGED_OPTIONAL_BINARY_HASH_DRIFT'
+      }
+    } elseif (Test-Path -LiteralPath $stagedBinaryPath) { throw 'STAGED_OPTIONAL_BINARY_UNEXPECTED' }
+  }
   $m = Join-Path $SourceRoot 'NATIVE_WINDOWS_SOURCE_MANIFEST.json'
   $stagedManifest = Assert-Local (Join-Path $current 'source/NATIVE_WINDOWS_SOURCE_MANIFEST.json') 'STAGED_MANIFEST'
   if ((Get-FileHash -LiteralPath $m -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $stagedManifest -Algorithm SHA256).Hash) { throw 'STAGED_SOURCE_MANIFEST_DRIFT' }
@@ -142,6 +176,10 @@ function Assert-ConfigurationInputs {
 }
 function Invoke-Claude([string]$Action) {
   $args = @($ClaudeScript,'--mode',$Action,'--variant','2','--source',$SourceRoot,'--home',$ClaudeHome,'--node-exe',$NodeExe,'--memory-config',$MemoryConfig,'--office-config',$OfficeConfig)
+  if ($UseRustDocWriter) {
+    $docWriter=Assert-Local (Join-Path (Split-Path -Parent $SourceRoot) 'bin/singularity-memorycore-writer.exe') 'DOC_WRITER'
+    $args += @('--rust-doc-writer-sha256',(Get-FileHash -LiteralPath $docWriter -Algorithm SHA256).Hash.ToLowerInvariant())
+  }
   if ($Action -eq 'apply') { $args += '--apply' }
   Invoke-Checked $NodeExe $args
 }
@@ -202,6 +240,34 @@ function Assert-NoLiveInstallReferences {
   }
   Assert-SupervisorTaskAbsent
   Assert-DashboardTaskAbsent
+  Assert-RustOpenMausTaskAbsent
+}
+function Assert-RustOpenMausTaskAbsent {
+  # A separately opted-in OpenMausBot task can reference the current supervisor.
+  # Do not retire or roll back its executable while that task is registered.
+  try { $ombTasks=@(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq 'Singularity-OpenMausBot' }) }
+  catch { throw 'OPENMAUSBOT_SCHEDULER_UNAVAILABLE' }
+  foreach ($task in $ombTasks) {
+    if (@($task.Actions | Where-Object {
+      [IO.Path]::GetFileName([string]$_.Execute) -ieq 'singularity-windows-supervisorw.exe'
+    }).Count -ne 0) { throw 'REMOVE_RUST_OPENMAUSBOT_TASK_BEFORE_STAGE_MUTATION' }
+  }
+}
+# A recovery snapshot cannot vouch for executable code inside itself.
+# An explicitly reviewed verifier stays outside every tree being moved.
+function Assert-RecoveryRustSnapshot([string]$Candidate) {
+  if (-not $RecoveryVerifierExe -and -not $RecoveryVerifierSha256) { return }
+  if ($RecoveryVerifierSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'RECOVERY_RUST_VERIFIER_DIGEST_INVALID' }
+  $tool=Assert-Local $RecoveryVerifierExe 'RECOVERY_RUST_VERIFIER'
+  if ($tool.StartsWith($InstallRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar,
+                      [StringComparison]::OrdinalIgnoreCase)) { throw 'RECOVERY_RUST_VERIFIER_INSIDE_STAGE' }
+  $actual=(Get-FileHash -LiteralPath $tool -Algorithm SHA256).Hash
+  if ($actual -ine $RecoveryVerifierSha256) { throw 'RECOVERY_RUST_VERIFIER_HASH_DRIFT' }
+  & $tool 'verify-snapshot' $Candidate | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'RECOVERY_RUST_SNAPSHOT_VERIFICATION_FAILED' }
+}
+if (($RecoveryVerifierExe -or $RecoveryVerifierSha256) -and $Mode -notin @('RollbackStage','RetireStage','RestoreRetired')) {
+  throw 'RECOVERY_RUST_VERIFIER_MODE_INVALID'
 }
 function Assert-OwnedStagingSnapshot([string]$Candidate) {
   $dir = Assert-Local $Candidate 'OWNED_STAGING' $false
@@ -226,6 +292,19 @@ function Assert-OwnedStagingSnapshot([string]$Candidate) {
     $file=Assert-Local (Join-Path $dir ('bin/' + $pair[0])) 'OWNED_BINARY'
     if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne [string]$rcpt.($pair[1])) { throw 'OWNED_BINARY_HASH_DRIFT' }
   }
+  if ($rcpt.PSObject.Properties['additionalBinaries']) {
+    foreach ($entry in $rcpt.additionalBinaries) {
+      $path=[string]$entry.path
+      if ($path -cnotin @('bin/singularity-windows-supervisorw.exe','bin/unified-repoql-control.exe','bin/singularity-dashboard-routes.exe','bin/singularity-dashboard-listener.exe','bin/singularity-doc-ledger-commit.exe','bin/singularity-memorycore-writer.exe','bin/singularity-windows-setup.exe','bin/singularity-source-packager.exe','bin/singularity-unified-proxy.exe') -or
+          [string]$entry.sha256 -notmatch '^[a-fA-F0-9]{64}$' -or -not $expected.Add($path)) {
+        throw 'OWNED_STAGE_ADDITIONAL_BINARY_INVALID'
+      }
+      $file=Assert-Local (Join-Path $dir $path) 'OWNED_ADDITIONAL_BINARY'
+      if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine [string]$entry.sha256) {
+        throw 'OWNED_STAGE_ADDITIONAL_BINARY_DRIFT'
+      }
+    }
+  }
   foreach ($row in $manifest.files) {
     $name=[string]$row.path
     if ($name -match '[\\:]' -or $name.StartsWith('/') -or $name.Split('/') -contains '..' -or
@@ -241,6 +320,7 @@ function Assert-OwnedStagingSnapshot([string]$Candidate) {
     }
   }
   if ($expected.Count -ne 0) { throw 'STAGED_FILE_INVENTORY_INCOMPLETE' }
+  Assert-RecoveryRustSnapshot $dir
 }
 if ($Mode -in @('RetireStage','RestoreRetired')) {
   # Recovery for FIRST staging only; no deletion, no silent system change.
@@ -266,13 +346,13 @@ if ($Mode -in @('RetireStage','RestoreRetired')) {
     servicesInstalled=$false;runtimeAccepted=$false;releaseReady=$false} | ConvertTo-Json -Compress
   return
 }
-if ($Mode -in @('DashboardPlan','DashboardRegister','DashboardVerify','DashboardStart','DashboardRemove')) {
+if ($Mode -in @('DashboardPlan','DashboardRegister','DashboardRebind','DashboardVerify','DashboardStart','DashboardRemove')) {
   # Native dashboard is an explicit install step, not simply an archived file.
   $manager=Assert-Local (Join-Path $PSScriptRoot 'manage_claude_complete_dashboard.ps1') 'DASHBOARD_MANAGER'
-  $taskMode=switch ($Mode) { 'DashboardPlan' {'Plan'} 'DashboardRegister' {'Register'}
+  $taskMode=switch ($Mode) { 'DashboardPlan' {'Plan'} 'DashboardRegister' {'Register'} 'DashboardRebind' {'Rebind'}
     'DashboardVerify' {'Verify'} 'DashboardStart' {'Start'} 'DashboardRemove' {'Remove'} }
   $args=@{Mode=$taskMode}
-  if ($Mode -eq 'DashboardRegister') {
+  if ($Mode -in @('DashboardRegister','DashboardRebind')) {
     $current=Assert-Local (Join-Path $InstallRoot 'current') 'STAGED_CURRENT' $false
     Assert-OwnedStagingSnapshot $current
     $args['StagedSource']=Assert-Local (Join-Path $current 'source') 'DASHBOARD_SOURCE' $false
@@ -280,8 +360,13 @@ if ($Mode -in @('DashboardPlan','DashboardRegister','DashboardVerify','Dashboard
     $args['RepoqlExe']=Assert-Local $RepoqlExe 'REPOQL'
     $args['Workspace']=Assert-Local $Workspace 'WORKSPACE' $false
     $args['Port']=$DashboardPort
+    if ($NativeRuntimeRoot) { $args['NativeRuntimeRoot']=Assert-Local $NativeRuntimeRoot 'NATIVE_RUNTIME_ROOT' $false }
+    if ($RebindBackupReceipt) { $args['RebindBackupReceipt']=Assert-Local $RebindBackupReceipt 'REBIND_BACKUP_RECEIPT' }
+    if ($UseRustDashboardRoutes) { $args['UseRustDashboardRoutes']=$true }
+    if ($UseRustDashboardListener) { $args['UseRustDashboardListener']=$true }
+    if ($UseRustUnifiedProxy) { $args['UseRustUnifiedProxy']=$true }
   }
-  if ($Mode -in @('DashboardRegister','DashboardStart','DashboardRemove')) {
+  if ($Mode -in @('DashboardRegister','DashboardRebind','DashboardStart','DashboardRemove')) {
     if ($PSCmdlet.ShouldProcess('Singularity-ClaudeComplete-Dashboard',"Dashboard $taskMode")) {
       & $manager @args -Apply -Confirm:$false
     }
@@ -371,10 +456,15 @@ if ($Mode -eq 'RollbackStage') {
   }
   # Do not move binaries while a logon task may still point at them.
   Assert-SupervisorTaskAbsent # REMOVE_SUPERVISOR_TASK_BEFORE_STAGE_ROLLBACK
+  Assert-RustOpenMausTaskAbsent
   Assert-DashboardTaskAbsent
   # Option 2 previous stage must be an unchanged, receipt-owned snapshot.
   # Never promote it using the generic stager's receipt-only header.
   Assert-OwnedStagingSnapshot (Join-Path $InstallRoot 'previous')
+  if ($RecoveryVerifierExe -or $RecoveryVerifierSha256) {
+    $outgoing = Join-Path $InstallRoot 'current'
+    if (Test-Path -LiteralPath $outgoing) { Assert-OwnedStagingSnapshot $outgoing }
+  }
   $stager = Assert-Local (Join-Path $PSScriptRoot 'stage-native.ps1') 'STAGER'
   if ($PSCmdlet.ShouldProcess($InstallRoot,'Restore the owned previous staging snapshot; preserve held current')) {
     & $stager -InstallRoot $InstallRoot -Rollback -Confirm:$false
@@ -452,7 +542,10 @@ if ($Mode -eq 'Stage' -or $Mode -eq 'Plan') {
   }
 }
 if ($Mode -eq 'Configure' -or $Mode -eq 'Verify') {
-  $null = Assert-StageMatchesPrepared
+  $current = Assert-StageMatchesPrepared
+  # Persist hook paths into the owned installation, never the disposable
+  # prepared candidate. Prepared source is only used by Plan and Stage.
+  $script:SourceRoot = Assert-Local (Join-Path $current 'source') 'STAGED_SOURCE' $false
   Assert-ConfigurationInputs
   if ($Mode -eq 'Configure') {
     # Keep these as separate, receipt-owned commits. A failure does not attempt

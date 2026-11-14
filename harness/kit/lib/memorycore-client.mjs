@@ -30,6 +30,7 @@
 // implemented in lib/context-pack.mjs (stable identity, never similarity-only).
 
 import { readFileSync } from "node:fs";
+import { guardedMemorycoreRead } from "../../../scripts/native-memorycore-reader.mjs";
 
 const HUB_BASE = process.env.MEMORYCORE_HUB_URL ?? "http://127.0.0.1:8125";
 const KEY_FILE = process.env.MEMORYCORE_KEY_FILE ?? "/opt/harness-unset/tencent-memory-hub/.agents-read-key";
@@ -54,6 +55,21 @@ export const MEMORYCORE_LIMITS = {
   skillBudgetBytes: _posInt(process.env.MEMORYCORE_SKILL_BUDGET_BYTES, 4000),
 };
 
+
+// The budget is in UTF-8 bytes, not UTF-16 code units. Never split an
+// encoded character when a MemoryCore result exceeds the shared budget.
+function utf8Prefix(text, maxBytes) {
+  let result = '';
+  let used = 0;
+  for (const char of text) {
+    const n = Buffer.byteLength(char, 'utf8');
+    if (used + n > maxBytes) break;
+    used += n;
+    result += char;
+  }
+  return result;
+}
+
 function _readKey() {
   const t = readFileSync(KEY_FILE, "utf8").trim();
   const last = t.split(/\r?\n/).pop().trim();
@@ -77,6 +93,7 @@ export function createMemorycoreClient(opts = {}) {
         headers: { "Content-Type": "application/json", "x-tdai-user-key": _readKey(), "x-tdai-service-id": SERVICE_ID },
         body: JSON.stringify(body),
         signal: ctl.signal,
+        redirect: "error", // Never follow a MemoryCore redirect with search data or the user key.
       });
       let json = null;
       try { json = await res.json(); } catch { json = null; }
@@ -152,13 +169,7 @@ export function createMemorycoreClient(opts = {}) {
     }
   }
 
-  return {
-    mode: "local",
-    team,
-    resolveBlocks,
-
-    // search({ agent, query, layer, limit }) — bounded L0/L1 recall with provenance.
-    async search({ agent = "general", query, layer = "L1", limit } = {}) {
+  const legacySearch = async ({ agent = "general", query, layer = "L1", limit } = {}) => {
       try {
         if (!String(query ?? "").trim()) return { ok: false, code: "EMPTY_QUERY" };
         const want = String(layer).toUpperCase() === "L0" ? MEMORYCORE_LIMITS.l0 : MEMORYCORE_LIMITS.l1;
@@ -206,10 +217,10 @@ export function createMemorycoreClient(opts = {}) {
           const b = Buffer.byteLength(out.body, "utf8");
           if (bytes + b > MEMORYCORE_LIMITS.budgetBytes) {
             const room = Math.max(0, MEMORYCORE_LIMITS.budgetBytes - bytes);
-            out.body = out.body.slice(0, room);
+            out.body = utf8Prefix(out.body, room);
             out.truncated = true;
             results.push(out);
-            bytes += room;
+            bytes += Buffer.byteLength(out.body, "utf8");
             break;
           }
           bytes += b;
@@ -219,12 +230,23 @@ export function createMemorycoreClient(opts = {}) {
       } catch (err) {
         return { ok: false, code: "UNEXPECTED" };
       }
-    },
+  };
 
-    // ticket 738 — raw list over the panel skill proxy (bounded topN ≤12,
-    // provenance only). Approved-only filtering + content fetch live in
-    // lib/skill-publish.mjs loadApprovedSkills(); context-pack uses that
-    // helper directly with this client's transport.
-    skillList,
+  const nativeConfig = { MEMORYCORE_KEY_FILE: KEY_FILE };
+  const nativeInput = (args = {}) => ({
+    team,
+    ...args,
+    skillTeam: SKILL_TEAM,
+    skillAgent: SKILL_AGENT,
+  });
+  return {
+    mode: "local",
+    team,
+    resolveBlocks: (args = {}) => guardedMemorycoreRead(
+      'resolveBlocks', nativeInput(args), () => resolveBlocks(args), { config: nativeConfig }),
+    search: (args = {}) => guardedMemorycoreRead(
+      'search', nativeInput(args), () => legacySearch(args), { config: nativeConfig }),
+    skillList: (args = {}) => guardedMemorycoreRead(
+      'skillList', nativeInput(args), () => skillList(args), { config: nativeConfig }),
   };
 }

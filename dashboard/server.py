@@ -44,6 +44,7 @@ from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit, urljoin, unqu
 from local_account import (LocalAccount, AccountRefused, session_ttl,
                            COOKIE_NAME as ACCOUNT_COOKIE_NAME)
 from access import AccessVerifier
+from dashboard_route_policy import classify_dashboard_route
 from repoql_bridge import Config, RepoQL, UpstreamError, host_uptime_seconds, summarise_log
 from variant_features import features as variant_features, route_allowed as variant_route_allowed
 
@@ -580,16 +581,27 @@ class App:
             )
         failed = self.rql.failed_files(ttl=15.0)
         roots = [row["root"] for row in rows if row["root"]]
+        # Native accounting never sees a repository URI or directory: source
+        # ownership and longest-root attribution stay in this Python service.
+        first_index = {}
+        exclusion_indexes = {}
+        for i, row in enumerate(rows):
+            first_index.setdefault(row["root"], i)
+            exclusion_indexes.setdefault(row["root"], []).append(i)
+        failed_indices = []
         for item in failed:
             root = repository_of(item["uri"], roots)
-            if not root:
-                continue
-            for row in rows:
-                if row["root"] == root:
-                    row["failed"] += 1
-                    break
-        for row in rows:
-            row["status"] = self.repo_status(row)
+            if root:
+                failed_indices.append(first_index[root])
+        excluded_indices = [i for rec in exclusions
+                            for i in exclusion_indexes.get(rec.get("mount_root"), [])]
+        from repository_projection import project_repositories
+        projected = project_repositories(rows, failed_indices, excluded_indices)
+        for row, item in zip(rows, projected):
+            row["excluded"] = item["excluded"]
+            row["failed"] = item["failed"]
+            row["status"] = (str(row["state"]) if item["status_code"] == "override"
+                             else item["status_code"])
         return {"repositories": rows, "system_mounts": [self.system_mount(fs) for fs in filesystems if not fs["source_uri"] or not any(r["root"] == fs["source_uri"] for r in rows)]}
 
     @staticmethod
@@ -781,9 +793,9 @@ class Handler(BaseHTTPRequestHandler):
         # Duck-typed handlers (the variant/HTTP unit tests) call route() without the
         # socket machinery, so the auto-local hook is optional rather than assumed.
         hook = getattr(self, '_maybe_issue_auto_local', None)
-        if hook is not None:
-            hook()
         try:
+            if hook is not None:
+                hook()
             profile = variant_features()
             if not variant_route_allowed(path, profile):
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "feature_not_in_install_variant"})
@@ -933,6 +945,16 @@ class Handler(BaseHTTPRequestHandler):
                     from tencent_panel_proxy import serve_proxy
                     serve_proxy(self,method,parsed)
                     return
+                native_read = getattr(self.app, 'native_read', None)
+                if native_read and method == 'GET':
+                    if path == '/api/features':
+                        self.send_json_bytes(HTTPStatus.OK, native_read('features'))
+                        return
+                    if path == '/api/health':
+                        self.send_json_bytes(HTTPStatus.OK, native_read(
+                            'health', started_at=int(self.app.started_at),
+                            peers=[str(net) for net in self.app._peer_networks]))
+                        return
                 result = self.dispatch(method, path, params)
                 if result is not None:
                     self.send_json(HTTPStatus.OK, result)
@@ -990,13 +1012,19 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.FORBIDDEN, {'error': 'local_origin_required'})
             return
         if path == '/api/account/status' and method == 'GET':
-            self.send_json(HTTPStatus.OK, {
-                'configured': account.configured(),
-                'authenticated': account.authenticated(self.headers.get('Cookie', ''))
-                                 or getattr(self, '_auto_session_ok', False),
-                'mode': account.mode,
-                'auto_local': account.auto_local,
-            })
+            configured = account.configured()
+            authenticated = (account.authenticated(self.headers.get('Cookie', ''))
+                             or getattr(self, '_auto_session_ok', False))
+            native_read = getattr(self.app, 'native_read', None)
+            if native_read:
+                self.send_json_bytes(HTTPStatus.OK, native_read(
+                    'account_status', configured=configured, authenticated=authenticated,
+                    auto_local=account.auto_local))
+            else:
+                self.send_json(HTTPStatus.OK, {
+                    'configured': configured, 'authenticated': authenticated,
+                    'mode': account.mode, 'auto_local': account.auto_local,
+                })
             return
         if path not in ('/api/account/setup', '/api/account/login', '/api/account/logout', '/api/account/mode') or method != 'POST':
             self.send_json(HTTPStatus.METHOD_NOT_ALLOWED, {'error': 'method_not_allowed'})
@@ -1134,8 +1162,7 @@ class Handler(BaseHTTPRequestHandler):
             if (self.headers.get('Origin') or self.headers.get('Sec-Fetch-Site')
                 or self.headers.get('Sec-Fetch-Mode')):
                 return False
-        header = self.headers.get("Authorization", "")
-        if header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), self.app.token):
+        if self.bearer_authorized():
             return True
         # Public hostname path: only a JWT signed by the Access team keys counts.
         # A bare Cf-Access-Authenticated-User-Email header is spoofable and ignored.
@@ -1161,7 +1188,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def bearer_authorized(self) -> bool:
         header = self.headers.get("Authorization", "")
-        return header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), self.app.token)
+        if not header.startswith("Bearer "):
+            return False
+        candidate = header[7:].strip()
+        native = getattr(self.app, 'native_bearer', None)
+        if native:
+            if not candidate.isascii():
+                return False
+            return native('bearer', candidate=hashlib.sha256(candidate.encode('ascii')).hexdigest(),
+                          expected=self.app.native_bearer_digest)
+        return hmac.compare_digest(candidate, self.app.token)
 
     def request_origin_allowed(self, *, require_origin: bool = False) -> bool:
         """Browser-origin boundary for the same-origin native proxy.
@@ -1183,7 +1219,9 @@ class Handler(BaseHTTPRequestHandler):
                 and parsed.scheme == self.request_scheme())
 
     def send_json(self, status: HTTPStatus, payload: dict) -> None:
-        body = json.dumps(payload, default=str).encode("utf-8")
+        self.send_json_bytes(status, json.dumps(payload, default=str).encode("utf-8"))
+
+    def send_json_bytes(self, status: HTTPStatus, body: bytes) -> None:
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1301,8 +1339,8 @@ class Handler(BaseHTTPRequestHandler):
         """Forward panel headers without exporting dashboard authentication.
 
         RepoQL may use its *own* Authorization bearer and session cookies, so
-        do not indiscriminately remove them. The dashboard's bearer and scoped
-        launch cookie must never cross the proxy boundary. Cloudflare Access
+        do not indiscriminately remove them. The dashboard's bearer, owner
+        session and scoped launch cookie must never cross the proxy boundary. Cloudflare Access
         identity headers belong to this dashboard's outer authentication only.
         """
         from repoql_native_auth import COOKIE_NAME
@@ -1326,7 +1364,9 @@ class Handler(BaseHTTPRequestHandler):
                 safe_cookies = []
                 for part in value.split(';'):
                     field = part.strip()
-                    if field and field.split('=', 1)[0].strip().lower() != COOKIE_NAME.lower():
+                    if field and field.split('=', 1)[0].strip().lower() not in {
+                        COOKIE_NAME.lower(), ACCOUNT_COOKIE_NAME.lower(),
+                    }:
                         safe_cookies.append(field)
                 if not safe_cookies:
                     continue
@@ -1396,6 +1436,10 @@ class Handler(BaseHTTPRequestHandler):
                            "content-encoding", "server", "date", "x-frame-options"):
                     continue
                 if low == "set-cookie":
+                    from repoql_native_auth import COOKIE_NAME
+                    cookie_name = value.split(';', 1)[0].split('=', 1)[0].strip().lower()
+                    if cookie_name in {ACCOUNT_COOKIE_NAME.lower(), COOKIE_NAME.lower()}:
+                        continue
                     value = self._rewrite_embed_cookie(value)
                 if low == "location":
                     if redirect is None:
@@ -1488,33 +1532,42 @@ class Handler(BaseHTTPRequestHandler):
                     return
             elif relative == 'account.html':
                 relative = 'index.html'
-        target = (STATIC_DIR / relative).resolve()
-        # Component-boundary containment: a string prefix would accept sibling dirs like static-foo.
-        if not target.is_relative_to(STATIC_DIR.resolve()) or not target.is_file():
-            target = STATIC_DIR / "index.html"
-        if not target.is_file():
-            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
-            return
-        content_type = {
-            ".html": "text/html; charset=utf-8",
-            ".js": "application/javascript; charset=utf-8",
-            ".mjs": "application/javascript; charset=utf-8",
-            ".css": "text/css; charset=utf-8",
-            ".svg": "image/svg+xml",
-            ".webp": "image/webp",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".json": "application/json",
-        }.get(target.suffix, "application/octet-stream")
-        body = target.read_bytes()
-        if target.name == "index.html":
+        native_asset = getattr(getattr(self, 'app', None), 'native_asset', None)
+        if native_asset:
+            selected = native_asset(STATIC_DIR, relative)
+            if selected is None or (selected[0] and local_account is not None and not signed_in):
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            is_index, content_type, body = selected
+        else:
+            target = (STATIC_DIR / relative).resolve()
+            # Component-boundary containment: a string prefix would accept sibling dirs like static-foo.
+            if not target.is_relative_to(STATIC_DIR.resolve()) or not target.is_file():
+                target = STATIC_DIR / "index.html"
+            if not target.is_file():
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            content_type = {
+                ".html": "text/html; charset=utf-8",
+                ".js": "application/javascript; charset=utf-8",
+                ".mjs": "application/javascript; charset=utf-8",
+                ".css": "text/css; charset=utf-8",
+                ".svg": "image/svg+xml",
+                ".webp": "image/webp",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".json": "application/json",
+            }.get(target.suffix, "application/octet-stream")
+            body = target.read_bytes()
+            is_index = target.name == "index.html"
+        if is_index:
             public_profile = variant_features()
             feature_json = json.dumps(public_profile, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
             body = body.replace(b"<head>", ("<head>\n<script>window.__SINGULARITY_VARIANT__=" + feature_json + ";</script>").encode("utf-8"), 1)
-        if target.name == "index.html" and local_account is not None:
+        if is_index and local_account is not None:
             body = body.replace(b"<head>", b"<head>\n<script>window.__SINGULARITY_LOCAL_LOGIN__=true;</script>", 1)
-        if target.name == "index.html" and (self.access_identity() is not None or
+        if is_index and (self.access_identity() is not None or
              (local_account and (getattr(self, '_auto_session_ok', False)
                                  or local_account.authenticated(self.headers.get('Cookie', ''))))):
             # Tell the SPA that Access already vouched for this browser, so it does
@@ -1533,28 +1586,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def dispatch(self, method: str, path: str, params: dict) -> dict | None:
         app = self.app
+        route = classify_dashboard_route(method, path)
         if method == "GET":
-            if path == "/api/features":
+            if route == "read_features":
                 return variant_features()
-            if path == "/api/claude/agents":
+            if route == "read_claude_agents":
                 from claude_agents_control import list_agents
                 return list_agents()
-            if path == "/api/claude/agents/detail":
+            if route == "read_claude_agents_detail":
                 from claude_agents_control import agent_detail
                 return agent_detail(params.get("name", ""))
-            if path == "/api/claude/policy":
+            if route == "read_claude_policy":
                 from claude_agents_control import policy_inventory
                 return policy_inventory()
-            if path == "/api/claude/mcps":
+            if route == "read_claude_mcps":
                 from claude_agents_control import mcp_inventory
                 return mcp_inventory()
-            if path == "/api/openmausbot/overview":
+            if route == "read_openmausbot_overview":
                 from native_openmausbot import overview
                 return overview(app.config.state_dir)
-            if path == "/api/openmausbot/models":
+            if route == "read_openmausbot_models":
                 from native_openmausbot import models
                 return models(app.config.state_dir)
-            if path == "/api/openmausbot/ops":
+            if route == "read_openmausbot_ops":
                 import time as _time
                 from openmausbot_ops import build
                 try:
@@ -1567,25 +1621,25 @@ class Handler(BaseHTTPRequestHandler):
                     return build(start, end, now_ms=now)
                 except (ValueError, TypeError):
                     return {'error': 'bad_request', 'message': 'Invalid operations window.'}
-            if path == "/api/native/windows/readiness":
+            if route == "read_native_windows_readiness":
                 from native_readiness import report
                 return report(app.config)
-            if path == "/api/harness/office":
+            if route == "read_harness_office":
                 from office_bridge import office_status
                 return office_status()
-            if path == "/api/repos/usage":
+            if route == "read_repos_usage":
                 from repo_query_usage import from_environment
                 return from_environment([r["root"] for r in app.repo_rows()["repositories"] if r.get("root")])
-            if path == "/api/freebuff/allowance":
+            if route == "read_freebuff_allowance":
                 if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
                     return {"available": False, "error": "not_part_of_native_gui_subscription_usage"}
                 from freebuff_allowance import get_allowance
                 return get_allowance()
-            if path.startswith("/api/harness"):
+            if route == "read_harness":
                 if app.harness is None:
                     raise UpstreamError("harness telemetry module unavailable")
                 return app.harness.get(path, params)
-            if path == "/api/openchamber/telemetry":
+            if route == "read_openchamber_telemetry":
                 if os.environ.get("SINGULARITY_WINDOWS_NATIVE") == "1":
                     return {"available": False, "reason": "unverified_provider_wide_usage_not_native_subscription_usage"}
                 configured_summary = os.environ.get("SINGULARITY_OPENCHAMBER_SUMMARY_FILE", "").strip()
@@ -1601,99 +1655,99 @@ class Handler(BaseHTTPRequestHandler):
                         return json.load(src)
                 except (OSError, ValueError):
                     return {"available": False, "reason": "OpenChamber summary unreadable"}
-            if path == "/api/agentchat/avatars":
+            if route == "read_agentchat_avatars":
                 from native_openmausbot import role_names
                 return {"names": role_names(app.config.state_dir), "agents": {},
                         "avatars": [], "palette": []}
-            if path == "/api/agentchat/presence":
+            if route == "read_agentchat_presence":
                 from agentchat_feed import read_presence
                 return read_presence()
-            if path == "/api/agentchat/feed":
+            if route == "read_agentchat_feed":
                 from agentchat_feed import read_feed
                 return read_feed(params.get("after", "0"), params.get("limit", "80"))
-            if path == "/api/graph/annotations":
+            if route == "read_graph_annotations":
                 from graph_annotations import list_annotations
                 return list_annotations()
-            if path.startswith("/api/unified/"):
+            if route == "read_unified":
                 from unified_bridge import forward_unified
                 return forward_unified("GET", path, params)
-            if path == "/api/health":
+            if route == "read_health":
                 return {"ok": True, "service": "repoql-dashboard", "started_at": int(app.started_at),
                         "access": app.access.status() if app.access else {"enabled": False},
                         "peers": [str(net) for net in app._peer_networks]}
-            if path == "/api/overview":
+            if route == "read_overview":
                 return self.overview()
-            if path == "/api/status":
+            if route == "read_status":
                 return self.status_detail()
-            if path == "/api/indexing":
+            if route == "read_indexing":
                 return self.indexing()
-            if path == "/api/files":
+            if route == "read_files":
                 return self.files(params)
-            if path == "/api/repos":
+            if route == "read_repos":
                 return app.repo_rows()
-            if path == "/api/repos/detail":
+            if route == "read_repos_detail":
                 return self.repo_detail(params)
-            if path == "/api/knowledge":
+            if route == "read_knowledge":
                 return self.knowledge(params)
-            if path == "/api/knowledge/item":
+            if route == "read_knowledge_item":
                 return self.knowledge_item(params)
-            if path == "/api/hub-doc-rows":
+            if route == "read_hub_doc_rows":
                 return self.hub_doc_rows(params)
-            if path == "/api/memory-docs":
+            if route == "read_memory_docs":
                 return self.memory_docs(params)
-            if path == "/api/links":
+            if route == "read_links":
                 return self.links(params)
-            if path == "/api/links/graph":
+            if route == "read_links_graph":
                 return self.links_graph(params)
-            if path == "/api/connectors":
+            if route == "read_connectors":
                 from repoql_connectors import connector_inventory
                 return connector_inventory(app.rql)
-            if path == "/api/errors":
+            if route == "read_errors":
                 return self.errors(params)
-            if path == "/api/excluded":
+            if route == "read_excluded":
                 return self.excluded()
-            if path == "/api/embed/panels":
+            if route == "read_embed_panels":
                 from embed_config import panel_config
                 return panel_config()
-            if path == "/api/cpu":
+            if route == "read_cpu":
                 return app.cpu_series(params.get("period", "1h"))
-            if path == "/api/activity":
+            if route == "read_activity":
                 return self.activity_feed(params)
             raise FileNotFoundError(f"no such endpoint: {path}")
         # mutations
         body = self.read_body()
-        if path == "/api/claude/agents/save":
+        if route == "write_claude_agents_save":
             from claude_agents_control import save_agent
             return self.mutation("Claude Code agent definition", lambda: save_agent(body))
-        if path == "/api/openmausbot/bots/model":
+        if route == "write_openmausbot_bots_model":
             from native_openmausbot import set_model
             return self.mutation("OpenMausBot bot model", lambda: set_model(app.config.state_dir, body))
-        if path == "/api/claude/agents/restore":
+        if route == "write_claude_agents_restore":
             from claude_agents_control import restore_agent
             return self.mutation("Claude Code agent restore", lambda: restore_agent(body))
-        if path == "/api/graph/annotations":
+        if route == "write_graph_annotations":
             from graph_annotations import save_annotation
             return self.mutation("graph annotation",lambda:save_annotation(body))
-        if path == "/api/unified/tencent/invoke":
+        if route == "write_unified_tencent_invoke":
             from unified_bridge import forward_unified
             result = forward_unified("POST", path, params, body)
             # A rejected upstream mutation must not look like an acknowledged write.
             if isinstance(result, dict) and result.get("available") is False:
                 raise UpstreamError(str(result.get("error") or "unified_tencent_failed"))
             return result
-        if path == "/api/harness/settings":
+        if route == "write_harness_settings":
             if app.harness is None:
                 raise UpstreamError("harness telemetry module unavailable")
             return app.harness.post(path, body)
-        if path == "/api/repos/import":
+        if route == "write_repos_import":
             return self.post_import(body)
-        if path == "/api/repos/remove":
+        if route == "write_repos_remove":
             return self.post_remove(body)
-        if path == "/api/repos/reindex":
+        if route == "write_repos_reindex":
             return self.post_reindex(body)
-        if path == "/api/excluded":
+        if route == "write_excluded":
             return self.post_exclude(body)
-        if path == "/api/excluded/remove":
+        if route == "write_excluded_remove":
             return self.post_unexclude(body)
         raise FileNotFoundError(f"no such endpoint: {path}")
 
@@ -2082,14 +2136,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if collection == "see_also":
             rows = app.see_also_links()
-            filtered = [
-                r for r in rows
-                if (not query or query.lower() in (r["source_name"] + " " + r["target_name"]).lower())
-                and (not source_category or r["source_category"] == source_category)
-                and (not target_category or r["target_category"] == target_category)
-            ]
+            # RepoQL reads and identity-bearing filter comparisons remain Python-owned.
+            # Optional Rust receives only the bounded match bitmap and paging integers.
+            from link_page_projection import page_links
+            projected = page_links(rows, page, page_size, query=query,
+                                   source_category=source_category, target_category=target_category)
             return {"collection": collection, "description": COLLECTIONS[collection], "page": page,
-                    "page_size": page_size, "total": len(filtered), "rows": filtered[offset:offset + page_size],
+                    "page_size": page_size, "total": projected["total"], "rows": projected["rows"],
                     "counts": self.link_collection_counts() if include_counts else {}}
 
         if collection == "markdown":
@@ -2236,23 +2289,35 @@ class Handler(BaseHTTPRequestHandler):
         app = self.app
         focus = (params.get("focus") or "").strip()
         links = app.see_also_links()
-        nodes: dict[str, dict] = {}
-        edges: list[dict] = []
+        # Only numeric graph positions cross the Rust boundary. The verified
+        # URI/name/category map remains private to this authenticated handler.
+        ids = {}
+        node_info = []
+        pairs = []
         for link in links:
             if not link["resolved"]:
                 continue
             if focus and focus not in (link["source_uri"], link["target_uri"]):
                 continue
+            pair = []
             for uri, name, category in (
                 (link["source_uri"], link["source_name"], link["source_category"]),
                 (link["target_uri"], link["target_name"], link["target_category"]),
             ):
-                nodes.setdefault(uri, {"id": uri, "name": name, "category": category})
-            edges.append({"source": link["source_uri"], "target": link["target_uri"], "type": "SEE_ALSO"})
-            if len(nodes) >= 120:
-                break
-        return {"nodes": list(nodes.values())[:120], "edges": edges[:200], "focus": focus or None,
-                "truncated": len(nodes) >= 120}
+                if uri not in ids:
+                    ids[uri] = len(node_info)
+                    node_info.append({"id": uri, "name": name, "category": category})
+                pair.append(ids[uri])
+            pairs.append(pair)
+        from graph_projection import project_graph
+        projected = project_graph(len(node_info), pairs)
+        return {
+            "nodes": [node_info[i] for i in projected["node_indices"]],
+            "edges": [{"source": node_info[a]["id"], "target": node_info[b]["id"],
+                       "type": "SEE_ALSO"} for a, b in projected["edge_indices"]],
+            "focus": focus or None,
+            "truncated": projected["truncated"],
+        }
 
     def errors(self, params: dict) -> dict:
         app = self.app
@@ -2268,22 +2333,15 @@ class Handler(BaseHTTPRequestHandler):
                 if r["level"] in ("WRN", "WARN", "ERR", "FTL", "CRT")
                 and (not query or query.lower() in r["msg"].lower())
             ]
-            groups: dict[str, dict] = {}
-            for record in records:
-                signature = re.sub(r"\d+", "#", record["msg"])[:180]
-                entry = groups.setdefault(signature, {
-                    "message": record["msg"], "count": 0, "first_ts": record["ts"],
-                    "last_ts": record["ts"], "level": record["level"], "component": "repoql-host",
-                    "kind": "service", "signature": signature,
-                })
-                entry["count"] += 1
-                entry["first_ts"] = record["ts"]
-                entry["last_ts"] = record["ts"]
-                entry["level"] = record["level"]
-            ordered = sorted(groups.values(), key=lambda item: item["last_ts"], reverse=True)
-            return {"kind": kind, "page": page, "page_size": page_size, "total": len(ordered),
-                    "rows": ordered[offset:offset + page_size],
-                    "summary": {"service": len(ordered), "indexing": len(app.rql.failed_files(ttl=15.0))}}
+            # Authentication, log reads, message filtering and failure counts remain
+            # with Python. The optional Rust process only sees numeric group and
+            # timestamp ranks, and may return results only after exact parity.
+            from service_error_projection import group_service_errors
+            projected = group_service_errors(records, page, page_size)
+            return {"kind": kind, "page": page, "page_size": page_size,
+                    "total": projected["total"], "rows": projected["rows"],
+                    "summary": {"service": projected["total"],
+                                "indexing": len(app.rql.failed_files(ttl=15.0))}}
 
         if kind == "parse":
             clauses = ["kind IN ('parse','swift.parse_error')"]
@@ -2317,10 +2375,13 @@ class Handler(BaseHTTPRequestHandler):
         ]
         if query:
             items = [i for i in items if query.lower() in (i["uri"] or "").lower() or query.lower() in (i["message"] or "").lower()]
-        items.sort(key=lambda i: str(i.get("timestamp") or ""), reverse=True)
-        return {"kind": kind, "page": page, "page_size": page_size, "total": len(items),
-                "rows": items[offset:offset + page_size],
-                "summary": {"indexing": len(items), "service": None}}
+        # Only numeric timestamp ranks and positional indexes cross to the
+        # optional Rust projector. RepoQL errors and query matching stay here.
+        from indexing_error_projection import project_indexing_errors
+        projected = project_indexing_errors(items, page, page_size)
+        return {"kind": kind, "page": page, "page_size": page_size,
+                "total": projected["total"], "rows": projected["rows"],
+                "summary": {"indexing": projected["total"], "service": None}}
 
     def excluded(self) -> dict:
         """Show actual root .repoqlignore rules as well as dashboard write history.
@@ -2610,16 +2671,50 @@ class Handler(BaseHTTPRequestHandler):
         return self.mutation("unexclude", run)
 
 
-def build_server(config: Config) -> ThreadingHTTPServer:
+def _bound_handler(config: Config):
     app = App(config)
-    handler = type("BoundHandler", (Handler,), {"app": app})
-    ThreadingHTTPServer.request_queue_size = 32
     if app.local_account is not None:
         if config.bind != '127.0.0.1' or config.public_url or config.access_team_domain or config.access_aud:
             raise ValueError('LOCAL_ACCOUNT_REQUIRES_PRIVATE_LOOPBACK')
+    return type("BoundHandler", (Handler,), {"app": app})
+
+
+def build_server(config: Config) -> ThreadingHTTPServer:
+    handler = _bound_handler(config)
+    ThreadingHTTPServer.request_queue_size = 32
     server = ThreadingHTTPServer((config.bind, config.port), handler)
     server.daemon_threads = True
     return server
+
+
+def build_native_listener(config: Config, binary: str):
+    from native_listener import NativeListener, PrivateHTTPServer, private_handler
+
+    if (config.bind != '127.0.0.1' or config.public_url or config.access_team_domain or config.access_aud
+            or os.environ.get('SINGULARITY_WINDOWS_NATIVE') != '1'
+            or os.environ.get('SINGULARITY_LOCAL_ACCOUNT_AUTH') != '1'):
+        raise ValueError('DASHBOARD_NATIVE_LISTENER_REQUIRES_PRIVATE_WINDOWS')
+    handler = _bound_handler(config)
+    bearer_digest = hashlib.sha256(handler.app.token.encode('ascii')).hexdigest()
+    key, reply_key = secrets.token_hex(32), secrets.token_hex(32)
+    server = PrivateHTTPServer(('127.0.0.1', 0), private_handler(handler, key, reply_key))
+    native = None
+    try:
+        native = NativeListener(binary, server, config.port, key, reply_key)
+        handler.app.local_account.native_session = native.session
+        handler.app.local_account.use_native_store(native.account)
+        handler.app.native_asset = native.asset
+        handler.app.native_read = native.read_api
+        handler.app.native_bearer_digest = bearer_digest
+        handler.app.native_bearer = native.session
+        return native
+    except BaseException:
+        try:
+            if native is not None:
+                native.close()
+        finally:
+            server.server_close()
+        raise
 
 
 def main(argv: list[str]) -> int:
@@ -2669,13 +2764,21 @@ def main(argv: list[str]) -> int:
         print(app.dashboard_url())
         return 0
 
-    server = build_server(config)
+    from native_listener import BINARY_ENV
+    binary = os.environ.get(BINARY_ENV)
+    native = build_native_listener(config, binary) if binary else None
+    server = native.server if native else build_server(config)
     print(f"repoql-dashboard listening on http://{config.bind}:{config.port} (workspace {config.workspace})", flush=True)
     try:
-        server.serve_forever()
+        if native:
+            native.serve()
+        else:
+            server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if native:
+            native.close()
         server.server_close()
     return 0
 

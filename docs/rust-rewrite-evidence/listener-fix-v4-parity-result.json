@@ -1,0 +1,696 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "evidence/native/listener-fix-v4-parity-result.json",
+    "original_sha256": "d1ce52c4f63b9c62a392e5ad81d8b81b3e9079b22a15e608809781389a5a9a31",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 39,
+      "home_path": 0,
+      "sid": 0,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": {
+    "schema": "wave56-native-listener-resume/v1",
+    "phase": "Parity",
+    "startedUtc": "2026-11-13T13:05:10.0509190Z",
+    "checks": [
+      {
+        "check": "gateway-26-singularity-unified-proxy-differential_unified_proxy",
+        "arguments": [
+          "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_unified_proxy.py",
+          "--rust-cli",
+          "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-unified-proxy.exe"
+        ],
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr": "listener-fix-v4-parity-gateway-26-singularity-unified-proxy-differential_unified_proxy.stderr.log",
+        "program": "python",
+        "stdoutSha256": "ad2f66f947218efb913c8aa5a9c060cc81e406931feea5f48ae4d66b5a208fc6",
+        "startedUtc": "2026-11-13T13:05:10.9491237Z",
+        "crate": "native/windows/unified-gateway-rust",
+        "exitCode": 0,
+        "stdout": "listener-fix-v4-parity-gateway-26-singularity-unified-proxy-differential_unified_proxy.stdout.log",
+        "finishedUtc": "2026-11-13T13:05:12.6142435Z"
+      },
+      {
+        "check": "windows-gateway-locality-guard",
+        "arguments": [
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "%USERPROFILE%\\singularity-wave56-1258-native\\source\\dashboard",
+          "-p",
+          "test_windows_gateway_locality.py"
+        ],
+        "stderrSha256": "61fa71214f8c3ce170ac3c2451c2498a0aa3d857246a57af562770f1b23be17b",
+        "stderr": "listener-fix-v4-parity-windows-gateway-locality-guard.stderr.log",
+        "program": "python",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "startedUtc": "2026-11-13T13:05:12.6238650Z",
+        "crate": "native/windows/unified-gateway-rust",
+        "exitCode": 0,
+        "stdout": "listener-fix-v4-parity-windows-gateway-locality-guard.stdout.log",
+        "finishedUtc": "2026-11-13T13:05:12.8547453Z"
+      }
+    ],
+    "sourcePhase": "BASE_PASS_WITH_FOCUSED_NATIVE_FIXES",
+    "compiledParity": "PASS_COMPOSITE_ALL_27_GATEWAY_CASES",
+    "fullGatePass": false,
+    "compositeEvidence": true,
+    "liveAcceptance": "NOT_RUN",
+    "rollback": "NOT_RUN",
+    "cutover": "NOT_RUN",
+    "exitCode": 0,
+    "baseBuildReceiptSha256": "b8872ebb4e4410c2797a0b1abf22f1c465400cd1e88ebb96f98a39ce4d8c6809",
+    "baseInputsSha256": "c74016c05ffde9a73046d2c6e7da5cb1cb3c20b53fe7638345d4394ecb694c40",
+    "sourceDeltas": [
+      {
+        "oldSha256": "6a073394f25c5b1b02543fab55cae111d1e3d4363aa8fa6d0bec02bf0ac6b5ab",
+        "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-listener.rs",
+        "newSha256": "2ef65b7f506cc849b49784d1e5f5e225010949ac6d85a1415e0568657ae2910d"
+      },
+      {
+        "oldSha256": "fc131b9276e2a9f9c56ed4985cc59729cbafc7a5fad1dfb41096c13e4b320f7e",
+        "path": "native/windows/memory-parity-rust/tests/differential_v2.py",
+        "newSha256": "1f79ee6fee90b393b89127b325bd51aaac19ab857e1f6cf5b79729ac518d4cfa"
+      },
+      {
+        "oldSha256": "058c77d8c27ee65a568e875c0dafa403ad02a0650f17f1364e9f85ff87e440da",
+        "path": "native/windows/unified-gateway-rust/tests/differential_unified_proxy.py",
+        "newSha256": "037d71e8834b4e8703709b43e2a121709a2055134397479bf99c60689b66fffb"
+      }
+    ],
+    "prefixEvidence": {
+      "compiled-prefix-v2.stdout.log": "57a5eb4bef8e981405ca9af60d380dea1e92dbb3221145206a92ec0ad56b2746",
+      "compiled-prefix-v2.stderr.log": "97bd99d0076e8b3bc1da234c6dd9a7038ebcd053b3bac24d25a3eec11fcc08d8",
+      "focused-compiled-parity-fixture-v2-result.json": "5f4417c907f7dd3ca0065d0b03d895f90dc1a0ff812345d046a1d3763bbfd1d7"
+    },
+    "prefixStoppedAt": "singularity-dashboard-listener",
+    "frozenSourceManifests": "UNCHANGED_DRIFT",
+    "updatedBuildReceiptSha256": "350b586b8d27752878736a596f46d47cba20beb34ad20de9fe3585f2b5500218",
+    "binaryInputs": [
+      {
+        "path": "harness/rust-authority/target/release/orchestra-observer.exe",
+        "sha256": "6a5e06d8fedbaed48133b83faee43fc5b4cba0b208f992fab88ec4847120c92d"
+      },
+      {
+        "path": "native/desktop-bridge/target/release/singularity-desktop-bridge.exe",
+        "sha256": "1883f789d976080e22657dc4c45f383d4d034066656d1e3ebd85785815f58797"
+      },
+      {
+        "path": "native/windows/rust-supervisor/target/release/singularity-windows-setup.exe",
+        "sha256": "30b4769ad50dc00c19e33c9448f6135d5b0cbf39305064fc9c27985c5b98f0ab"
+      },
+      {
+        "path": "native/windows/rust-supervisor/target/release/singularity-windows-supervisor.exe",
+        "sha256": "fb448df9bda604c191b922dc1840c72b26f37234ba76578a4e6d64441c20e81d"
+      },
+      {
+        "path": "native/windows/rust-supervisor/target/release/singularity-windows-supervisorw.exe",
+        "sha256": "f2dee36164aa217ea6fa371753d317c1a86d707bb856d94e27aa569d0c0098d4"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/kanzo_board_audit.exe",
+        "sha256": "86b6a38902b3f97ac02d1d03a5946857ff1555427e569b33189fe587cd40d2e6"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/memory_scope_audit.exe",
+        "sha256": "8b653e4ad28d3644cc7b71f15978f6c83ecd90d64afecd131f34eb151a17b5c9"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity_dashboard_open.exe",
+        "sha256": "7c73fa00ee9f3598cb4990c961f6de807c62614d381f0b4a836697da20ae3047"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-agentchat-feed.exe",
+        "sha256": "fbe0562cb851f9ec097dc92122f5195b836bb6d426cd004e35b762cbf697a876"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-claude-agent-fields.exe",
+        "sha256": "22d13ba998721d5e7ebb4679958755034ad2da5e94c8de9870488e0c22e4ca2f"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-claude-mcp-inventory.exe",
+        "sha256": "b370cf787368f849d6633ed3b8bade8bff06469a7e7ae4489ebdf49d28ff1411"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-graph.exe",
+        "sha256": "e8721642c24cba655bfe53d86db9c423c922540ea3d4baba026504bb243cee85"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-indexing-errors.exe",
+        "sha256": "8404bcc568ded3f7e0bd502f3edaefcc17aa98a300d5f45a6390e2ffd77018bf"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-link-page.exe",
+        "sha256": "a7fcfc9e5ee9d6c98acd19b7aa6880ffbabf94a21f50ecbd487e05b34d2ff854"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-listener.exe",
+        "sha256": "38aa5aa2d3f61c0e3b02b5f188f66577ebf0c5cee01e104d62cd58593127daed"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-routes.exe",
+        "sha256": "39276e9bc06628e6c64db5938a0e70f75a8098c712afa7b241d3f1ee93a01a38"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-service-errors.exe",
+        "sha256": "3caa3a57c789ff8c74a8b48740879f46ab69e7111296cc96863453a6f824052b"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-doc-ledger-commit.exe",
+        "sha256": "3b005e786076d9fa800ede13faacff3f55739534354adca0ecc551aebe220f23"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-doc-ledger-evidence.exe",
+        "sha256": "3401cae4b5c2a7b646290fd700eb5663daf2bca4b8d8e1abe2fe33073f9961fb"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-harness-agent-seats.exe",
+        "sha256": "2a198c825e100d70c55947c9d461fdc0ec0bbce8c2083e1d5e57c6e0dab72acc"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-harness-percentiles.exe",
+        "sha256": "e25fa640d04eafbdf1876a2ff96fc46b92629e1ba3d2dbe4d504d0c0dbc6ffef"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-harness-usage.exe",
+        "sha256": "023aeea95a1b4b67f898597909c5a948dd680c2776ff781c83d2fd92143ef4e6"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-memory-ledger-upgrade.exe",
+        "sha256": "ecaa75435c5bd8b991f8183221e901dec5ebc045f3ca5de3738a3b37862daa23"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-memorycore-reader.exe",
+        "sha256": "fae0ea12dec0f379df721136442a40791e8e64f8eada2a80728ed7a76b5e9700"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-memorycore-writer.exe",
+        "sha256": "6e90034700a9f83fd69bf847256c17de6a2bc34b17ab775d80b1194a46c5c5be"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-native-cpu-history.exe",
+        "sha256": "413c8116e0e2925bceb2d5b0f2d18088ab934f8b76ae9b030aed6274513e9abd"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-native-gui-usage.exe",
+        "sha256": "20bfe5a6f1db62a150867776c54bdd8b99117ad544b1268adcc831f65b1145ce"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-native-readiness.exe",
+        "sha256": "8b1e7851f3ad308260ca5e6fa855bf7e4ccce122e4bb933d6ea844fa996e568d"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-openmaus-inventory.exe",
+        "sha256": "632682fd578b510060680f9481c73b13cbbc1a40df63d1ffc9fa4def72636c6f"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-repoql-connectors.exe",
+        "sha256": "2e63e050ab07a307bb9e0fe7a7aa80f2266aae2d367e5d76b4561e7d1d8e5ec0"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-repoql-query-usage.exe",
+        "sha256": "a1eb3ba4959c52b4087470787a65e33b064e6d756e9abc256d78e421b0cf97a8"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-repository-summary.exe",
+        "sha256": "0df26a58f22abd67be028912c855944981f56e1d2047681d4b10b3d1a083676f"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-telemetry-model.exe",
+        "sha256": "5f70cb49390050d534efbc237293a1fa7a4a49f25c552e4a4f765e9f6354b3e0"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-unified-proxy.exe",
+        "sha256": "1d57661ef8acc0fd4d789c4a9ac34decd520840862bf99a6e7fb57907e40b028"
+      },
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/unified-repoql-control.exe",
+        "sha256": "1df19ea572d457077c56cf200176435df36099523cbf3db0770d2d56cb0b080c"
+      },
+      {
+        "path": "native/windows/memory-parity-rust/target/release/singularity-memory-parity.exe",
+        "sha256": "744001331b24317f5e80e8970fafcc791c27e08baa01ac23fb7d1e12a8434af5"
+      },
+      {
+        "path": "native/windows/memory-parity-rust/target/release/singularity-memory-turn-capture.exe",
+        "sha256": "ad7bbccf5c4592f31df26b260f9292ceaca8012febbeaa8c2cee541c47e8e86b"
+      },
+      {
+        "path": "native/windows/rc-stack-rust/target/release/singularity-rc-stack.exe",
+        "sha256": "8359e246aa328b96af6a6fbec1016d56f74a32513bad9986b99c92d0ddf61e80"
+      },
+      {
+        "path": "native/windows/source-packager-rust/target/release/singularity-source-packager.exe",
+        "sha256": "63382dc1c8ce51c58342a88c7e0523fd8f6302dd7d59d4fa9a3122737b1856f5"
+      },
+      {
+        "path": "native/windows/release-evidence-rust/target/release/singularity-release-evidence.exe",
+        "sha256": "b08d663803679ace6da25ab04619345717d924df5f8dc2e9647cef6e5e3bfa89"
+      }
+    ],
+    "binaryDelta": [
+      {
+        "path": "native/windows/unified-gateway-rust/target/release/singularity-dashboard-listener.exe",
+        "sha256": "38aa5aa2d3f61c0e3b02b5f188f66577ebf0c5cee01e104d62cd58593127daed"
+      }
+    ],
+    "reusedParityReceiptSha256": "7b9bb5d49b309319c49ef9741051e1495e951ca2b0a60b333822d741db4c6e63",
+    "reusedParity": [
+      {
+        "inventoryIndex": 8,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-dashboard-listener.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_dashboard_listener.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-dashboard-listener.exe"
+          ],
+          "stdoutSha256": "24dc4c628f1d4c8b5b1774e8b69180fe99b431e35599d6bbe717fd96dfdc5d8f",
+          "stderr": "listener-fix-parity-singularity-dashboard-listener.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:27.1509293Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:24.0602041Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "6367866fa2fcad7e7bd3f4ad1e8456b36cec2a0a8fcdacb8c9f43dd166712c16",
+          "check": "singularity-dashboard-listener"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-dashboard-listener",
+        "suite": "differential_dashboard_listener.py"
+      },
+      {
+        "inventoryIndex": 9,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-doc-ledger-commit.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_doc_ledger_commit.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-doc-ledger-commit.exe"
+          ],
+          "stdoutSha256": "39515259482bd3a4f31e8ecc6419876e9f8112a1812732ee457f0552983f1673",
+          "stderr": "listener-fix-parity-singularity-doc-ledger-commit.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:27.5239409Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:27.1691521Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-doc-ledger-commit"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-doc-ledger-commit",
+        "suite": "differential_doc_ledger_commit.py"
+      },
+      {
+        "inventoryIndex": 10,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-doc-ledger-evidence.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_doc_ledger_evidence.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-doc-ledger-evidence.exe"
+          ],
+          "stdoutSha256": "ffbcaab3ca0556e8cc1ff06cabd6103551303d8bea8ba0a8475c3640207706ea",
+          "stderr": "listener-fix-parity-singularity-doc-ledger-evidence.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:30.7543698Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:27.5451049Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-doc-ledger-evidence"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-doc-ledger-evidence",
+        "suite": "differential_doc_ledger_evidence.py"
+      },
+      {
+        "inventoryIndex": 11,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-harness-agent-seats.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_harness_agent_seats.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-harness-agent-seats.exe"
+          ],
+          "stdoutSha256": "f4d32f445e2f3739c4e03b36f396aabcf64c91fc768df7f06eca8786ffd3e197",
+          "stderr": "listener-fix-parity-singularity-harness-agent-seats.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:33.5074688Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:30.7618751Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-harness-agent-seats"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-harness-agent-seats",
+        "suite": "differential_harness_agent_seats.py"
+      },
+      {
+        "inventoryIndex": 12,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-harness-percentiles.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_harness_percentiles.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-harness-percentiles.exe"
+          ],
+          "stdoutSha256": "db3181b481adbee602162a7daf2fa7b41266f43cb5f43314f6903483e78151cc",
+          "stderr": "listener-fix-parity-singularity-harness-percentiles.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:36.7204511Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:33.5144340Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-harness-percentiles"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-harness-percentiles",
+        "suite": "differential_harness_percentiles.py"
+      },
+      {
+        "inventoryIndex": 13,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-harness-usage.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_harness_usage.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-harness-usage.exe"
+          ],
+          "stdoutSha256": "1da1d2da8edbe2cd5e7f48acd8531e525f0d7e4064ef00e59a8fbd71b7377080",
+          "stderr": "listener-fix-parity-singularity-harness-usage.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:39.8346149Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:36.7272420Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-harness-usage"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-harness-usage",
+        "suite": "differential_harness_usage.py"
+      },
+      {
+        "inventoryIndex": 14,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-memory-ledger-upgrade.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_memory_ledger_upgrade.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-memory-ledger-upgrade.exe"
+          ],
+          "stdoutSha256": "b814558b45912117d958bddf95c04186bc513f83e741571a4d61538d0437c949",
+          "stderr": "listener-fix-parity-singularity-memory-ledger-upgrade.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:43.2551411Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:39.8421742Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-memory-ledger-upgrade"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-memory-ledger-upgrade",
+        "suite": "differential_memory_ledger_upgrade.py"
+      },
+      {
+        "inventoryIndex": 15,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-memorycore-reader.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_memorycore_reader.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-memorycore-reader.exe"
+          ],
+          "stdoutSha256": "07162c9c413c19f4018df4494167c7d06346978aa7f71666c122589cb39cfb31",
+          "stderr": "listener-fix-parity-singularity-memorycore-reader.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:45.5946112Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:43.2620609Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-memorycore-reader"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-memorycore-reader",
+        "suite": "differential_memorycore_reader.py"
+      },
+      {
+        "inventoryIndex": 16,
+        "check": {
+          "stdout": "listener-fix-parity-singularity-memorycore-writer.stdout.log",
+          "exitCode": 0,
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_memorycore_writer.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-memorycore-writer.exe"
+          ],
+          "stdoutSha256": "6099c847d3e92b2d36fa5da82bf7d951d6ea6239456ca9fd6d5e682ddfa5c297",
+          "stderr": "listener-fix-parity-singularity-memorycore-writer.stderr.log",
+          "finishedUtc": "2026-11-13T12:01:46.8540490Z",
+          "program": "python",
+          "startedUtc": "2026-11-13T12:01:45.6016665Z",
+          "crate": "native/windows/unified-gateway-rust",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "check": "singularity-memorycore-writer"
+        },
+        "receipt": "listener-fix-parity-result.json",
+        "binary": "singularity-memorycore-writer",
+        "suite": "differential_memorycore_writer.py"
+      },
+      {
+        "inventoryIndex": 17,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:02.3013489Z",
+          "finishedUtc": "2026-11-13T12:40:17.2041152Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_doc_native_write.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-memorycore-writer.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-17-singularity-memorycore-writer-differential_doc_native_write.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-17-singularity-memorycore-writer-differential_doc_native_write.stderr.log",
+          "check": "gateway-17-singularity-memorycore-writer-differential_doc_native_write",
+          "stdoutSha256": "3b29d06e83d88cf58c63091f2573d773a0a1db6776a83430ebf874235b9bd45a",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-memorycore-writer",
+        "suite": "differential_doc_native_write.py"
+      },
+      {
+        "inventoryIndex": 18,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:17.2146411Z",
+          "finishedUtc": "2026-11-13T12:40:19.4829416Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_native_cpu_history.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-native-cpu-history.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-18-singularity-native-cpu-history-differential_native_cpu_history.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-18-singularity-native-cpu-history-differential_native_cpu_history.stderr.log",
+          "check": "gateway-18-singularity-native-cpu-history-differential_native_cpu_history",
+          "stdoutSha256": "58ad45d6a2a63bdbd69bff68a23e67b302c5e252b680cf126c205e8ae8586c23",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-native-cpu-history",
+        "suite": "differential_native_cpu_history.py"
+      },
+      {
+        "inventoryIndex": 19,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:19.4915486Z",
+          "finishedUtc": "2026-11-13T12:40:21.6671180Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_native_gui_usage.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-native-gui-usage.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-19-singularity-native-gui-usage-differential_native_gui_usage.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-19-singularity-native-gui-usage-differential_native_gui_usage.stderr.log",
+          "check": "gateway-19-singularity-native-gui-usage-differential_native_gui_usage",
+          "stdoutSha256": "4825cfcf5492e60a9a5a55ad9cb7ae14bacad21d19b46ba4734f4bb2ea7fce63",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-native-gui-usage",
+        "suite": "differential_native_gui_usage.py"
+      },
+      {
+        "inventoryIndex": 20,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:21.6746157Z",
+          "finishedUtc": "2026-11-13T12:40:25.0751887Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_native_readiness.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-native-readiness.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-20-singularity-native-readiness-differential_native_readiness.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-20-singularity-native-readiness-differential_native_readiness.stderr.log",
+          "check": "gateway-20-singularity-native-readiness-differential_native_readiness",
+          "stdoutSha256": "405a60e6e8d40e14c9d44a9c1a2b88632317a0e7f1dbab1e9ca06c59c0c8e737",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-native-readiness",
+        "suite": "differential_native_readiness.py"
+      },
+      {
+        "inventoryIndex": 21,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:25.0827479Z",
+          "finishedUtc": "2026-11-13T12:40:27.1142873Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_openmaus_inventory.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-openmaus-inventory.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-21-singularity-openmaus-inventory-differential_openmaus_inventory.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-21-singularity-openmaus-inventory-differential_openmaus_inventory.stderr.log",
+          "check": "gateway-21-singularity-openmaus-inventory-differential_openmaus_inventory",
+          "stdoutSha256": "f38249a65f3c3121b83d75a2b614b539f39908d6c98b92b03a07f1f68a85b1d2",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-openmaus-inventory",
+        "suite": "differential_openmaus_inventory.py"
+      },
+      {
+        "inventoryIndex": 22,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:27.1216812Z",
+          "finishedUtc": "2026-11-13T12:40:29.3173503Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_repoql_connectors.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-repoql-connectors.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-22-singularity-repoql-connectors-differential_repoql_connectors.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-22-singularity-repoql-connectors-differential_repoql_connectors.stderr.log",
+          "check": "gateway-22-singularity-repoql-connectors-differential_repoql_connectors",
+          "stdoutSha256": "e209577382698c03d0a5390bf5c874887c0ea95382d10271468abec7e1b82d7e",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-repoql-connectors",
+        "suite": "differential_repoql_connectors.py"
+      },
+      {
+        "inventoryIndex": 23,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:29.3235061Z",
+          "finishedUtc": "2026-11-13T12:40:31.6332985Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_repoql_query_usage.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-repoql-query-usage.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-23-singularity-repoql-query-usage-differential_repoql_query_usage.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-23-singularity-repoql-query-usage-differential_repoql_query_usage.stderr.log",
+          "check": "gateway-23-singularity-repoql-query-usage-differential_repoql_query_usage",
+          "stdoutSha256": "aef169ecd00f19eea0c9eecd230b7b7ca1e55410ab9244253f2f800ad3cc28b3",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-repoql-query-usage",
+        "suite": "differential_repoql_query_usage.py"
+      },
+      {
+        "inventoryIndex": 24,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:31.6403343Z",
+          "finishedUtc": "2026-11-13T12:40:34.2381485Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_repository_summary.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-repository-summary.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-24-singularity-repository-summary-differential_repository_summary.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-24-singularity-repository-summary-differential_repository_summary.stderr.log",
+          "check": "gateway-24-singularity-repository-summary-differential_repository_summary",
+          "stdoutSha256": "f191bf5a060d23f88275cf4f618a5f4017ec9ba87059a56ad1d5882da9bf80ea",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-repository-summary",
+        "suite": "differential_repository_summary.py"
+      },
+      {
+        "inventoryIndex": 25,
+        "check": {
+          "startedUtc": "2026-11-13T12:40:34.2441351Z",
+          "finishedUtc": "2026-11-13T12:40:34.4281656Z",
+          "arguments": [
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\tests\\differential_telemetry_model.py",
+            "--rust-cli",
+            "%USERPROFILE%\\singularity-wave56-1258-native\\source\\native\\windows\\unified-gateway-rust\\target\\release\\singularity-telemetry-model.exe"
+          ],
+          "stdout": "listener-fix-v3-parity-gateway-25-singularity-telemetry-model-differential_telemetry_model.stdout.log",
+          "stderr": "listener-fix-v3-parity-gateway-25-singularity-telemetry-model-differential_telemetry_model.stderr.log",
+          "check": "gateway-25-singularity-telemetry-model-differential_telemetry_model",
+          "stdoutSha256": "aaa95cb4d277b122f5a0be89639cd618b5dbff663e1c7fca642924be07a39835",
+          "exitCode": 0,
+          "crate": "native/windows/unified-gateway-rust",
+          "program": "python",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "receipt": "listener-fix-v3-parity-result.json",
+        "binary": "singularity-telemetry-model",
+        "suite": "differential_telemetry_model.py"
+      }
+    ],
+    "reusedSuffixReceiptSha256": "bf79e3f41878e60448ea03b958e9aaf570a681d9bdbe0a1aa4b6f7f930616604",
+    "localityGuardTests": 10,
+    "reusedGatewayCount": 18,
+    "freshGatewayCount": 1,
+    "reusedPriorGatewayPrefixCount": 8,
+    "totalGatewayCount": 27,
+    "totalReusedGatewayCount": 26,
+    "finishedUtc": "2026-11-13T13:05:13.2550472Z"
+  }
+}

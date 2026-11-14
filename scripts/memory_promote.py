@@ -18,9 +18,9 @@ Concept promotions are recorded with `--promoted <id...> [--name <Name>]` and
 are bounded: at most 3 per rolling 24h per workspace, and the same normalized
 concept name may only be promoted once every 7 days.
 
-Deferrals persist with a reason and are re-offered later: --advance-ts refuses
-to move past a deferred record's place in the stream until it is resolved or
-re-deferred out of the way. Nothing is silently dropped. The memory plugin
+Unresolved reviews and deferrals persist across scans: --advance-ts refuses
+to move past an unresolved record's place in the stream until it is marked
+resolved. Nothing is silently dropped from the review ledger. The memory plugin
 remains the only automatic capture writer. Helpers assume a single agent
 instance per workspace; state files under data/selflearn/ are plain
 read-modify-write JSON and are not locked.
@@ -37,6 +37,7 @@ import calendar
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import time
 import urllib.error
@@ -168,7 +169,22 @@ def load_cursor(path):
 
 
 def save_cursor(path, cur):
-    path.write_text(json.dumps(cur, indent=2) + "\n", encoding="utf-8")
+    """Replace cursor atomically so interruption cannot erase review history.
+
+    The helper remains single-writer, matching the existing agent contract.
+    A same-directory temporary file ensures os.replace stays on one volume.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.tmp")
+    try:
+        with open(temp, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(cur, indent=2) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def window_promotions(cur):
@@ -184,6 +200,152 @@ def concept_repeat(cur, name):
         return prior
     return None
 
+
+
+class PromotionPolicyError(RuntimeError):
+    """A selected native decision was unavailable or contradicted the owner."""
+
+
+def _native_checked(command, request, reference):
+    """Optional Rust parity gate. Never sends secrets, URLs or excerpts to Rust.
+
+    This is not an authorization API. The existing Python logic owns the
+    answer, and a native mismatch aborts before any cursor/state write.
+    """
+    binary = os.environ.get("SINGULARITY_RUST_MEMORY_POLICY_BIN", "")
+    if not binary:
+        return reference
+    candidate = pathlib.Path(binary)
+    if not candidate.is_absolute() or not candidate.is_file() or candidate.is_symlink():
+        raise PromotionPolicyError("native promotion policy binary is not an existing absolute regular file")
+    payload = json.dumps(request, ensure_ascii=False, separators=(",", ":"))
+    if len(payload.encode("utf-8")) > 256 * 1024:
+        raise PromotionPolicyError("native promotion policy request exceeds input budget")
+    try:
+        result = subprocess.run([str(candidate), command], input=payload,
+                                text=True, capture_output=True, timeout=3.5,
+                                check=False, encoding="utf-8")
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise PromotionPolicyError("native promotion policy executable failed") from exc
+    if result.returncode or len(result.stdout.encode("utf-8")) > 1024 * 1024:
+        raise PromotionPolicyError("native promotion policy rejected the request")
+    try:
+        actual = json.loads(result.stdout)
+    except (ValueError, UnicodeError) as exc:
+        raise PromotionPolicyError("native promotion policy response was invalid") from exc
+    if actual != reference:
+        raise PromotionPolicyError("native promotion policy result diverged from Python; no state written")
+    return actual
+
+
+def select_shortlist(records, cursor):
+    """Deterministic bounded selection, preserving source record order.
+
+    Rust sees only record IDs, timestamps and excerpt lengths. The source
+    text and authenticated MemoryCore response stay in this process.
+    """
+    after = int(cursor.get("afterTs", 0))
+    done = set(cursor.get("doneIds", []))
+    indices = []
+    budget = MAX_CHARS
+    for idx, rec in enumerate(records):
+        # Undated, unidentifiable or empty entries cannot safely participate
+        # in a timestamp cursor. Preserve the source page for --probe.
+        if not rec["id"] or rec["ts"] <= 0 or not rec["excerpt"].strip():
+            continue
+        if rec["id"] in done:
+            continue
+        if rec["ts"] and rec["ts"] <= after:
+            continue
+        need = len(rec["excerpt"]) + 8
+        if need > budget or len(indices) >= MAX_CANDIDATES:
+            break
+        indices.append(idx)
+        budget -= need
+    return {"ok": True, "indices": indices,
+            "newestTs": max((records[i]["ts"] for i in indices), default=0)}
+
+
+def guarded_shortlist(records, cursor):
+    expected = select_shortlist(records, cursor)
+    request = {
+        "records": [{"id": row["id"], "ts": row["ts"],
+                     "excerptLen": len(row["excerpt"]), "hasText": bool(row["excerpt"].strip())}
+                    for row in records],
+        "doneIds": cursor.get("doneIds", []), "afterTs": int(cursor.get("afterTs", 0)),
+    }
+    selected = _native_checked("promotion-shortlist", request, expected)
+    return [records[i] for i in selected["indices"]]
+
+
+def advance_decision(cursor, requested):
+    """Refuse cursor movement that would hide unresolved or deferred records.
+
+    A caller cannot skip beyond the last actually presented shortlist. An
+    absent shortlist cannot authorize forward movement. The cursor cannot
+    move backwards and historical resolved entries do not block it.
+    """
+    after = int(cursor.get("afterTs", 0))
+    target = int(requested)
+    if target <= after:
+        return {"ok": True, "allowed": True, "code": "NOOP", "blocked": [], "afterTs": after}
+    shortlist = cursor.get("pendingReview", cursor.get("lastShortlist", {}))
+    if not shortlist:
+        return {"ok": True, "allowed": False, "code": "NO_SHORTLIST", "blocked": [], "afterTs": after}
+    known = [int(v.get("ts") or 0) for v in shortlist.values()]
+    presented = int(cursor.get("maxPresentedTs", max(known, default=0)))
+    if target > presented:
+        return {"ok": True, "allowed": False, "code": "BEYOND_SHORTLIST", "blocked": [], "afterTs": after}
+    done = set(cursor.get("doneIds", []))
+    deferred = cursor.get("deferred", {})
+    blocked = set()
+    for rid, rec in shortlist.items():
+        ts = int(rec.get("ts") or 0)
+        if ts <= target and rid not in done:
+            blocked.add(rid)
+    for rid, rec in deferred.items():
+        ts = int(rec.get("rec_ts") or 0)
+        if ts and ts <= target:
+            blocked.add(rid)
+    if blocked:
+        return {"ok": True, "allowed": False, "code": "UNRESOLVED", "blocked": sorted(blocked), "afterTs": after}
+    return {"ok": True, "allowed": True, "code": "ADVANCE", "blocked": [], "afterTs": target}
+
+
+def guarded_advance(cursor, requested):
+    expected = advance_decision(cursor, requested)
+    request = {
+        "afterTs": int(cursor.get("afterTs", 0)), "advanceTs": int(requested),
+        "maxPresentedTs": int(cursor.get("maxPresentedTs", max((int(v.get("ts") or 0) for v in cursor.get("lastShortlist", {}).values()), default=0))),
+        "pendingReview": [{"id": rid, "ts": int(v.get("ts") or 0)}
+                          for rid, v in sorted(cursor.get("pendingReview", cursor.get("lastShortlist", {})).items())],
+        "doneIds": cursor.get("doneIds", []),
+        "deferred": [{"id": rid, "recTs": int(v.get("rec_ts") or 0)}
+                     for rid, v in sorted(cursor.get("deferred", {}).items())],
+    }
+    return _native_checked("promotion-advance", request, expected)
+
+
+def eligible_promotion(cursor, name, now):
+    promotions = cursor.get("promotions", {})
+    recent = [int(p.get("ts", 0)) for p in promotions.values()
+              if int(p.get("ts", 0)) >= now - DAY]
+    prior = promotions.get(name) if name else None
+    duplicate = bool(prior and now - int(prior.get("ts", 0)) < REPEAT_CONCEPT_DAYS * DAY)
+    return {"ok": True, "allowed": len(recent) < CONCEPTS_PER_24H and not duplicate,
+            "code": "CAP_REACHED" if len(recent) >= CONCEPTS_PER_24H else
+                    "REPEAT_CONCEPT" if duplicate else "ELIGIBLE",
+            "recentCount": len(recent)}
+
+
+def guarded_promotion_eligibility(cursor, name, now):
+    expected = eligible_promotion(cursor, name, now)
+    promotions = cursor.get("promotions", {})
+    request = {
+        "nowTs": int(now), "recentTs": [int(p.get("ts", 0)) for p in promotions.values()],
+        "priorTs": int(promotions[name].get("ts", 0)) if name and name in promotions else None,
+    }
+    return _native_checked("promotion-eligibility", request, expected)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -221,16 +383,16 @@ def main():
 
     if args.promoted:
         now = int(time.time())
+        eligibility = guarded_promotion_eligibility(cur, args.name, now)
         wins = window_promotions(cur)
-        if len(wins) >= CONCEPTS_PER_24H:
+        if eligibility["code"] == "CAP_REACHED":
             print(
                 "DEFERRED: concept cap reached ("
                 + str(len(wins)) + "/" + str(CONCEPTS_PER_24H)
                 + " in the last 24h) - submit this concept in a later window"
             )
             sys.exit(5)
-        repeat = concept_repeat(cur, args.name)
-        if repeat:
+        if eligibility["code"] == "REPEAT_CONCEPT":
             print(
                 "REFUSED: concept", args.name, "was promoted within the last",
                 str(REPEAT_CONCEPT_DAYS), "days; find a new durable lesson instead",
@@ -262,21 +424,19 @@ def main():
                 "reason": args.defer_reason,
             }
         if args.advance_ts is not None:
-            blocked = [
-                rid
-                for rid, v in cur.get("deferred", {}).items()
-                if v.get("rec_ts") and int(v["rec_ts"]) <= int(args.advance_ts)
-            ]
-            if blocked:
-                print(
-                    "ADVANCE BLOCKED: deferred record(s)",
-                    ", ".join(sorted(blocked)),
-                    "sit at or below the requested afterTs;",
-                    "resolve them first (--mark-done) or keep the cursor in place",
-                )
+            verdict = guarded_advance(cur, args.advance_ts)
+            if not verdict["allowed"]:
+                print("ADVANCE BLOCKED:", verdict["code"],
+                      ", ".join(verdict["blocked"]) or "no resolved eligible shortlist")
                 print("deferred kept:", len(cur.get("deferred", {})), "(defer, never discard)")
                 sys.exit(5)
-            cur["afterTs"] = max(int(cur.get("afterTs", 0)), args.advance_ts)
+            cur["afterTs"] = verdict["afterTs"]
+            # Prune only entries at/below a verified advanced cursor. Any
+            # deferred record blocks advance, so unresolved reviews survive.
+            cur["pendingReview"] = {
+                rid: entry for rid, entry in cur.get("pendingReview", cur.get("lastShortlist", {})).items()
+                if int(entry.get("ts") or 0) > cur["afterTs"]
+            }
         save_cursor(cursor_path, cur)
         print("STATE SAVED: done", len(args.mark_done), "deferred", len(args.defer), "afterTs", cur["afterTs"])
         print("promotions in last 24h:", len(window_promotions(cur)), "(cap: <=3 concepts per workspace)")
@@ -290,29 +450,19 @@ def main():
         sys.exit(0)
 
     after = int(cur.get("afterTs", 0))
-    done = set(cur.get("doneIds", []))
-    candidates = []
-    budget = MAX_CHARS
-    for rec in compact_records(doc):
-        if rec["id"] and rec["id"] in done:
-            continue
-        if rec["ts"] and rec["ts"] <= after:
-            continue
-        need = len(rec["excerpt"]) + 8
-        if need > budget or len(candidates) >= MAX_CANDIDATES:
-            break
-        candidates.append(rec)
-        budget -= need
-
+    records = compact_records(doc)
+    candidates = guarded_shortlist(records, cur)
     if not candidates:
+        pending_count = len(cur.get("pendingReview", cur.get("lastShortlist", {})))
         print(
             "NO NEW CANDIDATES (cursor afterTs:",
             after,
             "; deferred still kept:",
             len(cur.get("deferred", {})),
+            "; review ledger entries:", pending_count,
             ")",
         )
-        print("promotion cycle complete for this window (zero model calls spent)")
+        print("No new candidates shown. Resolve retained reviews before advancing the cursor.")
         sys.exit(0)
 
     newest = max(c["ts"] for c in candidates)
@@ -322,7 +472,21 @@ def main():
         print(" [" + str(i) + "]", "id", c["id"] or "(no id)", "ts", when)
         print("      ", c["excerpt"].replace("\n", " ")[:280])
     if candidates:
-        cur["lastShortlist"] = {c["id"]: {"ts": c["ts"]} for c in candidates if c["id"]}
+        latest = {c["id"]: {"ts": c["ts"]} for c in candidates if c["id"]}
+        pending = dict(cur.get("pendingReview", cur.get("lastShortlist", {})))
+        # Track even eligible rows hidden by this run's 12-row / 4k budget.
+        # Otherwise advancing after a short page can discard unreviewed rows
+        # that happened to have an older timestamp than the last shown item.
+        done_ids = set(cur.get("doneIds", []))
+        for record in records:
+            if record["id"] and record["ts"] > cur.get("afterTs", 0) and record["excerpt"].strip() and record["id"] not in done_ids:
+                pending[record["id"]] = {"ts": record["ts"]}
+        pending.update(latest)
+        if len(pending) > 2048:
+            raise PromotionPolicyError("promotion review ledger exceeded bounded capacity")
+        cur["lastShortlist"] = latest
+        cur["maxPresentedTs"] = max(int(cur.get("maxPresentedTs", 0)), max((c["ts"] for c in candidates), default=0))
+        cur["pendingReview"] = pending
         save_cursor(cursor_path, cur)
     print("RESOLUTION:")
     print("  resolved ids  : python3 scripts/memory_promote.py --mark-done <ids...>")
@@ -339,4 +503,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PromotionPolicyError as exc:
+        print("REFUSED:", exc, "(no cursor write)")
+        sys.exit(6)

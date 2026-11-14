@@ -50,6 +50,12 @@ const PY_AVAILABLE = (() => {
   }
 })();
 
+// Native acceptance is not satisfied by fixture-only mode or silently
+// skipped Python cases when a compiled policy is explicitly selected.
+if (process.env.SINGULARITY_DOC_RUST_BIN && !PY_AVAILABLE) {
+  throw new Error("Compiled doc parity requires an available Python interpreter");
+}
+
 const ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/g;
 const TS_KEYS = new Set(["ingested_at", "verified_at", "last_checked", "last_verified", "recorded_at"]);
 

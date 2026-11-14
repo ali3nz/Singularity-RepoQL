@@ -98,7 +98,7 @@ class NativeWindowsCpuHistory(unittest.TestCase):
         self.assertEqual(data['stats']['samples'],1)
         self.assertGreater(data['stats']['gaps'],0)
 
-    def test_live_http_api_isolated_under_all_four_install_options(self):
+    def test_live_http_api_requires_the_full_install_profile(self):
         import http.client
         import threading
         import time
@@ -115,14 +115,16 @@ class NativeWindowsCpuHistory(unittest.TestCase):
                 worker=threading.Thread(target=server.serve_forever,daemon=True)
                 worker.start()
                 try:
-                    conn=http.client.HTTPConnection('127.0.0.1', server.server_port,timeout=3)
-                    conn.request('GET','/api/cpu?period=1h',headers={'Authorization':'Bearer '+server.RequestHandlerClass.app.token})
-                    response=conn.getresponse()
-                    self.assertEqual(response.status,200)
-                    data=json.loads(response.read())
-                    conn.close()
-                    self.assertEqual(data['stats']['avg'],20+int(option))
-                    self.assertTrue(data['available'])
+                    with closing(http.client.HTTPConnection('127.0.0.1', server.server_port,timeout=3)) as conn:
+                        conn.request('GET','/api/cpu?period=1h',headers={'Authorization':'Bearer '+server.RequestHandlerClass.app.token})
+                        response=conn.getresponse()
+                        data=json.loads(response.read())
+                        self.assertEqual(response.status,200 if option == '2' else 400)
+                    if option == '2':
+                        self.assertEqual(data['stats']['avg'],22)
+                        self.assertTrue(data['available'])
+                    else:
+                        self.assertIn('only the full Claude Code', data['error'])
                 finally:
                     server.shutdown();server.server_close();worker.join(timeout=3)
 

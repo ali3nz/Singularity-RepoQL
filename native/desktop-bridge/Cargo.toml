@@ -5,13 +5,11 @@ edition = "2021"
 description = "Windows-native, read-only MemoryCore MCP adapter for desktop coding GUIs"
 license = "MIT"
 
-# Optional Office is excluded from options 1 and 3. Build those with
-# --no-default-features; options 2 and 4 use --features office.
-# Ghost is available only for non-Windows builds.
+# Optional Office is excluded from option 1. Build those with
+# --no-default-features; option 2 use --features office.
 [features]
 default = []
 office = []
-ghost = []
 
 [dependencies]
 serde_json = "1"

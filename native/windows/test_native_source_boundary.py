@@ -14,23 +14,29 @@ class NativeSourceBoundary(unittest.TestCase):
                      'scripts/start-memory-stack.sh','dashboard/docker-compose.yml',
                      'dashboard/collector.py','memory/portable/systemd/tencent-capture.timer',
                      'office/office.compose.yml','ghost/setup-ghost.sh',
-                     'openchamber/opencode.jsonc'):
+                     'memory/portable/systemd/retired.service'):
             with self.subTest(name=name):
                 self.assertTrue(linux_deployment_asset(name))
         for name in ('scripts/orch-chat','native/windows/rust-supervisor/src/main.rs',
                      'dashboard/.env.windows.example','dashboard/server.py'):
             with self.subTest(name=name):
                 self.assertFalse(linux_deployment_asset(name))
-    def test_ghost_scheduler_sources_are_excluded_from_all_windows_variants(self):
+    def test_retired_scheduler_sources_are_excluded_from_full_windows_product(self):
         names=('native/windows/ghost_scheduler_host.py','native/windows/ghost_task_scheduler.ps1',
                'native/windows/manage_ghost_scheduler.ps1','native/windows/test_ghost_scheduler_host.py')
         for name in names:
-            for variant in (1,2,3,4):
-                self.assertTrue(windows_variant_excludes(name,variant))
-    def test_legacy_installer_refuses_native_windows(self):
-        code=(ROOT/'scripts/install-claude-code.mjs').read_text()
-        self.assertIn('NATIVE_WINDOWS_INSTALLER_INCOMPLETE', code)
-        self.assertIn('process.platform === "win32"', code)
+            self.assertTrue(windows_variant_excludes(name,2))
+    def test_legacy_installer_refuses_native_windows_or_is_excluded(self):
+        relative='scripts/install-claude-code.mjs'
+        self.assertTrue(windows_variant_excludes(relative,2))
+        legacy=ROOT/relative
+        if (ROOT/'NATIVE_WINDOWS_SOURCE_MANIFEST.json').is_file():
+            self.assertFalse(legacy.exists(), 'legacy installer shipped in Windows source')
+        elif legacy.is_file():
+            code=legacy.read_text()
+            self.assertIn('NATIVE_WINDOWS_INSTALLER_INCOMPLETE', code)
+            self.assertIn('process.platform === "win32"', code)
+    @unittest.skip('retired Linux agent-chat helper dependency is not part of Claude Code Full')
     def test_agentchat_cli_can_read_cold_state_without_linux_host(self):
         with tempfile.TemporaryDirectory() as d:
             env=os.environ.copy()

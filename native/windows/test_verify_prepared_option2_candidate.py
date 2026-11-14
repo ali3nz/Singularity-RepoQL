@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from build_source_variants import build
-from build_option2_acceptance_bundle import BRIDGE, SUPERVISOR, assemble
+from build_option2_acceptance_bundle import BRIDGE, SUPERVISOR, SUPERVISORW, DASHBOARD_ROUTES, DASHBOARD_LISTENER, DOC_LEDGER_COMMIT, DOC_WRITER, SETUP, SOURCE_PACKAGER, UNIFIED_PROXY, assemble
 from prepare_option2_candidate import prepare
 from verify_prepared_option2_candidate import verify_prepared
 
@@ -36,6 +36,25 @@ class VerifyPreparedCandidate(unittest.TestCase):
         supervisor.write_bytes(fake_pe())
         cls.bundle = base / 'bundle.zip'
         assemble(source, bridge, supervisor, cls.bundle, native_windows=True)
+        windowless = base / SUPERVISORW
+        windowless.write_bytes(fake_pe() + b'windowless fixture')
+        routes, commit = base / DASHBOARD_ROUTES, base / DOC_LEDGER_COMMIT
+        routes.write_bytes(fake_pe() + b'routes fixture')
+        commit.write_bytes(fake_pe() + b'commit fixture')
+        listener = base / DASHBOARD_LISTENER
+        listener.write_bytes(fake_pe() + b'listener fixture')
+        writer, setup = base / DOC_WRITER, base / SETUP
+        writer.write_bytes(fake_pe() + b'writer fixture')
+        setup.write_bytes(fake_pe() + b'setup fixture')
+        packager = base / SOURCE_PACKAGER
+        packager.write_bytes(fake_pe() + b'packager fixture')
+        proxy = base / UNIFIED_PROXY
+        proxy.write_bytes(fake_pe() + b'proxy fixture')
+        cls.full_bundle = base / 'full-bundle.zip'
+        assemble(source, bridge, supervisor, cls.full_bundle, native_windows=True,
+                 supervisorw_exe=windowless, dashboard_routes_exe=routes, doc_ledger_commit_exe=commit, dashboard_listener_exe=listener,
+                 doc_writer_exe=writer, setup_exe=setup, source_packager_exe=packager, unified_proxy_exe=proxy)
+
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -54,6 +73,24 @@ class VerifyPreparedCandidate(unittest.TestCase):
         self.assertGreater(r['verified_source_files'], 200)
         for key in ('runtime_tested','publisher_identity_verified','installation_performed','release_ready'):
             self.assertFalse(r[key],key)
+
+    def test_optional_binaries_survive_extract_and_are_verified(self):
+        target = self.root / 'prepared-with-optional'
+        prepare(self.full_bundle, target, native_windows=True, preview_root=self.root)
+        result = verify_prepared(self.full_bundle, target, native_windows=True, preview_root=self.root)
+        self.assertEqual(result['verified_native_binaries'], 10)
+        self.assertFalse(result['release_ready'])
+        for name, tag in ((SUPERVISORW, b'windowless'), (DASHBOARD_ROUTES, b'routes'),
+                          (DOC_LEDGER_COMMIT, b'commit'), (DASHBOARD_LISTENER, b'listener'),
+                          (DOC_WRITER, b'writer'), (SETUP, b'setup'), (SOURCE_PACKAGER, b'packager'), (UNIFIED_PROXY, b'proxy')):
+            with self.subTest(name=name):
+                binary = target / 'bin' / name
+                original = fake_pe() + tag + b' fixture'
+                self.assertEqual(binary.read_bytes(), original)
+                binary.write_bytes(original[:-1] + b'E')
+                with self.assertRaisesRegex(ValueError, 'PREPARED_FILE_HASH_DRIFT'):
+                    verify_prepared(self.full_bundle, target, native_windows=True, preview_root=self.root)
+                binary.write_bytes(original)
 
     def test_never_writes_to_verified_directory(self):
         before = sorted((p.relative_to(self.destination).as_posix(), p.read_bytes()) for p in self.destination.rglob('*') if p.is_file())

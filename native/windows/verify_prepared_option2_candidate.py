@@ -17,7 +17,7 @@ from pathlib import Path
 import stat
 import zipfile
 
-from build_option2_acceptance_bundle import BRIDGE, SUPERVISOR, SOURCE, BUNDLE_FILES
+from build_option2_acceptance_bundle import SOURCE, BUNDLE_FILES, binary_entries
 from prepare_option2_candidate import inspect, _assert_no_reparse, _preview_root, OUTPUT_NAME, RESERVED_OUTPUTS
 
 SCHEMA = 'singularity-option2-prepared-verification/v1'
@@ -59,8 +59,9 @@ def verify_prepared(bundle: Path, prepared: Path, *, native_windows: bool | None
             manifest_bytes = inner.read('NATIVE_WINDOWS_SOURCE_MANIFEST.json')
             manifest = json.loads(manifest_bytes)
         binary_rows = {}
-        for name in (BRIDGE, SUPERVISOR):
-            data = outer.read(BUNDLE_FILES[name])
+        binaries = binary_entries(outer.namelist())
+        for name, entry in binaries.items():
+            data = outer.read(entry)
             binary_rows[name] = (len(data), hashlib.sha256(data).hexdigest())
     rows = manifest['files']
     if len({row['path'] for row in rows}) != len(rows):
@@ -70,7 +71,7 @@ def verify_prepared(bundle: Path, prepared: Path, *, native_windows: bool | None
         'PREPARATION_RECEIPT.json',
         'source/NATIVE_WINDOWS_SOURCE_MANIFEST.json',
         *('source/' + row['path'] for row in rows),
-        *('bin/' + name for name in (BRIDGE, SUPERVISOR)),
+        *('bin/' + name for name in binary_rows),
     }
     actual = set()
     # Do not follow directory junctions or symlinks into foreign files.
@@ -102,7 +103,7 @@ def verify_prepared(bundle: Path, prepared: Path, *, native_windows: bool | None
         raise ValueError('PREPARATION_RECEIPT_INVALID') from exc
     expected_receipt = dict(inspected)
     expected_receipt['status'] = 'PREPARED_ONLY_NOT_STAGED_NOT_INSTALLED'
-    expected_receipt['prepared_file_count'] = len(rows) + 3
+    expected_receipt['prepared_file_count'] = len(rows) + len(binary_rows) + 1
     if receipt != expected_receipt:
         raise ValueError('PREPARATION_RECEIPT_DRIFT')
     return {
@@ -112,7 +113,7 @@ def verify_prepared(bundle: Path, prepared: Path, *, native_windows: bool | None
         'bundle_sha256': inspected['bundle_sha256'],
         'source_sha256': inspected['source_sha256'],
         'verified_source_files': len(rows),
-        'verified_native_binaries': 2,
+        'verified_native_binaries': len(binary_rows),
         'runtime_tested': False,
         'publisher_identity_verified': False,
         'installation_performed': False,

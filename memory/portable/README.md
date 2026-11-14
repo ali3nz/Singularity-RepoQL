@@ -99,3 +99,37 @@ do them for it:
 agent id was replaced with generic wording; no behaviour changed. The runner,
 unit and env example are ports of the live ones with every host-specific path,
 identity and image moved into a variable.
+
+## Windows task-linked readback (fleet#1214 source-level port)
+
+`task-recovery.mjs` provides a read-only, bounded adapter over this consumer's
+existing capture ledger. It accepts only exact, `status=reconciled`, explicitly
+bound units for the requested source agent and task ID, then requests L0 and L1
+under the caller's registered MemoryCore identity. Each returned row is checked
+again for the requested task, source session when present, and identity fields
+when present. Results are sorted chronologically **after** bounded selection.
+
+No Ghost service, registry, new writer, task database or remote access is added.
+It cannot infer a Kanzo link from a session title or text. Legacy unbound units
+remain unlinked and return `NO_TASK_LINKED_EVIDENCE`.
+
+The existing optional `CAPTURE_TASK_BINDINGS` configuration supports logical
+`task-...` identifiers and now additionally supports the native Windows
+`kanzo:<positive integer>` form. For example, an explicit operator-authored
+binding may map `agent-alpha:An actual session title` to `kanzo:1219`. This
+only changes the DESTINATION `task_id` of newly captured units; it does not
+rewrite previous captures, modify the Kanzo board or imply a claim.
+
+Use `recoverBoundTask({ledgerPath,taskId,agent,identity,query,verifyTask,core})`
+from a **trusted native caller**. `verifyTask` MUST independently check the
+requester's authorization and native Kanzo task identity. The `core` function
+MUST be the existing authenticated MemoryCore caller, with per-agent/team/user
+push-down. Neither a claimed task id nor a caller-supplied agent label is
+sufficient authorization. Without a verifier or a trusted binding, the helper
+fails closed. The source helper is intentionally not registered as an MCP tool
+or exposed as an unverified public endpoint.
+
+`node --test memory/portable/task-recovery.test.mjs` runs hermetic tests for
+trusted binding, chronology, scope isolation, server filter rechecks and
+failure handling. Native Windows service integration and operator approval
+remain separate from these source-level results.

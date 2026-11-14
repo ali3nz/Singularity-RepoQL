@@ -6,12 +6,14 @@ see exactly what a live image adds to upstream source, and so a build can
 reproduce the same image without redistributing the upstream engine.
 
 `memory/upstream/` is byte-exact and is never edited. Everything here is an
-overlay: a patch series, an overlay Dockerfile, and the provenance that pins
-what the overlay was cut from.
+overlay with pinned provenance: a patch series, an image overlay, or a
+full-file native prepare transform. The prompt transform below needs no image.
 
 | Overlay | Base | What it changes |
 |---|---|---|
 | [`core-v2.0.2-l1recordids/`](core-v2.0.2-l1recordids/) | TencentDB-Agent-Memory `v2.0.2` @ `99a1a2c` (MIT), `MemoryCore/` | Eight source files plus one regression test: the L1 `recordIds` lookup honouring, the standalone model-fallback ladder, and the pipeline/extraction guards behind them. |
+| [`core-v2.0.2-l1idem2/`](core-v2.0.2-l1idem2/) | After `core-v2.0.2-l1recordids` | Dockerhost fleet#1175 six-file L1 idempotency and supersession overlay, staged but **not enabled**; requires pinned-source hash and native Windows validation. |
+| [`core-v2.0.2-l1prompt/`](core-v2.0.2-l1prompt/) | TencentDB-Agent-Memory `v2.0.2` @ `99a1a2c` (MIT) | Full-file extraction prompt from fleet#1268; fixed native prepare transform, LF-normalized preimage/overlay hashes, both prompt modes. |
 | [`hub-751/`](hub-751/) | `agentmemory/memory-hub` image @ `sha256:53a3285b…` | One file overlay: the knowledge-ingest parser bundle, plus its own tests. The Dockerfile fails closed if the base bundle is not the reviewed digest. |
 
 ## Why patches and not a fork
@@ -26,6 +28,11 @@ what the overlay was cut from.
 - **Roundtrip is the acceptance test.** A series that cannot be applied *and*
   reversed to the exact base hashes is not a curated export. That is what the
   roundtrip test proves, on Windows, before release.
+
+The native prompt override is applied by `scripts/native-memory-prompt.mjs`
+after the existing core patch during `prepare`, not by the Docker patch series.
+Its `manifest.json` pins the upstream revision and both normalized file hashes.
+An unknown preimage or modified override is refused before writing.
 
 ## Applying
 

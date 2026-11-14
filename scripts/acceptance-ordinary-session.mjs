@@ -45,7 +45,7 @@ import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { callMemoryCore, loadGhostMemoryConfig } from "./memory-config-loader.mjs";
+import { callMemoryCore, loadMemoryConfig } from "./memory-config-loader.mjs";
 import { discoverOpenchamber, resolveConfigDir } from "./attach-openchamber.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -129,7 +129,7 @@ export function sessionEnv(cfg, extra = {}) {
  * Config: SINGULARITY_MEMORY_CONFIG or the product default (production config).
  */
 export async function runOrdinaryAcceptance({ env = process.env, fetchImpl = globalThis.fetch, keep = false } = {}) {
-  const cfgBase = loadGhostMemoryConfig(env);
+  const cfgBase = loadMemoryConfig(env);
   const memoryConfig = {
     ...cfgBase,
     // parent sessions run under the proxy's claude-code/default client scope
@@ -267,7 +267,7 @@ async function searchTag(tag, cfg, fetchImpl, env = {}) {
   // configured service id — so the search MUST use the same partition the
   // capture was written under.
   const searchCfg = { ...cfg, serviceId: env?.SINGULARITY_CC_SEARCH_SERVICE_ID || "default" };
-  const identity = cfg.identity || loadGhostMemoryConfig(env.m).identity;
+  const identity = cfg.identity || loadMemoryConfig(env.m).identity;
   // agent_id is part of the capture partition on this kernel: a tag written by
   // an auto-provisioned agent identity is only returned when the search body
   // binds the SAME agent (team+user without agent never matches).
@@ -380,7 +380,7 @@ export function evidenceVerdict(e, { clockSkewMs = 10 * 60 * 1000, expectRuntime
  */
 export async function verifyEvidenceLive(e, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (!e || !e.tag) return { ok: false, state: "INCOMPLETE", detail: "no tag to re-verify" };
-  const cfg = loadGhostMemoryConfig(env);
+  const cfg = loadMemoryConfig(env);
   if (e.memoryScope && (e.runtime === "openchamber" || e.runtime === "claude-code")) {
     // SCOPE-BOUND corroboration: the tag must be found by searching EXACTLY the
     // evidence's recorded scope through the real service with the target's own

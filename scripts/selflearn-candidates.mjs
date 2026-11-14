@@ -43,9 +43,11 @@
 // installed by this module. Lifecycle hooks call the same function
 // in-process, so both paths share one implementation.
 import { execFileSync } from "node:child_process";
+import { nativeMemoryPolicyEnabled, requestNativeMemoryPolicy, NativeMemoryPolicyError } from "./document-learning-rust.mjs";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, relative, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 export const LESSON_SCHEMA = "selflearn.lesson.v1";
@@ -95,7 +97,15 @@ export function candidatePath(id, root) {
   return join(candidateDir(root), `${id}.json`);
 }
 export function candidateId(session, files) {
-  return sha8(`${session || "unknown"}\n${[...new Set(files || [])].sort().join("\n")}`);
+  const uniqueFiles = [...new Set(files || [])].sort();
+  const sessionKey = String(session || "unknown");
+  const expected = sha8(`${sessionKey}\n${uniqueFiles.join("\n")}`);
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const actual = requestNativeMemoryPolicy("selflearn-candidate-id", { session: sessionKey, files: uniqueFiles });
+  if (actual.id !== expected || !/^[a-f0-9]{8}$/.test(actual.id ?? "")) {
+    throw new NativeMemoryPolicyError("NATIVE_SELFLEARN_ID_DIVERGENCE");
+  }
+  return actual.id;
 }
 
 function writeAtomic(path, obj) {
@@ -342,7 +352,7 @@ function buildPrompt({ files, evidence, today }) {
 }
 
 /** Strict validation of the model's lesson object. Returns {ok, lesson|error}. */
-export function validateLesson(raw, { allowedRefs = [] } = {}) {
+function validateLessonReference(raw, { allowedRefs = [] } = {}) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "not a JSON object" };
   if (raw.schema !== LESSON_SCHEMA) return { ok: false, error: `schema must be ${LESSON_SCHEMA}` };
   if (raw.noLesson === true) {
@@ -374,6 +384,17 @@ export function validateLesson(raw, { allowedRefs = [] } = {}) {
       evidenceRefs: [...new Set(raw.evidenceRefs)], duplicateOf: raw.duplicateOf || null,
     },
   };
+}
+
+
+export function validateLesson(raw, { allowedRefs = [] } = {}) {
+  const expected = validateLessonReference(raw, { allowedRefs });
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const actual = requestNativeMemoryPolicy("selflearn-validate-lesson", { raw, allowedRefs, rawKeys: raw && typeof raw === "object" && !Array.isArray(raw) ? Object.keys(raw) : [] });
+  if (!isDeepStrictEqual(actual.value, expected)) {
+    throw new NativeMemoryPolicyError("NATIVE_LESSON_VALIDATION_DIVERGENCE");
+  }
+  return actual.value;
 }
 
 /** Extract one JSON object from a (possibly fenced/chatty) model answer. */

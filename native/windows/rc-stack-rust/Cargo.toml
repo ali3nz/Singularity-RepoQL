@@ -1,0 +1,11 @@
+[package]
+name = "singularity-rc-stack"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+description = "Native Rust RC-owned Tencent MemoryCore stack config, lifecycle and scoped probe"
+
+[dependencies]
+serde_json = "1"
+ureq = { version = "2.9", features = ["json"] }
+wait-timeout = "0.2"

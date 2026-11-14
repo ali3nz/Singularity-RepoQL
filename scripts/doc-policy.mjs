@@ -23,9 +23,10 @@
 // Exit codes: check 0 = closure complete, 1 = incomplete (findings printed),
 // 2 = usage error. No secret is ever read or printed.
 import { createHash } from "node:crypto";
+import { nativeMemoryPolicyEnabled, requestNativeMemoryPolicy, NativeMemoryPolicyError } from "./document-learning-rust.mjs";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync, readdirSync } from "node:fs";
-import { join, resolve, isAbsolute, extname, dirname, relative as relPosix } from "node:path";
+import { join, resolve, isAbsolute, extname, dirname, relative as relPosix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   candidateDir,
@@ -73,12 +74,28 @@ export function classifyFiles(files) {
       /\.bak|~$|-backup\.|\.tmp$/i.test(base);
     (skip ? skipped : material).push(f);
   }
+  if (nativeMemoryPolicyEnabled()) {
+    const actual = requestNativeMemoryPolicy("doc-policy-classify", { files, platform: process.platform });
+    const expectedDocsOnly = files.every((f) => SKIP_EXTS.has(extname(f).toLowerCase()));
+    if (!Array.isArray(actual.material) || !Array.isArray(actual.skipped) ||
+        actual.docsOnly !== expectedDocsOnly ||
+        actual.material.length !== material.length || actual.skipped.length !== skipped.length ||
+        actual.material.some((value, i) => value !== material[i]) ||
+        actual.skipped.some((value, i) => value !== skipped[i])) {
+      throw new NativeMemoryPolicyError("NATIVE_DOC_POLICY_DIVERGENCE");
+    }
+    return { material: actual.material, skipped: actual.skipped };
+  }
   return { material, skipped };
 }
 
 // A file set that ONLY touches documentation cannot itself demand new docs.
 export function isDocsOnlyChange(files) {
-  return files.every((f) => SKIP_EXTS.has(extname(f).toLowerCase()));
+  const expected = files.every((f) => SKIP_EXTS.has(extname(f).toLowerCase()));
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const actual = requestNativeMemoryPolicy("doc-policy-classify", { files, platform: process.platform });
+  if (actual.docsOnly !== expected) throw new NativeMemoryPolicyError("NATIVE_DOC_POLICY_DIVERGENCE");
+  return actual.docsOnly;
 }
 
 // ── ingestion evidence: the LEDGER is the source of verification ─────────────
@@ -313,8 +330,16 @@ export const MAX_DOC_INGEST_PER_PASS = 8;
  * delimiter. Use the native path-list separator so configured Windows hub
  * roots are not silently discarded during automatic documentation discovery. */
 export function parseDocRootEntries(raw, platform = process.platform) {
-  return String(raw || '').split(platform === 'win32' ? ';' : ':')
+  const value = String(raw || '');
+  const expected = value.split(platform === 'win32' ? ';' : ':')
     .map(s => s.trim()).filter(Boolean);
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const actual = requestNativeMemoryPolicy("doc-root-entries", { raw: value, platform });
+  if (!Array.isArray(actual.roots) || actual.roots.length !== expected.length ||
+      actual.roots.some((root, index) => root !== expected[index])) {
+    throw new NativeMemoryPolicyError("NATIVE_DOC_ROOTS_DIVERGENCE");
+  }
+  return actual.roots;
 }
 
 export function docRootsFor(dir, env = process.env) {
@@ -346,7 +371,10 @@ export function isEligibleDocPath(absPath, rootPath, { maxSizeBytes = 200 * 1024
     if (!st.isFile() || st.size === 0 || st.size > maxSizeBytes) return false;
     // containment: the scanned file must resolve inside its authorised root
     const rp = resolve(absPath);
-    if (!rp.startsWith(resolve(rootPath))) return false;
+    const fromRoot = relPosix(resolve(rootPath), rp);
+    // String-prefix containment accepts sibling folders such as root-copy.
+    // Require a real path-component boundary instead.
+    if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) return false;
     return true;
   } catch {
     return false;

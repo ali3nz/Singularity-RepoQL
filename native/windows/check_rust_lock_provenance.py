@@ -16,11 +16,19 @@ import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
+# Every first-party Rust binary in the Windows source release, plus the harness
+# authority crate. A lock gate covering only historical binaries is incomplete.
 CRATES = (
+    ('harness/rust-authority', 'orchestra-observer'),
     ('native/desktop-bridge', 'singularity-desktop-bridge'),
     ('native/windows/rust-supervisor', 'singularity-windows-supervisor'),
     ('native/windows/unified-gateway-rust', 'unified-repoql-control'),
+    ('native/windows/memory-parity-rust', 'singularity-memory-parity'),
+    ('native/windows/rc-stack-rust', 'singularity-rc-stack'),
+    ('native/windows/source-packager-rust', 'singularity-source-packager'),
+    ('native/windows/release-evidence-rust', 'singularity-release-evidence'),
 )
+
 _SHA = re.compile(r'^[a-f0-9]{64}$')
 
 

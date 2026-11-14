@@ -1,0 +1,4380 @@
+{
+  "schema": "singularity-rust-rewrite-execution-paths/v1",
+  "generated_utc": "2026-11-14T03:26:13Z",
+  "note": "Source inventory only. Presence of a path does not establish that a runtime executes it on an installed Windows host; the handoff doc records which paths are live.",
+  "counts": {
+    "total": 870,
+    "by_language": {
+      "batch": 3,
+      "csharp": 1,
+      "go": 2,
+      "javascript": 352,
+      "powershell": 62,
+      "python": 307,
+      "rust": 117,
+      "shell": 1,
+      "sql": 11,
+      "typescript": 5,
+      "wix": 9
+    },
+    "by_category": {
+      "build": 11,
+      "installer": 47,
+      "legacy": 14,
+      "runtime": 451,
+      "test": 347
+    }
+  },
+  "files": [
+    {
+      "path": "adapters/claude-code/agent-map.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "adapters/claude-code/doc-hook.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "adapters/claude-code/doc-hook.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/installer.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/integration.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/main-memory-rust-boundary.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/main-memory.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "adapters/claude-code/main-memory.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/memory-hook-process.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/memory-hook-rust-boundary.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/memory-hook.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "adapters/claude-code/memory-hook.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/office-hook.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "adapters/claude-code/office-hook.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "adapters/claude-code/settings-merge.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "adapters/claude-code/settings-windows.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "bin/ai-orchestra.cmd",
+      "language": "batch",
+      "category": "runtime"
+    },
+    {
+      "path": "bootstrapper/installerkit/Configure-Singularity.cmd",
+      "language": "batch",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/Configure-Singularity.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/Readiness.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/SingularityRepoQL.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/SingularityRepoQLBundle.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/Start-Here.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/build-exe.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/build-msi.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/installerkit/prepare_msi_payload.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/main.go",
+      "language": "go",
+      "category": "installer"
+    },
+    {
+      "path": "bootstrapper/main_test.go",
+      "language": "go",
+      "category": "test"
+    },
+    {
+      "path": "connectors/kanzo/connector.ts",
+      "language": "typescript",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/repoql-connector.d.ts",
+      "language": "typescript",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/imported_tasks.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/open_tasks.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/projects.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks_by_project.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks_by_status.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/sql/tasks_with_comments.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/tools/build_multicall.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "connectors/kanzo/tools/build_suite.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "connectors/kanzo/tools/pin.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/kanzo/tools/truncate.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/memorycore/connector.ts",
+      "language": "typescript",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/memorycore/repoql-connector.d.ts",
+      "language": "typescript",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/memorycore/sql/daily.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/memorycore/sql/personas.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/memorycore/sql/records.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "connectors/memorycore/sql/scenes.sql",
+      "language": "sql",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/access.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/agent_seat_projection.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/agentchat_feed.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/claude_agents_control.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/dashboard_route_policy.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/embed_config.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/file_lock.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/freebuff_allowance.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/graph_annotations.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/graph_projection.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/harness_api.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/harness_rust.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/harness_telemetry.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/indexing_error_projection.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/link_page_projection.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/local_account.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_cpu.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_cpu_history.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_gui_usage.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_listener.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_openmausbot.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_panel_proxy.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_readiness.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/native_repoql_gate.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/office_bridge.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/openmausbot_ops.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/repo_query_usage.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/repoql_bridge.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/repoql_connectors.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/repoql_native_auth.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/repository_projection.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/server.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/service_error_projection.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/setup_health.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "dashboard/static/agent_avatars.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/agent_reference.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/agents_control_view.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/app.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/app_test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/static/brain3d.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/brain3d_view.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/brain_asset.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/claude_agents_control.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/kanban_native.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/native_consolidation.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/static/native_variant_ui.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/static/navigation_ui.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/observability.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/openmausbot_ops.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/openmausbot_panel.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/polish.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/repoql_cheatsheet.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/repoql_guidance.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/ux_pack.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/static/workflow_graphs.js",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/tencent_panel_proxy.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/test_agent_seats_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_agentchat_recent_presence.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_agentchat_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_agentchat_windows_file_identity.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_auth_modes.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_claude_agent_fields_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_claude_agents_control.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_claude_mcp_inventory_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_dashboard_route_policy.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_embed_password_mode.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_exclusion_store_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_file_lock.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_graph_projection_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_harness_percentiles_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_harness_rust_native_security.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_harness_usage_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_indexing_errors_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_link_page_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_local_account.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_auth_broker.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_bot_ops_routes.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_browser_profiles.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_cpu.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_cpu_collector_lifecycle.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_cpu_history.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_cpu_history_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_dashboard_cpu_history.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_e2e_server.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_gui_usage.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_gui_usage_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_openmausbot.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_openmausbot_embed.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_panel_safety.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_panel_transport.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_readiness.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_readiness_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_repoql_gate.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_telemetry_platform.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_native_variant_dashboard_e2e.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_office_proxy_roundtrip.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_office_windows_rollback.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_openmaus_inventory_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_openmausbot_ops.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repo_query_usage_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repoql_connector_inventory_integrity.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repoql_connectors_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repoql_error_boundary.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repoql_panel_origin.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repoql_proxy_credential_boundary.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repoql_proxy_redirect_boundary.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_repository_projection_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_rust_telemetry_model.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_service_errors_rust_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_setup_health.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_supervisor_health_endpoint.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_unified_windows_proxy.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_variant_features.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_variant_http.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_windows_connector_roundtrip.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/test_windows_gateway_locality.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_command_overview_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_native_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_queue_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_races_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_stage_readback_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_kanban_usability_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_lounge_kanzo_activity_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_lounge_readability_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_native_ux_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_sidebar_icons_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/browser_unified_graph_fail_closed_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tests/dashboard_command_center_test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "dashboard/tools/bake_brain_mesh.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/tools/build_css.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "dashboard/unified_bridge.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "dashboard/variant_features.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "ghost/chain.mjs",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "ghost/dream.mjs",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "ghost/dream.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "ghost/gateway-backend.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "ghost/ghost-gateway.mjs",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "ghost/ghost-gateway.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "ghost/ghost-memory.mjs",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "ghost/ghost-turn.mjs",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "ghost/prompt-store/prompt_store.py",
+      "language": "python",
+      "category": "legacy"
+    },
+    {
+      "path": "ghost/prompt-store/test_prompt_store.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "ghost/prompt-store/test_windows_prompt_concurrency.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "ghost/task-prompts.mjs",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "harness/kit/docs/doc_program.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/docs/test-doc-program.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/lib/agent-issues.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/approval-artifact.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/bridge-result.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/case-state.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/case-store.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/concept-capture.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/concept-conflict-gate.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/confidentiality.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/consult-affinity.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/consult-integrity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/lib/consult-liveness.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/consult-pointer-reaper.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/consult-summary.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/consult-watch.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/context-pack.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/conversation-review.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/coordinator-status.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/debrief.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/deploy-gate.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/deployment-intent.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/deviation-ledger.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/doc-impact.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/effort.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/engine-router.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/engine-state.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/evidence-manifest.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/evidence-pack.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/free-model-registry.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/free-role-router.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/freebucks-status.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/gate-parser.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/ghostwake.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/github-sync.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/handoff-artifact.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/heartbeat-child.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/html-summary.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/invocation-telemetry.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/jobs-list.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/kit-paths.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/managed-bridge-cli.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-candidate-v2.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-impact.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-learning.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-lineage.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/answerability.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/attribution.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/client-l23.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/context.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/corrections.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/decision-repair.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/executors.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/export-portability.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/flags.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/fusion.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/ghostwake.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/hooks.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/ledger.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/planner.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/policy-induction.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/skill-lifecycle.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/steps.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/wire.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-orchestra/worldmodel.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-synthesis.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-temporal.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memory-tombstone.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/memorycore-client.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/nanny.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/narrator.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/native-managed-seat.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/lib/native-memory-policy.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/native-opencode-worker.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/native-opencode-worker.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/lib/native-ownership-safety.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/lib/no-change.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/observer-bridge.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/observer-sink.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/openchamber-managed-seat.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/openchamber-remediate.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/openchamber-watch.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/operator-query.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/orch-oc-config-mutate.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/orch-session-watcher-test.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/orch-session-watcher.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/payload-budget.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/phase-driver.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/plan-cache.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/policy-identity.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/progress-brief.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/qmd-client.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/qmd-endpoint.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/qmd-refresh.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/qmd-tunnel.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/quality-pipeline.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/repoql-client.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/resource-lease.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/review-evidence.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/roster.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/run-health.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/run-registry.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/run-slots.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/run-summary.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/rust-authority-cli.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/rust-authority.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/rust-compat-policy.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/rust-effects.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/seat-lease-check.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/session-bridge.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/session-watch.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/skill-harvest.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/skill-publish.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/sol-humanize.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/sol-outfile.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/start-guard.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/state-lock.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/supervisor.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/watchdog.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/windows-portability.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/lib/worker-completion.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/worker-digest.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/lib/worker-lease.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/orchestrate.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/kit/tests/concept-capture-resolution.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/conversation-review-local-verification.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/memory-freshness-failclosed.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-answerability.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-candidate-lifecycle.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-conflict-signals.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-doc-impact.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-memory-policy.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-memorycore-reader.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/native-synthesis-validation.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/rust-authority-windows.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/rust-authority.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/rust-compat-policy.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/rust-effects.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/tests/windows-memory-parity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/kit/v46-memory-retrieval-truth-test.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/adapter/source-telemetry.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/adapter/telemetry-transport.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/adapter/worker-shadow.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/scripts/compare-fixtures.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/scripts/migration-coverage.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/scripts/run-health-fixture-source.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/scripts/source-telemetry-preview.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/authority.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/authority_windows.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/bridge.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/case_store.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/compat.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/coordinator.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/deviation.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/doc_impact.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/effort.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/engine_router.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/engine_state.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/gate.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/nanny_observe.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/no_change.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/payload.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/phase_driver.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/resource_lease.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/run_health.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/run_state.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/run_summary.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/scope.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/state_cli.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/store.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/src/worker.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "harness/rust-authority/tests/comparator.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/coverage-audit.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/final-oracle.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/native-state-hardening-reference.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/reference-kit.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/resource-reference.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/run-health-reference.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/source-preview.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/source-telemetry.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/state-source-contract.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/telemetry-http.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/telemetry-transport.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/transport-contract.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "harness/rust-authority/tests/worker-shadow.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "installer/Configure-Singularity.cmd",
+      "language": "batch",
+      "category": "installer"
+    },
+    {
+      "path": "installer/Configure-Singularity.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "installer/Readiness.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQL.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQLBundle.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQLRC-v2.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQLRC-v3.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQLRC-v4.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQLRC.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/SingularityRepoQLRCBundle.wxs",
+      "language": "wix",
+      "category": "installer"
+    },
+    {
+      "path": "installer/Start-Here.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "installer/Start-Singularity.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "installer/Test-RCIsolation.ps1",
+      "language": "powershell",
+      "category": "test"
+    },
+    {
+      "path": "installer/build-exe.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "installer/build-msi.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "installer/prepare_msi_payload.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1idem2/test_validate_overlay.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1idem2/validate-overlay.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1prompt/l1-extraction.override.ts",
+      "language": "typescript",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/patches/core-v2.0.2-l1recordids/tests/issue712-ladder-regression.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "memory/patches/hub-751/patch/ingest-v2-CSw_7GGw.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/patches/hub-751/tests/diag.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "memory/patches/hub-751/tests/parse.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "memory/patches/hub-751/tests/summary.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "memory/portable/capture-consumer.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/portable/task-recovery-oracle.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/portable/task-recovery-rust-boundary.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "memory/portable/task-recovery.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/portable/task-recovery.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "memory/rc_stack.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "memory/test_rc_stack.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/desktop-bridge/src/ghost.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/desktop-bridge/src/gui_plan.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/desktop-bridge/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/desktop-bridge/src/office.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/desktop-bridge/src/repoql_compat.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/desktop-bridge/src/variant.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/desktop-bridge/src/windows_cpu.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/gui-plugins/openchamber/singularity-office.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/gui-plugins/openchamber/singularity-office.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/a4_run_step.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/apply_office_static.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/apply_verified_source_port.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/audit_claude_fleet_contract.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/audit_claude_fleet_contract.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/audit_kanzo_board.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/audit_locality_20261102.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/audit_portability.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/bootstrap_runtime.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/build_cpu_collector_component.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/build_memory_stack_config.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/build_option2_acceptance_bundle.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/build_source_variants.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/build_supervisor_config.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/build_unified_gateway.ps1",
+      "language": "powershell",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/check_rust_lock_provenance.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_acceptance_matrix.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_dashboard_host.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_doc_parity.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_doc_parity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/claude_complete_doc_reconciliation.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_doc_reconciliation.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/claude_complete_gui_acceptance_plan.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_memory_profiles.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_memory_profiles.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/claude_complete_release_audit.py",
+      "language": "python",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/claude_complete_static_inventory.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_static_inventory.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/claude_complete_tencent_recovery.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_complete_tencent_recovery.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/claude_complete_windows_probe.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/claude_session_watcher.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/compare_production_parity.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/configure_capability_gate.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/configure_claude_code_windows.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/configure_claude_code_windows.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/configure_parent_memory_proxy.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/configure_parent_memory_proxy.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/configure_project_mcp.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/configure_project_mcp.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/disable_unified_tunnel.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/export_release.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/ghost_scheduler_host.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/ghost_task_scheduler.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/hide-console-tasks.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/install_claude_complete.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/kanzo-claim/lib/layer.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/kanzo-claim/lib/store.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/kanzo-claim/server.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/kanzo-claim/test/layer.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/kanzo-claim/test/mcp.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/manage_claude_complete_dashboard.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/manage_claude_office.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/manage_dashboard_shortcut.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/manage_ghost_scheduler.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/manage_native_windows.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/manage_openmausbot.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/manage_unified_gateway.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/answerability.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/authority.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/bin/memory-turn-capture.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/candidate_lifecycle.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/candidate_policy.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/conflict_signals.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/doc_ingest.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/document_learning.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/hook_capture.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/lib.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/lineage.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/main_proxy.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/memory_impact.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/payload_budget.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/promotion.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/ranking.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/reconcile.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/source_policy.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/synthesis_spec.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/task_recovery.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/temporal.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/tombstone.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/src/windows_acceptance.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_answerability.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_capture.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_conflict.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_doc_ingest.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_document_learning.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_hook_capture.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_main_proxy.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_promotion.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_reconcile_synthesis.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_task_recovery.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_v2.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_v3.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_v4.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/differential_windows_acceptance.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/tests/native-runtime-smoke.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/memory-parity-rust/verify-windows.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory_authority_preflight.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/memory_ledger_upgrade_audit.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/native_cli_fixture.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/native_runtime_acceptance.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/open_dashboard.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/claude_mcp_launcher.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/headless.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/install_shared_rules.mjs",
+      "language": "javascript",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/openmausbot/maintenance_audit.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/maintenance_audit.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/openmausbot/maintenance_repair.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/maintenance_repair.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/openmausbot/maintenance_review.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/maintenance_sandbox.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/omb_chat.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/omb_chat.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/openmausbot/omb_integration.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/openmausbot/omb_office_bridge.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/omb_office_bridge_run.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/openmausbot/provision_maintainer.mjs",
+      "language": "javascript",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/openmausbot/provision_maintainer.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/openmausbot/test_headless.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/openmausbot/test_omb_office_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/plan_claude_code_windows.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/plan_claude_code_windows.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/plan_option2_upgrade.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/preflight.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/prepare_option2_candidate.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/prepare_rust_locks.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/provision/provisioner.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/provision/test_provisioner.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/provision_connectors.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/provision_memory_identity.mjs",
+      "language": "javascript",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/provision_memory_identity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/provision_repoql.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/rc-stack-rust/src/lib.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rc-stack-rust/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rc_services.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/refresh_installed_claude_rules.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/refresh_installed_claude_rules.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/register-boot-tasks.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/register-supervisor-service.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/register-supervisor-task.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/register_claude_session_watcher.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/register_cpu_collector.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/acceptance.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/connector_inventory.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/doc_impact.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/lib.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/linux_candidates.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/parity.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/rust_locks.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/src/upgrade.rs",
+      "language": "rust",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/tests/differential.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/tests/differential_doc_impact.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/release-evidence-rust/tests/differential_upgrade_acceptance.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/repoql_compat.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/runtime_closure.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/backend_capacity.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/bin/singularity-capability-gate.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/bin/singularity-windows-setup.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/bin/singularity_windows_supervisor_service.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/bin/singularity_windows_supervisorw.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/lib.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/openmausbot.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust-supervisor/src/setup.rs",
+      "language": "rust",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/rust_acceptance_boundary.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/rust_readonly_bridge.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/rust_release_policy.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/scan_source_archive.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/setup/Build-Setup.ps1",
+      "language": "powershell",
+      "category": "build"
+    },
+    {
+      "path": "native/windows/setup/Complete-Setup.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/setup/Setup.cs",
+      "language": "csharp",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/silent_python_host.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/smoke-stage.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/source-packager-rust/src/archive.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/source-packager-rust/src/classifier.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/source-packager-rust/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/source-packager-rust/src/staged_tree.rs",
+      "language": "rust",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/source-packager-rust/tests/classifier_parity.rs",
+      "language": "rust",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/source-packager-rust/tests/compare_legacy_release.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/stage-native.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/start_openmausbot.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/start_unified_gateway.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/task_action_transaction.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/test_build_supervisor_config.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_claude_complete_acceptance_matrix.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_claude_complete_gui_acceptance_plan.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_claude_complete_release_audit.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_claude_complete_windows_probe.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_claude_package_config_integration.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_connector_provisioning_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_cpu_collector_component.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_cpu_collector_registration_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_dashboard_shortcut_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_fixture_launcher.rs",
+      "language": "rust",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_ghost_scheduler_host.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_install_claude_complete_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_kanzo_imported_view_source.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_memory_authority_preflight.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_memory_ledger_upgrade_audit.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_native_ghost_client_config.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_native_install_lifecycle_behaviour.ps1",
+      "language": "powershell",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_native_install_lifecycle_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_native_runtime_acceptance.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_native_source_boundary.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_native_windows_manager_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_no_flash_spawns.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_office_ghost_only_patch.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_office_native_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_office_restage_behaviour.ps1",
+      "language": "powershell",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_openmausbot_lifecycle.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_openmausbot_rust_job.ps1",
+      "language": "powershell",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_openmausbot_windows_package.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_option2_acceptance_bundle.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_option2_dashboard_wiring.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_plan_option2_upgrade.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_portability_audit.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_preflight_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_prepare_option2_candidate.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_production_parity.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_project_mcp_package.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_provision_connectors.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rc_services.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_repoql_bare_version_source_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_repoql_compat.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_repoql_release_consistency.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_runtime_closure.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_capture_cli_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_case_lock_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_extracted_tree.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_lock_release_gate.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_parity_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_readonly_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_release_policy.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_release_source_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_repoql_preflight.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_setup_request.ps1",
+      "language": "powershell",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_source_bridge.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_supervisor_source.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_rust_upgrade_complete_parity.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_scan_source_archive.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_scheduler_fail_closed_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_silent_runtime_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_source_variant_feature_exclusions.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_stage_native_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_staging_rollback_source_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_supervisor_readiness_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_supervisor_registration_source_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_tencent_dashboard_owner_autosignin.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_trace_linux_assumptions.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_unified_gateway_dashboard_pairing.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_uninstall_claude_complete_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_verify_installed_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_verify_option2_expected_digest.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_verify_prepared_option2_candidate.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_verify_supervisor_task_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_windows_authority_contract.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_windows_memory_gateway_source.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/test_windows_source_ci.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/tests/test_ghost_task_scheduler_ps51_smoke.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/tests/test_ghost_task_snapshot.ps1",
+      "language": "powershell",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/trace_linux_assumptions.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/dashboard_listener/account_store.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/dashboard_listener/password.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/dashboard_listener/read_api.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/dashboard_listener/static_asset.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/kanzo_board_audit.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/memory_scope_audit.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-agentchat-feed.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-claude-agent-fields.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-claude-mcp-inventory.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-graph.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-indexing-errors.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-link-page.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-listener.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-routes.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-dashboard-service-errors.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-doc-ledger-commit.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-doc-ledger-evidence.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-harness-agent-seats.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-harness-percentiles.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-harness-usage.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-memory-ledger-upgrade.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-memorycore-reader.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-memorycore-writer.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-native-cpu-history.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-native-gui-usage.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-native-readiness.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-openmaus-inventory.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-repoql-connectors.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-repoql-query-usage.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-repository-summary.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-telemetry-model.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity-unified-proxy.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/bin/singularity_dashboard_open.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/src/main.rs",
+      "language": "rust",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_agentchat_feed.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_claude_agent_fields.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_claude_mcp_inventory.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_dashboard_graph.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_dashboard_indexing_errors.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_dashboard_link_page.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_dashboard_listener.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_dashboard_routes.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_dashboard_service_errors.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_doc_ledger_commit.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_doc_ledger_evidence.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_doc_native_write.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_harness_agent_seats.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_harness_percentiles.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_harness_usage.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_memory_ledger_upgrade.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_memorycore_reader.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_memorycore_writer.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_native_cpu_history.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_native_gui_usage.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_native_readiness.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_openmaus_inventory.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_repoql_connectors.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_repoql_query_usage.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_repository_summary.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_telemetry_model.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/differential_unified_proxy.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/memorycore-oracle.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/unified-gateway-rust/tests/memorycore-write-oracle.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "native/windows/uninstall_claude_complete.ps1",
+      "language": "powershell",
+      "category": "installer"
+    },
+    {
+      "path": "native/windows/verify_after_reboot.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_option2_connectors.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_option2_expected_digest.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_prepared_option2_candidate.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_rust_upgrade.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_rust_wave3.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_rust_wave4.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_rust_wave5.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_source_release.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/verify_supervisor_task.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "native/windows/windows_source_policy.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "openchamber/plugins/product-office/index.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-reconcile.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-reconcile.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-turns.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/product-office/memory-turns.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "openchamber/plugins/product-office/native-contract.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/product-office/native-contract.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-events.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-events.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-transport.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/product-office/office-transport.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "openchamber/plugins/runbook-nudge/index.js",
+      "language": "javascript",
+      "category": "legacy"
+    },
+    {
+      "path": "openchamber/plugins/runbook-nudge/runbook-nudge.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "orchestration/approvals.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/evidence.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/governance.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "orchestration/leases.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/modes.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/routing.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/routing.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "orchestration/runs.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/stage-machine.mjs",
+      "language": "javascript",
+      "category": "installer"
+    },
+    {
+      "path": "orchestration/state.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "orchestration/workflow.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/acceptance-ordinary-session.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/acceptance-ordinary-session.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/attach-openchamber.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/attach-openchamber.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/bundle-classification.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/bundle-classification.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/cohere-quota.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/cohere-quota.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/doc-ingest-node.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/doc-ingest-node.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/doc-policy-batch.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/doc-policy.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/doctor.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/doctor.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/document-learning-rust.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/export-release.ps1",
+      "language": "powershell",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/extraction-failover.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/extraction-failover.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/install-claude-code.components.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/install-claude-code.gate.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/install-claude-code.mjs",
+      "language": "javascript",
+      "category": "installer"
+    },
+    {
+      "path": "scripts/install-claude-code.profiles.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/knowledge-promotion.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/knowledge-windows-main.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/lib/win-platform.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/lib/win-platform.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/memory-config-loader.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/memory-doc-ingest.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/memory-forwarder.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/memory-reconcile-core.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/memory-reconcile-core.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/memory_client.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/memory_promote.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/memory_turn_capture.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/model-lane.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/model-lane.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/native-memory-prompt.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/native-memory-prompt.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/native-memory-supervisor.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/native-memory-supervisor.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/native-memorycore-reader.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/native-memorycore-v3.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/native-memorycore-write.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/orch-run.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/orch_chat_office.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/orch_chat_sessions.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/pre-push-gitleaks.sh",
+      "language": "shell",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/provider-failover-proof.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/provision-secrets.py",
+      "language": "python",
+      "category": "installer"
+    },
+    {
+      "path": "scripts/provision-secrets.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/redact-memory-startup.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/runtime-proofs.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/runtime-proofs.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/selflearn-candidates.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/setup-agent-profiles.mjs",
+      "language": "javascript",
+      "category": "installer"
+    },
+    {
+      "path": "scripts/setup-agent-profiles.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/skill-gate.mjs",
+      "language": "javascript",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/skill-gate.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "scripts/test_doc_ledger_corruption.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "scripts/test_doc_ledger_lock.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "scripts/verify-memory-user-key.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/verify_wave20_source.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/verify_wave21_source.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "scripts/verify_wave22_source.py",
+      "language": "python",
+      "category": "runtime"
+    },
+    {
+      "path": "tests/attach-harness-contract.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/dashboard-portable.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/doc-ingest-chunk-parity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/doc-ingest-parity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/doc-ingest-rust-boundary.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/doc-policy.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/doctor-selflearn.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/fixtures/native-memory/fake-service.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/harness-authority.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/harness-config-schema.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/harness-contract.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/harness-guard.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/harness-paths.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/no-flash-node-spawns.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/portable-agent-bundle.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/runtime-parity.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/rust-document-learning-boundary.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/selflearn-candidates.test.mjs",
+      "language": "javascript",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-memory-doc-ingest-rust.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-memory-doc-ingest.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-memory-doc-ledger-evidence-rust.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-memory-promote-rust.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-memory-promote.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-memory-security.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-orch-chat-sessions.py",
+      "language": "python",
+      "category": "test"
+    },
+    {
+      "path": "tests/test-orch-chat.py",
+      "language": "python",
+      "category": "test"
+    }
+  ]
+}

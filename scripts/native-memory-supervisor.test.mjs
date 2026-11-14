@@ -17,7 +17,6 @@ import {
   SCHEMA,
   SupervisorError,
   applyKnowledgeLoopbackSource,
-  applyKnowledgeWindowsPaths,
   assertKnowledgeLoopback,
   ensureSecret,
   isLoopbackHost,
@@ -437,7 +436,7 @@ test("prepare dry-run plans core, panel and knowledge without touching disk", as
     const config = await makeConfig(root);
     const plan = preparePlan(config);
     assert.deepEqual(plan.map((p) => p.name), ["core", "panel"]);
-    assert.deepEqual(plan[0].steps, ["stage", "apply-patch", "transform-package", "npm-install", "esbuild-install"]);
+    assert.deepEqual(plan[0].steps, ["stage", "apply-patch", "apply-prompt-override", "transform-package", "npm-install", "esbuild-install"]);
     const result = await prepareStack(config, { dryRun: true });
     assert.equal(result.dryRun, true);
     assert.equal(result.plan.length, 2);
@@ -466,17 +465,4 @@ test("supervisor dry-run cannot start/stop/restart or mutate services", () => {
   }
   assert.equal(parseCli(["prepare", "--config", "C:\\dummy.json", "--dry-run"]).dryRun, true);
   assert.throws(() => parseCli(["stop", "--config", "C:\\dummy.json", "--clean"]), /only for prepare/);
-});
-
-test("applyKnowledgeWindowsPaths fixes separators, is idempotent, and refuses unknown upstream", () => {
-  const src = [
-    'const dirWithSep = base.endsWith("/") ? base : base + "/";',
-    'const prefix = wikiDir.endsWith("/") ? wikiDir : wikiDir + "/";',
-    'return abs.slice(prefix.length).replace(/\\.md$/, "");',
-  ].join("\n");
-  const out = applyKnowledgeWindowsPaths(src);
-  assert.match(out, /base\.endsWith\(\(process\.platform === "win32"/);
-  assert.match(out, /replace\(\/\\\\\/g, "\/"\)\.replace/);
-  assert.equal(applyKnowledgeWindowsPaths(out), out);
-  assert.throws(() => applyKnowledgeWindowsPaths("nothing relevant"), /matched nothing/);
 });

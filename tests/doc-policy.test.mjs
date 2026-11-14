@@ -127,6 +127,23 @@ test("discovery: runtime backup artifacts are never documentation (regression: f
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("documentation containment rejects a sibling whose name starts with the root", () => {
+  const dir = scratch();
+  const sibling = `${dir}-foreign`;
+  try {
+    mkdirSync(sibling, { recursive: true });
+    const doc = join(sibling, "runbook.md");
+    writeFileSync(doc, "# Not owned by this workspace\n");
+    assert.equal(isEligibleDocPath(doc, dir), false);
+    const owned = join(dir, "runbook.md");
+    writeFileSync(owned, "# Owned runbook\n");
+    assert.equal(isEligibleDocPath(owned, dir), true);
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+    rmSync(sibling, {recursive: true, force: true});
+  }
+});
+
 test("no assessment recorded / DOC_BLOCKED behaves as before", () => {
   assert.match(evaluateAssessment({ files: ["a.py"] })[0], /no documentation assessment recorded/);
   const blocked = evaluateAssessment({ files: ["a.py"], docStatus: "DOC_BLOCKED", docReason: "docs system offline", captureStatus: "NO_LESSON" });

@@ -1,0 +1,218 @@
+{
+  "schema": "singularity-rust-rewrite-crates/v1",
+  "generated_utc": "2026-11-14T03:26:13Z",
+  "crate_count": 8,
+  "locks_present": 8,
+  "all_crates_locked": true,
+  "crates": [
+    {
+      "crate": "harness/rust-authority/Cargo.toml",
+      "package": "orchestra-observer",
+      "version": "0.6.0",
+      "edition": "2021",
+      "license": "UNLICENSED",
+      "features": {},
+      "bins": [
+        "orchestra-observer"
+      ],
+      "lib": false,
+      "dependencies": [
+        "chrono",
+        "fs2",
+        "libc",
+        "regex",
+        "serde",
+        "serde_json",
+        "sha2",
+        "tiny_http"
+      ],
+      "lockfile": "harness/rust-authority/Cargo.lock",
+      "lockfile_sha256": "ff19c46421c25497306bb8cee7bba72ddb220997a11cb68cc97d3c42b37a2a30"
+    },
+    {
+      "crate": "native/desktop-bridge/Cargo.toml",
+      "package": "singularity-desktop-bridge",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": "MIT",
+      "features": {
+        "default": [],
+        "office": []
+      },
+      "bins": [
+        "singularity-desktop-bridge"
+      ],
+      "lib": false,
+      "dependencies": [
+        "chrono",
+        "reqwest",
+        "serde_json"
+      ],
+      "lockfile": "native/desktop-bridge/Cargo.lock",
+      "lockfile_sha256": "4c53b1cf0f78de9e8abfa4ab1a1cce29d502dd3048a919265eb1cbbe32c9f78e"
+    },
+    {
+      "crate": "native/windows/memory-parity-rust/Cargo.toml",
+      "package": "singularity-memory-parity",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": "UNLICENSED",
+      "features": {},
+      "bins": [
+        "memory-turn-capture",
+        "singularity-memory-parity",
+        "singularity-memory-turn-capture"
+      ],
+      "lib": true,
+      "dependencies": [
+        "chrono",
+        "regex",
+        "serde",
+        "serde_json",
+        "sha2"
+      ],
+      "lockfile": "native/windows/memory-parity-rust/Cargo.lock",
+      "lockfile_sha256": "a2c85f57bd3e8d63b4c865986ca2dace81a88b02495b21af12311e96f815c011"
+    },
+    {
+      "crate": "native/windows/rc-stack-rust/Cargo.toml",
+      "package": "singularity-rc-stack",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": "UNLICENSED",
+      "features": {},
+      "bins": [
+        "singularity-rc-stack"
+      ],
+      "lib": true,
+      "dependencies": [
+        "serde_json",
+        "ureq",
+        "wait-timeout"
+      ],
+      "lockfile": "native/windows/rc-stack-rust/Cargo.lock",
+      "lockfile_sha256": "0719f946baf817b139021096acff62c454e44b3038ae289bd5d39f1b225f6cbe"
+    },
+    {
+      "crate": "native/windows/release-evidence-rust/Cargo.toml",
+      "package": "singularity-release-evidence",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": "UNLICENSED",
+      "features": {},
+      "bins": [
+        "singularity-release-evidence"
+      ],
+      "lib": true,
+      "dependencies": [
+        "chrono",
+        "hex",
+        "regex",
+        "serde_json",
+        "sha2",
+        "toml",
+        "zip"
+      ],
+      "lockfile": "native/windows/release-evidence-rust/Cargo.lock",
+      "lockfile_sha256": "be0c2e080d1a1badcd4405d16406b1edb21a2e20907dab14166a9a65d7320722"
+    },
+    {
+      "crate": "native/windows/rust-supervisor/Cargo.toml",
+      "package": "singularity-windows-supervisor",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": "MIT",
+      "features": {},
+      "bins": [
+        "singularity-capability-gate",
+        "singularity-windows-setup",
+        "singularity-windows-supervisorw",
+        "singularity_windows_supervisor_service",
+        "singularity_windows_supervisorw"
+      ],
+      "lib": true,
+      "dependencies": [
+        "serde",
+        "serde_json"
+      ],
+      "lockfile": "native/windows/rust-supervisor/Cargo.lock",
+      "lockfile_sha256": "6fc2895f98704b41cfa148417f67c993684dd7953c613f6b04e8e78b9a87bb13"
+    },
+    {
+      "crate": "native/windows/source-packager-rust/Cargo.toml",
+      "package": "singularity-source-packager",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": "UNLICENSED",
+      "features": {},
+      "bins": [
+        "singularity-source-packager"
+      ],
+      "lib": false,
+      "dependencies": [
+        "hex",
+        "serde",
+        "serde_json",
+        "sha2",
+        "walkdir",
+        "zip"
+      ],
+      "lockfile": "native/windows/source-packager-rust/Cargo.lock",
+      "lockfile_sha256": "c8f3a806a2308a480f5b1f22fa256087397d6d8d459f40982e6717d9c34510c7"
+    },
+    {
+      "crate": "native/windows/unified-gateway-rust/Cargo.toml",
+      "package": "unified-repoql-control",
+      "version": "0.1.0",
+      "edition": "2021",
+      "license": null,
+      "features": {},
+      "bins": [
+        "kanzo_board_audit",
+        "memory_scope_audit",
+        "singularity-agentchat-feed",
+        "singularity-claude-agent-fields",
+        "singularity-claude-mcp-inventory",
+        "singularity-dashboard-graph",
+        "singularity-dashboard-indexing-errors",
+        "singularity-dashboard-link-page",
+        "singularity-dashboard-listener",
+        "singularity-dashboard-routes",
+        "singularity-dashboard-service-errors",
+        "singularity-doc-ledger-commit",
+        "singularity-doc-ledger-evidence",
+        "singularity-harness-agent-seats",
+        "singularity-harness-percentiles",
+        "singularity-harness-usage",
+        "singularity-memory-ledger-upgrade",
+        "singularity-memorycore-reader",
+        "singularity-memorycore-writer",
+        "singularity-native-cpu-history",
+        "singularity-native-gui-usage",
+        "singularity-native-readiness",
+        "singularity-openmaus-inventory",
+        "singularity-repoql-connectors",
+        "singularity-repoql-query-usage",
+        "singularity-repository-summary",
+        "singularity-telemetry-model",
+        "singularity-unified-proxy",
+        "singularity_dashboard_open",
+        "unified-repoql-control"
+      ],
+      "lib": false,
+      "dependencies": [
+        "base64",
+        "chrono",
+        "scrypt",
+        "serde",
+        "serde_json",
+        "subtle",
+        "tiny_http",
+        "ureq",
+        "url"
+      ],
+      "lockfile": "native/windows/unified-gateway-rust/Cargo.lock",
+      "lockfile_sha256": "d633a05c156e2911136399fc4c954b3e6ea9cda1b9781713f475a394d661c66d"
+    }
+  ]
+}

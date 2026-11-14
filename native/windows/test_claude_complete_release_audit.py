@@ -28,12 +28,10 @@ class ClaudeCompleteReleaseAuditTests(unittest.TestCase):
             self.assertFalse(r['nativeWindowsExecutableBundled'])
             self.assertFalse(r['releaseReady'])
             self.assertGreaterEqual(len(r['blockers']),7)
-    def test_lean_profile_cannot_masquerade_as_claude_complete(self):
+    def test_lean_profile_is_not_a_supported_installation(self):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/'option1.zip'
-            build(1,path)
-            r=inspect(path)
-            self.assertFalse(r['sourceValid'])
-            self.assertTrue(any('Option 2' in issue for issue in r['sourceIssues']))
-            self.assertTrue(r['missingSourceAssets'])
+            with self.assertRaisesRegex(ValueError,'only Claude Code Full'):
+                build(1,path)
+            self.assertFalse(path.exists())
 if __name__=='__main__': unittest.main()

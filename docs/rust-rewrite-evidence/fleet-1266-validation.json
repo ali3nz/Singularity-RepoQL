@@ -1,0 +1,55 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "fleet-1266/final-delivery/validation.json",
+    "original_sha256": "75fa8657d04e0de2274b658d018a1eaf843432f7a3e080efd29d34da441712bb",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 0,
+      "home_path": 0,
+      "sid": 0,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": [
+    {
+      "name": "Native Rust setup focused tests",
+      "result": "pass",
+      "evidence": "/mnt/newdata/backups/singularity-wave56/fleet-1266/final-delivery/setup-focused-tests.log"
+    },
+    {
+      "name": "Prompt transform and bounded L1-first hook",
+      "result": "pass",
+      "evidence": "33 passed initial targeted files; final outdated log assertion fixed and targeted rerun passed; both retained logs."
+    },
+    {
+      "name": "Windows staging upgrade rollback",
+      "result": "pass",
+      "evidence": "Earlier focused-rollback-result.json passed; actual first cutover failure independently restored original task XML/action/receipt."
+    },
+    {
+      "name": "Windows fixed file replacement and 10-binary assembly",
+      "result": "pass",
+      "evidence": "/mnt/newdata/backups/singularity-wave56/fleet-1266/final-delivery/assembly-result.json; protected receipt ACL fixture passed; 10 binaries reused after one setup build."
+    },
+    {
+      "name": "Live native dashboard cutover",
+      "result": "pass",
+      "evidence": "/mnt/newdata/backups/singularity-wave56/fleet-1266/final-delivery/cutover-result.json; Rust listener PID 37540; normal authenticated loopback; /, account/status, features and health HTTP200."
+    },
+    {
+      "name": "Preservation",
+      "result": "pass",
+      "evidence": "Task invariant and SDDL preserved; four other listener PIDs unchanged; no Claude/settings/prepared memory data changes."
+    }
+  ]
+}

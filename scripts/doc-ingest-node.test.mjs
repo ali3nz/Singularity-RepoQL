@@ -78,6 +78,41 @@ const baseOpts = (box, gateway, extra = {}) => ({
   ...extra,
 });
 
+test("remote writes see a durable pending revision and the prior active revision", async () => {
+  const box = sandbox(), gateway = fakeGateway();
+  try {
+    const doc = box.doc("durable-intent.md", "# Prior revision");
+    const first = await ingestFile(doc, baseOpts(box, gateway));
+    box.doc("durable-intent.md", "# Next revision");
+    let observed;
+    const next = await ingestFile(doc, baseOpts(box, gateway, {
+      fetchImpl: async (url, init) => {
+        if (url.endsWith("/conversation/add")) {
+          const body = JSON.parse(init.body);
+          if (body.task_id.startsWith("docs-")) observed = loadLedger(box.env).docs[first.identity];
+        }
+        return gateway.fetchImpl(url, init);
+      }
+    }));
+    assert.equal(observed.active_rev, first.rev);
+    assert.equal(observed.revs[next.rev].status, "DOC_INGEST_PENDING");
+    assert.ok(observed.revs[next.rev].task_ids.length);
+    assert.equal(next.status, "DOC_INGEST_INDEXED");
+    assert.equal(loadLedger(box.env).docs[first.identity].active_rev, next.rev);
+  } finally { box.cleanup(); }
+});
+
+test("a rejected native checkpoint prevents all MemoryCore traffic", async () => {
+  const box = sandbox(), gateway = fakeGateway();
+  try {
+    const doc = box.doc("refused-checkpoint.md", "# Must not be written");
+    const env = {...box.env, SINGULARITY_DOC_LEDGER_COMMIT_RUST_BIN: join(box.dir, "missing.exe")};
+    await assert.rejects(ingestFile(doc, baseOpts(box, gateway, {env})), /commit unconfirmed/);
+    assert.deepEqual(gateway.calls, []);
+    assert.deepEqual(loadLedger(env), {version: 1, docs: {}});
+  } finally { box.cleanup(); }
+});
+
 test("malformed or invalid documentation ledgers are never overwritten by ingestion", async () => {
   const box = sandbox();
   const gateway = fakeGateway();
@@ -217,18 +252,23 @@ test("missing memory secrets refuse honestly instead of claiming success", async
 test("chunking respects fences, keeps every line, and refuses unbounded growth", () => {
   const chunks = chunkMarkdown("## A\n" + "x".repeat(8000) + "\n## B\ny\n");
   assert.ok(chunks.length >= 2);
-  // A single source line longer than the cap wraps (never truncates); only such
-  // a chunk may exceed the cap, exactly as the Python engine behaves.
+  // A single source line longer than the cap wraps without truncation.
+  // No produced chunk may exceed the code-point budget.
+  assert.ok(chunks.every(part => Array.from(part).length <= 7000));
   const joined = chunks.join("\n");
   assert.equal(joined.includes("## B"), true);
   assert.equal(joined.replace(/\n/g, "").includes("x".repeat(100)), true, "long line content is preserved, not truncated");
 
   const fenced = chunkMarkdown("## A\n" + "a\n".repeat(4000) + "```\n## not a heading\n```\n");
-  assert.equal(fenced.length, 1, "a heading inside a fence never splits the chunk");
+  // The size cap still applies inside fences, but the fenced heading must
+  // not trigger an additional semantic split or lose its surrounding fence.
+  assert.equal(fenced.length, 2, "size cap may split a long fenced document");
+  assert.ok(fenced.every(part => Array.from(part).length <= 7000));
+  assert.ok(fenced[1].endsWith("```\n## not a heading\n```"));
 
   assert.equal(chunkMarkdown("# one\n").length, 1, "small documents are a single chunk");
   const tooMany = Array.from({ length: 100 }, (_, i) => `## H${i}\n${"z".repeat(5000)}\n`).join("");
-  assert.throws(() => chunkMarkdown(tooMany), /max 64/);
+  assert.throws(() => chunkMarkdown(tooMany), /(max 64|more than 64)/);
 });
 
 test("sensitive content and secret-like names are refused before any write", () => {

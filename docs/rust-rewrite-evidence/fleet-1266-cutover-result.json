@@ -1,0 +1,63 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "fleet-1266/final-delivery/cutover-result.json",
+    "original_sha256": "8a9b28c5813a14d63620c664b61bf9de179d5f8873aa16c69d3dccdd89885faf",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 0,
+      "home_path": 0,
+      "sid": 0,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": {
+    "schema": "wave56-windows-cutover/v1",
+    "task": "fleet#1266",
+    "bundleSha256": "c4b1bca4e83314c65e5cae5323c9c3aebb6b1ac067895104a57ff1fe485713b9",
+    "startedUtc": "2026-11-14T01:38:29.3558938Z",
+    "exitCode": 0,
+    "dashboardCutover": true,
+    "browserVisualVerified": false,
+    "claudeSettingsModified": false,
+    "preparedMemoryDataModified": false,
+    "otherServicesRestarted": false,
+    "startupSettingsPreserved": true,
+    "rollback": "not_needed",
+    "listenerPid": 37540,
+    "listenerBinarySha256": "38aa5aa2d3f61c0e3b02b5f188f66577ebf0c5cee01e104d62cd58593127daed",
+    "httpChecks": [
+      {
+        "bytes": 15427,
+        "path": "/",
+        "status": 200
+      },
+      {
+        "bytes": 86,
+        "path": "/api/account/status",
+        "status": 200
+      },
+      {
+        "bytes": 251,
+        "path": "/api/features",
+        "status": 200
+      },
+      {
+        "bytes": 137,
+        "path": "/api/health",
+        "status": 200
+      }
+    ],
+    "otherListenersPreserved": 4,
+    "finishedUtc": "2026-11-14T01:38:40.1113711Z"
+  }
+}

@@ -1,3 +1,27 @@
+import { spawnSync } from "node:child_process";
+import { isDeepStrictEqual } from "node:util";
+import { isAbsolute, win32 } from "node:path";
+
+// Independent closeout policy switch, not a change to stage order or routing.
+// Treat every native mismatch as a failed documentation-governance check.
+const RUST_EVIDENCE_BIN = "SINGULARITY_RUST_EVIDENCE_POLICY_BIN";
+function runNativeDocPolicy(command, payload) {
+  const bin = process.env[RUST_EVIDENCE_BIN];
+  if (!bin || bin.includes("\0") || (!isAbsolute(bin) && !win32.isAbsolute(bin))) {
+    throw new Error("RUST_DOC_POLICY_INVALID_BINARY");
+  }
+  const input = JSON.stringify(payload);
+  if (typeof input !== "string" || Buffer.byteLength(input,"utf8") > 256 * 1024) {
+    throw new Error("RUST_DOC_POLICY_INPUT_LIMIT");
+  }
+  const run = spawnSync(bin,[command],{input,encoding:"utf8",shell:false,windowsHide:true,
+    timeout:3500,maxBuffer:1024*1024});
+  if (run.error || run.status !== 0) throw new Error("RUST_DOC_POLICY_EXECUTION_FAILED");
+  try { const result = JSON.parse(run.stdout); if (result && typeof result === "object" && !Array.isArray(result)) return result; }
+  catch { /* malformed native output is never a successful closeout */ }
+  throw new Error("RUST_DOC_POLICY_INVALID_RESPONSE");
+}
+
 // doc-impact.mjs — V3.3.35 (ticket 085, plan D17). Small source-to-document
 // impact map for the core components, consulted at closeout. `unmapped` is an
 // unclassified state, NOT "no impact": a changed file that maps to nothing
@@ -32,7 +56,7 @@ const MAP = [
 // Returns { entries: [{path, docs, disposition}], unmapped: [paths] } where
 // disposition for mapped files starts as "review-required" and callers record
 // "no impact (reason)" or "updated <doc>" per doc during closeout.
-export function classifyDocImpact(changedFiles) {
+function jsClassifyDocImpact(changedFiles) {
   const entries = [], unmapped = [];
   for (const f of changedFiles) {
     const rel = String(f.path ?? f).replace(/^work\/ai-orchestration\//, "");
@@ -44,7 +68,7 @@ export function classifyDocImpact(changedFiles) {
 }
 
 // Serialize the classification for the closeout receipt / hub update.
-export function renderDocImpactReport(classification) {
+function jsRenderDocImpactReport(classification) {
   const lines = ["## Source-to-doc impact classification"];
   for (const e of classification.entries) {
     lines.push(`- ${e.path} -> ${e.docs.join(", ")} [${e.disposition}]`);
@@ -54,4 +78,22 @@ export function renderDocImpactReport(classification) {
   }
   if (!classification.entries.length && !classification.unmapped.length) lines.push("- (no changed files classified)");
   return lines.join("\n");
+}
+
+export function classifyDocImpact(changedFiles) {
+  const reference = jsClassifyDocImpact(changedFiles);
+  if (!process.env[RUST_EVIDENCE_BIN]) return reference;
+  const actual = runNativeDocPolicy("doc-impact-stdin", {changedFiles});
+  if (!isDeepStrictEqual(actual,reference)) throw new Error("RUST_DOC_POLICY_REFERENCE_MISMATCH");
+  return actual;
+}
+
+export function renderDocImpactReport(classification) {
+  const reference = jsRenderDocImpactReport(classification);
+  if (!process.env[RUST_EVIDENCE_BIN]) return reference;
+  const actual = runNativeDocPolicy("doc-render-stdin", {classification});
+  if (typeof actual.report !== "string" || actual.report !== reference || Object.keys(actual).length !== 1) {
+    throw new Error("RUST_DOC_POLICY_REFERENCE_MISMATCH");
+  }
+  return actual.report;
 }

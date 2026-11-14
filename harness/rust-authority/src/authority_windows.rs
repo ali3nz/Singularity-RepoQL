@@ -6,7 +6,9 @@
 //!
 //! IMPORTANT: this code must pass the Windows MSVC CI build and real Win32
 //! client/ACL/timeout acceptance before enabling native run-state writes.
-use super::{handle_op, recover_all, token_matches, write_status, AuthorityConfig, MAX_REQUEST_BYTES, PROTOCOL_VERSION};
+use super::{
+    handle_op, recover_all, token_matches, write_status, AuthorityConfig, MAX_REQUEST_BYTES,
+};
 use serde_json::{json, Value};
 use std::ffi::{c_void, OsStr};
 use std::os::windows::ffi::OsStrExt;
@@ -47,7 +49,6 @@ struct Overlapped {
     h_event: isize,
 }
 
-
 #[repr(C)]
 struct SecurityAttributes {
     size: u32,
@@ -67,18 +68,55 @@ struct TokenUser {
 
 #[link(name = "kernel32")]
 extern "system" {
-    fn CreateNamedPipeW(name: *const u16, access: u32, mode: u32, instances: u32, out_size: u32, in_size: u32,
-        timeout: u32, security: *const SecurityAttributes) -> isize;
+    fn CreateNamedPipeW(
+        name: *const u16,
+        access: u32,
+        mode: u32,
+        instances: u32,
+        out_size: u32,
+        in_size: u32,
+        timeout: u32,
+        security: *const SecurityAttributes,
+    ) -> isize;
     fn ConnectNamedPipe(pipe: isize, overlapped: *mut Overlapped) -> i32;
     fn DisconnectNamedPipe(pipe: isize) -> i32;
-    fn ReadFile(pipe: isize, buffer: *mut c_void, len: u32, read: *mut u32, overlapped: *mut Overlapped) -> i32;
-    fn WriteFile(pipe: isize, buffer: *const c_void, len: u32, wrote: *mut u32, overlapped: *mut Overlapped) -> i32;
-    fn CreateEventW(attributes: *const c_void, manual_reset: i32, initial_state: i32, name: *const u16) -> isize;
+    fn ReadFile(
+        pipe: isize,
+        buffer: *mut c_void,
+        len: u32,
+        read: *mut u32,
+        overlapped: *mut Overlapped,
+    ) -> i32;
+    fn WriteFile(
+        pipe: isize,
+        buffer: *const c_void,
+        len: u32,
+        wrote: *mut u32,
+        overlapped: *mut Overlapped,
+    ) -> i32;
+    fn CreateEventW(
+        attributes: *const c_void,
+        manual_reset: i32,
+        initial_state: i32,
+        name: *const u16,
+    ) -> isize;
     fn WaitForSingleObject(handle: isize, timeout: u32) -> u32;
-    fn GetOverlappedResult(file: isize, overlapped: *mut Overlapped, transferred: *mut u32, wait: i32) -> i32;
+    fn GetOverlappedResult(
+        file: isize,
+        overlapped: *mut Overlapped,
+        transferred: *mut u32,
+        wait: i32,
+    ) -> i32;
     fn CancelIoEx(file: isize, overlapped: *mut Overlapped) -> i32;
-    fn CreateFileW(name: *const u16, access: u32, share: u32, security: *const c_void,
-        disposition: u32, flags: u32, template: isize) -> isize;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        security: *const c_void,
+        disposition: u32,
+        flags: u32,
+        template: isize,
+    ) -> isize;
     fn WaitNamedPipeW(name: *const u16, timeout: u32) -> i32;
     fn CloseHandle(handle: isize) -> i32;
     fn GetCurrentProcess() -> isize;
@@ -89,23 +127,49 @@ extern "system" {
 extern "system" {
     fn OpenProcessToken(process: isize, access: u32, token: *mut isize) -> i32;
     fn OpenThreadToken(thread: isize, access: u32, as_self: i32, token: *mut isize) -> i32;
-    fn GetTokenInformation(token: isize, information_class: u32, buffer: *mut c_void, len: u32, result_len: *mut u32) -> i32;
+    fn GetTokenInformation(
+        token: isize,
+        information_class: u32,
+        buffer: *mut c_void,
+        len: u32,
+        result_len: *mut u32,
+    ) -> i32;
     fn ConvertSidToStringSidW(sid: *const c_void, sid_text: *mut *mut u16) -> i32;
-    fn ConvertStringSecurityDescriptorToSecurityDescriptorW(text: *const u16, revision: u32,
-        result: *mut *mut c_void, length: *mut u32) -> i32;
+    fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        text: *const u16,
+        revision: u32,
+        result: *mut *mut c_void,
+        length: *mut u32,
+    ) -> i32;
     fn ImpersonateNamedPipeClient(pipe: isize) -> i32;
     fn RevertToSelf() -> i32;
 }
 struct Handle(isize);
 impl Drop for Handle {
-    fn drop(&mut self) { if self.0 != INVALID_HANDLE && self.0 != 0 { unsafe { CloseHandle(self.0); } } }
+    fn drop(&mut self) {
+        if self.0 != INVALID_HANDLE && self.0 != 0 {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
 }
 struct Local(*mut c_void);
 impl Drop for Local {
-    fn drop(&mut self) { if !self.0.is_null() { unsafe { LocalFree(self.0); } } }
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                LocalFree(self.0);
+            }
+        }
+    }
 }
-fn last_err(label: &str) -> String { format!("{label}: {}", std::io::Error::last_os_error()) }
-fn wide(value: &str) -> Vec<u16> { OsStr::new(value).encode_wide().chain(Some(0)).collect() }
+fn last_err(label: &str) -> String {
+    format!("{label}: {}", std::io::Error::last_os_error())
+}
+fn wide(value: &str) -> Vec<u16> {
+    OsStr::new(value).encode_wide().chain(Some(0)).collect()
+}
 
 pub fn is_local_runs_dir(path: &Path) -> bool {
     use std::path::{Component, Prefix};
@@ -115,8 +179,15 @@ pub fn is_local_runs_dir(path: &Path) -> bool {
 
 pub fn validated_pipe_path(value: Option<&str>) -> Result<String, String> {
     let pipe = value.unwrap_or(DEFAULT_PIPE);
-    let Some(name) = pipe.strip_prefix(PREFIX) else { return Err("AUTHORITY_PIPE_MUST_BE_LOCAL".into()); };
-    if name.is_empty() || name.len() > 120 || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+    let Some(name) = pipe.strip_prefix(PREFIX) else {
+        return Err("AUTHORITY_PIPE_MUST_BE_LOCAL".into());
+    };
+    if name.is_empty()
+        || name.len() > 120
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
         return Err("AUTHORITY_PIPE_NAME_INVALID".into());
     }
     Ok(pipe.to_string())
@@ -124,33 +195,55 @@ pub fn validated_pipe_path(value: Option<&str>) -> Result<String, String> {
 
 fn user_sid(token: isize) -> Result<String, String> {
     let mut len = 0u32;
-    unsafe { GetTokenInformation(token, TOKEN_USER, null_mut(), 0, &mut len); }
-    if len < std::mem::size_of::<TokenUser>() as u32 || len > 65536 { return Err("WINDOWS_TOKEN_USER_INVALID".into()); }
-    let mut buffer = vec![0u64; (len as usize + 7) / 8];
-    let rc = unsafe { GetTokenInformation(token, TOKEN_USER, buffer.as_mut_ptr().cast(), len, &mut len) };
-    if rc == 0 { return Err(last_err("GetTokenInformation")); }
+    unsafe {
+        GetTokenInformation(token, TOKEN_USER, null_mut(), 0, &mut len);
+    }
+    if len < std::mem::size_of::<TokenUser>() as u32 || len > 65536 {
+        return Err("WINDOWS_TOKEN_USER_INVALID".into());
+    }
+    let mut buffer = vec![0u64; (len as usize).div_ceil(8)];
+    let rc = unsafe {
+        GetTokenInformation(token, TOKEN_USER, buffer.as_mut_ptr().cast(), len, &mut len)
+    };
+    if rc == 0 {
+        return Err(last_err("GetTokenInformation"));
+    }
     let user = unsafe { std::ptr::read_unaligned(buffer.as_ptr() as *const TokenUser) };
-    if user.user.sid.is_null() { return Err("WINDOWS_TOKEN_SID_UNAVAILABLE".into()); }
+    if user.user.sid.is_null() {
+        return Err("WINDOWS_TOKEN_SID_UNAVAILABLE".into());
+    }
     let mut text: *mut u16 = null_mut();
-    if unsafe { ConvertSidToStringSidW(user.user.sid, &mut text) } == 0 { return Err(last_err("ConvertSidToStringSidW")); }
+    if unsafe { ConvertSidToStringSidW(user.user.sid, &mut text) } == 0 {
+        return Err(last_err("ConvertSidToStringSidW"));
+    }
     let _owner = Local(text.cast());
     let mut count = 0usize;
-    while count < 256 && unsafe { *text.add(count) } != 0 { count += 1; }
-    if count == 256 { return Err("WINDOWS_TOKEN_SID_TOO_LARGE".into()); }
+    while count < 256 && unsafe { *text.add(count) } != 0 {
+        count += 1;
+    }
+    if count == 256 {
+        return Err("WINDOWS_TOKEN_SID_TOO_LARGE".into());
+    }
     let sid = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(text, count) });
-    if !sid.starts_with("S-1-") { return Err("WINDOWS_TOKEN_SID_INVALID".into()); }
+    if !sid.starts_with("S-1-") {
+        return Err("WINDOWS_TOKEN_SID_INVALID".into());
+    }
     Ok(sid)
 }
 fn current_user_sid() -> Result<String, String> {
     let mut raw = 0isize;
-    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0 { return Err(last_err("OpenProcessToken")); }
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0 {
+        return Err(last_err("OpenProcessToken"));
+    }
     let token = Handle(raw);
     user_sid(token.0)
 }
 fn peer_is_current_user(pipe: isize, expected_sid: &str) -> bool {
     // Must run on the SAME thread that read the pipe request. On failure,
     // there is no fallback to trusting the client-provided PID or name.
-    if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 { return false; }
+    if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
+        return false;
+    }
     let result = (|| -> Result<bool, String> {
         let mut raw = 0isize;
         if unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut raw) } == 0 {
@@ -161,7 +254,9 @@ fn peer_is_current_user(pipe: isize, expected_sid: &str) -> bool {
     })();
     // Failing to revert would allow subsequent filesystem mutations under a
     // caller's identity; terminate instead of continuing impersonated.
-    if unsafe { RevertToSelf() } == 0 { std::process::abort(); }
+    if unsafe { RevertToSelf() } == 0 {
+        std::process::abort();
+    }
     result.unwrap_or(false)
 }
 fn security_descriptor(sid: &str) -> Result<Local, String> {
@@ -169,8 +264,18 @@ fn security_descriptor(sid: &str) -> Result<Local, String> {
     // Never use the permissive default named-pipe security descriptor.
     let descriptor = wide(&format!("D:P(A;;GA;;;{sid})(A;;GA;;;SY)"));
     let mut raw: *mut c_void = null_mut();
-    if unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(descriptor.as_ptr(), 1, &mut raw, null_mut()) } == 0 {
-        return Err(last_err("ConvertStringSecurityDescriptorToSecurityDescriptorW"));
+    if unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            descriptor.as_ptr(),
+            1,
+            &mut raw,
+            null_mut(),
+        )
+    } == 0
+    {
+        return Err(last_err(
+            "ConvertStringSecurityDescriptorToSecurityDescriptorW",
+        ));
     }
     Ok(Local(raw))
 }
@@ -181,7 +286,9 @@ fn security_descriptor(sid: &str) -> Result<Local, String> {
 fn remaining_ms(deadline: Instant) -> u32 {
     // Zero triggers immediate cancellation. Never return before draining a
     // pending OVERLAPPED, even when the deadline expired during its start.
-    deadline.saturating_duration_since(Instant::now()).as_millis()
+    deadline
+        .saturating_duration_since(Instant::now())
+        .as_millis()
         .min(u32::MAX as u128) as u32
 }
 
@@ -192,14 +299,28 @@ fn timed_io(
     operation: impl FnOnce(*mut Overlapped, *mut u32) -> i32,
 ) -> Result<u32, String> {
     let event = Handle(unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) });
-    if event.0 == INVALID_HANDLE || event.0 == 0 { return Err(last_err("CreateEventW")); }
-    let mut state = Overlapped { internal: 0, internal_high: 0, offset: 0, offset_high: 0, h_event: event.0 };
+    if event.0 == INVALID_HANDLE || event.0 == 0 {
+        return Err(last_err("CreateEventW"));
+    }
+    let mut state = Overlapped {
+        internal: 0,
+        internal_high: 0,
+        offset: 0,
+        offset_high: 0,
+        h_event: event.0,
+    };
     let mut transferred = 0;
     let rc = operation(&mut state, &mut transferred);
-    if rc != 0 { return Ok(transferred); }
+    if rc != 0 {
+        return Ok(transferred);
+    }
     let error = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-    if op_name == "connect" && error == ERROR_PIPE_CONNECTED { return Ok(0); }
-    if error != ERROR_IO_PENDING { return Err(format!("WINDOWS_PIPE_{op_name}: os error {error}")); }
+    if op_name == "connect" && error == ERROR_PIPE_CONNECTED {
+        return Ok(0);
+    }
+    if error != ERROR_IO_PENDING {
+        return Err(format!("WINDOWS_PIPE_{op_name}: os error {error}"));
+    }
 
     match unsafe { WaitForSingleObject(event.0, remaining_ms(deadline)) } {
         WAIT_OBJECT_0 => {
@@ -209,7 +330,9 @@ fn timed_io(
             Ok(transferred)
         }
         WAIT_TIMEOUT => {
-            unsafe { CancelIoEx(pipe, &mut state); }
+            unsafe {
+                CancelIoEx(pipe, &mut state);
+            }
             // CancelIoEx only requests cancellation. The kernel still owns the
             // buffer/OVERLAPPED until completion has been observed.
             if unsafe { WaitForSingleObject(event.0, CANCEL_DRAIN_MS) } != WAIT_OBJECT_0 {
@@ -219,7 +342,9 @@ fn timed_io(
             Err(format!("WINDOWS_PIPE_{op_name}_TIMEOUT"))
         }
         _ => {
-            unsafe { CancelIoEx(pipe, &mut state); }
+            unsafe {
+                CancelIoEx(pipe, &mut state);
+            }
             if unsafe { WaitForSingleObject(event.0, CANCEL_DRAIN_MS) } != WAIT_OBJECT_0 {
                 std::process::abort();
             }
@@ -231,7 +356,13 @@ fn timed_io(
 
 fn timed_read(pipe: isize, out: &mut [u8], deadline: Instant) -> Result<usize, String> {
     let count = timed_io(pipe, deadline, "read", |ov, completed| unsafe {
-        ReadFile(pipe, out.as_mut_ptr().cast(), out.len() as u32, completed, ov)
+        ReadFile(
+            pipe,
+            out.as_mut_ptr().cast(),
+            out.len() as u32,
+            completed,
+            ov,
+        )
     })?;
     Ok(count as usize)
 }
@@ -241,9 +372,17 @@ fn timed_write_all(pipe: isize, data: &[u8], deadline: Instant) -> Result<(), St
     while offset < data.len() {
         let remaining = &data[offset..];
         let count = timed_io(pipe, deadline, "write", |ov, completed| unsafe {
-            WriteFile(pipe, remaining.as_ptr().cast(), remaining.len() as u32, completed, ov)
+            WriteFile(
+                pipe,
+                remaining.as_ptr().cast(),
+                remaining.len() as u32,
+                completed,
+                ov,
+            )
         })? as usize;
-        if count == 0 || count > remaining.len() { return Err("WINDOWS_PIPE_SHORT_WRITE".into()); }
+        if count == 0 || count > remaining.len() {
+            return Err("WINDOWS_PIPE_SHORT_WRITE".into());
+        }
         offset += count;
     }
     Ok(())
@@ -254,11 +393,18 @@ fn read_line(pipe: isize, deadline: Instant) -> Result<Vec<u8>, String> {
     let mut buffer = [0u8; 4096];
     loop {
         let count = timed_read(pipe, &mut buffer, deadline)?;
-        if count == 0 { return Err("WINDOWS_PIPE_EOF".into()); }
+        if count == 0 {
+            return Err("WINDOWS_PIPE_EOF".into());
+        }
         bytes.extend_from_slice(&buffer[..count]);
-        if bytes.len() > MAX_REQUEST_BYTES { return Err("REQUEST_TOO_LARGE".into()); }
+        if bytes.len() > MAX_REQUEST_BYTES {
+            return Err("REQUEST_TOO_LARGE".into());
+        }
         if let Some(newline) = bytes.iter().position(|b| *b == b'\n') {
-            if bytes[newline + 1..].iter().any(|b| !b.is_ascii_whitespace()) {
+            if bytes[newline + 1..]
+                .iter()
+                .any(|b| !b.is_ascii_whitespace())
+            {
                 return Err("MULTIPLE_REQUESTS_REFUSED".into());
             }
             bytes.truncate(newline);
@@ -302,9 +448,15 @@ fn one_connection(pipe: isize, config: &AuthorityConfig, sid: &str) {
     }
     let request: Value = match serde_json::from_slice(&bytes) {
         Ok(value) => value,
-        Err(_) => { write_reply(pipe, json!({"ok":false,"error":"INVALID_JSON"})); return; }
+        Err(_) => {
+            write_reply(pipe, json!({"ok":false,"error":"INVALID_JSON"}));
+            return;
+        }
     };
-    let token = request.get("token").and_then(Value::as_str).unwrap_or_default();
+    let token = request
+        .get("token")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if !token_matches(&config.token, token) {
         write_reply(pipe, json!({"ok":false,"error":"UNAUTHORIZED"}));
         return;
@@ -319,15 +471,31 @@ fn create_pipe(name: &[u16], sid: &str, first: bool) -> Result<Handle, String> {
         descriptor: descriptor.0,
         inherit: 0,
     };
-    let flags = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | if first { FIRST_PIPE_INSTANCE } else { 0 };
-    let raw = unsafe { CreateNamedPipeW(name.as_ptr(), flags, PIPE_REJECT_REMOTE_CLIENTS,
-        PIPE_WORKERS, 65536, 65536, CONNECT_TIMEOUT_MS, &attributes) };
-    if raw == INVALID_HANDLE { return Err(last_err("CreateNamedPipeW")); }
+    let flags =
+        PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | if first { FIRST_PIPE_INSTANCE } else { 0 };
+    let raw = unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            flags,
+            PIPE_REJECT_REMOTE_CLIENTS,
+            PIPE_WORKERS,
+            65536,
+            65536,
+            CONNECT_TIMEOUT_MS,
+            &attributes,
+        )
+    };
+    if raw == INVALID_HANDLE {
+        return Err(last_err("CreateNamedPipeW"));
+    }
     Ok(Handle(raw))
 }
 
 fn serve_worker(
-    name: &[u16], sid: &str, config: &AuthorityConfig, initial: Option<Handle>,
+    name: &[u16],
+    sid: &str,
+    config: &AuthorityConfig,
+    initial: Option<Handle>,
 ) -> Result<(), String> {
     let mut initial = initial;
     loop {
@@ -335,22 +503,37 @@ fn serve_worker(
             Some(pipe) => pipe,
             None => create_pipe(name, sid, false)?,
         };
-        let connected = timed_io(pipe.0, Instant::now() + Duration::from_millis(CONNECT_TIMEOUT_MS as u64),
-            "connect", |ov, _| unsafe { ConnectNamedPipe(pipe.0, ov) });
+        let connected = timed_io(
+            pipe.0,
+            Instant::now() + Duration::from_millis(CONNECT_TIMEOUT_MS as u64),
+            "connect",
+            |ov, _| unsafe { ConnectNamedPipe(pipe.0, ov) },
+        );
         if connected.is_ok() {
             one_connection(pipe.0, config, sid);
-            unsafe { DisconnectNamedPipe(pipe.0); }
+            unsafe {
+                DisconnectNamedPipe(pipe.0);
+            }
         }
     }
 }
 
 pub fn serve(config: AuthorityConfig) -> Result<(), String> {
-    if config.token.len() < 32 { return Err("AUTHORITY_TOKEN_TOO_SHORT".into()); }
+    if config.token.len() < 32 {
+        return Err("AUTHORITY_TOKEN_TOO_SHORT".into());
+    }
     let name = validated_pipe_path(config.socket_path.to_str())?;
     let sid = current_user_sid()?;
     let (recovered, failures) = recover_all(&config.runs_dir);
-    if !failures.is_empty() { return Err(format!("AUTHORITY_RECOVERY_FAILED: {}", failures.join("; "))); }
-    if recovered > 0 { eprintln!("recovered {recovered} authority run projections"); }
+    if !failures.is_empty() {
+        return Err(format!(
+            "AUTHORITY_RECOVERY_FAILED: {}",
+            failures.join("; ")
+        ));
+    }
+    if recovered > 0 {
+        eprintln!("recovered {recovered} authority run projections");
+    }
     let pipe_name = wide(&name);
     // FIRST_PIPE_INSTANCE prevents another process from pre-registering the
     // authority name and causing us to connect to the wrong server.
@@ -379,13 +562,26 @@ pub fn request(pipe: &Path, req: &Value) -> Result<Value, String> {
     if unsafe { WaitNamedPipeW(wide_name.as_ptr(), CONNECT_TIMEOUT_MS) } == 0 {
         return Err(last_err("WaitNamedPipeW"));
     }
-    let raw = unsafe { CreateFileW(wide_name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0,
-        std::ptr::null(), OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0) };
-    if raw == INVALID_HANDLE { return Err(last_err("CreateFileW")); }
+    let raw = unsafe {
+        CreateFileW(
+            wide_name.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED,
+            0,
+        )
+    };
+    if raw == INVALID_HANDLE {
+        return Err(last_err("CreateFileW"));
+    }
     let handle = Handle(raw);
     let mut bytes = serde_json::to_vec(req).map_err(|e| e.to_string())?;
     bytes.push(b'\n');
-    if bytes.len() > MAX_REQUEST_BYTES { return Err("REQUEST_TOO_LARGE".into()); }
+    if bytes.len() > MAX_REQUEST_BYTES {
+        return Err("REQUEST_TOO_LARGE".into());
+    }
     let deadline = Instant::now() + REQUEST_BUDGET;
     timed_write_all(handle.0, &bytes, deadline)?;
     let reply = read_line(handle.0, deadline)?;
@@ -398,7 +594,13 @@ mod tests {
     #[test]
     fn local_pipe_paths_only() {
         assert_eq!(validated_pipe_path(None).unwrap(), DEFAULT_PIPE);
-        for value in [r"\\server\pipe\hijack", r"\\.\pipe\..", r"\\.\pipe\folder\p", r"\\.\pipe\", r"C:\temp\sock"] {
+        for value in [
+            r"\\server\pipe\hijack",
+            r"\\.\pipe\..",
+            r"\\.\pipe\folder\p",
+            r"\\.\pipe\",
+            r"C:\temp\sock",
+        ] {
             assert!(validated_pipe_path(Some(value)).is_err(), "{value}");
         }
     }

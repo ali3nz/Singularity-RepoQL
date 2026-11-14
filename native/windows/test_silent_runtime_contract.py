@@ -26,7 +26,6 @@ class SilentRuntimeContract(unittest.TestCase):
         files = {
             'dashboard':('native/windows/manage_claude_complete_dashboard.ps1', 'New-ScheduledTaskAction -Execute $pythonw', 'silent_python_host.py'),
             'office':('native/windows/manage_claude_office.ps1', 'New-ScheduledTaskAction -Execute $venvPythonw', 'Scripts\\pythonw.exe'),
-            'ghost':('native/windows/manage_ghost_scheduler.ps1', 'New-ScheduledTaskAction -Execute $pythonw', 'silent_python_host.py'),
             'gateway':('native/windows/manage_unified_gateway.ps1', 'New-ScheduledTaskAction -Execute $binary', '--config'),
             'supervisor':('native/windows/register-supervisor-task.ps1', 'New-ScheduledTaskAction -Execute $runtimeExe', 'singularity-windows-supervisorw.exe'),
         }
@@ -57,13 +56,9 @@ class SilentRuntimeContract(unittest.TestCase):
             with self.subTest(file=name):
                 self.assertIn('creationflags=getattr(subprocess,', (ROOT/name).read_text())
 
-    def test_ghost_schedule_uses_windowless_runner_and_matching_readback(self):
-        ps=(ROOT/'native/windows/ghost_task_scheduler.ps1').read_text()
-        py=(ROOT/'native/windows/ghost_scheduler_host.py').read_text()
-        self.assertIn("'pythonw.exe'",ps)
-        self.assertIn('silent_python_host.py',ps)
-        self.assertIn('with_name("pythonw.exe")',py)
-        self.assertIn('silent_python_host.py',py)
+    def test_retired_scheduler_is_not_needed_for_windowless_checks(self):
+        for name in ('ghost_task_scheduler.ps1', 'ghost_scheduler_host.py', 'manage_ghost_scheduler.ps1'):
+            self.assertFalse((ROOT / 'native/windows' / name).exists())
 
 
 if __name__=='__main__': unittest.main()

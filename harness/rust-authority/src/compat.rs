@@ -2,7 +2,7 @@
 //! This module is deliberately offline and has no production side effects.
 use crate::{
     bridge, deviation, doc_impact, effort, engine_router, engine_state, gate, nanny_observe,
-    no_change, payload, phase_driver, run_summary, scope, worker,
+    no_change, payload, phase_driver, run_health, run_summary, scope, worker,
 };
 use serde_json::{json, Value};
 
@@ -79,6 +79,7 @@ pub fn execute(request: &Value) -> Value {
             doc_impact::render(request.get("classification").unwrap_or(&Value::Null))
         }
         "run_summary.build" => run_summary::build(request.get("inputs").unwrap_or(&Value::Null)),
+        "run_health.derive" => run_health::derive(request.get("inputs").unwrap_or(&Value::Null)),
         "no_change.can_reuse" => {
             no_change::can_reuse(request.get("values").unwrap_or(&Value::Null))
         }

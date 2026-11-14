@@ -11,6 +11,7 @@ import {dirname, relative, resolve, sep, win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {readRqlVersion} from './configure_project_mcp.mjs';
+import {nativeMemoryPolicyEnabled,requestNativeMemoryPolicy} from '../../harness/kit/lib/native-memory-policy.mjs';
 import {sha, verifyFile, searchDocs} from '../../scripts/doc-ingest-node.mjs';
 
 const normalize=text=>String(text).replace(/\r\n|\r/g,'\n');
@@ -44,7 +45,11 @@ export function canonicalTestDoc(root,file,marker){
 export function repoqlDocumentUri(doc){
   if(!doc?.relative || doc.relative.startsWith('/') || doc.relative.split('/').some(x => !x || x==='.' || x==='..'))
     reject('REPOQL_RELATIVE_DOCUMENT_URI_INVALID');
-  return 'file:///' + doc.relative.split('/').map(encodeURIComponent).join('/');
+  const expected='file:///' + doc.relative.split('/').map(encodeURIComponent).join('/');
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const native=requestNativeMemoryPolicy('repoql-doc-uri',{relative:doc.relative});
+  if (native.uri!==expected) reject('NATIVE_REPOQL_URI_DIVERGENCE');
+  return native.uri;
 }
 /** Receipts prove the selected TEST document only, never global consistency. */
 export async function verifyDocumentParity({doc, tencentLedgerRead, tencentLiveSearch, repoqlRead, repoqlIndexCount}){

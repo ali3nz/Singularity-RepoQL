@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evidence-based runtime closure inventory for *source-only* native Windows variants.
+"""Evidence-based runtime closure inventory for the source-only Windows package.
 
 This is deliberately not a portable dependency resolver. It explains what a
 source ZIP can and cannot establish. A passing archive scan is never accepted
@@ -15,10 +15,9 @@ import zipfile
 from scan_source_archive import scan
 
 # Component id, required source hint (may be None for externally provided
-# software), and acceptance contract. The mandatory items are derived from the
-# four native installation options and are not guessed from file presence.
-BASE = (
-    ('repoql', None, 'Real Windows rql.exe --version=1.7.18, ABI-1 indexing, query and readback'),
+# software), and acceptance contract for the supported Claude Code Full profile.
+COMPONENTS = (
+    ('repoql', None, 'Real Windows rql.exe --version=1.7.18, fetch/render indexing, query and readback'),
     ('desktop-bridge', 'native/desktop-bridge/src/main.rs', 'Compiled native bridge, MCP handshake from the actual selected desktop GUI'),
     ('rust-harness-authority', 'harness/rust-authority/src/main.rs', 'Compiled native named pipe; owner security, durable state and restart test'),
     ('rust-service-supervisor', 'native/windows/rust-supervisor/src/lib.rs', 'Compiled supervisor; child lifecycle, Job Object and shutdown containment'),
@@ -29,17 +28,10 @@ BASE = (
     ('dashboard', 'dashboard/server.py', 'Native dashboard listener; embedded service authentication and browser workflow'),
     ('memory-graph', 'dashboard/unified_bridge.py', 'Real live graph backend, streaming/reconnect and graph readback'),
     ('native-telemetry', 'dashboard/native_cpu.py', 'Real Windows process CPU, GUI-sourced subscription receipts'),
-)
-EXTRAS = (
-    ('ghost', 'ghost/prompt-store/prompt_store.py', 'Native Ghost daemon; task lifecycle, prompt edit, revert and audit'),
     ('claude-office', 'dashboard/office_bridge.py', 'Native Office backend; token URL, presence/events, iframe and restart'),
+    ('openmausbot', 'native/windows/manage_openmausbot.ps1', 'Native task and process ownership, health, restart and recovery'),
+    ('claude-desktop-code', 'adapters/claude-code/doc-hook.mjs', 'Native Claude Code session and persistent hooks work after restart'),
 )
-GUI_HINTS = {
-    1: ('claude-desktop-code', 'adapters/claude-code/doc-hook.mjs'),
-    2: ('claude-desktop-code', 'adapters/claude-code/doc-hook.mjs'),
-    3: ('openchamber-desktop', 'native/windows/configure_project_mcp.mjs'),
-    4: ('openchamber-desktop', 'native/gui-plugins/openchamber/singularity-office.mjs'),
-}
 
 
 def inspect(source_zip: Path) -> dict:
@@ -51,27 +43,16 @@ def inspect(source_zip: Path) -> dict:
         names = set(z.namelist())
         manifest = json.loads(z.read('NATIVE_WINDOWS_SOURCE_MANIFEST.json'))
     variant = manifest['variant']
-    gui, gui_hint = GUI_HINTS[variant]
-    specs = BASE + (EXTRAS if variant in (2,4) else ())
+    gui = 'claude-desktop-code'
     components=[]
-    for cid,hint,acceptance in specs:
+    for cid,hint,acceptance in COMPONENTS:
         components.append({'id':cid,'source_hint':hint,'source_hint_present':hint in names if hint else None,
                            'actual_windows_binary_present':False,
                            'native_runtime_verified':False,'behavioural_parity_verified':False,
                            'acceptance_required':acceptance,'status':'BLOCKED_UNVERIFIED'})
-    # OpenChamber's full-variant Office plugin may be omitted from lean option
-    # archives intentionally; native GUI session acceptance is still mandatory.
-    components.append({'id':gui,'source_hint':gui_hint,
-                       'source_hint_present':gui_hint in names,
-                       'actual_windows_binary_present':False,
-                       'native_runtime_verified':False,'behavioural_parity_verified':False,
-                       'acceptance_required':'Selected native GUI session and persistent hooks work after restart',
-                       'status':'BLOCKED_UNVERIFIED'})
     issues=[]
-    if variant in (3,4) and not (manifest.get('gui') == 'openchamber-desktop'):
-        issues.append('OpenChamber option GUI mismatch')
-    if variant in (1,2) and not (manifest.get('gui') == 'claude-desktop-code'):
-        issues.append('Claude option GUI mismatch')
+    if manifest.get('gui') != gui:
+        issues.append('Claude Code Full GUI mismatch')
     if manifest.get('repoql',{}).get('requiredVersion') != '1.7.18':
         issues.append('Windows RepoQL pin mismatch')
     # The single source ZIP has *no* deployable runtime. This is a hard release

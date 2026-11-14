@@ -1,40 +1,16 @@
 #!/usr/bin/env node
-// bundle-classification.mjs — ONE explicit classification of every shipped
-// component file, driving the four installation options.
-//
-// Why this exists: the installer, the attach flow and the doctor each used to
-// decide what "option 2/4" ships with their own ad-hoc lists. A file added to
-// a Ghost or Office directory could therefore reach an option that must not
-// carry it (or fail to reach one that must). This module is the single table:
-//
-//   core      — every option (1, 2, 3, 4)
-//   ghost     — options 2 and 4 only
-//   office    — options 2 and 4 only
-//   dashboard — OPT-IN adjunct: shipped in the package, installed by no option
-//               unless the operator asks for it (the doctor never claims it)
-//
-// Contract:
-//   - `classifyBundleFile()` returns null for an UNKNOWN path. Callers must
-//     treat null as a hard error (an unclassified file can silently ship with
-//     the wrong variant), never as "core".
-//   - `assertVariantExactSet()` checks both directions: option 1/3 must carry
-//     no Ghost/Office artifact, option 2/4 must carry all of them.
-//   - `auditComponentSet()` walks the shipped tree and reports unclassified
-//     files, so a new file cannot land without an explicit decision.
+// Claude Code Windows source component inventory. Unsupported clients are not variants.
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-export const COMPONENT = Object.freeze({ CORE: "core", GHOST: "ghost", OFFICE: "office", DASHBOARD: "dashboard" });
+export const COMPONENT = Object.freeze({ CORE: "core", OFFICE: "office", DASHBOARD: "dashboard" });
 
 /** Components a package may carry but no installation option installs by default. */
-export const OPT_IN_COMPONENTS = Object.freeze([COMPONENT.DASHBOARD]);
+export const OPT_IN_COMPONENTS = Object.freeze([]);
 
-/** The four options, expressed as the components each one ships. */
+/** The one full Claude Code profile, keyed 2 for existing receipt compatibility. */
 export const VARIANT_COMPONENTS = Object.freeze({
-  1: Object.freeze([COMPONENT.CORE]),
-  2: Object.freeze([COMPONENT.CORE, COMPONENT.GHOST, COMPONENT.OFFICE]),
-  3: Object.freeze([COMPONENT.CORE]),
-  4: Object.freeze([COMPONENT.CORE, COMPONENT.GHOST, COMPONENT.OFFICE]),
+  2: Object.freeze([COMPONENT.CORE, COMPONENT.OFFICE, COMPONENT.DASHBOARD]),
 });
 
 /**
@@ -43,27 +19,13 @@ export const VARIANT_COMPONENTS = Object.freeze({
  * fall through to core by accident.
  */
 const RULES = [
-  // ── Ghost ────────────────────────────────────────────────────────────────
-  { component: COMPONENT.GHOST, test: (p) => p === "openchamber/agents/ghost.md" },
-  { component: COMPONENT.GHOST, test: (p) => [
-    "native/windows/ghost_scheduler_host.py",
-    "native/windows/ghost_task_scheduler.ps1",
-    "native/windows/manage_ghost_scheduler.ps1",
-    "native/windows/test_ghost_scheduler_host.py",
-  ].includes(p) },
-  { component: COMPONENT.GHOST, test: (p) => /^openchamber\/plugins\/product-ghost\//.test(p) },
-  { component: COMPONENT.GHOST, test: (p) => /^ghost\//.test(p) },
-  { component: COMPONENT.GHOST, test: (p) => /^systemd\/ghost-/.test(p) },
-  { component: COMPONENT.GHOST, test: (p) => /^compose\/ghost[.-]/.test(p) },
-  { component: COMPONENT.GHOST, test: (p) => /^dashboard\/static\/ghost\//.test(p) || p === "dashboard/ghost_bridge.py" || p === "native/desktop-bridge/src/ghost.rs" || p === "dashboard/native_ghost.py" || p === "dashboard/test_native_ghost.py" },
   // ── Office ───────────────────────────────────────────────────────────────
-  { component: COMPONENT.OFFICE, test: (p) => /^openchamber\/plugins\/product-office\//.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => /^office\//.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => /^systemd\/office-/.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => /^compose\/office[.-]/.test(p) },
   { component: COMPONENT.OFFICE, test: (p) => p === "scripts/orch_chat_office.py" },
-  { component: COMPONENT.OFFICE, test: (p) => /^native\/gui-plugins\/openchamber\/singularity-office(?:\.test)?\.mjs$/.test(p) || p === "native/desktop-bridge/src/office.rs" || p === "dashboard/office_bridge.py" },
-  // ── Dashboard (opt-in adjunct; native Windows variants always include it) ─
+  { component: COMPONENT.OFFICE, test: (p) => p === "native/desktop-bridge/src/office.rs" || p === "dashboard/office_bridge.py" },
+  // ── Dashboard (included in the full Claude Code installation) ─
   { component: COMPONENT.DASHBOARD, test: (p) => /^dashboard\//.test(p) },
   // ── Core (explicit prefixes; anything else is UNCLASSIFIED on purpose) ────
   { component: COMPONENT.CORE, test: (p) => /^native\//.test(p) || ["WINDOWS_GUI_PORT_STATUS.md", "WINDOWS_NATIVE_RELEASE_PROGRESS_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE6_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE7_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE8_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE9_20261029.md", "WINDOWS_NATIVE_RELEASE_MILESTONE10_20261029.md"].includes(p) },
@@ -76,7 +38,6 @@ const RULES = [
   { component: COMPONENT.CORE, test: (p) => /^compose\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^docs\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^memory\//.test(p) },
-  { component: COMPONENT.CORE, test: (p) => /^openchamber\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^orchestration\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^scripts\//.test(p) },
   { component: COMPONENT.CORE, test: (p) => /^systemd\//.test(p) },
@@ -92,14 +53,13 @@ const RULES = [
 export const CREDENTIAL_COMPONENTS = Object.freeze({
   "memory.json": COMPONENT.CORE,
   "selflearn.json": COMPONENT.CORE,
-  "ghost.json": COMPONENT.GHOST,
   "office.json": COMPONENT.OFFICE,
 });
 
 /** Directories the shipped tree is walked from (explicit; no blind tree crawl). */
 const WALK_ROOTS = [
   ".github", "adapters", "bin", "compose", "connectors", "dashboard", "docs", "native",
-  "ghost", "harness", "memory", "office", "openchamber", "orchestration",
+  "harness", "memory", "office", "orchestration",
   "scripts", "systemd", "templates", "tests",
 ];
 // Runtime/derived directories are never part of the shipped set.
@@ -121,16 +81,16 @@ export function classifyBundleFile(rel) {
   return { component: RULES[idx].component, rule: `rule#${idx}` };
 }
 
-/** Is this component part of the option? Accepts "1".."4" or 1..4. */
+/** Is this component part of the option? Accepts "1".."2" or 1..2. */
 export function variantIncludesComponent(variant, component) {
   const list = VARIANT_COMPONENTS[String(variant)];
-  if (!list) throw new Error(`unknown installation option: ${variant} (expected 1..4)`);
+  if (!list) throw new Error(`unknown installation option: ${variant} (only Claude Code Full is supported)`);
   return list.includes(component);
 }
 
 /** Split a file list into components; `unclassified` stays explicit. */
 export function partitionBundleFiles(files) {
-  const out = { [COMPONENT.CORE]: [], [COMPONENT.GHOST]: [], [COMPONENT.OFFICE]: [], [COMPONENT.DASHBOARD]: [], unclassified: [] };
+  const out = { [COMPONENT.CORE]: [], [COMPONENT.OFFICE]: [], [COMPONENT.DASHBOARD]: [], unclassified: [] };
   for (const rel of files || []) {
     const c = classifyBundleFile(rel);
     if (!c) { out.unclassified.push(rel); continue; }
@@ -144,9 +104,9 @@ export function partitionBundleFiles(files) {
 export function variantFileSet(files, variant) {
   const parts = partitionBundleFiles(files);
   const wanted = VARIANT_COMPONENTS[String(variant)];
-  if (!wanted) throw new Error(`unknown installation option: ${variant} (expected 1..4)`);
-  // opt-in components (the dashboard) are shipped, never installed by an option
-  return wanted.filter((c) => !OPT_IN_COMPONENTS.includes(c)).flatMap((c) => parts[c]).sort();
+  if (!wanted) throw new Error(`unknown installation option: ${variant} (only Claude Code Full is supported)`);
+  // The full install includes both Office and dashboard.
+  return wanted.flatMap((c) => parts[c]).sort();
 }
 
 /**
@@ -170,7 +130,7 @@ export function assertVariantExactSet(allFiles, variant) {
     if (!parts[c].length) problems.push(`option ${variant} must ship ${c} files but the set is empty`);
   }
   const excluded = allFiles.filter((f) => !included.includes(f)).sort();
-  return { ok: problems.length === 0, included, excluded, problems, counts: { core: parts.core.length, ghost: parts.ghost.length, office: parts.office.length, dashboard: parts.dashboard.length } };
+  return { ok: problems.length === 0, included, excluded, problems, counts: { core: parts.core.length, office: parts.office.length, dashboard: parts.dashboard.length } };
 }
 
 /**
@@ -187,7 +147,7 @@ export function assertInstalledSet(installedFiles, variant) {
     problems.push(`unclassified installed file(s): ${parts.unclassified.join(", ")}`);
   }
   const leaked = [];
-  for (const c of [COMPONENT.GHOST, COMPONENT.OFFICE, ...OPT_IN_COMPONENTS]) {
+  for (const c of [COMPONENT.OFFICE, COMPONENT.DASHBOARD]) {
     if (!wanted.includes(c) && parts[c].length) {
       leaked.push(...parts[c]);
       problems.push(`option ${variant} must not install ${c} files (${parts[c].length} leaked: ${parts[c].slice(0, 3).join(", ")})`);

@@ -129,7 +129,7 @@ const TASK_BINDINGS = (() => {
   try { parsed = JSON.parse(raw); }
   catch { emit('task-binding-ignored', { path: cfg.taskBindingsPath, reason: 'invalid json' }); return map; }
   for (const [k, v] of Object.entries(parsed?.bindings ?? {})) {
-    if (typeof v !== 'string' || !/^task-[a-z0-9]{6,40}$/.test(v)) { emit('task-binding-ignored', { key: k, reason: 'invalid task id' }); continue; }
+    if (typeof v !== 'string' || !/^(?:task-[a-z0-9]{6,40}|kanzo:[1-9][0-9]{0,10})$/.test(v)) { emit('task-binding-ignored', { key: k, reason: 'invalid task id' }); continue; }
     map.set(k, v);
   }
   return map;

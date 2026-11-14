@@ -1,108 +1,56 @@
 {
   "name": "Singularity-RepoQL",
   "version": "0.1.0-rc15",
-  "description": "Persistent memory and self-learning for existing Claude Code or OpenChamber + RepoQL setups: Tencent MemoryCore stack, seventeen specialist agents, automatic documentation lifecycle and knowledge promotion, extraction provider ladder, Ghost companion (claude-code or openchamber backend) and Claude Office. Includes an optional, independently installable portable orchestration engine (scripts/orch-run): evidence-backed runs, explicit stages, execution modes, identity-bound approvals, resource leases and free-only model routing. Exactly four installation options (--variant 1-4); Ghost and Claude Office are bundled into options 2 and 4. Also ships a portable orchestration harness (harness/kit + bin/ai-orchestra), RepoQL connectors, Tencent MemoryCore derivative patches, a portable single-writer capture consumer, and an opt-in dashboard adjunct that no installation option installs.",
+  "description": "Windows Singularity for a single Claude Code Full installation. The supported source profile includes Kanzo, Tencent MemoryCore integration, RepoQL, the native dashboard, Claude Office and Openmaus bots. This repository export is source-only; no native Windows runtime acceptance or production upgrade is implied.",
   "license": "MIT (see LICENSE); third-party components and licenses in THIRD_PARTY_NOTICES.md",
+  "product": {
+    "platform": "windows-native",
+    "frontend": "Claude Code",
+    "install_profiles": [
+      "claude-code-full"
+    ],
+    "legacy_receipt_variant": 2,
+    "feature_policy": "native/windows/variants.json",
+    "installer": "native/windows/install_claude_complete.ps1",
+    "installer_acceptance": "NOT_RUN_NATIVE_WINDOWS",
+    "retired_runtime_policy": "native/windows/windows_source_policy.py"
+  },
   "components": {
-    "memory_stack": {
-      "path": "memory/upstream",
-      "source": "https://github.com/TencentCloud/TencentDB-Agent-Memory",
-      "revision": "v2.0.2 (commit 99a1a2c)",
-      "vendored": true,
-      "provenance": "memory/upstream/PROVENANCE.md"
+    "claude_code": {
+      "path": "adapters/claude-code/",
+      "note": "Claude Code hooks, agent definitions, settings, delegated memory profiles and documentation capture"
     },
-    "openchamber_integration": {
-      "path": "openchamber",
-      "source": "https://github.com/openchamber/openchamber",
-      "vendored": false,
-      "note": "config bundle (agents, rules, plugins: product-office memory capture + runbook-nudge reminders, RepoQL MCP entry) for the upstream OpenChamber application; the application itself is installed separately"
+    "kanzo": {
+      "path": "connectors/kanzo/ and native/windows/kanzo-claim/",
+      "note": "Kanzo connector and local claim layer; upstream Kanzo is separately installed"
     },
-    "claude_office": {
-      "path": "office",
-      "source": "https://github.com/ali3nz/claude-office",
-      "upstream": "https://github.com/paulrobello/claude-office",
-      "vendored": false,
-      "note": "compose + docs for the activity visualizer bundled into installation options 2 and 4; the fork carries the validated Focus/seating updates"
+    "tencent_memorycore": {
+      "path": "connectors/memorycore/ and memory/patches/",
+      "note": "MemoryCore connector and provenance-preserving derivative patch series; upstream engine separately installed"
     },
-    "opencode_runtime": {
-      "source": "https://opencode.ai",
-      "vendored": false,
-      "note": "agent runtime embedded by the OpenChamber image"
-    },
-    "opencode_dcp": {
-      "package": "@tarquinen/opencode-dcp@3.2.0",
-      "license": "AGPL-3.0-or-later",
-      "vendored": false,
-      "note": "installed separately at runtime by OpenCode"
-    },
-    "self_learning": {
-      "path": "scripts",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "bounded agent-run self-learning loop: scripts/memory_turn_capture.py and scripts/memory_promote.py; caps and contract in docs/memory-capture-promotion.md; no new hook framework, store or service"
-    },
-    "repoql_integration": {
-      "path": "compose/repoql.override.yml + openchamber/opencode.jsonc (mcp.repoql)",
-      "source": "https://github.com/RepoQL/RepoQL",
-      "vendored": false,
-      "note": "connects the OpenChamber bundle to the user's existing rql installation over MCP; RepoQL is installed and licensed separately (repoql.com)"
-    },
-    "claude_code_agent_integration": {
-      "path": "adapters/claude-code (agents/, agent-map.mjs, memory-hook.mjs, settings-merge.mjs) + scripts/install-claude-code.mjs",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "native Claude Code definitions for all nine retained roles (five subagent delegation targets and four main-session coordination surfaces) bound to the SAME MemoryCore identities as the OpenChamber roster via the existing profile seeder; SubagentStart bounded recall + SubagentStop reconciled lesson capture through the existing loop; RepoQL over MCP when rql is present; idempotent install/uninstall; Ghost, standalone, solo/orchestrator, free-mode, quality-fixer, fleet-reviewer and researcher-web are retired",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "shared documentation policy for OpenChamber and Claude Code: DOC_UPDATED / DOC_NOT_REQUIRED / DOC_BLOCKED outcomes, deterministic closure check (doc-policy.mjs assess|check), automatic MemoryCore ingestion of current runbook content (eligibility allowlist, secret rejection, heading chunking, hash-dedup chunk idempotency, verified retrieval, revision supersession tombstones, atomic flock ledger under data/doc-index/), dedicated shared docs-keeper scope, and Claude Code SessionStart guidance + Stop closeout hooks; details in docs/DOC-INGESTION.md"
-    },
-    "memory_startup_safety": {
-      "path": "scripts/start-memory-stack.sh + scripts/redact-memory-startup.py + scripts/verify-memory-user-key.py (and the loopback publishing boundary check)",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "runs the byte-exact Memory Core quickstart through streaming key-output redaction and verifies auth/verify data.valid=true without printing the admin key"
-    },
-    "ghost_companion": {
-      "path": "ghost + openchamber/agents/ghost.md + docs/GHOST-SETUP.md",
-      "source": "authored for this repository (redacted clean-slate projection)",
-      "vendored": false,
-      "note": "persistent companion agent bundled into installation options 2 and 4 (absent from 1 and 3); 3-tier memory helper (ghost-memory.mjs), checkpointed 6-step daily dream engine (dream.mjs), headless OpenChamber turn runner (ghost-turn.mjs), allowlist model gateway (ghost-gateway.mjs), and blank seed templates (zero personal memories)"
-    },
-    "harness_engine": {
-      "path": "harness/ + bin/ai-orchestra",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "portable orchestration engine: one engine authority (harness/kit/orchestrate.mjs), a verb-preserving launcher, a declarative path/capability table, and a dormant Rust state-authority source tree. Creates its run state under harness/kit/runs at first use; the shipped tree carries none"
-    },
-    "harness_config": {
-      "path": "harness/harness.config.json",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "the only place a host path, credential-backed feature or optional capability is declared; an entry resolved to null means this host does not have it"
-    },
-    "connectors": {
-      "path": "connectors/kanzo + connectors/memorycore",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "RepoQL connectors that copy Kanzo work items and MemoryCore records into indexable files; no credentials are stored in the connector definitions"
-    },
-    "memory_patches": {
-      "path": "memory/patches",
-      "source": "derivative patches over TencentDB Agent Memory v2.0.2 (commit 99a1a2c)",
-      "vendored": false,
-      "note": "two patch series (core L1 record ids, hub-751 parser) with provenance and self-describing series.json; MIT, derived from the Tencent MIT source"
-    },
-    "portable_capture": {
-      "path": "memory/portable",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "capture-only consumer plus systemd unit; exactly one automatic writer, enforced by an exclusive lock that refuses a second live writer"
+    "repoql": {
+      "path": "native/windows/repoql_compat.py and dashboard/repoql_connectors.py",
+      "note": "Externally installed and licensed RepoQL, pinned by the native connector contract"
     },
     "dashboard": {
       "path": "dashboard/",
-      "source": "authored for this repository",
-      "vendored": false,
-      "note": "OPT-IN adjunct: shipped in the package, installed by no installation option, never claimed by the doctor unless the operator points it at an installed copy"
+      "note": "Native Windows dashboard and local API, including Kanzo, memory and Agent Chat read models"
+    },
+    "claude_office": {
+      "path": "office/ and native/desktop-bridge/",
+      "note": "Claude Office integration and Windows bridge; third-party application requires separate verified binaries"
+    },
+    "openmaus_bots": {
+      "path": "native/windows/openmausbot/",
+      "note": "Claude Code Openmaus maintenance and agent workflows"
+    },
+    "orchestration": {
+      "path": "harness/ and bin/ai-orchestra",
+      "note": "Existing orchestrator authority and guarded Rust compatibility ports; no workflow authority migration approved"
+    },
+    "memory_ingestion": {
+      "path": "scripts/memory-doc-ingest.py and scripts/doc-ingest-node.mjs",
+      "note": "Current documentation ingestion, revision ledger and guarded Rust policy interfaces"
     }
   },
   "external_dependencies": {
@@ -119,54 +67,63 @@
       "license": "commercial, user-installed",
       "note": "the rql engine is never bundled; the user's own licence and terms apply"
     },
-    "opencode_dcp": {
-      "source": "https://github.com/Opencode-DCP/opencode-dynamic-context-pruning",
+    "tencent_memorycore": {
+      "source": "https://github.com/TencentCloud/TencentDB-Agent-Memory",
+      "revision": "v2.0.2 (commit 99a1a2c)",
       "bundled": false,
-      "license": "AGPL-3.0-or-later",
-      "note": "npm plugin installed separately (@tarquinen/opencode-dcp); external process"
+      "note": "Third party source and derivative patch provenance are tracked separately"
+    },
+    "claude_office": {
+      "source": "https://github.com/paulrobello/claude-office",
+      "bundled": false,
+      "note": "Windows frontend/backend require independent binary and runtime acceptance"
     }
   },
   "validation": {
-    "static": "tests/validate-local.sh",
-    "repoql_live": "tests/validate-repoql.sh",
-    "memory_loop": "tests/validate-memory-loop.sh"
+    "static_windows_source": "native/windows/verify_source_release.py",
+    "windows_source_archive": "native/windows/scan_source_archive.py",
+    "rust_upgrade_gate": "native/windows/verify_rust_upgrade.ps1",
+    "native_windows_acceptance": "NOT_RUN"
   },
-  "file_hashes": "SHA256SUMS",
+  "file_hashes": "docs/rust-rewrite-evidence/MANIFEST-FILE-HASHES.json",
   "native_windows_gui_development": {
     "status": "SOURCE_ONLY_NOT_PUBLIC_RELEASE",
     "feature_contract": "native/windows/variants.json",
-    "rust_bridge": "native/desktop-bridge",
-    "dashboard_mode": "included_in_all_native_windows_variants",
-    "optional_features": "Ghost and Claude Office only options 2 and 4",
-    "native_windows_installer": "not_implemented",
-    "acceptance": "not_run_clean_windows_gui",
-    "limitations": "Rust compiler/build and Windows integration acceptance, native supervisor and installer, native Ghost server, ACL-secured credentials, live graph/indexing/GUI receipts still required",
+    "dashboard_mode": "included_in_single_full_claude_code_profile",
+    "native_windows_installer": "native/windows/install_claude_complete.ps1",
+    "acceptance": "NOT_RUN_CLEAN_WINDOWS",
     "guide": "docs/WINDOWS-NATIVE-RELEASE.md"
   },
   "native_windows_wip": {
     "status": "SOURCE_ONLY_NOT_RELEASE_READY",
-    "baseline": "4f3d0f971f09ec677e7d4e5e49147476c054b311",
     "options": [
-      1,
-      2,
-      3,
-      4
+      2
     ],
     "requires_no_wsl": true,
     "rust_binary_compiled": false,
     "repoql_required_version": "1.7.18",
-    "repoql_connector_abi": 1,
+    "repoql_connector_contract": "fetch-render",
     "public_acceptance": "BLOCKED",
     "audit": "WINDOWS_NATIVE_RELEASE_MILESTONE9_20261029.md",
-    "doc_ledger_auto_reaper": false,
-    "added_sources": [
-      "native/desktop-bridge/src/windows_cpu.rs",
-      "native/desktop-bridge/src/ghost.rs",
-      "dashboard/native_readiness.py",
-      "dashboard/repoql_native_auth.py"
-    ],
     "rollback": "docs/WINDOWS-OFFICE-AUTH-ROLLBACK.md",
     "preflight": "native/windows/preflight.ps1",
     "archive_security_gate": "native/windows/scan_source_archive.py"
+  },
+  "checksum_authority": {
+    "current": "SHA256SUMS",
+    "file_hashes": "docs/rust-rewrite-evidence/MANIFEST-FILE-HASHES.json",
+    "generated_utc": "2026-11-14T03:26:13Z",
+    "base_commit": "d4d27588c7ee6c494b1ee2f6a6f4364198ff2ed4",
+    "algorithm": "sha256",
+    "excluded": [
+      "SHA256SUMS",
+      "MANIFEST.json",
+      "docs/rust-rewrite-evidence/MANIFEST-FILE-HASHES.json"
+    ],
+    "historical_manifests": [
+      "docs/rust-rewrite-evidence/SHA256SUMS.wave56.frozen",
+      "docs/rust-rewrite-evidence/NATIVE_WINDOWS_SOURCE_MANIFEST.wave56.json"
+    ],
+    "note": "This tree was reconciled from the reviewed Wave56 source onto main. The current authority is the root SHA256SUMS plus the linked file-hash map. The native source manifest in the tree and the frozen Wave56 manifests are historical revision metadata with 37 known pre-existing mismatches; they do not verify this tree and must not be relabelled as acceptance."
   }
 }

@@ -1,7 +1,7 @@
 # Native Windows agent memory and RepoQL policy
 
-**Scope:** Singularity RepoQL native Windows. The 1 November 2026 Dockerhost
-OpenChamber instructions and Harness review informed this portable policy, but
+**Scope:** Singularity RepoQL native Windows. The canonical agent policy and closed memory work through
+13 November 2026 informed this portable policy, but
 Linux host paths, service units, timers, credentials, and fleet roles are **not**
 Windows installation instructions. Keep Windows memory in Windows-owned services.
 
@@ -61,13 +61,25 @@ response.
   allowlisted terminal-session capture timer and asynchronous extraction. That
   behavior is **not a Windows Claude Code hook** and must not be assumed to
   run on native Windows. Do not create a duplicate Windows timer to imitate it.
-- Where an authorized `agent-memory` CLI is actually installed, use an explicit
-  capturing role and bounded `stats` / `recall` (L1 first, L0 fallback); never
-  guess roles. Where absent, use the product's scoped MemoryCore connector.
+- Establish the authorized capturing identity first. Use L1 first (≤5); use
+  L0 fallback (≤3) only when L1 is empty or unavailable. Do not run `stats` as
+  a routine preflight. Use the installed scoped MemoryCore connector; never
+  guess a role or assume a role argument grants access.
 - Never copy Dockerhost token files, SSH port forwards, memory ledgers, private
   data or Redis/RepoQL storage into the Windows gateway. Windows graph queries
   must reach the local Windows unified Rust executable and Windows configured
   RepoQL/Tencent services, or show **unavailable**.
+
+## Outcome and task provenance
+
+Engineering memories must state the decision or accepted result, exact evidence
+(commands, paths, commits or task IDs), and any unresolved work. Do not record
+process narration or claim asynchronous extraction has completed. Corrections
+remain repository-scoped, supplementary evidence, not new global authority.
+Task recovery accepts explicit capture bindings and orders the bounded result
+chronologically; never infer task ownership from text or timestamps. No new
+association writer or capture store is introduced. See
+[the synchronization record](DOCKERHOST-SYNC-2026-11-13.md).
 
 ## Saving a durable lesson
 
@@ -125,3 +137,39 @@ not automatically installable native Windows code. No orchestration mode,
 worker selection, stage or concurrency policy changes are authorized by
 this document. The Windows product's authenticated hooks and connector
 contracts remain the runtime authority.
+
+### Native documentation write transport
+
+In an isolated acceptance profile, `Configure -Apply -UseRustDocWriter`
+binds the verified staged `singularity-memorycore-writer.exe` and its digest
+to the owned Claude settings. Direct CLI fixtures may select it through
+`SINGULARITY_DOC_WRITE_RUST_BIN`. The compiled transport permits only
+documentation chunk and revision supersession adds to the configured local
+IPv4 MemoryCore service. The host retains source eligibility, planning, ledger
+ownership and the decision to advance a revision. With the native writer
+selected, Rust queries the exact task and compares its messages locally.
+The readback request contains only the scoped task identity, not expected
+message content. The Rust writer also checks indexing visibility for
+generated document markers and returns only a boolean, not search rows.
+It compares the service identity selected by the caller with the
+configuration it loaded before any search, query or write. This catches
+a changed service between the ledger check and the child request. A
+native error does not select the old transport. Operator search stays
+on the existing host path. No credential is passed in arguments or the request
+frame.
+
+The host persists an intent and a digest of the nonsecret destination
+identity under the shared ledger lock before sending. A native chunk must
+be searchable and its exact task must contain both expected messages before
+the new revision can become active. The host retains the previous active
+revision until any supersession record has also been confirmed by exact task
+readback. An unresolved native add is never sent again by either host, even
+after the switch is removed. A destination change blocks reconciliation before
+contacting the new target. If the source changes again while a supersession is
+pending, the newer edit is blocked until the earlier transition is reconciled.
+Older pending chunk records may not carry a destination digest.
+
+Do not remove an unresolved intent simply because search did not return it.
+Use independent MemoryCore readback and the existing operator reconciliation
+process. Reconcile outstanding native intents before rolling back to a host
+that does not understand them.

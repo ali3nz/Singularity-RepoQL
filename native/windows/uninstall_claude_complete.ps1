@@ -16,10 +16,17 @@ param(
   [string]$Workspace = '',
   [string]$NodeExe = '',
   [string]$SupervisorConfig = '',
-  [switch]$Apply
+  [switch]$Apply,
+  [switch]$NativeSetupConfirmed
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# The Rust GUI has already presented its phase-specific confirmation.
+# A plain switch works with Windows PowerShell 5.1 -File.
+if ($NativeSetupConfirmed) {
+  if (-not $Apply) { throw 'SETUP_CONFIRMATION_REQUIRES_APPLY' }
+  $ConfirmPreference = 'None'
+}
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'NATIVE_WINDOWS_REQUIRED' }
 if ($Mode -eq 'Uninstall' -and -not $Apply) { throw 'EXPLICIT_UNINSTALL_APPLY_REQUIRED' }
 if ($Mode -eq 'Plan' -and $Apply) { throw 'PLAN_REFUSES_APPLY' }

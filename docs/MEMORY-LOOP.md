@@ -42,8 +42,8 @@ list shows extraction work progressing per scope.
 - The OpenChamber plugin recalls per session and reconciles new turns back
   into the store.
 - With the Claude Code integration, each `singularity-*` subagent starts with
-  a bounded recall from its OWN identity (SubagentStart hook: ≤4 L0 + ≤4 L1
-  items, clipped, clearly stamped advisory-only). Recalled context never
+  a bounded recall from its OWN identity (SubagentStart hook: ≤5 L1 items, or ≤3 L0 items only when L1 is
+  empty or unavailable; clipped, clearly stamped advisory-only). Recalled context never
   overrides the current operator request or verified code, and a MemoryCore
   outage degrades the recall visibly without blocking the agent.
 - Everything is also reachable on demand: `POST /v3/conversation/search` with

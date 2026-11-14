@@ -33,7 +33,7 @@ test('roster is five delegated and four excluded main roles',()=>{
 test('refuses missing, colliding, or Ghost identities before contact',()=>{
  const x=map();delete x.board;assert.throws(()=>validateDelegatedMap(x),/MISSING/);
  const y=map();y.board=y.explore;assert.throws(()=>validateDelegatedMap(y),/COLLISION/);
- const z=map();z.board.agent_id='ghost';assert.throws(()=>validateDelegatedMap(z),/GHOST/);
+ const z=map();z.board.agent_id='ghost';assert.throws(()=>validateDelegatedMap(z),/RETIRED/);
  const extra=map();extra.board.extra='injection';assert.throws(()=>validateDelegatedMap(extra),/SHAPE/);
 });
 test('plan is read-only and does not print scoped IDs or credentials',async()=>{

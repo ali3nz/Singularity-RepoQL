@@ -22,6 +22,8 @@
 // imports it for candidate-side temporal validation, so any import back into
 // the conflict-gate plane would create a cycle)
 
+import { nativeMemoryPolicyEnabled, nativeTemporalVerdict } from "./native-memory-policy.mjs";
+
 export const TEMPORAL_VERDICT = Object.freeze({
   MATCH: "MATCH",
   NO_MATCH: "NO_MATCH",
@@ -121,6 +123,7 @@ function normalizeTemporalShape(t) {
 // KNOWN future validity (validFrom > now). Tombstone/TTL exclusion is the
 // callers' job — separate concerns.
 export function currentTruth({ capsuleBody = null, temporal = null, now = new Date() } = {}) {
+  if (nativeMemoryPolicyEnabled()) return nativeTemporalVerdict("current", { capsuleBody, temporal, now: now.getTime() });
   const t = normalizeTemporalShape(temporal ?? (capsuleBody != null ? extractTemporal(capsuleBody) : null));
   if (!t || t.unknown) return TEMPORAL_VERDICT.MATCH;
   const n = now.getTime();
@@ -132,6 +135,7 @@ export function currentTruth({ capsuleBody = null, temporal = null, now = new Da
 // historicalTruth(asOf): was the fact true at asOf? STRICT — requires a KNOWN
 // validFrom; without it the honest answer is UNKNOWN, never claimed support.
 export function historicalTruth({ capsuleBody = null, temporal = null, asOf } = {}) {
+  if (nativeMemoryPolicyEnabled()) return nativeTemporalVerdict("historical", { capsuleBody, temporal, asOf });
   const t = normalizeTemporalShape(temporal ?? (capsuleBody != null ? extractTemporal(capsuleBody) : null));
   if (!t || t.unknown) return TEMPORAL_VERDICT.UNKNOWN;
   if (t.validFrom == null) return TEMPORAL_VERDICT.REQUIRES_KNOWN_VALID_FROM;
@@ -145,6 +149,7 @@ export function historicalTruth({ capsuleBody = null, temporal = null, asOf } = 
 // beliefTruth(asOf): what the system RECORDED as of a time — requires a KNOWN
 // recordedAt (never git birth time, never verified.date).
 export function beliefTruth({ capsuleBody = null, temporal = null, asOf } = {}) {
+  if (nativeMemoryPolicyEnabled()) return nativeTemporalVerdict("belief", { capsuleBody, temporal, asOf });
   const t = normalizeTemporalShape(temporal ?? (capsuleBody != null ? extractTemporal(capsuleBody) : null));
   if (!t || t.unknown) return TEMPORAL_VERDICT.UNKNOWN;
   if (t.recordedAt == null) return TEMPORAL_VERDICT.REQUIRES_KNOWN_RECORDED_AT;

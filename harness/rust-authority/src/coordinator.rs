@@ -204,6 +204,7 @@ pub fn read_run(run_dir: &Path) -> Option<RunView> {
 
 /// Process liveness using /proc. Existence is never liveness: a zombie or an
 /// empty cmdline counts as dead.
+#[cfg(not(windows))]
 fn process_alive(pid: u64) -> bool {
     let proc_dir = PathBuf::from(format!("/proc/{pid}"));
     let stat = match fs::read_to_string(proc_dir.join("stat")) {
@@ -221,6 +222,33 @@ fn process_alive(pid: u64) -> bool {
     fs::read(proc_dir.join("cmdline"))
         .map(|bytes| !bytes.is_empty())
         .unwrap_or(false)
+}
+
+// Read-only liveness projection, never authority to remove a lock.
+// Open/query failure means liveness could not be verified, not proven death.
+#[cfg(windows)]
+fn process_alive(pid: u64) -> bool {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn WaitForSingleObject(handle: isize, timeout: u32) -> u32;
+        fn CloseHandle(handle: isize) -> i32;
+    }
+    let Ok(pid) = u32::try_from(pid) else {
+        return false;
+    };
+    if pid == 0 {
+        return false;
+    }
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const WAIT_TIMEOUT: u32 = 258;
+    let handle = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+    if handle == 0 {
+        return false;
+    }
+    let state = unsafe { WaitForSingleObject(handle, 0) };
+    unsafe { CloseHandle(handle) };
+    state == WAIT_TIMEOUT
 }
 
 fn cmdline(pid: u64) -> String {
@@ -241,6 +269,7 @@ fn read_lock(runs_dir: &Path, name: &str) -> Option<LockView> {
     let text = fs::read_to_string(runs_dir.join(name)).ok()?;
     let pid = text.trim().parse::<u64>().ok();
     let alive = pid.map(process_alive).unwrap_or(false);
+    // Windows command-line classification is unavailable; false is not proof.
     let js_coordinator = pid
         .filter(|_| alive)
         .map(|p| cmdline(p).contains("orchestrate.mjs"))
@@ -725,6 +754,21 @@ mod tests {
         assert!(!cleaned.contains("abcdef123456"));
         assert!(!cleaned.contains("supersecret"));
         assert!(cleaned.contains("[REDACTED]"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_process_liveness_is_bounded_and_tracks_exit() {
+        assert!(process_alive(u64::from(std::process::id())));
+        assert!(!process_alive(0));
+        assert!(!process_alive(u64::MAX));
+        let mut child = std::process::Command::new("cmd.exe")
+            .args(["/C", "exit", "0"])
+            .spawn()
+            .unwrap();
+        let pid = u64::from(child.id());
+        assert!(child.wait().unwrap().success());
+        assert!(!process_alive(pid));
     }
 
     #[test]

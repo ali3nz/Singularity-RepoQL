@@ -11,13 +11,12 @@ powershell.exe -NoProfile -File .\native\windows\preflight.ps1 -Option 3 -Repoql
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateRange(1, 4)][int]$Option,
+  [Parameter(Mandatory = $true)][ValidateSet(2)][int]$Option,
   [string]$RepoqlExe = '',
   [string]$BridgeExe = '',
   [string]$SupervisorExe = '',
   [string]$SupervisorConfig = '',
   [string]$ClaudeGuiExe = '',
-  [string]$OpenChamberGuiExe = '',
   [switch]$SkipLocalPortChecks,
   [int]$RepoqlPort = 41005,
   [int]$TencentPort = 8125,
@@ -76,9 +75,9 @@ function Test-LoopbackPort([int]$Port) {
 }
 
 $isWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
-$complete = $Option -eq 2 -or $Option -eq 4
-$gui = if ($Option -le 2) { 'claude-desktop-code' } else { 'openchamber-desktop' }
-$selectedGuiPath = if ($Option -le 2) { $ClaudeGuiExe } else { $OpenChamberGuiExe }
+$complete = $true
+$gui = 'claude-desktop-code'
+$selectedGuiPath = $ClaudeGuiExe
 $report = [ordered]@{
   schema = 1
   product = 'Singularity RepoQL'
@@ -87,7 +86,7 @@ $report = [ordered]@{
   option = $Option
   gui = $gui
   feature_office = $complete
-  feature_ghost = $complete
+  feature_ghost = $false
   required_repoql_version = '1.7.18'
   required_connector_abi = 1
   repoql = Test-ExplicitFile $RepoqlExe

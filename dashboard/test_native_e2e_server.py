@@ -118,6 +118,16 @@ class RealDashboardBoundaries(unittest.TestCase):
         self.port = self.dashboard.server_port
         self.auth = {'Authorization': 'Bearer '+self.dashboard.RequestHandlerClass.app.token}
 
+    def test_rust_route_selection_runs_only_after_authentication(self):
+        with patch('server.classify_dashboard_route', return_value='read_features') as classify:
+            status, _, _ = request(self.port, 'GET', '/api/features')
+            self.assertEqual(status, 401)
+            classify.assert_not_called()
+            status, _, body = request(self.port, 'GET', '/api/features', headers=self.auth)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)['variant'], 2)
+            classify.assert_called_once_with('GET', '/api/features')
+
     def test_real_listener_panel_cookies_cannot_cross_audiences(self):
         for label in ('office','tencent','kanzo'):
             status, headers, body = request(self.port, 'GET',f'/api/embed/{label}/handshake', headers=self.auth)

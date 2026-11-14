@@ -1,0 +1,38 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "fleet-1266/final-delivery/assembly-result.json",
+    "original_sha256": "232210f1942c149a8599fc351bc443840005836995361808dedb434a0e589c88",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 2,
+      "home_path": 0,
+      "sid": 0,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": {
+    "bundle": "%USERPROFILE%\\singularity-wave56-1258-native\\cutover-fleet-1266\\assembled-receipt-fix-final\\wave56-synchronized-native-candidate.zip",
+    "frozenManifestUnchanged": true,
+    "setupSha256": "17b8174eb9ef43186437997841b9e3d8855aa35ae9881f891a0f4892d48fbfd9",
+    "finishedUtc": "2026-11-14T01:37:25.0121107Z",
+    "exitCode": 0,
+    "bundleSha256": "c4b1bca4e83314c65e5cae5323c9c3aebb6b1ac067895104a57ff1fe485713b9",
+    "runtimeModified": false,
+    "installRoot": "%USERPROFILE%\\AppData\\Local\\Singularity\\WindowsNativeWave56",
+    "sourceArchiveSha256": "0699b61df7d20a095606e12308284d6c055db27768f7a38b3caa1d87be2e27de",
+    "binaryCount": 10,
+    "acceptedOnWindows": false,
+    "schema": "wave56-synchronized-assembly/v1",
+    "syncedSourceFiles": 24
+  }
+}

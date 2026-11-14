@@ -50,7 +50,10 @@ import os
 import re
 import secrets
 import shutil
+import stat
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -111,8 +114,12 @@ def sha(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def _config_path():
+    return Path(os.environ.get("MEMORY_SECRETS", "./data/opencode/config/product-secrets/memory.json")).absolute()
+
+
 def load_cfg():
-    p = Path(os.environ.get("MEMORY_SECRETS", "./data/opencode/config/product-secrets/memory.json"))
+    p = _config_path()
     try:
         cfg = json.loads(p.read_text())
         if not cfg.get("gatewayKey"):
@@ -171,22 +178,59 @@ def release_ledger_lock(lock_dir, owner):
     lock_dir.rmdir()
 
 
-def with_ledger(fn):
-    """Run fn(ledger) under the ledger lock and persist with atomic replace."""
+def with_ledger(fn, *, checkpoint=False):
+    """Run fn under the ledger lock, with an optional in-lock publication callback."""
     lp = _ledger()
     lp.parent.mkdir(parents=True, exist_ok=True)
     lock_dir = _lock()
     owner = acquire_ledger_lock(lock_dir)
     try:
         ledger = _load_ledger()
-        result = fn(ledger)
-        tmp = lp.with_suffix(".tmp")
-        tmp.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
-        os.replace(tmp, lp)  # atomic: no torn ledger on crash
+        def publish():
+            _publish_locked_ledger(lp, lock_dir, owner, ledger)
+        result = fn(ledger, publish) if checkpoint else fn(ledger)
+        publish()
         return result
     finally:
         release_ledger_lock(lock_dir, owner)
 
+
+def _publish_locked_ledger(lp, lock_dir, owner, ledger):
+    # Use a private, exclusive sibling. Never truncate a stale or foreign
+    # ledger.tmp before publishing the new ledger.
+    data = (json.dumps(ledger, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=lp.parent, prefix=".ledger-",
+                                         suffix=".tmp", delete=False) as pending:
+            tmp = Path(pending.name)
+            pending.write(data)
+            pending.flush()
+            os.fsync(pending.fileno())
+        if (lock_dir / "owner").read_text(encoding="utf-8") != owner:
+            raise RuntimeError(f"ledger lock ownership changed: {lock_dir}")
+        if os.environ.get("SINGULARITY_DOC_LEDGER_COMMIT_RUST_BIN"):
+            try:
+                _rust_doc_policy("doc-ledger-commit", {
+                    "schema": "singularity-doc-ledger-commit/v1",
+                    "temp": str(tmp.absolute()), "owner": owner,
+                }, {"ok": True, "published": True},
+                   binary_env="SINGULARITY_DOC_LEDGER_COMMIT_RUST_BIN", args=[])
+                if tmp.exists() or not lp.is_file():
+                    raise RuntimeError("document ledger publication could not be confirmed")
+                with lp.open("rb") as published:
+                    if published.read(len(data) + 1) != data:
+                        raise RuntimeError("document ledger publication differs")
+            except Exception:
+                # A child may have committed before its response failed.
+                # Never retry the commit or fall back to the host writer.
+                raise Blocked("native document ledger commit unconfirmed; inspect ledger before retry") from None
+        else:
+            os.replace(tmp, lp)
+        tmp = None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 # ── eligibility and safety ───────────────────────────────────────────────────
 
@@ -245,36 +289,110 @@ def reject_sensitive(text, rel):
 
 # ── chunking (by markdown headings; never silently truncated) ────────────────
 
-def chunk_markdown(text):
-    """Split into <=MAX_CHUNK_CHARS chunks on headings, respecting fenced blocks.
+def _rust_doc_policy(command, request, reference, *, binary_env="SINGULARITY_DOC_RUST_BIN", args=None):
+    """Opt-in native leaf only. The Python decision remains an independent oracle.
 
-    Fences are never split mid-block by a heading break; a single line longer
-    than the cap is wrapped (content preserved, never truncated). More than
-    MAX_CHUNKS chunks is a Blocked refusal, not a silent truncation.
+    This process never receives gateway credentials. A failed or mismatched
+    native response blocks the ingestion before the first MemoryCore write.
     """
-    lines = text.splitlines()
+    binary = os.environ.get(binary_env, "")
+    if not binary:
+        return reference
+    # Reuse the Windows native read-only bridge; no independent subprocess
+    # policy that could relax its bounds or acceptance rules.
+    import importlib.util
+    module_path = Path(__file__).resolve().parent.parent / "native" / "windows" / "rust_readonly_bridge.py"
+    try:
+        spec = importlib.util.spec_from_file_location("singularity_doc_rust_bridge", module_path)
+        if spec is None or spec.loader is None:
+            raise ValueError("bridge unavailable")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Pure Rust documentation policies need no memory credentials, root
+        # allowlists or gateway configuration. Never inherit the full process
+        # environment, including during ingestion planning and retrieval.
+        allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME"}
+        safe_env = {k: v for k, v in os.environ.items() if k.upper() in allowed}
+        return module.run_checked(Path(binary), [command] if args is None else args,
+                                  reference, data=request, env=safe_env)
+    except Exception as exc:
+        # Include only a fixed category, never native stderr or document data.
+        raise Blocked("native documentation policy unavailable or disagrees with the source contract") from None
+
+
+def _chunk_markdown_reference(text):
+    """Split without truncation, guaranteeing <=7000 Unicode characters per chunk.
+
+    Short normal documents retain the established heading/fence policy. Long
+    physical lines are emitted as independent bounded chunks, not silently
+    accumulated into an oversize chunk, and the 64-chunk cap fails closed.
+    """
     chunks, cur, cur_chars, fence = [], [], 0, False
-    for line in lines:
+
+    def flush():
+        nonlocal cur, cur_chars
+        if cur:
+            chunks.append("\n".join(cur))
+            cur, cur_chars = [], 0
+
+    for line in text.splitlines():
         if line.strip().startswith("```"):
             fence = not fence
         is_heading = not fence and re.match(r"^#{1,3} ", line)
-        if is_heading and cur_chars >= MAX_CHUNK_CHARS * 0.6 and cur:
-            chunks.append("\n".join(cur))
-            cur, cur_chars = [], 0
-        if len(line) + 1 > MAX_CHUNK_CHARS and cur_chars > 0:
-            chunks.append("\n".join(cur))
-            cur, cur_chars = [], 0
+        if is_heading and cur and cur_chars >= MAX_CHUNK_CHARS * 0.6:
+            flush()
         if len(line) + 1 > MAX_CHUNK_CHARS:
-            for i in range(0, len(line), MAX_CHUNK_CHARS - 1):
-                cur.append(line[i:i + MAX_CHUNK_CHARS - 1])
-        else:
-            cur.append(line)
+            flush()
+            for index in range(0, len(line), MAX_CHUNK_CHARS):
+                piece = line[index:index + MAX_CHUNK_CHARS]
+                if len(piece) == MAX_CHUNK_CHARS:
+                    chunks.append(piece)
+                else:
+                    cur = [piece]
+                    cur_chars = len(piece) + 1
+                if len(chunks) > MAX_CHUNKS:
+                    raise Blocked(f"document needs more than {MAX_CHUNKS} chunks; split it into smaller docs")
+            continue
+        if cur and cur_chars + len(line) + 1 > MAX_CHUNK_CHARS:
+            flush()
+        cur.append(line)
         cur_chars += len(line) + 1
-    if cur:
-        chunks.append("\n".join(cur))
+        if len(chunks) > MAX_CHUNKS:
+            raise Blocked(f"document needs more than {MAX_CHUNKS} chunks; split it into smaller docs")
+    flush()
     if len(chunks) > MAX_CHUNKS:
         raise Blocked(f"document needs {len(chunks)} chunks (max {MAX_CHUNKS}); split it into smaller docs")
     return chunks
+
+
+def chunk_markdown(text):
+    chunks = _chunk_markdown_reference(text)
+    native = _rust_doc_policy("doc-index-chunks", {"text": text}, {"ok": True, "chunks": chunks})
+    return native["chunks"]
+
+
+def _chunk_tasks_reference(chunks, rel, title, root_id, doc_id8, rev, ts, team, user):
+    tasks = []
+    for i, body in enumerate(chunks, start=1):
+        chash = sha(body)[:8]
+        task_id = f"docs-{doc_id8}-r{rev}-c{i:02d}"
+        marker = f"[doc-ref:{rel}#{rev} chunk {i}/{len(chunks)} hash {chash}]"
+        header = (f"{marker}\ntitle: {title}\nsource: {rel} (canonical file on disk — this memory record "
+                  f"is its indexed copy)\nrevision: {rev}\nroot-id: {root_id}\nchunk: {i}/{len(chunks)}\n"
+                  f"content-hash: {chash}\nscope: {team}/{user}\ningested: {ts}\n\n")
+        tasks.append({"task_id": task_id, "marker": marker, "text": header + body, "hash": chash})
+    return tasks
+
+
+def doc_chunk_tasks(chunks, rel, title, root_id, doc_id8, rev, ts):
+    team = os.environ.get("DOC_INDEX_TEAM", "singularity-docs")
+    user = os.environ.get("DOC_INDEX_USER", "shared")
+    reference = _chunk_tasks_reference(chunks, rel, title, root_id, doc_id8, rev, ts, team, user)
+    native = _rust_doc_policy("doc-index-plan", {
+        "chunks": chunks, "rel": rel, "title": title, "rootId": root_id, "docId": doc_id8,
+        "rev": rev, "timestamp": ts, "team": team, "user": user,
+    }, {"ok": True, "tasks": reference})
+    return native["tasks"]
 
 
 # ── memory writes (single path, idempotent by deterministic task ids) ────────
@@ -286,10 +404,18 @@ def search_once(cfg, query, limit=5):
     return (found.get("data") or {}).get("messages") or []
 
 
+def _marker_visible(cfg, marker, limit=5):
+    binary = os.environ.get("SINGULARITY_DOC_WRITE_RUST_BIN")
+    if binary:
+        return _write_native_chunk(binary, {**_scope(), "query": marker, "limit": limit},
+                                   service_id=cfg.get("serviceId"), marker=True)
+    return any(marker in (m.get("content") or "") for m in search_once(cfg, marker, limit))
+
+
 def marker_searchable(cfg, marker, deadline):
     while True:
         try:
-            if any(marker in (m.get("content") or "") for m in search_once(cfg, marker)):
+            if _marker_visible(cfg, marker):
                 return True
         except Exception:
             pass  # transient gateway errors during eventual indexing: keep polling
@@ -298,40 +424,159 @@ def marker_searchable(cfg, marker, deadline):
         time.sleep(VERIFY_POLL_S)
 
 
-def write_chunk(cfg, chunk_task, chunk_text, recorded_at):
-    """Idempotent L0 write: marker search first; add only when absent."""
+def _write_native_chunk(binary, payload, *, service_id, verify=False, marker=False):
+    path = Path(binary)
+    if not path.is_absolute() or (os.name == "nt" and not re.fullmatch(r"[A-Za-z]:", path.drive)):
+        raise ValueError("DOC_NATIVE_BINARY_INVALID")
+    for entry in (path, *path.parents):
+        info = entry.lstat()
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise ValueError("DOC_NATIVE_BINARY_INVALID")
+    if not stat.S_ISREG(path.lstat().st_mode):
+        raise ValueError("DOC_NATIVE_BINARY_INVALID")
+    digest = os.environ.get("SINGULARITY_DOC_WRITE_RUST_SHA256")
+    if digest is not None:
+        if not re.fullmatch(r"[a-f0-9]{64}", digest) or path.stat().st_size > 100 * 1024 * 1024:
+            raise ValueError("DOC_NATIVE_BINARY_HASH_DRIFT")
+        actual = hashlib.sha256()
+        with path.open("rb") as exe:
+            for chunk in iter(lambda: exe.read(1024 * 1024), b""):
+                actual.update(chunk)
+        if actual.hexdigest() != digest:
+            raise ValueError("DOC_NATIVE_BINARY_HASH_DRIFT")
+    env = {k: v for k, v in os.environ.items() if k.upper() in {"SYSTEMROOT", "WINDIR"}}
+    env.update(SINGULARITY_DOC_WRITE_CONFIG=str(_config_path()), SINGULARITY_DOC_WRITE_ORIGIN=_base())
+    data = json.dumps({"operation": "docFindMarker" if marker else "docVerify" if verify else "docWrite",
+                       "path": "/v3/conversation/search" if marker else "/v3/conversation/query" if verify else "/v3/conversation/add",
+                       "expected_service": service_id, "body": payload},
+                      ensure_ascii=False).encode("utf-8")
+    if len(data) > 128 * 1024:
+        raise ValueError("DOC_NATIVE_WRITE_LIMIT")
+    result = subprocess.run([str(path)], input=data, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            env=env, timeout=23, check=False, shell=False,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if result.returncode or len(result.stdout) > 4096:
+        raise ValueError("DOC_NATIVE_WRITE_UNCONFIRMED")
+    reply = json.loads(result.stdout)
+    field = "visible" if marker else "verified" if verify else "accepted"
+    if (type(reply) is not dict or set(reply) != {"ok", field} or reply["ok"] is not True
+            or (type(reply[field]) is not bool if verify or marker else reply[field] is not True)):
+        raise ValueError("DOC_NATIVE_WRITE_UNCONFIRMED")
+    return reply[field]
+
+
+def _native_intent_verified(cfg, task, messages):
+    """Verify the full pair under the exact persisted task, not a search hit."""
+    binary = os.environ.get("SINGULARITY_DOC_WRITE_RUST_BIN")
+    if binary:
+        return _write_native_chunk(binary, {**_scope(), "session_id": DOCS_SESSION,
+                                           "task_id": task, "messages": messages}, service_id=cfg.get("serviceId"), verify=True)
+    response = ensure_success(memory_call(_base(), cfg, "/conversation/query", {
+        **_scope(), "session_id": DOCS_SESSION, "task_id": task, "offset": 0, "limit": 100,
+    }), "documentation task readback")
+    data = response.get("data")
+    rows = data.get("messages") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or len(rows) >= 100:
+        return False
+    present = {(m.get("role"), m.get("content")) for m in rows
+               if isinstance(m, dict) and m.get("task_id") == task
+               and isinstance(m.get("role"), str) and isinstance(m.get("content"), str)}
+    def normalize(content):
+        header, sep, body = content.partition("\n\n")
+        return re.sub(r"(?m)^ingested: [^\n]+$", "ingested:", header) + sep + body
+    wanted = {(m["role"], normalize(m["content"])) for m in messages}
+    return wanted.issubset({(role, normalize(content)) for role, content in present})
+
+
+def _native_target(cfg):
+    scope = _scope()
+    values = [_base().rstrip("/"), scope["team_id"], scope["user_id"], scope["agent_id"], cfg.get("serviceId")]
+    return sha(json.dumps(values, ensure_ascii=False, separators=(",", ":")))
+
+
+def write_chunk(cfg, chunk_task, chunk_text, recorded_at, rec, intent, publish):
+    """Search before writes and preserve any unresolved native send."""
+    binary = os.environ.get("SINGULARITY_DOC_WRITE_RUST_BIN")
+    task = chunk_task["task_id"]
     try:
-        if any(chunk_task["marker"] in (m.get("content") or "") for m in search_once(cfg, chunk_task["marker"], 10)):
+        try:
+            searchable = _marker_visible(cfg, chunk_task["marker"], 10)
+        except Exception:
+            if binary:
+                return "uncertain"
+            raise
+        messages = [
+            {"role": "user", "content": chunk_text, "recorded_at": recorded_at},
+            {"role": "assistant", "content": f"Documentation record {chunk_task['marker']} acknowledged.",
+             "recorded_at": recorded_at},
+        ]
+        if task in intent:
+            # Check the complete role/content pair. Only the generated header
+            # timestamp may differ when reconstructing a revision on retry.
+            try:
+                if searchable and _native_intent_verified(cfg, task, messages):
+                    return "present"
+            except Exception:
+                pass
+            return "uncertain"
+        if searchable:
             return "present"
-        ensure_success(memory_call(_base(), cfg, "/conversation/add", {
-            **_scope(), "session_id": DOCS_SESSION, "task_id": chunk_task["task_id"],
-            "messages": [
-                {"role": "user", "content": chunk_text, "recorded_at": recorded_at},
-                {"role": "assistant", "content": f"Documentation record {chunk_task['marker']} acknowledged.",
-                 "recorded_at": recorded_at},
-            ]}), f"chunk add {chunk_task['task_id']}")
+        payload = {**_scope(), "session_id": DOCS_SESSION, "task_id": task, "messages": messages}
+        if binary:
+            rec["write_target"] = _native_target(cfg)
+            intent.append(task)
+            publish()
+            try:
+                _write_native_chunk(binary, payload, service_id=cfg.get("serviceId"))
+                if not _native_intent_verified(cfg, task, messages):
+                    return "uncertain"
+            except Exception:
+                return "uncertain"
+        else:
+            ensure_success(memory_call(_base(), cfg, "/conversation/add", payload), f"chunk add {task}")
         return "written"
+    except Blocked:
+        raise
     except Exception as e:
-        raise RuntimeError(f"chunk write failed ({chunk_task['task_id']}): {e}")
+        raise RuntimeError(f"chunk write failed ({task}): {e}")
 
 
-def write_supersession(cfg, doc_id8, old_rev, new_rev):
-    """Record that old_rev of doc_id8 is no longer current (idempotent tombstone)."""
-    marker = f"[docs-superseded:{doc_id8}:{old_rev}->{new_rev}]"
-    try:
-        if any(marker in (m.get("content") or "") for m in search_once(cfg, marker, 5)):
-            return "present"
-        ensure_success(memory_call(_base(), cfg, "/conversation/add", {
-            **_scope(), "session_id": DOCS_SESSION, "task_id": marker.strip("[]"),
-            "messages": [
-                {"role": "user", "content": (
-                    f"{marker} Documentation revision {old_rev} of document {doc_id8} is SUPERSEDED "
+
+def write_supersession(cfg, doc_id8, old_rev, new_rev, rec, publish):
+    """Publish or verify one tombstone; never replay an uncertain native send."""
+    task_id = f"docs-superseded:{doc_id8}:{old_rev}->{new_rev}"
+    marker = f"[{task_id}]"
+    messages = [{
+        "role": "user",
+        "content": (f"{marker} Documentation revision {old_rev} of document {doc_id8} is SUPERSEDED "
                     f"by revision {new_rev}. Never present revision {old_rev} as current guidance."),
-                 "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
-            ]}), "supersession tombstone")
+        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }]
+    binary = os.environ.get("SINGULARITY_DOC_WRITE_RUST_BIN")
+    pending = "supersession_intent" in rec
+    try:
+        searchable = _marker_visible(cfg, marker)
+        if pending:
+            return "present" if searchable and _native_intent_verified(cfg, task_id, messages) else "uncertain"
+        if searchable:
+            return "present"
+        payload = {**_scope(), "session_id": DOCS_SESSION, "task_id": task_id, "messages": messages}
+        if binary:
+            rec["supersession_intent"] = task_id
+            rec["write_target"] = _native_target(cfg)
+            publish()
+            try:
+                _write_native_chunk(binary, payload, service_id=cfg.get("serviceId"))
+                return "written" if _native_intent_verified(cfg, task_id, messages) else "uncertain"
+            except Exception:
+                return "uncertain"
+        ensure_success(memory_call(_base(), cfg, "/conversation/add", payload), "supersession tombstone")
         return "written"
+    except Blocked:
+        raise
     except Exception as e:
-        return f"failed: {e}"
+        return "uncertain" if pending or binary else f"failed: {e}"
+
 
 
 # ── core ingest ──────────────────────────────────────────────────────────────
@@ -354,7 +599,7 @@ def ingest_file(path, root_arg=None, session=None, now=None):
     rev = sha(text)[:8]
     doc_id8 = sha(key)[:8]
 
-    def proceed(ledger):
+    def proceed(ledger, publish):
         entry = ledger["docs"].setdefault(key, {"rel": rel, "root": Path(root_dir).resolve().as_posix(),
                                                 "root_id": root_id, "doc_id": doc_id8,
                                                 "title": title, "active_rev": None, "revs": {}})
@@ -370,6 +615,12 @@ def ingest_file(path, root_arg=None, session=None, now=None):
             entry["last_checked"] = ts
             return report
 
+        # A pending tombstone may already have changed the remote revision
+        # chain. A later edit cannot commit around that uncertain transition.
+        if any(other != rev and "supersession_intent" in row
+               for other, row in entry["revs"].items()):
+            raise Blocked("DOC_NATIVE_PRIOR_SUPERSESSION_UNCONFIRMED")
+
         try:
             chunks = chunk_markdown(text)
         except Blocked as e:
@@ -378,16 +629,14 @@ def ingest_file(path, root_arg=None, session=None, now=None):
             entry["revs"][rev] = rec
             report.update(status="DOC_INGEST_BLOCKED", reason=rec["reason"])
             return report
-        chunk_tasks = []
-        for i, body in enumerate(chunks, start=1):
-            chash = sha(body)[:8]
-            task_id = f"docs-{doc_id8}-r{rev}-c{i:02d}"
-            marker = f"[doc-ref:{rel}#{rev} chunk {i}/{len(chunks)} hash {chash}]"
-            header = (f"{marker}\ntitle: {title}\nsource: {rel} (canonical file on disk — this memory record "
-                      f"is its indexed copy)\nrevision: {rev}\nroot-id: {root_id}\nchunk: {i}/{len(chunks)}\n"
-                      f"content-hash: {chash}\nscope: {os.environ.get('DOC_INDEX_TEAM', 'singularity-docs')}/"
-                      f"{os.environ.get('DOC_INDEX_USER', 'shared')}\ningested: {ts}\n\n")
-            chunk_tasks.append({"task_id": task_id, "marker": marker, "text": header + body, "hash": chash})
+        try:
+            chunk_tasks = doc_chunk_tasks(chunks, rel, title, root_id, doc_id8, rev, ts)
+        except Blocked as e:
+            rec = entry["revs"].get(rev, {})
+            rec.update(status="DOC_INGEST_BLOCKED", reason=str(e)[:400])
+            entry["revs"][rev] = rec
+            report.update(status="DOC_INGEST_BLOCKED", reason=rec["reason"])
+            return report
 
         rec = entry["revs"].setdefault(rev, {"status": "DOC_INGEST_PENDING", "chunks": len(chunks),
                                              "task_ids": [t["task_id"] for t in chunk_tasks],
@@ -395,11 +644,16 @@ def ingest_file(path, root_arg=None, session=None, now=None):
                                              "ingested_at": ts})
         rec["task_ids"] = [t["task_id"] for t in chunk_tasks]
         rec["chunks"] = len(chunks)
+        intent = rec.get("write_intents", [])
+        if (not isinstance(intent, list) or any(not isinstance(i, str) or i not in rec["task_ids"] for i in intent)
+                or len(set(intent)) != len(intent)):
+            raise Blocked("DOC_LEDGER_WRITE_INTENT_INVALID")
+        if intent or os.environ.get("SINGULARITY_DOC_WRITE_RUST_BIN"):
+            rec["write_intents"] = intent
         rec["session"] = session or rec.get("session")
 
-        # Failure path: mark PENDING/FAILED and persist BEFORE any write so
-        # crashes/retries are visible and idempotent.
         rec["status"] = "DOC_INGEST_PENDING"
+        rec.pop("reason", None)
         try:
             cfg = load_cfg()
         except Blocked as e:
@@ -408,10 +662,23 @@ def ingest_file(path, root_arg=None, session=None, now=None):
             report.update(status=rec["status"], reason=rec["reason"])
             return report
 
+        old_rev = entry["active_rev"]
+        expected_supersession = f"docs-superseded:{doc_id8}:{old_rev}->{rev}" if old_rev and old_rev != rev else None
+        if "supersession_intent" in rec and rec["supersession_intent"] != expected_supersession:
+            raise Blocked("DOC_LEDGER_SUPERSESSION_INTENT_INVALID")
+        if "write_target" in rec and rec["write_target"] != _native_target(cfg):
+            raise Blocked("DOC_NATIVE_WRITE_TARGET_CHANGED")
+
+        # Persist intent before any remote write. Keep the prior active
+        # revision until the new one is independently searchable.
+        publish()
         recorded_at = ts
         try:
             for t in chunk_tasks:
-                write_chunk(cfg, t, t["text"], recorded_at)  # raises on hard failure
+                if write_chunk(cfg, t, t["text"], recorded_at, rec, intent, publish) == "uncertain":
+                    rec["reason"] = "DOC_NATIVE_WRITE_UNCONFIRMED: wait for readback or reconcile before retry"
+                    report.update(status=rec["status"], reason=rec["reason"])
+                    return report
         except RuntimeError as e:
             rec["status"] = "DOC_INGEST_FAILED"
             rec["reason"] = str(e)[:400]
@@ -427,17 +694,24 @@ def ingest_file(path, root_arg=None, session=None, now=None):
             report.update(status="DOC_INGEST_PENDING", reason=rec["reason"])
             return report
 
+        sup = None
+        if expected_supersession:
+            sup = write_supersession(cfg, doc_id8, old_rev, rev, rec, publish)
+            if sup == "uncertain":
+                rec["reason"] = "DOC_NATIVE_SUPERSESSION_UNCONFIRMED: verify the prior revision before retry"
+                report.update(status=rec["status"], reason=rec["reason"])
+                return report
+        rec.pop("write_intents", None)
+        rec.pop("write_target", None)
+        rec.pop("supersession_intent", None)
         rec["status"] = "DOC_INGEST_INDEXED"
         rec["verified_at"] = ts
-        sup = None
-        if entry["active_rev"] and entry["active_rev"] != rev:
-            sup = write_supersession(cfg, doc_id8, entry["active_rev"], rev)
         entry["active_rev"] = rev
         entry["last_verified"] = ts
         report.update(status="DOC_INGEST_INDEXED", chunks=len(chunks), bytes=len(text), superseded=sup)
         return report
 
-    return with_ledger(proceed)
+    return with_ledger(proceed, checkpoint=True)
 
 # ── retry / status / verify / search (root-persisted path resolution) ────────
 
@@ -458,38 +732,46 @@ def _root_id_of(root_arg):
     return sha(Path(os.path.abspath(root_arg)).as_posix())[:8]
 
 
-def locate_entry_key(ledger, path, root_arg=None):
-    """Match a --file argument against ledger entries.
+def _locate_entry_index_reference(candidates, root_pinned):
+    """Keep existing single-match and first same-root tie behavior."""
+    first = None
+    for index, (matches, root_matches) in enumerate(candidates):
+        if not matches:
+            continue
+        if root_pinned:
+            if root_matches:
+                return index
+        elif first is None:
+            first = index
+        else:
+            return None
+    return first
 
-    Matching uses what is RECORDED, never the caller's cwd: exact rel equality,
-    a rel-suffix match, or the given absolute path equal to a stored entry's
-    full document path. When several workspaces recorded the same rel, only an
-    explicit matching --root disambiguates; otherwise the match is refused
-    (never guessed).
+
+def locate_entry_key(ledger, path, root_arg=None):
+    """Match recorded paths, never the caller's cwd. A root pin resolves ties.
+
+    Compute path and root equality locally. The optional Rust process sees
+    only booleans and returns an index, never a path or root identifier.
     """
     given = Path(path).as_posix()
     root_pin = _root_id_of(root_arg) if root_arg is not None else None
-    matches = []
+    keys, candidates = [], []
     for key, entry in ledger.get("docs", {}).items():
         rel = entry.get("rel") or key.split("::", 1)[-1]
         root_abs = entry.get("root")
-        if given == rel:
-            matches.append(key)
-        elif given.endswith("/" + rel):
-            matches.append(key)
-        elif os.path.isabs(given) and root_abs and Path(given).as_posix() == (Path(root_abs) / rel).as_posix():
-            matches.append(key)
-    if not matches:
-        return None
-    if len(matches) == 1:
-        if root_pin is None or matches[0].split("::", 1)[0] == root_pin:
-            return matches[0]
-        return None
-    if root_pin is not None:
-        for key in matches:
-            if key.split("::", 1)[0] == root_pin:
-                return key
-    return None  # ambiguous: caller must pass a matching --root
+        matches = (given == rel or given.endswith("/" + rel) or
+                   (os.path.isabs(given) and bool(root_abs) and
+                    given == (Path(root_abs) / rel).as_posix()))
+        keys.append(key)
+        candidates.append([matches, root_pin is not None and key.split("::", 1)[0] == root_pin])
+    pinned = root_pin is not None
+    index = _locate_entry_index_reference(candidates, pinned)
+    checked = _rust_doc_policy("doc-index-locate", {"candidates": candidates, "rootPinned": pinned},
+                               {"ok": True, "index": index})
+    if checked["index"] is not None and type(checked["index"]) is not int:
+        raise Blocked("native documentation policy unavailable or disagrees with the source contract")
+    return None if index is None else keys[checked["index"]]
 
 
 def resolve_entry_target(entry):
@@ -644,6 +926,61 @@ def verify_file(rel, root_arg=None):
     return _entry_evidence(entry, rel_e)
 
 
+def _ledger_evidence_reference(facts):
+    """Read-only verdict on redacted revision facts, not the ledger or files.
+
+    This is deliberately independent of _entry_evidence's existing return
+    branches. Any enabled Rust disagreement blocks a VERIFIED claim.
+    """
+    unresolved = [i for i, row in enumerate(facts["revisions"])
+                  if not row["active"] and row["unresolved"] and row["newer"]]
+    if facts["active"] and not facts["hash_equal"]:
+        verdict = "stale_hash"
+    elif not facts["indexed"] or not facts["verified"]:
+        verdict = "not_indexed"
+    elif not facts["chunks_complete"]:
+        verdict = "incomplete_chunks"
+    elif unresolved:
+        verdict = "unresolved_revisions"
+    else:
+        verdict = "verified"
+    return {"ok": True, "verdict": verdict, "newer_unresolved_indices": unresolved}
+
+
+def _ledger_evidence_rust_check(entry, active, rec, current):
+    """Cross-check durable completion without sending names, paths or content.
+
+    Python remains the sole source/ledger authority and constructs the answer.
+    Rust sees only booleans and positional revision indexes; it never receives
+    the root, revision hash, timestamps, task identifiers or MemoryCore data.
+    """
+    if not os.environ.get("SINGULARITY_DOC_LEDGER_RUST_BINARY"):
+        return
+    revisions = sorted(entry["revs"].items())
+    if len(revisions) > 256:
+        raise Blocked("native documentation evidence revision limit exceeded")
+    chunks = rec.get("chunks") or 0
+    task_ids = rec.get("task_ids") or []
+    hashes = rec.get("hashes") or []
+    facts = {
+        "schema": "singularity-doc-ledger-evidence/v1",
+        "active": bool(active),
+        "hash_equal": current == active,
+        "indexed": rec.get("status") == "DOC_INGEST_INDEXED",
+        "verified": bool(rec.get("verified_at")),
+        "chunks_complete": bool(chunks) and len(task_ids) == chunks
+                           and len(hashes) == chunks and all(bool(h) for h in hashes),
+        "revisions": [
+            {"active": r == active,
+             "unresolved": v.get("status") in ("DOC_INGEST_PENDING", "DOC_INGEST_FAILED"),
+             "newer": str(v.get("ingested_at", "")) > str(rec.get("verified_at", ""))}
+            for r, v in revisions
+        ],
+    }
+    _rust_doc_policy("doc-index-evidence", facts, _ledger_evidence_reference(facts),
+                     binary_env="SINGULARITY_DOC_LEDGER_RUST_BINARY", args=[])
+
+
 def _entry_evidence(entry, rel_e):
     """Re-derive completion evidence for one exact ledger entry."""
     try:
@@ -659,6 +996,7 @@ def _entry_evidence(entry, rel_e):
     active = entry.get("active_rev")
     rec = entry["revs"].get(active, {}) if active else {}
     current = sha(target.read_text(errors="replace"))[:8]
+    _ledger_evidence_rust_check(entry, active, rec, current)
     if active and current != active:
         return {"status": "DOC_INGEST_NOT_VERIFIED", "file": rel_e,
                 "reason": "changed source was never indexed successfully (stale hash)"}
@@ -683,55 +1021,99 @@ def _entry_evidence(entry, rel_e):
             "revision": active, "chunks": chunks, "verified_at": rec.get("verified_at")}
 
 
-def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False, root_arg=None):
-    """Bounded search of the shared documentation knowledge for agents.
+def _select_retrieval_indices_reference(rows, limit, include_stale, roots_restricted):
+    """Independent source contract for native documentation retrieval selection."""
+    selected, seen = [], set()
+    for row in rows:
+        if row["superseded"] or not row["validMarker"]:
+            continue
+        if roots_restricted and (not row["hasEntry"] or not row["rootAllowed"]):
+            continue
+        if not include_stale and (not row["activeRevMatches"] or not row["verifiedActive"]):
+            continue
+        key = (row["rootId"], row["rel"], row["rev"])
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(row["index"])
+        if len(selected) >= limit:
+            break
+    return selected
 
-    Only records whose document identity AND revision match a verified active
-    ledger revision in the same scope are returned as current guidance;
-    records absent from the ledger (or superseded ones) require --stale.
+
+def _doc_retrieval_facts(msgs, ledger, roots, *, require_current):
+    """Parse and independently verify source provenance, never a caller claim.
+
+    Rows contain only redacted decision metadata. MemoryCore message contents,
+    ledger paths, credentials and document bodies never enter the Rust policy.
+    """
+    entries = {}
+    for key, entry in ledger.get("docs", {}).items():
+        entries[(entry.get("root_id"), entry.get("rel") or key.split("::", 1)[-1])] = entry
+    rows, display = [], {}
+    for index, message in enumerate(msgs):
+        content = message.get("content") or ""
+        superseded = "docs-superseded:" in content
+        m_ref = re.search(r"\[doc-ref:([^#\]]+)#([0-9a-f]{8})", content) if not superseded else None
+        valid = m_ref is not None
+        rel = m_ref.group(1) if valid else ""
+        rev = m_ref.group(2) if valid else ""
+        m_root = re.search(r"^root-id: ([0-9a-f]{8})$", content, re.M) if valid else None
+        root_hit = m_root.group(1) if m_root else None
+        matching = entries.get((root_hit, rel)) if valid else None
+        active = matching.get("active_rev") if matching else None
+        allowed = bool(matching and root_is_currently_authorised(matching.get("root"), roots)) if roots else bool(matching)
+        matches = bool(active is not None and active == rev)
+        verified = False
+        if require_current and matches and matching is not None and (not roots or allowed):
+            evidence = _entry_evidence(matching, rel)
+            verified = evidence.get("status") == "DOC_INGEST_VERIFIED" and evidence.get("revision") == rev
+        rows.append({"index": index, "validMarker": valid, "superseded": superseded,
+                     "hasEntry": matching is not None, "rootAllowed": allowed,
+                     "activeRevMatches": matches, "verifiedActive": verified,
+                     "rootId": root_hit or "", "rel": rel, "rev": rev})
+        if valid:
+            display[index] = {"source": rel, "root": root_hit, "revision": rev, "content": content[:1200]}
+    return rows, display
+
+
+def _native_retrieval_facts(facts):
+    """Replace source/revision identity with nonreversible, per-call group IDs.
+
+    The Rust selection policy needs only equality between triples for dedup.
+    The Python reference and canonical ledger keep the real identity values.
+    """
+    groups = {}
+    private_fields = {"rootId", "rel", "rev"}
+    projected = []
+    for row in facts:
+        identity = (row["rootId"], row["rel"], row["rev"])
+        if identity not in groups:
+            groups[identity] = str(len(groups))
+        projected.append({**{key: value for key, value in row.items()
+                             if key not in private_fields},
+                          "rootId": groups[identity], "rel": "", "rev": ""})
+    return projected
+
+
+def search_docs(query, limit=SEARCH_LIMIT_DEFAULT, include_stale=False, root_arg=None):
+    """Return only verified active documents unless stale history was requested.
+
+    The network and filesystem authority stay in Python. Native Rust receives
+    a bounded list of provenance decisions and returns selected indices only,
+    which are checked against the independent Python reference before use.
     """
     cfg = load_cfg()
     msgs = search_once(cfg, query, limit * 2 if not include_stale else limit * 4)
     ledger = _load_ledger()
     roots = doc_roots(root_arg)
-    entries = {}
-    for key, e in ledger.get("docs", {}).items():
-        entries[(e.get("root_id"), e.get("rel") or key.split("::", 1)[-1])] = e
-    items, seen = [], set()
-    for m in msgs:
-        content = m.get("content") or ""
-        if "docs-superseded:" in content:
-            continue  # supersession tombstones are never presented as guidance
-        m_ref = re.search(r"\[doc-ref:([^#\]]+)#([0-9a-f]{8})", content)
-        if not m_ref:
-            continue  # records that cannot be attributed to a ledger revision are not current
-        d_rel, d_rev = m_ref.group(1), m_ref.group(2)
-        m_root = re.search(r"^root-id: ([0-9a-f]{8})$", content, re.M)
-        root_hit = m_root.group(1) if m_root else None
-        matching_entry = entries.get((root_hit, d_rel))
-        active_rev = matching_entry.get("active_rev") if matching_entry else None
-        # Workspace scope applies to BOTH current and historical retrieval: an
-        # explicit --root (or configured allowlist) must not leak another
-        # workspace's history.
-        if roots and (matching_entry is None
-                      or not root_is_currently_authorised(matching_entry.get("root"), roots)):
-            continue
-        if not include_stale:
-            if active_rev is None:
-                continue  # record not present in the active revision ledger: not current
-            if active_rev != d_rev:
-                continue  # old revision: excluded from current retrieval
-            evidence = _entry_evidence(matching_entry, d_rel)
-            if evidence.get("status") != "DOC_INGEST_VERIFIED" or evidence.get("revision") != d_rev:
-                continue  # changed/missing/unverified source is not current guidance
-        dkey = (root_hit or "", d_rel, d_rev)
-        if dkey in seen:
-            continue
-        seen.add(dkey)
-        items.append({"source": d_rel, "root": root_hit, "revision": d_rev, "content": content[:1200]})
-        if len(items) >= limit:
-            break
-    return items
+    facts, display = _doc_retrieval_facts(msgs, ledger, roots, require_current=not include_stale)
+    selection = _select_retrieval_indices_reference(facts, limit, include_stale, bool(roots))
+    native = _rust_doc_policy("doc-index-select", {
+        "candidates": _native_retrieval_facts(facts), "limit": limit,
+        "includeStale": bool(include_stale), "rootsRestricted": bool(roots),
+    }, {"ok": True, "indices": selection})
+    return [display[i] for i in native["indices"]]
 
 
 def main():

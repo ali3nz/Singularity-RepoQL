@@ -43,3 +43,20 @@ Rollback/remove dashboard task **before** any stage retirement or upgrade. Regis
 ## Release rules
 
 A valid source tree or matching manifest is not proof of `rql.exe` signature/provenance, plugin launch ownership, real connector installation, panel authentication, native GUI integration or production readiness. Keep `releaseReady=false` until Codex verifies every relevant live gate on Windows and records redacted evidence.
+
+## Optional Rust route selection
+
+The Windows acceptance bundle can carry
+`bin/singularity-dashboard-routes.exe`. After staged inventory verification,
+add `-UseRustDashboardRoutes` to the existing `DashboardRegister` command
+to opt in. The registration binds the executable's staged SHA256 to the
+scheduled task and startup checks it again. Existing registrations are
+unchanged. To switch an existing task or restore the default, remove its
+owned task through `DashboardRemove -Apply` and register again with or
+without the flag. This does not reset dashboard state or credentials.
+
+Authentication and origin checks still run in Python before dispatch.
+The Rust selector receives only the public route key and read/write flag,
+then its result must match the Python route. It does not receive request
+bodies, tokens, cookies, query parameters, or private path suffixes.
+Native Windows authenticated browser acceptance is still required.

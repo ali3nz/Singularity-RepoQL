@@ -7,16 +7,18 @@ Windows runtime acceptance still requires independent browser authentication.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact='High')]
 param(
-  [ValidateSet('Plan','Register','Verify','Start','Stop','Remove')][string]$Mode='Plan',
+  [ValidateSet('Plan','Register','Rebind','Verify','Start','Stop','Remove')][string]$Mode='Plan',
   [string]$StagedSource='', [string]$PythonExe='', [string]$RepoqlExe='', [string]$NativeRuntimeRoot='',
+  [string]$RebindBackupReceipt='',
   [string]$NativeBridgeExe='', [string]$GhostControlConfig='',
   [string]$Workspace='', [ValidateRange(1,4)][int]$Variant=2,
-  [int]$Port=18100, [ValidateRange(1024,65534)][int]$OpenMausBotPort=18211, [switch]$Apply
+  [int]$Port=18100, [switch]$UseRustDashboardRoutes, [switch]$UseRustDashboardListener, [switch]$UseRustUnifiedProxy, [switch]$Apply
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'NATIVE_WINDOWS_REQUIRED' }
-$writes=$Mode -in @('Register','Remove','Start','Stop')
+$writes=$Mode -in @('Register','Rebind','Remove','Start','Stop')
+if (($UseRustDashboardRoutes -or $UseRustDashboardListener -or $UseRustUnifiedProxy) -and $Mode -notin @('Register','Rebind')) { throw 'RUST_DASHBOARD_OPTIONS_REQUIRE_REGISTRATION' }
 if ($writes -and -not $Apply) { throw 'DASHBOARD_EXPLICIT_APPLY_REQUIRED' }
 if (-not $writes -and $Apply) { throw 'DASHBOARD_READ_ONLY_REFUSES_APPLY' }
 if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA_REQUIRED' }
@@ -24,6 +26,8 @@ if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA_REQUIRED' }
 # accepting the old parameters for Stop/Remove compatibility, but reject any
 # non-empty values when creating a new task.
 if ($Mode -eq 'Register' -and ($NativeBridgeExe -or $GhostControlConfig)) { throw 'DASHBOARD_NATIVE_GHOST_PATH_NOT_ALLOWED' }
+if ($Mode -eq 'Rebind' -and ($NativeBridgeExe -or $GhostControlConfig)) { throw 'DASHBOARD_NATIVE_GHOST_PATH_NOT_ALLOWED' }
+if ([bool]$RebindBackupReceipt -ne ($Mode -eq 'Rebind')) { throw 'DASHBOARD_REBIND_BACKUP_REQUIRED_OR_OUT_OF_SCOPE' }
 $taskName=if ($Variant -eq 2) { 'Singularity-ClaudeComplete-Dashboard' } else { "Singularity-WindowsNative-Option$Variant-Dashboard" }
 $stateRelative=if ($Variant -eq 2) { 'Singularity\Dashboard' } else { "Singularity\Dashboard\Option$Variant" }
 $state=Join-Path $env:LOCALAPPDATA $stateRelative
@@ -60,32 +64,10 @@ function Get-TaskCandidates {
   catch { throw 'DASHBOARD_SCHEDULER_UNAVAILABLE' }
   return @($all | Where-Object { $_.TaskName -eq $taskName })
 }
-function Assert-ReceiptOpenMausBotPort($receipt) {
-  $property=$receipt.PSObject.Properties['openMausBotPort']
-  if (-not $property) { return } # Existing receipts and their original arguments remain valid.
-  $value=$property.Value
-  if (($value -isnot [int] -and $value -isnot [long]) -or $value -lt 1024 -or $value -gt 65534) {
-    throw 'DASHBOARD_OPENMAUSBOT_RECEIPT_INVALID'
-  }
-  # Registration emits only space-separated bare tokens and quoted paths,
-  # and refuses embedded quotes. Reject malformed input before tokenizing.
-  $arguments=[string]$receipt.arguments
-  if ($arguments -notmatch '^(?:"[^"]*"|[^\s"]+)(?:\s+(?:"[^"]*"|[^\s"]+))*$') {
-    throw 'DASHBOARD_OPENMAUSBOT_RECEIPT_INVALID'
-  }
-  $tokens=@([regex]::Matches($arguments,'"[^"]*"|[^\s"]+') | ForEach-Object { $_.Value })
-  $matches=@(for ($i=0; $i -lt $tokens.Count; $i++) { if ($tokens[$i] -ceq '--openmausbot-port') { $i } })
-  if ($matches.Count -ne 1 -or $matches[0] -ne $tokens.Count-4 -or
-      $tokens[$matches[0]+1] -cne [string]$value -or
-      $tokens[$matches[0]+2] -cne '--mode' -or $tokens[$matches[0]+3] -cne 'serve') {
-    throw 'DASHBOARD_OPENMAUSBOT_RECEIPT_INVALID'
-  }
-}
 function Get-OwnedReceipt {
   if (-not (Test-Path -LiteralPath $receiptFile -PathType Leaf)) { throw 'DASHBOARD_OWNERSHIP_RECEIPT_MISSING' }
   Assert-ReceiptAcl
   $receipt=Get-Content -LiteralPath $receiptFile -Raw -Encoding UTF8 | ConvertFrom-Json
-  Assert-ReceiptOpenMausBotPort $receipt
   $receiptVariant=if ($null -eq $receipt.variant) { 2 } else { [int]$receipt.variant }
   $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
   if (-not $identity -or -not $identity.User -or [string]$receipt.userId -notin @($identity.Name,$identity.User.Value)) { throw 'DASHBOARD_OWNERSHIP_RECEIPT_OWNER_MISMATCH' }
@@ -186,8 +168,9 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
     Remove-Item -LiteralPath $receiptFile -Force -ErrorAction Stop
     $hasReceipt=$false
   }
-} elseif ($Mode -eq 'Register') {
-  if ($existing.Count -ne 0 -or $hasReceipt) { throw 'DASHBOARD_ALREADY_REGISTERED' }
+} elseif ($Mode -in @('Register','Rebind')) {
+  if ($Mode -eq 'Register' -and ($existing.Count -ne 0 -or $hasReceipt)) { throw 'DASHBOARD_ALREADY_REGISTERED' }
+  if ($Mode -eq 'Rebind' -and ($existing.Count -ne 1 -or -not $hasReceipt -or [string]$existing[0].State -eq 'Running')) { throw 'DASHBOARD_REBIND_REQUIRES_STOPPED_OWNED_TASK' }
   $StagedSource=Assert-Path $StagedSource 'STAGED_SOURCE' $true
   $PythonExe=Assert-Path $PythonExe 'PYTHON'
   $RepoqlExe=Assert-Path $RepoqlExe 'REPOQL'
@@ -200,7 +183,7 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   if ([IO.Path]::GetFileName($PythonExe) -notin @('python.exe','python3.exe')) { throw 'DASHBOARD_PYTHON_EXE_REQUIRED' }
   if ([IO.Path]::GetFileName($RepoqlExe) -ne 'rql.exe' -or $Port -lt 1024 -or $Port -gt 65535) { throw 'DASHBOARD_DEPENDENCY_INVALID' }
   $entry=Assert-Path (Join-Path $StagedSource 'native/windows/claude_complete_dashboard_host.py') 'DASHBOARD_ENTRY'
-  foreach ($relative in @('dashboard/server.py','dashboard/native_repoql_gate.py','connectors/memorycore/manifest.yaml','connectors/kanzo/manifest.yaml')) {
+  foreach ($relative in @('dashboard/server.py','dashboard/dashboard_route_policy.py','dashboard/native_listener.py','dashboard/native_repoql_gate.py','connectors/memorycore/manifest.yaml','connectors/kanzo/manifest.yaml')) {
     $null=Assert-Path (Join-Path $StagedSource $relative) 'DASHBOARD_SOURCE'
   }
   # Before registering a persistent task verify the real pinned executable and
@@ -213,13 +196,39 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
   $silentHost=Assert-Path (Join-Path $StagedSource 'native/windows/silent_python_host.py') 'DASHBOARD_SILENT_HOST'
   $arguments='-B "'+$silentHost+'" --log "'+(Join-Path $state 'dashboard-runtime.log')+'" -- "'+$entry+'" --source-root "' +$StagedSource+'" --rql-exe "'+$RepoqlExe+'" --workspace "'+$Workspace+'" --state-dir "'+$state+'" --port '+$Port+' --variant '+$Variant
   if ($NativeRuntimeRoot) { $arguments+=' --native-runtime-root "'+$NativeRuntimeRoot+'"' }
-  $arguments+=' --openmausbot-port '+$OpenMausBotPort+' --mode serve'
+  if ($UseRustDashboardRoutes -or $UseRustDashboardListener -or $UseRustUnifiedProxy) {
+    $requested=[ordered]@{}
+    if ($UseRustDashboardRoutes) { $requested['bin/singularity-dashboard-routes.exe']='--rust-route-sha256' }
+    if ($UseRustDashboardListener) { $requested['bin/singularity-dashboard-listener.exe']='--rust-listener-sha256' }
+    if ($UseRustUnifiedProxy) { $requested['bin/singularity-unified-proxy.exe']='--rust-unified-proxy-sha256' }
+    $stageRoot=Split-Path -Parent $StagedSource
+    $stageFile=Assert-Path (Join-Path $stageRoot 'STAGING_RECEIPT.json') 'DASHBOARD_STAGE_RECEIPT'
+    $stageReceipt=Get-Content -LiteralPath $stageFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($Variant -ne 2 -or $stageReceipt.schema -ne 1 -or $stageReceipt.option -ne 2 -or
+        $stageReceipt.state -cne 'STAGED_UNVERIFIED' -or $stageReceipt.repoqlVersion -cne '1.7.18' -or
+        -not $stageReceipt.PSObject.Properties['additionalBinaries']) { throw 'DASHBOARD_STAGE_RECEIPT_INVALID' }
+    foreach ($name in $requested.Keys) {
+      $binary=Assert-Path (Join-Path $stageRoot $name) 'DASHBOARD_RUST_BINARY'
+      $rows=@($stageReceipt.additionalBinaries | Where-Object { $_.path -ceq $name })
+      $digest=(Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($rows.Count -ne 1 -or $digest -cne [string]$rows[0].sha256) { throw 'DASHBOARD_RUST_BINARY_HASH_DRIFT' }
+      $arguments+=' '+$requested[$name]+' '+$digest
+    }
+  }
+  $arguments+=' --mode serve'
   foreach ($value in @($entry,$silentHost,$pythonw,$StagedSource,$RepoqlExe,$Workspace,$state,$NativeRuntimeRoot)) {
     if ($value.Contains('"') -or $value.Contains([char]10) -or $value.Contains([char]13)) {
       throw 'DASHBOARD_ARGUMENTS_INVALID'
     }
   }
-  if ($PSCmdlet.ShouldProcess($taskName,'Register current-user dashboard task without starting it')) {
+  if ($Mode -eq 'Rebind') {
+    $RebindBackupReceipt=Assert-Path $RebindBackupReceipt 'REBIND_BACKUP_RECEIPT'
+    . (Assert-Path (Join-Path $PSScriptRoot 'task_action_transaction.ps1') 'TASK_ACTION_TRANSACTION')
+    $replacement=[ordered]@{schema=$receiptSchema;option=$Variant;variant=$Variant;taskName=$taskName;pythonExe=$pythonw;arguments=$arguments;workspace=$Workspace;userId=$user;nativeBridgeExe=[string]$owned.nativeBridgeExe;ghostControlConfig=[string]$owned.ghostControlConfig}
+    if ($PSCmdlet.ShouldProcess($taskName,'Rebind exact owned action preserving all startup/security settings')) {
+      Invoke-OwnedDashboardTaskRebind -BackupReceipt $RebindBackupReceipt -Replacement $replacement
+    }
+  } elseif ($PSCmdlet.ShouldProcess($taskName,'Register current-user dashboard task without starting it')) {
     if (-not (Test-Path -LiteralPath $state)) { New-Item -ItemType Directory -Path $state -Force | Out-Null }
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     $acl=[System.Security.AccessControl.DirectorySecurity]::new()
@@ -236,7 +245,7 @@ if ($Mode -in @('Verify','Start','Stop','Remove')) {
     # Write the ownership receipt BEFORE registration. On interruption, an
     # orphaned receipt/task blocks further changes for manual reconciliation.
     $receipt=[ordered]@{schema=$receiptSchema;option=$Variant;variant=$Variant;taskName=$taskName;pythonExe=$pythonw;arguments=$arguments;
-      workspace=$Workspace;userId=$user;openMausBotPort=$OpenMausBotPort;nativeBridgeExe=$NativeBridgeExe;ghostControlConfig=$GhostControlConfig}
+      workspace=$Workspace;userId=$user;nativeBridgeExe=$NativeBridgeExe;ghostControlConfig=$GhostControlConfig}
     $receipt | ConvertTo-Json -Compress | Set-Content -LiteralPath $receiptFile -Encoding UTF8 -NoNewline
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
     $result=@(Get-TaskCandidates)

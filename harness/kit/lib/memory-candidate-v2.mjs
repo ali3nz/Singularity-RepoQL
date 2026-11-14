@@ -1,3 +1,4 @@
+import { nativeMemoryPolicyEnabled, nativeCandidatePolicy, nativeCandidateTransition, nativeCandidateTtl } from "./native-memory-policy.mjs";
 // lib/memory-candidate-v2.mjs — second-brain delta 1 (hub ticket 180, Sol consult
 // 2026-09-29T10-07-37-757-85087). Memory-candidate-v2: provenance-first schema with
 // the operator-ladder lifecycle split. Design contract (Sol verdict, turn 2):
@@ -39,6 +40,7 @@ export function precedenceOfKind(kind) {
 }
 // Highest precedence among a candidate's provenance kinds (null when unanchored).
 export function precedenceRank(cand) {
+  if (nativeMemoryPolicyEnabled()) return nativeCandidatePolicy(cand).precedenceRank;
   const prov = Array.isArray(cand?.provenance) ? cand.provenance : [];
   const ranks = prov.map((p) => precedenceOfKind(p.kind)).filter((r) => r != null);
   return ranks.length ? Math.max(...ranks) : null;
@@ -141,6 +143,7 @@ export function validateCandidatesV2(rawList, ctx = {}) {
 // Hard invariant check (mechanical form): anchored = at least one valid provenance
 // entry with a locatable anchor.
 export function hasAnchoredProvenance(cand) {
+  if (nativeMemoryPolicyEnabled()) return nativeCandidatePolicy(cand).hasAnchoredProvenance;
   return (Array.isArray(cand?.provenance) ? cand.provenance : []).some((p) => !p.error && (p.uri || p.caseId || p.runId || p.evidenceSha256));
 }
 
@@ -152,6 +155,7 @@ export function canVerify(cand) {
 // subtle issue"): true when every provenance entry is `derived`. Such candidates
 // are memory about memory and must never count as independent verification.
 export function isDerivedProvenance(cand) {
+  if (nativeMemoryPolicyEnabled()) return nativeCandidatePolicy(cand).isDerivedProvenance;
   const prov = (Array.isArray(cand?.provenance) ? cand.provenance : []).filter((p) => !p.error);
   return prov.length > 0 && prov.every((p) => p.kind === "derived");
 }
@@ -160,6 +164,7 @@ export function isDerivedProvenance(cand) {
 // derived-from-memory nor tracing to the SAME source uri as the reference. Used by
 // the conflict gate so a Concept cannot verify its own paraphrase.
 export function hasIndependentProvenance(cand, { excludeUri = null } = {}) {
+  if (nativeMemoryPolicyEnabled()) return nativeCandidatePolicy(cand, excludeUri).hasIndependentProvenance;
   const prov = (Array.isArray(cand?.provenance) ? cand.provenance : []).filter((p) => !p.error);
   return prov.some((p) => p.kind !== "derived" && !(excludeUri && p.uri && p.uri === excludeUri));
 }
@@ -201,6 +206,10 @@ export function upgradeV1Candidate(v1, { seq = 1 } = {}) {
 // Anything else (sideways moves, silent widening, unknown targets) throws.
 export const TERMINAL_MEMORY_STATES = new Set(["EXPIRED", "SUPERSEDED", "INVALIDATED"]);
 export function validateLifecycleTransition(cand, toState, { verification = null } = {}) {
+  if (nativeMemoryPolicyEnabled()) {
+    const closedAt = TERMINAL_MEMORY_STATES.has(toState) ? new Date().toISOString() : null;
+    return nativeCandidateTransition(cand, toState, { verification, closedAt });
+  }
   const from = cand?.maturityState ?? "OBSERVATION";
   if (toState === "CANDIDATE") {
     if (from !== "OBSERVATION") throw new Error(`lifecycle: ${from}->CANDIDATE not allowed`);
@@ -224,6 +233,7 @@ export function validateLifecycleTransition(cand, toState, { verification = null
 // Pure date math — the CALLER decides what "revalidated" means (mechanical jobs
 // identify; they never rewrite knowledge, per the Sol contract).
 export function isTtlDue(cand, { now = new Date() } = {}) {
+  if (nativeMemoryPolicyEnabled()) return nativeCandidateTtl(cand, now);
   if (cand?.ttlDays == null) return { due: false, reason: "no ttl" };
   if (cand?.maturityState !== "VERIFIED") return { due: false, reason: `state ${cand.maturityState} is not TTL-managed` };
   const base = cand?.verifiedAt ?? cand?.promotedAt ?? cand?.observedAt ?? null;

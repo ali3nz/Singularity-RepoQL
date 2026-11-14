@@ -43,17 +43,35 @@ unless every recorded process still passes the ownership and health checks.
 ## Provenance and transforms
 
 `prepare` verifies the pinned tarball sha256 and the commit prefix in its name
-before staging. It never edits the vendored `memory/upstream` tree. Two small,
+before staging. It never edits the vendored `memory/upstream` tree. Three small,
 documented transforms are applied to staged copies only:
 
 1. **Core package transform** — drop the private/optional peer chain and alias
    the Jimp config-typescript peer so npm can install on this host. Runtime code
    is unchanged. The existing `core-v2.0.2-l1recordids` patch is applied first.
-2. **Knowledge loopback transform** — upstream calls
+2. **L1 extraction prompt** — after the existing core patch and before npm
+   builds, apply the fixed `core-v2.0.2-l1prompt` source override. Both chat and
+   code prompts preserve engineering decisions, exact evidence and open work,
+   and require a JSON array even for one scene. SHA256 checks normalize only
+   CRLF to LF for both preimage and override; unknown source is refused. The
+   dry-run exposes this step and prepare logs the applied digest.
+3. **Knowledge loopback transform** — upstream calls
    `serve({ fetch: app.fetch, port: config.port })` with no hostname, which binds
    `0.0.0.0`. The staged `src/server.ts` gains
    `hostname: process.env.HOST ?? "127.0.0.1"`. `start` re-checks the built
    `dist/server.mjs` and refuses a knowledge build without that option.
+
+## Prompt update and rollback
+
+Last updated: 2026-11-13. Prepare changes staged source only, not memory data.
+Do not run prepare against an active build or rebuild an existing prepared stack
+merely to refresh this prompt. Stage the new candidate separately. For an owned
+existing build, retain the old prompt and its digest in the installation backup
+before an approved maintenance update; restore those exact bytes to roll back.
+`PROMPT_PREIMAGE_SHA256_MISMATCH` means inspect the pinned revision and the
+actual source; never weaken the hash check. Windows CRLF is supported explicitly.
+The focused prompt fixture tests cover LF/CRLF, idempotency and tamper refusal;
+no model call is needed to validate the source transform.
 
 ## Known limitation
 

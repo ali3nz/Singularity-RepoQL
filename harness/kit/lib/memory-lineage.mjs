@@ -1,3 +1,4 @@
+import { nativeMemoryPolicyEnabled, nativeLineageFilter } from "./native-memory-policy.mjs";
 // lib/memory-lineage.mjs — Orchestra memory provenance hardening (hub ticket 305;
 // operator plan §1-41 "Orchestra Memory Provenance Hardening"; duo Sol consult
 // 2026-10-05T20-21-20-005-17600 verdict PASS WITH GATES). Provenance GRAPH =
@@ -701,6 +702,16 @@ export function markSupersessionStale({ sourceClaimId, supersedingClaimId, linea
 // (plan §19). Historical queries bypass this helper BY CALLING IT NOT AT ALL —
 // exclusion is opt-in at the current-truth call sites, never a global rewrite.
 export function excludeInvalidFromCurrentRetrieval(recordNames, lineageDir = resolveLineageDir()) {
+  if (nativeMemoryPolicyEnabled()) {
+    const names = Array.isArray(recordNames) ? recordNames : [];
+    const states = Object.create(null);
+    for (const name of names) {
+      // The existing strict authority reader remains the only filesystem
+      // boundary; never silently default to legacy_unknown after read failure.
+      states[name] = recordLineageState(lineageDir, name, true);
+    }
+    return nativeLineageFilter(names, states);
+  }
   const excluded = [];
   const kept = [];
   for (const n of recordNames ?? []) {

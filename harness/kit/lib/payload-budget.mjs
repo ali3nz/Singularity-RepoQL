@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { nativeMemoryPolicyEnabled, nativeBudgetPayload, nativeSplitIntoByteParts } from "./native-memory-policy.mjs";
 
 export const PAYLOAD_LIMITS = {
   attachTotalBytes: 24_000,   // matches consult --attach contract (8k x 3+)
@@ -19,6 +20,7 @@ function bytesOf(s) { return Buffer.byteLength(String(s ?? ""), "utf8"); }
 // files: [{name, content}] already transport-normalised by the caller.
 // Returns { ok, totalBytes, included:[{name,bytes,sha256}], omitted:[{name,bytes,reason}], reasons }
 export function budgetPayload(files, { totalCap = PAYLOAD_LIMITS.attachTotalBytes, perFileCap = PAYLOAD_LIMITS.attachPerFileBytes } = {}) {
+  if (nativeMemoryPolicyEnabled()) return nativeBudgetPayload(files, { totalCap, perFileCap });
   const included = [], omitted = [], reasons = [];
   let spent = 0;
   for (const f of files) {
@@ -55,6 +57,7 @@ export function requireWithinBudget(files, opts) {
 // names them partN. Guarantees: every part <= cap bytes; concatenation is
 // byte-identical to the input; no line is split mid-character.
 export function splitIntoByteParts(text, cap = PAYLOAD_LIMITS.attachPerFileBytes) {
+  if (nativeMemoryPolicyEnabled()) return nativeSplitIntoByteParts(text, cap);
   const s = String(text ?? "");
   if (!s) return [];
   const lines = s.split("\n");

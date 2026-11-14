@@ -33,10 +33,13 @@ import contextlib
 import datetime as dt
 from file_lock import fcntl
 import glob
+import itertools
 import hashlib
 import json
+import math
 import os
 import re
+import subprocess
 import sqlite3
 import sys
 import time
@@ -252,6 +255,88 @@ def provider_of(engine, model) -> str | None:
     return engine.lower() or None
 
 
+
+# Rust is an optional normalizer, never the telemetry owner. No prompt,
+# transcript, run identifier, credential, path, or error text enters the child.
+_MODEL_USAGE_FIELDS = ("engine", "model", "usageScope", "inputTokens", "outputTokens",
+                       "costUsd", "sendInputTokens", "sendOutputTokens", "sendCostUsd")
+
+def model_usage_metrics(rows, *, rust_bin=None, runner=subprocess.run):
+    """Normalize a bounded metadata batch and require exact native/Python parity.
+
+    The collector remains authoritative for file cursors, SQLite writes, and
+    retention. A mismatched native result never changes billed totals.
+    """
+    if len(rows) > 128:
+        raise ValueError("MODEL_USAGE_BATCH_TOO_LARGE")
+    expected = []
+    safe_rows = []
+    binary = rust_bin if rust_bin is not None else os.environ.get("SINGULARITY_RUST_TELEMETRY_BIN")
+    for row in rows:
+        provider = provider_of(row.get("engine"), row.get("model"))
+        measured_in, measured_out, cost = metered_outbound_fields(row)
+        engine = str(row.get("engine") or "").lower()
+        model = str(row.get("model") or "").lower()
+        receiving = (engine in {"openai-sol", "chatgpt", "chatgpt-sol"} or
+                     model.startswith("chatgpt/")) and all(
+                         item is None for item in (measured_in, measured_out, cost))
+        expected.append({"provider": provider, "tokens_in": measured_in,
+                         "tokens_out": measured_out, "cost_usd": cost,
+                         "cost_kind": ("review_receiving_side" if receiving else
+                                       "reported" if cost is not None else "unknown")})
+        if not binary:
+            continue  # do not impose native metadata limits on the default collector
+        # Deliberately whitelist only provider/usage accounting metadata.
+        entry = {}
+        for field in _MODEL_USAGE_FIELDS:
+            value = row.get(field)
+            if field in ("engine", "model"):
+                value = str(value or "")
+                if len(value.encode("utf8")) > 128:
+                    raise ValueError("MODEL_USAGE_METADATA_TOO_LARGE")
+            elif field == "usageScope":
+                if not isinstance(value, str):
+                    continue
+                if len(value.encode("utf8")) > 128:
+                    raise ValueError("MODEL_USAGE_METADATA_TOO_LARGE")
+            elif value is not None and (type(value) not in (int, float, bool)):
+                # Numeric metadata occasionally contains a legacy string. The
+                # original Python path can retain it, but native must not
+                # receive arbitrary text masquerading as accounting data.
+                raise ValueError("MODEL_USAGE_METADATA_INVALID")
+            if value is not None:
+                entry[field] = value
+        safe_rows.append(entry)
+    if not binary:
+        return expected
+    binary = Path(binary)
+    if not binary.is_absolute() or not binary.is_file() or binary.is_symlink():
+        raise RuntimeError("RUST_TELEMETRY_EXECUTABLE_INVALID")
+    parent = binary.parent
+    while parent != parent.parent:
+        if parent.is_symlink():
+            raise RuntimeError("RUST_TELEMETRY_EXECUTABLE_INVALID")
+        parent = parent.parent
+    request = json.dumps({"schema": "singularity-model-usage/v1", "rows": safe_rows},
+                         allow_nan=False, separators=(",", ":"))
+    if len(request.encode("utf8")) > 128 * 1024:
+        raise RuntimeError("RUST_TELEMETRY_REQUEST_TOO_LARGE")
+    # Explicitly do not forward caller credentials or access tokens as env vars.
+    child_env = {key: value for key, value in os.environ.items()
+                 if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME"}}
+    try:
+        run = runner([str(binary)], input=request, capture_output=True, text=True,
+                     timeout=8, check=False, env=child_env)
+        if run.returncode or len(run.stdout) > 1024 * 1024:
+            raise RuntimeError("RUST_TELEMETRY_EXECUTION_FAILED")
+        result = json.loads(run.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise RuntimeError("RUST_TELEMETRY_EXECUTION_FAILED") from exc
+    if not isinstance(result, dict) or result.get("ok") is not True or        not isinstance(result.get("metrics"), list) or result["metrics"] != expected:
+        raise RuntimeError("RUST_TELEMETRY_DIVERGENCE")
+    return result["metrics"]
+
+
 def percentile(values, pct: float):
     if not values:
         return None
@@ -267,6 +352,108 @@ def percentile(values, pct: float):
 
 def median(values):
     return percentile(values, 0.5)
+
+
+# Native performance projection is opt-in only. The existing authenticated
+# SQLite reader, coverage calculation, retention and source attribution remain
+# Python-owned. Child input contains numeric samples only, never run metadata.
+def performance_percentiles(durations, model_latency, *, rust_bin=None, runner=subprocess.run):
+    expected = {
+        "completion_ms": {"p50": percentile(durations, 0.5),
+                          "p95": percentile(durations, 0.95),
+                          "p99": percentile(durations, 0.99),
+                          "samples": len(durations)},
+        "model_latency_ms": {"p50": percentile(model_latency, 0.5),
+                             "p95": percentile(model_latency, 0.95),
+                             "samples": len(model_latency)},
+    }
+    binary = (os.environ.get('SINGULARITY_HARNESS_PERCENTILES_RUST_BINARY', '')
+              if rust_bin is None else rust_bin)
+    if not binary:
+        return expected
+    if len(durations) + len(model_latency) > 20_000:
+        raise RuntimeError('harness_rust_percentiles_too_many_samples')
+    for value in itertools.chain(durations, model_latency):
+        if type(value) not in (int, float) or not math.isfinite(value) or abs(value) > 1e12:
+            raise RuntimeError('harness_rust_percentiles_invalid_sample')
+    path = Path(binary)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        raise RuntimeError('harness_rust_percentiles_binary_invalid')
+    parent = path.parent
+    while parent != parent.parent:
+        if parent.is_symlink():
+            raise RuntimeError('harness_rust_percentiles_binary_invalid')
+        parent = parent.parent
+    request = json.dumps({"schema": "singularity-harness-percentiles/v1",
+                          "completion_ms": durations, "model_latency_ms": model_latency},
+                         separators=(',', ':'), allow_nan=False)
+    if len(request.encode('utf8')) > 512 * 1024:
+        raise RuntimeError('harness_rust_percentiles_request_too_large')
+    child_env = {key: value for key, value in os.environ.items()
+                 if key.upper() in {'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'HOME'}}
+    try:
+        run = runner([str(path)], input=request, capture_output=True, text=True,
+                     timeout=8, check=False, shell=False, env=child_env)
+        if run.returncode or len(run.stdout) > 4096:
+            raise RuntimeError('harness_rust_percentiles_execution_failed')
+        actual = json.loads(run.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise RuntimeError('harness_rust_percentiles_execution_failed') from exc
+    if actual != expected:
+        raise RuntimeError('harness_rust_percentiles_parity_mismatch')
+    return actual
+
+
+# Rust may only count already aggregated numeric receipt metadata. Provider
+# charges, cost rounding, billing scope and database ownership remain Python.
+def usage_counter_projection(rows, completed, *, rust_bin=None, runner=subprocess.run):
+    binary = (os.environ.get('SINGULARITY_HARNESS_USAGE_RUST_BINARY', '')
+              if rust_bin is None else rust_bin)
+    safe_rows = []
+    if binary:
+        if len(rows) > 500 or type(completed) is not int or not 0 <= completed <= 10**12:
+            raise RuntimeError('harness_rust_usage_invalid_count')
+        for row in rows:
+            # No names, identities, model strings, costs, receipt IDs or paths.
+            values = [row[name] for name in ('calls', 'tin_samples', 'tout_samples', 'reported_calls')]
+            if any(type(value) is not int or not 0 <= value <= 10**12 for value in values):
+                raise RuntimeError('harness_rust_usage_invalid_count')
+            if any(value > values[0] for value in values[1:]):
+                raise RuntimeError('harness_rust_usage_inconsistent_counts')
+            safe_rows.append(values)
+    expected = {
+        "calls_without_input_tokens": sum(int(r["calls"] or 0) - int(r["tin_samples"] or 0) for r in rows),
+        "calls_without_output_tokens": sum(int(r["calls"] or 0) - int(r["tout_samples"] or 0) for r in rows),
+        "paid_calls": sum(r["reported_calls"] for r in rows),
+        "completed_tasks": int(completed),
+    }
+    if not binary:
+        return expected
+    path = Path(binary)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        raise RuntimeError('harness_rust_usage_binary_invalid')
+    parent = path.parent
+    while parent != parent.parent:
+        if parent.is_symlink():
+            raise RuntimeError('harness_rust_usage_binary_invalid')
+        parent = parent.parent
+    request = json.dumps({"schema": "singularity-harness-usage-counts/v1",
+                          "rows": safe_rows, "completed": completed}, separators=(',', ':'))
+    if len(request.encode('utf8')) > 64 * 1024:
+        raise RuntimeError('harness_rust_usage_request_too_large')
+    child_env = {key: value for key, value in os.environ.items()
+                 if key.upper() in {'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'HOME'}}
+    try:
+        run = runner([str(path)], input=request, capture_output=True, text=True,
+                     timeout=8, check=False, shell=False, env=child_env)
+        if run.returncode or len(run.stdout) > 4096:
+            raise RuntimeError('harness_rust_usage_execution_failed')
+        actual = json.loads(run.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise RuntimeError('harness_rust_usage_execution_failed') from exc
+    if actual != expected:
+        raise RuntimeError('harness_rust_usage_parity_mismatch')
+    return actual
 
 
 
@@ -817,65 +1004,68 @@ class Collector:
         inode = path.stat().st_ino
         start = int(cur["offset"]) if cur["inode"] in (None, inode) else 0
         count = 0
-        for end, line in iter_jsonl_tail(path, start):
-            start = end
-            try:
-                row = json.loads(line.decode("utf-8", "replace"))
-            except ValueError:
-                continue
-            ts = to_iso(row.get("timestamp"))
-            if not ts:
-                continue
-            ok = bool(row.get("success"))
-            model = str(row.get("model") or "")
-            engine = str(row.get("engine") or "")
-            measured_in, measured_out, cost = metered_outbound_fields(row)
-            engine_name = str(row.get("engine") or "").lower()
-            model_name = str(row.get("model") or "").lower()
-            review_receiver = (engine_name in {"openai-sol", "chatgpt", "chatgpt-sol"} or
-                               model_name.startswith("chatgpt/")) and measured_in is None and measured_out is None and cost is None
-            cost_kind = "review_receiving_side" if review_receiver else ("reported" if cost is not None else "unknown")
-            detail = f"{row.get('purpose') or row.get('component') or 'call'}"
-            if row.get("fallbackFrom"):
-                detail += f" (fallback from {row.get('fallbackFrom')})"
-            if row.get("attempt") and int(row.get("attempt") or 1) > 1:
-                detail += f" attempt {row.get('attempt')}"
-            inserted = self.s.add_event({
-                "ts": ts, "category": "model", "kind": "model_call",
-                "severity": "info" if ok else "warn", "status": "ok" if ok else "failed",
-                "run_id": str(row.get("runId") or "") or None, "agent": str(row.get("role") or row.get("component") or ""),
-                "model": model, "provider": provider_of(engine, model), "mode": None,
-                "duration_ms": int(row["durationMs"]) if isinstance(row.get("durationMs"), (int, float)) else None,
-                "ok": 1 if ok else 0, "tokens_in": measured_in, "tokens_out": measured_out,
-                "cost_usd": cost,
-                "cost_kind": cost_kind, "error_category": None if ok else str(row.get("failureClass") or "UNKNOWN"),
-                "detail": scrub(detail, 140), "source": "engine-usage",
-                "dedup_key": f"model:{ts}:{row.get('runId')}:{fmt_hash(line.decode('utf-8', 'replace')[:400])}"})
-            day = ts[:10]
-            if inserted:
-                self.s.bump_daily(day, "model_calls")
-                if not ok:
-                    self.s.bump_daily(day, "model_failed")
-                if measured_in is not None:
-                    self.s.bump_daily(day, "tokens_in", measured_in)
-                if measured_out is not None:
-                    self.s.bump_daily(day, "tokens_out", measured_out)
-                if row.get("freebucksUsed"):
-                    self.s.bump_daily(day, "freebucks", row["freebucksUsed"])
-                if isinstance(cost, (int, float)):
-                    self.s.bump_daily(day, "cost_reported_usd", cost)
-            if row.get("fallbackFrom"):
-                fallback_inserted = self.s.add_event({
-                    "ts": ts, "category": "model", "kind": "model_fallback", "severity": "warn",
-                    "status": "fallback", "run_id": row.get("runId"), "agent": row.get("role"),
-                    "model": model, "provider": provider_of(engine, model),
-                    "detail": f"{row.get('fallbackFrom')} -> {engine}/{model}", "source": "engine-usage",
-                    "dedup_key": f"fb:{ts}:{row.get('runId')}:{row.get('fallbackFrom')}"})
-                if fallback_inserted:
-                    self.s.bump_daily(day, "fallbacks")
-            if int(row.get("attempt") or 1) > 1 and inserted:
-                self.s.bump_daily(day, "retries")
-            count += 1
+        source = iter_jsonl_tail(path, start)
+        while chunk := list(itertools.islice(source, 128)):
+            decoded = []
+            for end, line in chunk:
+                start = end
+                try:
+                    row = json.loads(line.decode("utf-8", "replace"))
+                except ValueError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                ts = to_iso(row.get("timestamp"))
+                if ts:
+                    decoded.append((line, row, ts))
+            metrics = model_usage_metrics([row for _, row, _ in decoded])
+            for (line, row, ts), metric in zip(decoded, metrics):
+                ok = bool(row.get("success"))
+                model = str(row.get("model") or "")
+                engine = str(row.get("engine") or "")
+                measured_in, measured_out, cost = (metric["tokens_in"], metric["tokens_out"], metric["cost_usd"])
+                cost_kind = metric["cost_kind"]
+                detail = f"{row.get('purpose') or row.get('component') or 'call'}"
+                if row.get("fallbackFrom"):
+                    detail += f" (fallback from {row.get('fallbackFrom')})"
+                if row.get("attempt") and int(row.get("attempt") or 1) > 1:
+                    detail += f" attempt {row.get('attempt')}"
+                inserted = self.s.add_event({
+                    "ts": ts, "category": "model", "kind": "model_call",
+                    "severity": "info" if ok else "warn", "status": "ok" if ok else "failed",
+                    "run_id": str(row.get("runId") or "") or None, "agent": str(row.get("role") or row.get("component") or ""),
+                    "model": model, "provider": metric["provider"], "mode": None,
+                    "duration_ms": int(row["durationMs"]) if isinstance(row.get("durationMs"), (int, float)) else None,
+                    "ok": 1 if ok else 0, "tokens_in": measured_in, "tokens_out": measured_out,
+                    "cost_usd": cost,
+                    "cost_kind": cost_kind, "error_category": None if ok else str(row.get("failureClass") or "UNKNOWN"),
+                    "detail": scrub(detail, 140), "source": "engine-usage",
+                    "dedup_key": f"model:{ts}:{row.get('runId')}:{fmt_hash(line.decode('utf-8', 'replace')[:400])}"})
+                day = ts[:10]
+                if inserted:
+                    self.s.bump_daily(day, "model_calls")
+                    if not ok:
+                        self.s.bump_daily(day, "model_failed")
+                    if measured_in is not None:
+                        self.s.bump_daily(day, "tokens_in", measured_in)
+                    if measured_out is not None:
+                        self.s.bump_daily(day, "tokens_out", measured_out)
+                    if row.get("freebucksUsed"):
+                        self.s.bump_daily(day, "freebucks", row["freebucksUsed"])
+                    if isinstance(cost, (int, float)):
+                        self.s.bump_daily(day, "cost_reported_usd", cost)
+                if row.get("fallbackFrom"):
+                    fallback_inserted = self.s.add_event({
+                        "ts": ts, "category": "model", "kind": "model_fallback", "severity": "warn",
+                        "status": "fallback", "run_id": row.get("runId"), "agent": row.get("role"),
+                        "model": model, "provider": metric["provider"],
+                        "detail": f"{row.get('fallbackFrom')} -> {engine}/{model}", "source": "engine-usage",
+                        "dedup_key": f"fb:{ts}:{row.get('runId')}:{row.get('fallbackFrom')}"})
+                    if fallback_inserted:
+                        self.s.bump_daily(day, "fallbacks")
+                if int(row.get("attempt") or 1) > 1 and inserted:
+                    self.s.bump_daily(day, "retries")
+                count += 1
         self.s.save_cursor(path, start, inode, path.stat().st_mtime, count)
         return {"records": count}
 
@@ -1373,19 +1563,10 @@ class Harness:
             events = self._q(
                 "SELECT kind,agent,model,provider,stage,status,ts,detail,duration_ms FROM events "
                 "WHERE run_id=? AND category IN ('agent','model','run') ORDER BY ts DESC LIMIT 200", (r["run_id"],))
-            seats = {}
-            for ev in reversed(events):
-                agent = ev["agent"] or "coordinator"
-                if ev["kind"] in ("agent_assigned", "agent_started", "agent_waiting", "agent_error"):
-                    cur = seats.setdefault(agent, {"agent": agent, "model": None, "provider": None,
-                                                   "stage": None, "status": "assigned", "started_at": None,
-                                                   "last_event": None, "duration_ms": None})
-                    cur["model"] = cur["model"] or ev["model"]
-                    cur["provider"] = cur["provider"] or ev["provider"]
-                    cur["stage"] = ev["stage"] or cur["stage"]
-                    cur["status"] = "error" if ev["kind"] == "agent_error" else ev["status"] or cur["status"]
-                    cur["started_at"] = cur["started_at"] or ev["ts"]
-                    cur["last_event"] = ev["ts"]
+            # The optional Rust state machine only sees numeric event positions
+            # and boolean field presence. No agent identity or event body crosses.
+            from agent_seat_projection import project_agent_seats
+            seats = project_agent_seats(events)
             updated = parse_iso(r["updated_at"])
             stale = bool(updated and not r["ended_at"] and (now - updated).total_seconds() > 900)
             for seat in seats.values():
@@ -1526,12 +1707,9 @@ class Harness:
             "range": range_key,
             "coverage": dict(coverage, terminal_in_window=undone),
             "refresh_seconds": int(float(self.store.setting("dashboard_refresh_seconds"))),
-            "completion_ms": {"p50": percentile(durations, 0.5), "p95": percentile(durations, 0.95),
-                              "p99": percentile(durations, 0.99), "samples": len(durations)},
+            **performance_percentiles(durations, model_latency),
             "throughput_per_day": by_day,
             "stage_duration_ms": stage_rows[:200],
-            "model_latency_ms": {"p50": percentile(model_latency, 0.5), "p95": percentile(model_latency, 0.95),
-                                 "samples": len(model_latency)},
             "tool_latency_ms": {"p50": None, "p95": None, "samples": int(tool_latency_rows[0]["n"]),
                                 "unavailable_reason": "the existing tool audit records decisions, not durations"},
             "fallbacks": int(fallback),
@@ -1575,16 +1753,13 @@ class Harness:
             "range": range_key,
             "refresh_seconds": int(float(self.store.setting("dashboard_refresh_seconds"))),
             "by_model": rows,
-            "calls_without_input_tokens": sum(int(r["calls"] or 0) - int(r["tin_samples"] or 0) for r in rows),
-            "calls_without_output_tokens": sum(int(r["calls"] or 0) - int(r["tout_samples"] or 0) for r in rows),
+            **usage_counter_projection(rows, completed),
             "daily": by_day,
-            "paid_calls": reported,
             "estimated_usd": None,
             "reported_usd": cost,
             "cost_status": "reported" if reported else "unknown",
             "cost_note": "Only verified outbound provider charges are counted; receiving-side Sol/ChatGPT reviews are excluded from token and cost usage. Subscription usage is never priced as spend.",
             "cost_per_completed_task": round(cost / completed, 6) if cost is not None and completed else None,
-            "completed_tasks": int(completed),
         }
 
     # -- events ------------------------------------------------------

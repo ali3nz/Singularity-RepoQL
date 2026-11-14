@@ -35,7 +35,7 @@ class SupervisorHealthTests(unittest.TestCase):
         finally:c.close()
 
     def test_native_probe_identifies_dashboard_without_token(self):
-        with patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_INSTALL_VARIANT':'3'}):
+        with patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_INSTALL_VARIANT':'2'}):
             status, identity, body = self.fetch()
         self.assertEqual(status,200)
         self.assertEqual(identity,'dashboard')
@@ -48,7 +48,7 @@ class SupervisorHealthTests(unittest.TestCase):
         self.assertIsNone(identity)
 
     def test_mutating_method_is_refused(self):
-        with patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_INSTALL_VARIANT':'3'}):
+        with patch.dict(os.environ,{'SINGULARITY_WINDOWS_NATIVE':'1','SINGULARITY_INSTALL_VARIANT':'2'}):
             status,identity,_=self.fetch('POST')
         self.assertNotEqual(status,200)
         self.assertIsNone(identity)

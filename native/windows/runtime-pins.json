@@ -7,14 +7,6 @@
     "sha256": "ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2",
     "verified": "node --version printed v24.22.2 after extraction; npm 11.19.1"
   },
-  "ghostRunner": {
-    "kind": "npm",
-    "package": "@openai/codex",
-    "version": "0.166.0",
-    "installPrefix": "%LOCALAPPDATA%\\Singularity\\runtime\\npm-global",
-    "binaryRelPath": "node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
-    "verified": "codex-cli 0.166.0 printed on .241 after npm install -g with --prefix"
-  },
   "repoql": {
     "version": "1.7.18",
     "installerUrl": "https://downloads.repoql.ai/latest/install-rql.ps1",

@@ -1,63 +1,52 @@
-"""Native Windows source packaging boundary, not proof of runtime parity."""
+"""Single full Claude Code source scope for Windows. No retired assistant GUI."""
 
-# Keep Linux production sources in the FULL repository snapshot for parity review,
-# but never place their deployment entrypoints in a native Windows option archive.
-# This is a package-content rule, NOT a claim that remaining code works on Windows.
 LINUX_RUNTIME_PREFIXES = (
     'compose/', 'systemd/', 'memory/upstream/', 'memory/portable/systemd/',
 )
 LINUX_RUNTIME_FILES = {
     'dashboard/docker-compose.yml', 'dashboard/.env.example',
     'dashboard/config.example.json', 'dashboard/collector.py',
-    # OpenCode v1/Linux example; Windows must generate OpenCode 2 mcp.servers.
-    'openchamber/opencode.jsonc',
 }
-
-# These are the Windows-specific Ghost scheduler files. They remain named
-# explicitly as a backstop, while windows_ghost_source below covers Ghost
-# runtime, module, and agent files no matter which classifier group contains
-# them.
-WINDOWS_GHOST_ONLY_FILES = frozenset({
+RETIRED_PREFIXES = (
+    'ghost/', 'openchamber/', 'native/gui-plugins/openchamber/',
+    'harness/openchamber-patches/', 'harness/kit/prompts/',
+)
+RETIRED_FILES = {
+    'native/desktop-bridge/src/ghost.rs',
+    'office/patches/windows-ghost-only.patch',
     'native/windows/ghost_scheduler_host.py',
     'native/windows/ghost_task_scheduler.ps1',
     'native/windows/manage_ghost_scheduler.ps1',
-    'native/windows/test_ghost_scheduler_host.py',
-})
+    # Retired multi-product entrypoints. The supported Windows installer is
+    # native/windows/install_claude_complete.ps1.
+    'native/windows/manage_native_windows.ps1',
+    'native/windows/bootstrap_runtime.ps1',
+    'native/windows/a4_run_step.ps1',
+    'native/windows/test_native_windows_manager_contract.py',
+    'native/windows/test_native_install_lifecycle_contract.py',
+    'native/windows/test_native_install_lifecycle_behaviour.ps1',
+    'scripts/install-claude-code.mjs',
+    'scripts/doctor.mjs',
+    'scripts/provision-secrets.py',
+    'scripts/install-claude-code.gate.test.mjs',
+    'scripts/install-claude-code.components.test.mjs',
+    'scripts/install-claude-code.profiles.test.mjs',
+    'scripts/doctor.test.mjs',
+}
 
-WINDOWS_OFFICE_ONLY_PREFIXES = (
-    'office/',
-    'openchamber/plugins/product-office/',
-)
-WINDOWS_OFFICE_ONLY_FILES = frozenset({
-    'native/desktop-bridge/src/office.rs',
-    'dashboard/office_bridge.py',
-    'native/gui-plugins/openchamber/singularity-office.mjs',
-})
-WINDOWS_OFFICE_GHOST_REMOVAL_PATCH = 'office/patches/windows-ghost-only.patch'
-
-
-def windows_ghost_source(name: str) -> bool:
-    """Return true for Ghost payloads wherever the bundle classifier put them."""
+def windows_retired_source(name: str) -> bool:
     normalized = name.replace('\\', '/').casefold()
-    if normalized == WINDOWS_OFFICE_GHOST_REMOVAL_PATCH:
-        return False
-    return 'ghost' in normalized
-
+    return (normalized.startswith(RETIRED_PREFIXES) or normalized in RETIRED_FILES
+            or 'ghost' in normalized or 'openchamber' in normalized)
 
 def windows_office_source(name: str) -> bool:
-    """Return true for Office-only payloads that must stay out of options 1/3."""
     normalized = name.replace('\\', '/').casefold()
-    return (normalized.startswith(WINDOWS_OFFICE_ONLY_PREFIXES)
-            or normalized in WINDOWS_OFFICE_ONLY_FILES
-            or 'office' in normalized)
-
+    return normalized.startswith('office/') or normalized in ('native/desktop-bridge/src/office.rs', 'dashboard/office_bridge.py')
 
 def windows_variant_excludes(name: str, variant: int) -> bool:
-    if variant not in (1, 2, 3, 4):
-        raise ValueError('variant must be 1 through 4')
-    if windows_ghost_source(name):
-        return True
-    return variant in (1, 3) and windows_office_source(name)
+    if variant != 2:
+        raise ValueError('Windows product supports only Claude Code Full')
+    return windows_retired_source(name)
 
 def linux_deployment_asset(name: str) -> bool:
     basename = name.rsplit('/', 1)[-1].lower()

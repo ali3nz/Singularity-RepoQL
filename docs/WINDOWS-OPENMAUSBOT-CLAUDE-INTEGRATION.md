@@ -119,3 +119,28 @@ a health endpoint or an on-disk digest alone does not prove the live turn uses
 them. Onsite acceptance still requires one real bot execution, a verified
 repair, a Markdown report and an acknowledged OMB chat message; a source template
 or a successful `team apply` by itself is not proof of an autonomous maintainer.
+
+## Changing the supervised headless runtime
+
+This is separate from the paired desktop MCP client. On a native Windows
+acceptance machine, the product owned headless task can use the optional
+windowless Rust supervisor already verified and staged under
+`WindowsNative/current/bin`. First use `manage_openmausbot.ps1 -Mode Plan`
+to confirm the task is owned. Unregister it through the same manager before
+changing the launcher. Unregister leaves the vendor files, lease history,
+receipt, and data intact.
+
+```powershell
+.\native\windows\manage_openmausbot.ps1 -Mode Unregister -Apply
+.\native\windows\manage_openmausbot.ps1 -Mode Install -Apply -ChangeSupervisor -UseRustSupervisor
+.\native\windows\manage_openmausbot.ps1 -Mode Start -Apply
+.\native\windows\manage_openmausbot.ps1 -Mode Verify
+```
+
+To return to the Node launcher, repeat the unregister and install sequence
+without `-UseRustSupervisor`, keeping `-ChangeSupervisor`. The manager
+requires an existing owned receipt, no registered task, and free ports
+before switching. A registration interruption can be resumed using the same
+requested mode. A fresh installation uses `-UseRustSupervisor` without
+`-ChangeSupervisor`. Task registration and the Rust Job Object must still
+be exercised on native Windows.

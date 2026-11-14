@@ -15,7 +15,7 @@ class StageNativeContracts(unittest.TestCase):
         for marker in ('PREVIOUS_ROLLBACK_SNAPSHOT_EXISTS', 'Move-Item -LiteralPath $current -Destination $previous', 'Move-Item -LiteralPath $staging -Destination $current', 'Move-Item -LiteralPath $previous -Destination $current'):
             self.assertIn(marker,SRC)
     def test_rollback_does_not_require_original_binaries(self):
-        self.assertIn("if (-not $Rollback -and $Option -notin @(1,2,3,4))", SRC)
+        self.assertIn("if (-not $Rollback -and $Option -ne 2)", SRC)
         for name in ('SourceRoot', 'BridgeExe', 'RepoqlExe', 'GuiExe'):
             self.assertNotIn(f'[Parameter(Mandatory = $true)][string]${name}', SRC)
         self.assertIn('ROLLBACK_RECEIPT_INVALID', SRC)

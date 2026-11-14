@@ -1,5 +1,7 @@
 # Singularity RepoQL Windows Setup
 
+**Historical installer only.** The current single profile source archive does not ship the legacy manager required by this GUI. Its build and setup entry points now refuse before any installation changes. For current candidates use the [phased Windows installation](../../../docs/WINDOWS-NATIVE-M46-OPTION2-PHASED-INSTALL.md) after native build and acceptance. The artifact and commands below refer only to the historical build.
+
 `Singularity-RepoQL-Setup.exe` installs the per-user native Windows product, the
 Claude Code integration, a Windows-local Kanzo board, and the local Tencent
 MemoryCore/MemoryPanel stack. It does not use Dockerhost or an SSH tunnel for

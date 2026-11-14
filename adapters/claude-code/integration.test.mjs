@@ -9,7 +9,6 @@ import { AGENT_MAP, resolveSingularityAgent } from "./agent-map.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const AGENT_FILES = readdirSync(join(HERE, "agents")).filter((f) => f.endsWith(".md")).sort();
-const OPENCHAMBER_AGENTS = join(HERE, "..", "..", "openchamber", "agents");
 const read = (name) => readFileSync(join(HERE, "agents", `${name}.md`), "utf8");
 
 function parseFrontmatter(text) {
@@ -23,17 +22,6 @@ function parseFrontmatter(text) {
     if (match) { key = match[1]; fm[key] = match[2]; }
   }
   return fm;
-}
-
-function openchamberMode(file) {
-  return parseFrontmatter(readFileSync(join(OPENCHAMBER_AGENTS, file), "utf8")).mode;
-}
-
-function openchamberFilesByMode(mode) {
-  return readdirSync(OPENCHAMBER_AGENTS)
-    .filter((f) => f.endsWith(".md") && openchamberMode(f) === mode)
-    .map((f) => f.replace(/\.md$/, ""))
-    .sort();
 }
 
 test("every mapped agent has a definition file, and every file is mapped", () => {
@@ -99,14 +87,13 @@ test("identity map: every delegation target maps to one unique MemoryCore identi
   const ids = Object.values(AGENT_MAP).map((e) => e.memoryAgentId).filter((x) => x !== null);
   assert.equal(new Set(ids).size, ids.length, "no two claude agents share one memory identity");
   for (const [claudeName, entry] of Object.entries(AGENT_MAP)) {
-    assert.ok(existsSync(join(HERE, "..", "..", entry.sourceDef)), `${claudeName} maps to the real OpenChamber definition ${entry.sourceDef}`);
+    assert.equal(entry.sourceDef, `adapters/claude-code/agents/${claudeName}.md`);
+    assert.ok(existsSync(join(HERE, "..", "..", entry.sourceDef)), `${claudeName} maps to a shipped definition`);
     assert.ok(["subagent", "main"].includes(entry.surface), `${claudeName}: known surface`);
     if (entry.surface === "main") assert.equal(entry.memoryAgentId, null, `${claudeName}: main surfaces have no duplicate identity`);
-    else assert.equal(typeof entry.memoryAgentId, "string", `${claudeName}: delegation targets carry an identity`);
+    else assert.equal(entry.memoryAgentId, claudeName.slice("singularity-".length), `${claudeName}: delegated identity`);
   }
   assert.equal(ids.includes("ghost"), false, "Ghost keeps its own ghost-companion profile — never a second identity");
-  const openchamberNames = readdirSync(OPENCHAMBER_AGENTS).map((f) => f.replace(/\.md$/, ""));
-  for (const id of ids) assert.ok(openchamberNames.includes(id), `memoryAgentId ${id} matches the OpenChamber roster`);
 });
 
 test("resolveSingularityAgent accepts only delegation targets with a singularity-* name", () => {
@@ -120,35 +107,18 @@ test("resolveSingularityAgent accepts only delegation targets with a singularity
   assert.equal(resolveSingularityAgent(undefined), null);
 });
 
-// --- roster rules ----------------------------------------------------------
-//
-// The surface ALWAYS mirrors the source definition's mode in openchamber/agents/.
-// A `mode: subagent` role is a delegation target; a `mode: primary` role is a
-// main-session surface launched with `claude --agent`. We no longer claim that a
-// primary role can never be installed in ~/.claude/agents (Claude Code has no
-// field that hides a definition from the Agent tool); instead we assert the
-// classification is honest and that every main-surface body declares its launch
-// form and refuses delegated authority.
-
-const SURFACE_BY_MODE = { subagent: "subagent", primary: "main" };
-
-test("surface mirrors the source definition's mode for every mapped agent", () => {
-  for (const [claudeName, entry] of Object.entries(AGENT_MAP)) {
-    const roleFile = entry.sourceDef.split("/").pop();
-    assert.equal(entry.surface, SURFACE_BY_MODE[openchamberMode(roleFile)], `${claudeName}: surface must mirror ${roleFile} mode`);
-  }
-  const mainRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "main").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
-  const subRoles = Object.values(AGENT_MAP).filter((e) => e.surface === "subagent").map((e) => e.sourceDef.split("/").pop().replace(/\.md$/, "")).sort();
-  // Claude's roster is a documented subset of OpenChamber's: the Windows product
-  // retired these roles, so they are intentionally not installed from Claude.
+test("retained Claude Code definitions have the expected main and delegated surfaces", () => {
+  const roles = (surface) => Object.entries(AGENT_MAP)
+    .filter(([, entry]) => entry.surface === surface)
+    .map(([name]) => name.slice("singularity-".length))
+    .sort();
   const RETIRED = Object.freeze(["quality-fixer", "fleet-reviewer", "researcher-web", "orchestrator", "solo-coordinator", "standalone", "free-mode", "ghost"]);
   for (const retired of RETIRED) {
     assert.equal(Object.keys(AGENT_MAP).includes(`singularity-${retired}`), false, `${retired} is retired`);
     assert.equal(AGENT_FILES.includes(`singularity-${retired}.md`), false, `${retired} definition is not shipped`);
   }
-  assert.deepEqual(subRoles, openchamberFilesByMode("subagent").filter((n) => !RETIRED.includes(n)), "every retained subagent-mode role is a delegation target");
-  assert.deepEqual(mainRoles, openchamberFilesByMode("primary").filter((n) => !RETIRED.includes(n)),
-    "every retained primary-mode role is a main-session surface");
+  assert.deepEqual(roles("subagent"), ["board", "code-reviewer", "explore", "general", "thinker"]);
+  assert.deepEqual(roles("main"), ["duel-coordinator", "duo", "quad-coordinator", "super"]);
 });
 
 test("every main-surface definition states its launch form and refuses delegated authority", () => {

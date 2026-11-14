@@ -16,6 +16,7 @@
 use crate::run_state::{self, RunStore};
 use serde_json::{json, Value};
 use std::fs;
+#[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -25,14 +26,19 @@ use std::os::unix::net::{UnixListener, UnixStream};
 #[path = "authority_windows.rs"]
 mod windows;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use std::time::Duration;
 
 pub const PROTOCOL_VERSION: u64 = 1;
 pub const AUTHORITY_SCHEMA: &str = "orchestra-authority/1";
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
+#[cfg(unix)]
 pub const MAX_CONNECTIONS: usize = 32;
+#[cfg(unix)]
 pub const SOCKET_NAME: &str = "authority.sock";
 pub const META_DIR: &str = ".rust-authority";
 

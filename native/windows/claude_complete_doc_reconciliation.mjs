@@ -9,6 +9,7 @@ import {dirname,isAbsolute,resolve,win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {canonicalTestDoc,verifyDocumentParity,repoqlExecutableRead,repoqlExecutableIndexCount,requirePinnedRepoql} from './claude_complete_doc_parity.mjs';
 import {verifyFile,searchDocs} from '../../scripts/doc-ingest-node.mjs';
+import {nativeMemoryPolicyEnabled,requestNativeMemoryPolicy} from '../../harness/kit/lib/native-memory-policy.mjs';
 export const SCHEMA='singularity-claude-complete-reconciliation-manifest/v1';
 function fail(code){throw new Error(code)}
 const hasOnly=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&
@@ -32,10 +33,14 @@ export function planReconciliation(root,manifest){
 }
 
 function actionFor(issues){
-  if(issues.includes('SOURCE_CHANGED_DURING_READBACK'))return 'STABILIZE_SOURCE_THEN_REPEAT';
-  if(issues.some(x=>x.startsWith('TENCENT_')))return 'INVESTIGATE_TENCENT_INGESTION_AND_READBACK';
-  if(issues.some(x=>x.startsWith('REPOQL_')))return 'INVESTIGATE_REPOQL_INDEX_AND_READBACK';
-  return issues.length?'REVIEW_READBACK_FAILURE':'NONE';
+  const expected=issues.includes('SOURCE_CHANGED_DURING_READBACK')?'STABILIZE_SOURCE_THEN_REPEAT':
+    issues.some(x=>x.startsWith('TENCENT_'))?'INVESTIGATE_TENCENT_INGESTION_AND_READBACK':
+    issues.some(x=>x.startsWith('REPOQL_'))?'INVESTIGATE_REPOQL_INDEX_AND_READBACK':
+    issues.length?'REVIEW_READBACK_FAILURE':'NONE';
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const result=requestNativeMemoryPolicy('doc-reconcile-action',{issues});
+  if (result.action!==expected) fail('NATIVE_DOC_RECONCILIATION_DIVERGENCE');
+  return result.action;
 }
 
 /** Mockable adapters are supplied ONLY by the tests or the live CLI. */

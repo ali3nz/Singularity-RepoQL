@@ -34,8 +34,11 @@
 // requires operator recovery after verifying both engines are stopped.
 import { createHash, randomUUID } from "node:crypto";
 import {
+  closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -46,6 +49,8 @@ import {
 } from "node:fs";
 import { delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
+import { commitNativeDocLedger, nativeDocIndexPolicyEnabled, requestNativeDocIndexPolicy, writeNativeDocChunk } from "./document-learning-rust.mjs";
 
 export class Blocked extends Error {}
 
@@ -169,8 +174,12 @@ export function documentIdentity(rootAbs, rel) {
 
 // ── memory gateway client ────────────────────────────────────────────────────
 
+function configPath(env) {
+  return resolve(String(env.SINGULARITY_MEMORY_CONFIG || env.MEMORY_SECRETS || DEFAULT_MEMORY_SECRETS));
+}
+
 export function loadConfig(env = process.env) {
-  const p = resolve(String(env.SINGULARITY_MEMORY_CONFIG || env.MEMORY_SECRETS || DEFAULT_MEMORY_SECRETS));
+  const p = configPath(env);
   let cfg;
   try {
     cfg = JSON.parse(readFileSync(p, "utf8"));
@@ -239,11 +248,18 @@ async function searchOnce(cfg, query, limit, ctx) {
   return (found.data || {}).messages || [];
 }
 
+async function markerVisible(cfg, marker, limit, ctx) {
+  const binary = ctx.env.SINGULARITY_DOC_WRITE_RUST_BIN;
+  if (binary) return writeNativeDocChunk({ ...scopeOf(ctx.env), query:marker, limit },
+    {binary, config:configPath(ctx.env), origin:baseUrl(ctx.env,cfg),
+      serviceId:cfgAuth(cfg).serviceId, env:ctx.env, marker:true});
+  return (await searchOnce(cfg, marker, limit, ctx)).some(m => String(m?.content || "").includes(marker));
+}
+
 async function markerSearchable(cfg, marker, deadline, ctx) {
   for (;;) {
     try {
-      const messages = await searchOnce(cfg, marker, SEARCH_LIMIT_DEFAULT, ctx);
-      if (messages.some((m) => String(m?.content || "").includes(marker))) return true;
+      if (await markerVisible(cfg, marker, SEARCH_LIMIT_DEFAULT, ctx)) return true;
     } catch {
       /* eventual indexing: transient gateway errors keep polling */
     }
@@ -252,49 +268,111 @@ async function markerSearchable(cfg, marker, deadline, ctx) {
   }
 }
 
-async function writeChunk(cfg, chunkTask, chunkText, recordedAt, ctx) {
+async function nativeIntentVerified(cfg, taskId, messages, ctx) {
+  const binary = ctx.env.SINGULARITY_DOC_WRITE_RUST_BIN;
+  if (binary) return writeNativeDocChunk({
+    ...scopeOf(ctx.env), session_id: DOCS_SESSION, task_id: taskId, messages,
+  }, {binary, config:configPath(ctx.env), origin:baseUrl(ctx.env,cfg), serviceId:cfgAuth(cfg).serviceId, env:ctx.env, verify:true});
+  const response = ensureSuccess(await memoryCall("/conversation/query", {
+    ...scopeOf(ctx.env), session_id: DOCS_SESSION, task_id: taskId, offset: 0, limit: 100,
+  }, ctx, cfg), "documentation task readback");
+  const rows = response.data?.messages;
+  if (!Array.isArray(rows) || rows.length >= 100) return false;
+  const normalize = content => {
+    const i = content.indexOf("\n\n");
+    if (i < 0) return content;
+    return content.slice(0, i).replace(/^ingested: [^\n]+$/gm, "ingested:") + content.slice(i);
+  };
+  return messages.every(message => rows.some(row => row?.task_id === taskId &&
+    row.role === message.role && typeof row.content === "string" &&
+    normalize(row.content) === normalize(message.content)));
+}
+
+function nativeTarget(cfg, ctx) {
+  const auth = cfgAuth(cfg);
+  const scope = scopeOf(ctx.env);
+  return sha(JSON.stringify([baseUrl(ctx.env,cfg), scope.team_id, scope.user_id,
+    scope.agent_id, auth.serviceId ?? null]));
+}
+
+async function writeChunk(cfg, chunkTask, chunkText, recordedAt, ctx, rec, intent, publish) {
+  const binary = ctx.env.SINGULARITY_DOC_WRITE_RUST_BIN;
   try {
-    const existing = await searchOnce(cfg, chunkTask.marker, 10, ctx);
-    if (existing.some((m) => String(m?.content || "").includes(chunkTask.marker))) return "present";
-    ensureSuccess(
-      await memoryCall("/conversation/add", {
-        ...scopeOf(ctx.env),
-        session_id: DOCS_SESSION,
-        task_id: chunkTask.taskId,
-        messages: [
-          { role: "user", content: chunkText, recorded_at: recordedAt },
-          { role: "assistant", content: `Documentation record ${chunkTask.marker} acknowledged.`, recorded_at: recordedAt },
-        ],
-      }, ctx, cfg),
-      `chunk add ${chunkTask.taskId}`,
-    );
+    let searchable;
+    try {
+      searchable = await markerVisible(cfg, chunkTask.marker, 10, ctx);
+    } catch (error) {
+      if (binary) return "uncertain";
+      throw error;
+    }
+    const messages = [
+      { role: "user", content: chunkText, recorded_at: recordedAt },
+      { role: "assistant", content: `Documentation record ${chunkTask.marker} acknowledged.`, recorded_at: recordedAt },
+    ];
+    // Search absence alone cannot distinguish a lost response from a
+    // committed write whose index has not caught up. A single search hit can
+    // also be a partial write. Require exact task readback of both messages.
+    if (intent.includes(chunkTask.taskId)) {
+      try {
+        if (searchable && await nativeIntentVerified(cfg, chunkTask.taskId, messages, ctx)) return "present";
+      } catch { /* an unavailable query cannot authorize another write */ }
+      return "uncertain";
+    }
+    if (searchable) return "present";
+    const body = {...scopeOf(ctx.env), session_id: DOCS_SESSION, task_id: chunkTask.taskId, messages};
+    if (binary) {
+      rec.write_target = nativeTarget(cfg, ctx);
+      intent.push(chunkTask.taskId);
+      publish();
+      try {
+        writeNativeDocChunk(body, {binary, config:configPath(ctx.env),
+          origin:baseUrl(ctx.env,cfg), serviceId:cfgAuth(cfg).serviceId, env:ctx.env});
+        if (!(await nativeIntentVerified(cfg, chunkTask.taskId, messages, ctx))) return "uncertain";
+      } catch {
+        // Never retry or substitute the JavaScript HTTP path.
+        return "uncertain";
+      }
+    } else {
+      ensureSuccess(await memoryCall("/conversation/add", body, ctx, cfg), `chunk add ${chunkTask.taskId}`);
+    }
     return "written";
   } catch (e) {
+    if (e instanceof Blocked) throw e;
     throw new Error(`chunk write failed (${chunkTask.taskId}): ${e?.message || e}`);
   }
 }
 
-async function writeSupersession(cfg, docId8, oldRev, newRev, ctx) {
+async function writeSupersession(cfg, docId8, oldRev, newRev, ctx, rec, publish) {
   const marker = `[docs-superseded:${docId8}:${oldRev}->${newRev}]`;
+  const taskId = marker.slice(1, -1);
+  const messages = [{
+    role: "user",
+    content: `${marker} Documentation revision ${oldRev} of document ${docId8} is SUPERSEDED by revision ${newRev}. Never present revision ${oldRev} as current guidance.`,
+    recorded_at: timestamp(ctx.now()),
+  }];
+  const binary = ctx.env.SINGULARITY_DOC_WRITE_RUST_BIN;
+  const pending = rec.supersession_intent;
   try {
-    const existing = await searchOnce(cfg, marker, 5, ctx);
-    if (existing.some((m) => String(m?.content || "").includes(marker))) return "present";
-    ensureSuccess(
-      await memoryCall("/conversation/add", {
-        ...scopeOf(ctx.env),
-        session_id: DOCS_SESSION,
-        task_id: marker.replace(/^\[|\]$/g, ""),
-        messages: [{
-          role: "user",
-          content: `${marker} Documentation revision ${oldRev} of document ${docId8} is SUPERSEDED by revision ${newRev}. Never present revision ${oldRev} as current guidance.`,
-          recorded_at: timestamp(ctx.now()),
-        }],
-      }, ctx, cfg),
-      "supersession tombstone",
-    );
+    const searchable = await markerVisible(cfg, marker, 5, ctx);
+    if (pending !== undefined) {
+      return searchable && await nativeIntentVerified(cfg, taskId, messages, ctx) ? "present" : "uncertain";
+    }
+    if (searchable) return "present";
+    const body = {...scopeOf(ctx.env), session_id:DOCS_SESSION, task_id:taskId, messages};
+    if (binary) {
+      rec.supersession_intent = taskId;
+      rec.write_target = nativeTarget(cfg, ctx);
+      publish();
+      try {
+        writeNativeDocChunk(body, {binary, config:configPath(ctx.env), origin:baseUrl(ctx.env,cfg), serviceId:cfgAuth(cfg).serviceId, env:ctx.env});
+        return await nativeIntentVerified(cfg, taskId, messages, ctx) ? "written" : "uncertain";
+      } catch { return "uncertain"; }
+    }
+    ensureSuccess(await memoryCall("/conversation/add", body, ctx, cfg), "supersession tombstone");
     return "written";
   } catch (e) {
-    return `failed: ${e?.message || e}`;
+    if (e instanceof Blocked) throw e;
+    return pending !== undefined || binary ? "uncertain" : `failed: ${e?.message || e}`;
   }
 }
 
@@ -363,36 +441,78 @@ export function rejectSensitive(text, rel) {
   }
 }
 
-/** Split into <=MAX_CHUNK_CHARS chunks on headings, respecting fenced blocks. */
-export function chunkMarkdown(text) {
+/** Exact-result native doc policy. Credential screening precedes this call
+ * in the canonical ingest path. Native selection cannot bypass the Node
+ * source contract or turn an unverified revision into current guidance. */
+function checkedDocIndex(command, request, reference, env) {
+  if (!nativeDocIndexPolicyEnabled(env)) return reference;
+  let actual;
+  try { actual = requestNativeDocIndexPolicy(command, request, env); }
+  catch { throw new Blocked("native documentation policy unavailable or disagrees with the source contract"); }
+  if (!isDeepStrictEqual(actual, reference)) {
+    throw new Blocked("native documentation policy unavailable or disagrees with the source contract");
+  }
+  return actual;
+}
+
+/** Split into <=7,000 *Unicode code points* per chunk, never silently
+ * truncating or accumulating an oversized physical line. */
+export function chunkMarkdown(text, env = process.env) {
   const lines = splitLines(text);
   const chunks = [];
   let current = [];
   let currentChars = 0;
   let fence = false;
+  function flush() {
+    if (current.length) chunks.push(current.join("\n"));
+    current = [];
+    currentChars = 0;
+  }
   for (const line of lines) {
     if (line.trim().startsWith("```")) fence = !fence;
     const isHeading = !fence && /^#{1,3} /.test(line);
-    if (isHeading && currentChars >= MAX_CHUNK_CHARS * 0.6 && current.length) {
-      chunks.push(current.join("\n"));
-      current = [];
-      currentChars = 0;
+    if (isHeading && currentChars >= MAX_CHUNK_CHARS * 0.6 && current.length) flush();
+    const units = Array.from(line);
+    if (units.length + 1 > MAX_CHUNK_CHARS) {
+      flush();
+      for (let i = 0; i < units.length; i += MAX_CHUNK_CHARS) {
+        const part = units.slice(i, i + MAX_CHUNK_CHARS).join("");
+        if (part && Array.from(part).length === MAX_CHUNK_CHARS) chunks.push(part);
+        else {
+          current = [part];
+          currentChars = Array.from(part).length + 1;
+        }
+        if (chunks.length > MAX_CHUNKS) throw new Blocked(`document needs more than ${MAX_CHUNKS} chunks; split it into smaller docs`);
+      }
+      continue;
     }
-    if (line.length + 1 > MAX_CHUNK_CHARS && currentChars > 0) {
-      chunks.push(current.join("\n"));
-      current = [];
-      currentChars = 0;
-    }
-    if (line.length + 1 > MAX_CHUNK_CHARS) {
-      for (let i = 0; i < line.length; i += MAX_CHUNK_CHARS - 1) current.push(line.slice(i, i + MAX_CHUNK_CHARS - 1));
-    } else {
-      current.push(line);
-    }
-    currentChars += line.length + 1;
+    if (current.length && currentChars + units.length + 1 > MAX_CHUNK_CHARS) flush();
+    current.push(line);
+    currentChars += units.length + 1;
+    if (chunks.length > MAX_CHUNKS) throw new Blocked(`document needs more than ${MAX_CHUNKS} chunks; split it into smaller docs`);
   }
-  if (current.length) chunks.push(current.join("\n"));
+  flush();
   if (chunks.length > MAX_CHUNKS) throw new Blocked(`document needs ${chunks.length} chunks (max ${MAX_CHUNKS}); split it into smaller docs`);
-  return chunks;
+  return checkedDocIndex('doc-index-chunks', {text}, {ok:true,chunks}, env).chunks;
+}
+
+function chunkWritePlan(chunks, rel, title, rootId, docId8, rev, ts, env) {
+  const scope = scopeOf(env);
+  const tasks = chunks.map((body, index) => {
+    const i = index + 1;
+    const chunkHash = sha8(body);
+    const taskId = `docs-${docId8}-r${rev}-c${String(i).padStart(2, '0')}`;
+    const marker = `[doc-ref:${rel}#${rev} chunk ${i}/${chunks.length} hash ${chunkHash}]`;
+    const header = `${marker}\ntitle: ${title}\nsource: ${rel} (canonical file on disk — this memory record is its indexed copy)\n` +
+      `revision: ${rev}\nroot-id: ${rootId}\nchunk: ${i}/${chunks.length}\ncontent-hash: ${chunkHash}\n` +
+      `scope: ${scope.team_id}/${scope.user_id}\ningested: ${ts}\n\n`;
+    return {task_id:taskId,marker,text:header+body,hash:chunkHash};
+  });
+  const checked = checkedDocIndex('doc-index-plan', {
+    chunks, rel, title, rootId, docId:docId8, rev, timestamp:ts,
+    team:scope.team_id, user:scope.user_id,
+  }, {ok:true,tasks}, env);
+  return checked.tasks.map(({task_id,marker,text,hash}) => ({taskId:task_id,marker,text,hash}));
 }
 
 // ── ledger (atomic + lock directory) ─────────────────────────────────────────
@@ -411,18 +531,25 @@ function acquireLock(lockDir, ctx) {
         try { rmdirSync(lockDir); } catch { /* uncertain ownership: fail closed */ }
         throw e;
       }
-      return () => {
-        // A replaced lock must NEVER be released by the old writer.
+      const assertOwner = () => {
+        // A replaced lock must NEVER be used by the old writer.
         try {
           if (readFileSync(ownerPath, "utf8") !== owner) {
             throw new Error(`ledger lock ownership changed: ${lockDir}`);
           }
-          rmSync(ownerPath);
-          rmdirSync(lockDir);
         } catch (e) {
           if (e?.code !== "ENOENT") throw e;
           throw new Error(`ledger lock disappeared while held: ${lockDir}`);
         }
+      };
+      return {
+        owner,
+        assertOwner,
+        release() {
+          assertOwner();
+          rmSync(ownerPath);
+          rmdirSync(lockDir);
+        },
       };
     } catch (e) {
       if (e?.code !== "EEXIST") throw e;
@@ -438,16 +565,49 @@ export async function withLedger(fn, opts = {}) {
   const ctx = ctxOf(opts);
   const file = ledgerPath(ctx.env);
   mkdirSync(dirname(file), { recursive: true });
-  const release = acquireLock(lockDirPath(ctx.env), ctx);
+  const lock = acquireLock(lockDirPath(ctx.env), ctx);
   try {
     const ledger = loadLedger(ctx.env);
-    const result = await fn(ledger);
-    const tmp = join(dirname(file), "ledger.tmp");
-    writeFileSync(tmp, ledgerJson(ledger));
-    renameSync(tmp, file); // atomic: no torn ledger on crash
+    const publish = () => {
+      const serialized = ledgerJson(ledger);
+      const tmp = join(dirname(file), `.ledger-${randomUUID()}.tmp`);
+      const fd = openSync(tmp, "wx", 0o600);
+      let published = false;
+      try {
+        try {
+          writeFileSync(fd, serialized, "utf8");
+          fsyncSync(fd);
+        } finally {
+          closeSync(fd);
+        }
+        lock.assertOwner();
+        if (ctx.env.SINGULARITY_DOC_LEDGER_COMMIT_RUST_BIN) {
+          try {
+            const result = commitNativeDocLedger({
+              schema: "singularity-doc-ledger-commit/v1",
+              temp: tmp, owner: lock.owner,
+            }, ctx.env);
+            if (!isDeepStrictEqual(result, {ok: true, published: true}) || existsSync(tmp)
+              || !statSync(file).isFile() || statSync(file).size !== Buffer.byteLength(serialized, "utf8")
+              || !readFileSync(file).equals(Buffer.from(serialized, "utf8")))
+              throw new Error("unconfirmed publication");
+          } catch {
+            // The child may have committed before a missing response. No fallback.
+            throw new Blocked("native document ledger commit unconfirmed; inspect ledger before retry");
+          }
+        } else {
+          renameSync(tmp, file);
+        }
+        published = true;
+      } finally {
+        if (!published) rmSync(tmp, { force: true });
+      }
+    };
+    const result = await fn(ledger, publish);
+    publish();
     return result;
   } finally {
-    release();
+    lock.release();
   }
 }
 
@@ -503,7 +663,7 @@ export async function ingestFile(filePath, opts = {}) {
     return {status:'DOC_INGEST_BLOCKED',file:rel,reason:'EXPECTED_SOURCE_REVISION_CHANGED'};
   const docId8 = sha8(key);
 
-  return withLedger(async (ledger) => {
+  return withLedger(async (ledger, publish) => {
     const entry = ledger.docs[key] || { rel, root: toPosix(resolve(rootDir)), root_id: rootId, doc_id: docId8, title, active_rev: null, revs: {} };
     ledger.docs[key] = entry;
     entry.root = toPosix(resolve(rootDir));
@@ -521,9 +681,15 @@ export async function ingestFile(filePath, opts = {}) {
       return report;
     }
 
+    // A pending tombstone may already have changed the remote revision
+    // chain. A later edit cannot commit around that uncertain transition.
+    if (Object.entries(entry.revs).some(([other, row]) =>
+        other !== rev && row && Object.hasOwn(row, 'supersession_intent')))
+      throw new Blocked("DOC_NATIVE_PRIOR_SUPERSESSION_UNCONFIRMED");
+
     let chunks;
     try {
-      chunks = chunkMarkdown(text);
+      chunks = chunkMarkdown(text, ctx.env);
     } catch (e) {
       if (!(e instanceof Blocked)) throw e;
       const rec = entry.revs[rev] || {};
@@ -535,23 +701,31 @@ export async function ingestFile(filePath, opts = {}) {
       return report;
     }
 
-    const chunkTasks = chunks.map((body, index) => {
-      const i = index + 1;
-      const chunkHash = sha8(body);
-      const taskId = `docs-${docId8}-r${rev}-c${String(i).padStart(2, "0")}`;
-      const marker = `[doc-ref:${rel}#${rev} chunk ${i}/${chunks.length} hash ${chunkHash}]`;
-      const scope = scopeOf(ctx.env);
-      const header = `${marker}\ntitle: ${title}\nsource: ${rel} (canonical file on disk — this memory record is its indexed copy)\n` +
-        `revision: ${rev}\nroot-id: ${rootId}\nchunk: ${i}/${chunks.length}\ncontent-hash: ${chunkHash}\n` +
-        `scope: ${scope.team_id}/${scope.user_id}\ningested: ${ts}\n\n`;
-      return { taskId, marker, text: header + body, hash: chunkHash };
-    });
+    let chunkTasks;
+    try {
+      chunkTasks = chunkWritePlan(chunks, rel, title, rootId, docId8, rev, ts, ctx.env);
+    } catch (e) {
+      if (!(e instanceof Blocked)) throw e;
+      const rec = entry.revs[rev] || {};
+      rec.status = "DOC_INGEST_BLOCKED";
+      rec.reason = e.message.slice(0, 400);
+      entry.revs[rev] = rec;
+      report.status = "DOC_INGEST_BLOCKED";
+      report.reason = rec.reason;
+      return report;
+    }
 
     const rec = entry.revs[rev] || { status: "DOC_INGEST_PENDING", chunks: chunks.length, ingested_at: ts };
     rec.task_ids = chunkTasks.map((t) => t.taskId);
     rec.hashes = chunkTasks.map((t) => t.hash);
     rec.chunks = chunks.length;
+    const intent = Object.hasOwn(rec, 'write_intents') ? rec.write_intents : [];
+    if (!Array.isArray(intent) || intent.some(id => !rec.task_ids.includes(id)) ||
+        new Set(intent).size !== intent.length)
+      throw new Blocked("DOC_LEDGER_WRITE_INTENT_INVALID");
+    if (intent.length || ctx.env.SINGULARITY_DOC_WRITE_RUST_BIN) rec.write_intents = intent;
     rec.status = "DOC_INGEST_PENDING";
+    delete rec.reason;
     // Parity with the Python engine: a new record always carries `session`
     // (null when absent), and an explicit session wins over a recorded one.
     rec.session = opts.session || rec.session || null;
@@ -569,10 +743,24 @@ export async function ingestFile(filePath, opts = {}) {
       return report;
     }
 
+    const expectedSupersession = entry.active_rev && entry.active_rev !== rev
+      ? `docs-superseded:${docId8}:${entry.active_rev}->${rev}` : null;
+    if (Object.hasOwn(rec, 'supersession_intent') && rec.supersession_intent !== expectedSupersession)
+      throw new Blocked("DOC_LEDGER_SUPERSESSION_INTENT_INVALID");
+    if (Object.hasOwn(rec, 'write_target') && rec.write_target !== nativeTarget(cfg, ctx))
+      throw new Blocked("DOC_NATIVE_WRITE_TARGET_CHANGED");
+
+    // Persist the intent while holding the shared owner lock. The previous
+    // active revision remains current until successful readback.
+    publish();
     for (const task of chunkTasks) {
       try {
-        await writeChunk(cfg, task, task.text, ts, ctx);
+        if (await writeChunk(cfg, task, task.text, ts, ctx, rec, intent, publish) === "uncertain") {
+          rec.reason = "DOC_NATIVE_WRITE_UNCONFIRMED: wait for readback or reconcile before retry";
+          return {...report, status: rec.status, reason: rec.reason};
+        }
       } catch (e) {
+        if (e instanceof Blocked) throw e;
         rec.status = "DOC_INGEST_FAILED";
         rec.reason = String(e?.message || e).slice(0, 400);
         report.status = rec.status;
@@ -594,12 +782,19 @@ export async function ingestFile(filePath, opts = {}) {
       return report;
     }
 
+    let superseded = null;
+    if (expectedSupersession) {
+      superseded = await writeSupersession(cfg, docId8, entry.active_rev, rev, ctx, rec, publish);
+      if (superseded === "uncertain") {
+        rec.reason = "DOC_NATIVE_SUPERSESSION_UNCONFIRMED: verify the prior revision before retry";
+        return {...report, status: rec.status, reason: rec.reason};
+      }
+    }
+    delete rec.write_intents;
+    delete rec.write_target;
+    delete rec.supersession_intent;
     rec.status = "DOC_INGEST_INDEXED";
     rec.verified_at = ts;
-    let superseded = null;
-    if (entry.active_rev && entry.active_rev !== rev) {
-      superseded = await writeSupersession(cfg, docId8, entry.active_rev, rev, ctx);
-    }
     entry.active_rev = rev;
     entry.last_verified = ts;
     report.status = "DOC_INGEST_INDEXED";
@@ -616,27 +811,40 @@ export function rootIdOf(rootArg) {
   return sha8(toPosix(resolve(rootArg)));
 }
 
-export function locateEntryKey(ledger, filePath, rootArg) {
+function locateEntryIndexReference(candidates, rootPinned) {
+  let first = null;
+  for (const [index, [matches, rootMatches]] of candidates.entries()) {
+    if (!matches) continue;
+    if (rootPinned) {
+      if (rootMatches) return index;
+    } else if (first === null) {
+      first = index;
+    } else {
+      return null;
+    }
+  }
+  return first;
+}
+
+export function locateEntryKey(ledger, filePath, rootArg, env = process.env) {
   const given = toPosix(filePath);
   const rootPin = rootArg !== undefined && rootArg !== null ? rootIdOf(rootArg) : null;
-  const matches = [];
+  const keys = [];
+  const candidates = [];
   for (const [key, entry] of Object.entries(ledger.docs || {})) {
     const rel = entry?.rel || key.split("::").slice(1).join("::");
     const rootAbs = entry?.root;
-    if (given === rel) matches.push(key);
-    else if (given.endsWith(`/${rel}`)) matches.push(key);
-    else if (isAbsolute(given) && rootAbs && given === toPosix(join(rootAbs, rel))) matches.push(key);
+    const matches = given === rel || given.endsWith(`/${rel}`) ||
+      Boolean(isAbsolute(given) && rootAbs && given === toPosix(join(rootAbs, rel)));
+    keys.push(key);
+    candidates.push([matches, rootPin !== null && key.split("::")[0] === rootPin]);
   }
-  if (!matches.length) return null;
-  if (matches.length === 1) {
-    if (rootPin === null || matches[0].split("::")[0] === rootPin) return matches[0];
-    return null;
-  }
-  if (rootPin !== null) {
-    for (const key of matches) if (key.split("::")[0] === rootPin) return key;
-  }
-  return null; // ambiguous: caller must pass a matching --root
+  const rootPinned = rootPin !== null;
+  const index = locateEntryIndexReference(candidates, rootPinned);
+  const checked = checkedDocIndex("doc-index-locate", {candidates, rootPinned}, {ok:true,index}, env);
+  return checked.index === null ? null : keys[checked.index];
 }
+
 
 export function resolveEntryTarget(entry) {
   const rootAbs = entry?.root;
@@ -687,7 +895,7 @@ export async function retryDocuments(opts = {}) {
   const ledger = loadLedger(env);
   let wantedKey = null;
   if (!all && filePath) {
-    wantedKey = locateEntryKey(ledger, filePath, root);
+    wantedKey = locateEntryKey(ledger, filePath, root, env);
     if (wantedKey === null) {
       return [{ status: "DOC_INGEST_BLOCKED", file: String(filePath), reason: "no ledger record matches --file (nothing recorded for this document)" }];
     }
@@ -758,7 +966,7 @@ export function statusReport(opts = {}) {
   const rootPin = root !== undefined && root !== null ? rootIdOf(root) : null;
   const out = [];
   if (filePath && !all) {
-    const wanted = locateEntryKey(ledger, filePath, root);
+    const wanted = locateEntryKey(ledger, filePath, root, env);
     if (wanted !== null) out.push(statusRow(ledger.docs[wanted], filePath));
     return out;
   }
@@ -858,46 +1066,80 @@ function entryEvidence(entry, relE) {
  * document identity AND revision match a verified active ledger revision in the
  * same scope are current guidance; absent/superseded records need `stale`.
  */
+function selectDocIndicesReference(candidates, limit, includeStale, rootsRestricted) {
+  const selected = [];
+  const seen = new Set();
+  for (const row of candidates) {
+    if (row.superseded || !row.validMarker) continue;
+    if (rootsRestricted && (!row.hasEntry || !row.rootAllowed)) continue;
+    if (!includeStale && (!row.activeRevMatches || !row.verifiedActive)) continue;
+    const key = `${row.rootId}\u0000${row.rel}\u0000${row.rev}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push(row.index);
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
+/**
+ * Project only equality-preserving synthetic IDs to the Rust deduplication
+ * policy. Canonical root, relative document name and revision remain in JS.
+ */
+function nativeRetrievalFacts(facts) {
+  const groups = new Map();
+  return facts.map(({rootId, rel, rev, ...flags}) => {
+    const key = JSON.stringify([rootId, rel, rev]);
+    if (!groups.has(key)) groups.set(key, String(groups.size));
+    return {...flags, rootId:groups.get(key), rel:'', rev:''};
+  });
+}
+
+/**
+ * Current documentation is verified against the canonical source and revision
+ * ledger BEFORE the native policy process sees any facts. Rust sees no
+ * credentials, retrieved message body or document identity.
+ */
 export async function searchDocs(query, opts = {}) {
   const ctx = ctxOf({ ...opts, env: envForRoot(opts.env, opts.root) });
   const limit = opts.limit ?? SEARCH_LIMIT_DEFAULT;
   const includeStale = Boolean(opts.stale);
-  const root = opts.root;
   const cfg = loadConfig(ctx.env);
   const messages = await searchOnce(cfg, query, includeStale ? limit * 4 : limit * 2, ctx);
   const ledger = loadLedger(ctx.env);
-  const authorisedRoots = docRoots(root, ctx.env);
+  const authorisedRoots = docRoots(opts.root, ctx.env);
   const entries = new Map();
   for (const [key, entry] of Object.entries(ledger.docs || {})) {
-    entries.set(`${entry?.root_id ?? ""}\u0000${entry?.rel || key.split("::").slice(1).join("::")}`, entry);
+    entries.set(`${entry?.root_id ?? ''}\u0000${entry?.rel || key.split('::').slice(1).join('::')}`, entry);
   }
-  const items = [];
-  const seen = new Set();
-  for (const message of messages) {
-    const content = String(message?.content || "");
-    if (content.includes("docs-superseded:")) continue; // tombstones are never guidance
-    const ref = content.match(/\[doc-ref:([^#\]]+)#([0-9a-f]{8})/);
-    if (!ref) continue; // unattributable records are not current
-    const [, dRel, dRev] = ref;
-    const rootHit = content.match(/^root-id: ([0-9a-f]{8})$/m)?.[1] ?? null;
-    const entry = entries.get(`${rootHit ?? ""}\u0000${dRel}`);
-    // Workspace scope applies to BOTH current and historical retrieval: an
-    // explicit --root (or configured allowlist) must not leak another
-    // workspace's history.
-    if (authorisedRoots.length && (!entry || !rootIsCurrentlyAuthorised(entry.root, authorisedRoots))) continue;
-    if (!includeStale) {
-      if (!entry || !entry.active_rev) continue;
-      if (entry.active_rev !== dRev) continue;
-      const evidence = entryEvidence(entry, dRel);
-      if (evidence.status !== "DOC_INGEST_VERIFIED" || evidence.revision !== dRev) continue;
+  const facts = [];
+  const displays = new Map();
+  for (const [index,message] of messages.entries()) {
+    const content = String(message?.content || '');
+    const superseded = content.includes('docs-superseded:');
+    const ref = superseded ? null : content.match(/\[doc-ref:([^#\]]+)#([0-9a-f]{8})/);
+    const valid = Boolean(ref);
+    const rel = ref?.[1] ?? '';
+    const rev = ref?.[2] ?? '';
+    const rootHit = valid ? (content.match(/^root-id: ([0-9a-f]{8})$/m)?.[1] ?? null) : null;
+    const entry = valid ? entries.get(`${rootHit ?? ''}\u0000${rel}`) : null;
+    const allowed = authorisedRoots.length ? Boolean(entry && rootIsCurrentlyAuthorised(entry.root, authorisedRoots)) : Boolean(entry);
+    const current = Boolean(entry?.active_rev && entry.active_rev === rev);
+    let verified = false;
+    if (!includeStale && current && (!authorisedRoots.length || allowed)) {
+      const evidence = entryEvidence(entry, rel);
+      verified = evidence.status === 'DOC_INGEST_VERIFIED' && evidence.revision === rev;
     }
-    const dedupe = `${rootHit ?? ""}\u0000${dRel}\u0000${dRev}`;
-    if (seen.has(dedupe)) continue;
-    seen.add(dedupe);
-    items.push({ source: dRel, root: rootHit, revision: dRev, content: content.slice(0, 1200) });
-    if (items.length >= limit) break;
+    facts.push({index,validMarker:valid,superseded,hasEntry:Boolean(entry),rootAllowed:allowed,
+                activeRevMatches:current,verifiedActive:verified,rootId:rootHit ?? '',rel,rev});
+    if (valid) displays.set(index,{source:rel,root:rootHit,revision:rev,content:content.slice(0,1200)});
   }
-  return items;
+  const indices = selectDocIndicesReference(facts, limit, includeStale, Boolean(authorisedRoots.length));
+  const checked = checkedDocIndex('doc-index-select', {
+    candidates:nativeRetrievalFacts(facts), limit, includeStale,
+    rootsRestricted:Boolean(authorisedRoots.length),
+  }, {ok:true,indices}, ctx.env);
+  return checked.indices.map((index) => displays.get(index));
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────

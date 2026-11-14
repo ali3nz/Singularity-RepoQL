@@ -7,12 +7,13 @@
 // acceptance subject (knowledge section) by the closeout path.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { verifiedRustCompat } from "./rust-compat-policy.mjs";
 
 function pad(n) { return String(n ?? 0).padStart(3, "0"); }
 
 // Pure: build the summary body from run state + case + staged knowledge.
 // Deterministic content given the same inputs (timestamps come from inputs).
-export function buildRunSummary({ runNumber = null, caseId = null, runType = "orchestration", title = null, objective = null, decisions = [], changedComponents = [], validation = [], residuals = [], memoryRefs = [], outcome = "ACCEPTED", date = null } = {}) {
+function buildRunSummaryReference({ runNumber = null, caseId = null, runType = "orchestration", title = null, objective = null, decisions = [], changedComponents = [], validation = [], residuals = [], memoryRefs = [], outcome = "ACCEPTED", date = null } = {}) {
   const lines = [];
   const heading = runNumber != null ? `Run ${pad(runNumber)} | ${title ?? caseId ?? "untitled"}` : `${runType} ${caseId ?? "unnumbered"} | ${title ?? "untitled"}`;
   lines.push(`# ${heading}`);
@@ -53,6 +54,14 @@ export function buildRunSummary({ runNumber = null, caseId = null, runType = "or
   lines.push(String(outcome));
   lines.push("");
   return lines.join("\n");
+}
+
+// Native rendering is authoritative only after exact agreement with the
+// existing builder. Fix date once to avoid comparing two independent clocks.
+export function buildRunSummary(inputs = {}) {
+  const fixed = { ...inputs, date: inputs?.date ?? new Date().toISOString().slice(0, 10) };
+  const reference = buildRunSummaryReference(fixed);
+  return verifiedRustCompat("run_summary.build", { inputs: fixed }, reference);
 }
 
 export function writeRunSummary(runDir, inputs) {

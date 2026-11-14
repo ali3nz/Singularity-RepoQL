@@ -17,6 +17,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { verifiedRustCompat } from "./rust-compat-policy.mjs";
 
 function readJson(p) {
   try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; }
@@ -48,8 +49,7 @@ function deriveGate(state) {
   return "not_required";
 }
 
-function deriveEvidence(state, manifestPath) {
-  const m = manifestPath && existsSync(manifestPath) ? readJson(manifestPath) : null;
+function deriveEvidence(state, m) {
   const claimed = (state?.criteriaResults ?? []).filter((c) => c?.ok === false).length;
   if (claimed > 0) return "failed";
   if (!m || !Array.isArray(m.entries) || m.entries.length === 0) {
@@ -82,17 +82,21 @@ export function deriveRunHealth({ runId = null, runDir = null, state = null, lea
     manifestPath = join(runDir, "evidence-manifest.json");
   }
   if (runDir && !manifestPath) manifestPath = join(runDir, "evidence-manifest.json");
-  return {
+  const evidenceManifest = manifestPath && existsSync(manifestPath) ? readJson(manifestPath) : null;
+  const health = {
     schema: 1,
     runId: runId ?? st?.runId ?? null,
     generatedAt: new Date().toISOString(),
     retrieval: deriveRetrieval(st ?? {}),
     worker: deriveWorker(st ?? {}, lease ?? {}),
     gate: deriveGate(st ?? {}),
-    evidence: deriveEvidence(st ?? {}, manifestPath),
+    evidence: deriveEvidence(st ?? {}, evidenceManifest),
     github: deriveGithub(st ?? {}, ghStatus),
     learning: deriveLearning(st ?? {}),
   };
+  return verifiedRustCompat("run_health.derive", { inputs: {
+    generatedAt: health.generatedAt, runId, state: st, lease, ghStatus, evidenceManifest,
+  } }, health);
 }
 
 // Batch view for OpenChamber/Pixel: one summary per run dir, newest first.

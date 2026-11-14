@@ -22,7 +22,7 @@
 import { createQmdClient } from "./qmd-client.mjs";
 // (imports for the source-boundary helper live at the bottom of this file,
 // matching the module's existing pattern)
-import { createRepoqlClient } from "./repoql-client.mjs";
+import { createRepoqlClient, liveSourceOrder } from "./repoql-client.mjs";
 import { contradictionSignal } from "./concept-conflict-gate.mjs";
 
 // ---- Second-brain delta 3 (hub ticket 180, Sol consult 2026-09-29T10-07-37):
@@ -205,7 +205,7 @@ export function createBuildContextPack({ qmdBaseUrl = "http://127.0.0.1:8181", q
   const _mbPos = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : d; };
   const MEMORY_PACK_BUDGET = memoryRecall?.budgetBytes != null ? _mbPos(memoryRecall.budgetBytes, 6000) : 6000; // ≈1500 tokens (plan §6.4)
   const qmd = createQmdClient({ baseUrl: qmdBaseUrl, timeoutMs: qmdTimeoutMs });
-  return async function buildContextPack({ stage, mandatory = {}, historicalQueries = [], maxHistoricalBytes = 6000, fetchSource = null }) {
+  return async function buildContextPack({ stage, mandatory = {}, historicalQueries = [], maxHistoricalBytes = 6000, fetchSource = null, historicalMode = false }) {
     const manifest = { schema: 2, stage, generatedAt: new Date().toISOString(), included: [], omitted: [], qmd: "unknown", sources: [], repoql: null, fallback: [] };
     const sections = [];
     let mandatoryBytes = 0;
@@ -252,21 +252,38 @@ export function createBuildContextPack({ qmdBaseUrl = "http://127.0.0.1:8181", q
           if (!prev || (hit.score ?? 0) > (prev.score ?? 0)) merged.set(hit.uri, { ...hit, scope: sr.scope, q: pq.q });
         }
       }
-      const ranked = [...merged.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, repoqlPrimary ? 8 : 4);
+      // historicalQueries entries may be strings or { q } plan entries; liveSourceOrder
+      // normalises either, and the slice keeps the pre-existing depth.
+      let ranked = [];
+      try {
+        ranked = liveSourceOrder([...merged.values()], historicalQueries[0]?.q ?? historicalQueries[0] ?? "").slice(0, repoqlPrimary ? 8 : 4);
+      } catch (e) {
+        // Preserve mandatory current-case material while failing closed on
+        // unverified native historical ordering. Do not silently use JS.
+        manifest.omitted.push({ item: "repoql-ranking",
+          omissionReason: `native memory ranking unavailable: ${String(e?.code ?? "failure").slice(0, 80)}` });
+        manifest.nativeMemoryPolicy = { ok: false, code: String(e?.code ?? "NATIVE_POLICY_FAILED") };
+      }
+      let tombIndexCache = null; // loaded once per pack, not once per hit
 
       // Ticket 339 phase 3 (plan §3.1): provenance-aware current-truth filter.
       // When retrievalFilter is ENABLED, concept capsules whose lineageState is
       // invalid/stale are dropped from the pack and the omission is RECORDED in
       // the manifest (never silent). legacy_unknown passes unchanged (plan §22).
-      // Historical/REVIEW bypass is BY NOT CALLING the filter (plan §19).
-      try {
+      // Historical/REVIEW bypass is enforced above (plan §19).
+      // Historical and REVIEW stages are provenance reads, not current-truth
+      // promotion. Do not load or fail closed on the current-only lineage gate.
+      if (historicalMode || stage === "REVIEW") {
+        manifest.lineageFilter = { enabled: false, historicalBypass: true };
+      } else try {
         const ml339 = await import("./memory-lineage.mjs");
         if (ml339.flags().retrievalFilterEnabled) {
           const toName = (u) => { const str = String(u ?? ""); if (!/^concept:\/\//.test(str)) return null; const base = str.replace(/^concept:\/+/, ""); return decodeURIComponent(base.split("/").pop().replace(/\.md$/, "")) || null; };
           const names = ranked.map((h) => toName(h.uri)).filter(Boolean);
+          let excludedSet = new Set();
           if (names.length) {
             const filt = ml339.excludeInvalidFromCurrentRetrieval(names, ml339.resolveLineageDir());
-            const excludedSet = new Set(filt.excluded.map((e) => e.name));
+            excludedSet = new Set(filt.excluded.map((e) => e.name));
             for (const ex of filt.excluded) {
               const hit = ranked.find((h) => toName(h.uri) === ex.name);
               if (hit) manifest.omitted.push({ item: hit.uri, omissionReason: `lineage:${ex.state} (ticket 339 retrieval filter)` });
@@ -307,6 +324,54 @@ export function createBuildContextPack({ qmdBaseUrl = "http://127.0.0.1:8181", q
             manifest.fallback.push({ item: hit.uri, repoqlCode: fcode ?? g.code, used: via, mandatoryEvidenceSurvived: true });
             hit.body = body; hit.via = via;
           } else { hit.body = g.content; hit.via = "repoql"; }
+          // fleet#1202 current-truth retrieval gate (review corrections 1/3):
+          //   * tombstone rejection is permanent, including when temporal metadata is UNKNOWN;
+          //   * an unreadable/corrupt tombstone index fails CLOSED (capture governance does the same);
+          //   * currentTruth is THREE-VALUED: UNKNOWN legacy metadata never hides knowledge,
+          //     only a KNOWN expired/future window excludes;
+          //   * a REVIEW stage or an explicit historicalMode caller may retrieve superseded
+          //     facts (history is not falsehood); every drop is recorded in the manifest.
+          // Rejected values are exact claims, never entire subjects. Use the
+          // capsule's explicitly marked invariant; no fuzzy or subject-only
+          // inference is permitted by the tombstone authority contract.
+          if (/^concept:\/\//.test(hit.uri)) {
+            let dropReason = null;
+            manifest.currentTruth = manifest.currentTruth ?? { enabled: true, historical: Boolean(historicalMode), excluded: 0, problems: [] };
+            try {
+              const tomb = await import("./memory-tombstone.mjs");
+              tombIndexCache = tombIndexCache ?? tomb.loadTombstones();
+              const idx = tombIndexCache;
+              if (idx?.ok === false) {
+                dropReason = `tombstone-index-unverified:${idx.code}`;
+              } else {
+                const claim = String(hit.body).match(/\*\*Invariant\*\*\s*\n([\s\S]*?)(?=\n\*\*|$)/)?.[1]?.trim() ?? "";
+                if (claim) {
+                  const rejected = tomb.claimIsRejected({ claim, scope: hit.uri, tombstones: idx.tombstones });
+                  if (rejected.blocked) dropReason = `tombstone:${rejected.tombstone?.name ?? rejected.tombstone?.subject ?? "exact-claim"}`;
+                } else if (idx.tombstones.some((t) => String(t.status ?? "active") === "active")) {
+                  manifest.currentTruth.problems.push({ item: hit.uri, problem: "no-invariant-claim-for-exact-tombstone-check" });
+                }
+              }
+            } catch (e) {
+              // A throwing reader cannot prove the capsule is not revoked: fail closed.
+              dropReason = `tombstone-read-failed:${String(e?.message ?? e).slice(0, 60)}`;
+            }
+            if (!dropReason && !historicalMode && stage !== "REVIEW") {
+              try {
+                const mt = await import("./memory-temporal.mjs");
+                if (mt.currentTruth({ capsuleBody: hit.body }) === "NO_MATCH") dropReason = "temporal:outside-validity-window";
+              } catch (e) {
+                // Malformed temporal frontmatter is a data defect, not authority to hide a
+                // legacy capsule: keep it (UNKNOWN behaviour) and record the problem.
+                manifest.currentTruth.problems.push({ item: hit.uri, problem: `temporal-malformed:${String(e?.message ?? e).slice(0, 80)}` });
+              }
+            }
+            if (dropReason) {
+              manifest.omitted.push({ item: hit.uri, omissionReason: `${dropReason} (fleet#1202 current-truth retrieval gate)` });
+              manifest.currentTruth.excluded++;
+              continue;
+            }
+          }
           const bytes = Buffer.byteLength(hit.body, "utf8");
           if (histBytes + bytes > maxHistoricalBytes) { manifest.omitted.push({ item: hit.uri, omissionReason: "historical byte budget exhausted (repoql primary)" }); continue; }
           histBytes += bytes;
@@ -466,7 +531,7 @@ export function createBuildContextPack({ qmdBaseUrl = "http://127.0.0.1:8181", q
     try {
       const morchFlags = (await import("./memory-orchestra/flags.mjs")).flags();
       if (morchFlags.planner && morchFlags.fusion && morchFlags.ledger) {
-        const { runHook } = await import("./memory-orchestra/hooks.mjs");
+        const { runHook, boundStepsExecutors } = await import("./memory-orchestra/hooks.mjs");
         const { createPlannerExecutors } = await import("./memory-orchestra/executors.mjs");
         // P1 §6: bind the EXISTING L2/L3 client so the wired channels have a
         // real transport; it reports a typed NOT_SUPPORTED verdict when the

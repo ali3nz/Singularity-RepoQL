@@ -1,0 +1,566 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "evidence/native/native-build-verification.json",
+    "original_sha256": "b8872ebb4e4410c2797a0b1abf22f1c465400cd1e88ebb96f98a39ce4d8c6809",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 0,
+      "home_path": 0,
+      "sid": 0,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": {
+    "schema": "wave56-native-locked-builds/v1",
+    "recordedUtc": "2026-11-13T10:26:22.971782+00:00",
+    "sourceRoot": "C:/Users/Ben/singularity-wave56-1258-native/source",
+    "checks": [
+      {
+        "crate": "harness/rust-authority",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "authority-fmt-aligned.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/harness/rust-authority/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitEvidence": "checked native command exit recorded in this session transcript",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "harness/rust-authority",
+        "check": "test",
+        "exitCode": 0,
+        "log": "authority-tests-final.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/harness/rust-authority/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "exitEvidence": "checked native command exit recorded in this session transcript",
+        "logSha256": "2c8bf4aa177ba2e29821587ec62fe06e01b4421862ce7521ead7a893d77a33b9"
+      },
+      {
+        "crate": "harness/rust-authority",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "authority-clippy-aligned.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/harness/rust-authority/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitEvidence": "checked native command exit recorded in this session transcript",
+        "logSha256": "3d641bfd13bcb0204498a6d229b95de6e137baff4b4f32663bbb5a8da944d936"
+      },
+      {
+        "crate": "harness/rust-authority",
+        "check": "release",
+        "exitCode": 0,
+        "log": "authority-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/harness/rust-authority/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "exitEvidence": "checked native command exit recorded in this session transcript",
+        "logSha256": "21bf73b7b297374c75520e9028fa7d74eb83790afcf0a32d4cf789d70271b2f0"
+      },
+      {
+        "crate": "native/desktop-bridge",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "crate-desktop-bridge-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/desktop-bridge/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T09:55:02.399541+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/desktop-bridge",
+        "check": "test",
+        "exitCode": 0,
+        "log": "crate-desktop-bridge-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/desktop-bridge/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--no-default-features",
+          "--features",
+          "office"
+        ],
+        "finishedUtc": "2026-11-13T09:55:19.586370+00:00",
+        "logSha256": "f5634c7435dbf3371104a67f144bf8665a1c26f805d57b9f14c57968d0b2fd4a"
+      },
+      {
+        "crate": "native/desktop-bridge",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "crate-desktop-bridge-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/desktop-bridge/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--no-default-features",
+          "--features",
+          "office",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T09:55:26.450837+00:00",
+        "logSha256": "2c574d296d6a529d831e54ee337f7abf1447395ea6c6852b81c7778d83f9492a"
+      },
+      {
+        "crate": "native/desktop-bridge",
+        "check": "release",
+        "exitCode": 0,
+        "log": "crate-desktop-bridge-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/desktop-bridge/Cargo.toml",
+          "--locked",
+          "--release",
+          "--no-default-features",
+          "--features",
+          "office"
+        ],
+        "finishedUtc": "2026-11-13T09:55:42.919969+00:00",
+        "logSha256": "004424d354654ae6f06fcc89b9f4f6868d314f58413bae5ee184270a7b759335"
+      },
+      {
+        "crate": "native/windows/rust-supervisor",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "crate-aligned-rust-supervisor-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rust-supervisor/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T10:00:53.091947+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/windows/rust-supervisor",
+        "check": "test",
+        "exitCode": 0,
+        "log": "crate-aligned-rust-supervisor-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rust-supervisor/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "finishedUtc": "2026-11-13T10:00:54.919920+00:00",
+        "logSha256": "baf6df59dbca8ce19e385165438015fb7004490bc5e91ff491ff818e313b3b57"
+      },
+      {
+        "crate": "native/windows/rust-supervisor",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "crate-aligned-rust-supervisor-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rust-supervisor/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T10:00:57.346435+00:00",
+        "logSha256": "3d98d4721cd92958228931b9c06b9e2beae6ed0c7199560029e8edf9224af02c"
+      },
+      {
+        "crate": "native/windows/rust-supervisor",
+        "check": "release",
+        "exitCode": 0,
+        "log": "crate-aligned-rust-supervisor-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rust-supervisor/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "finishedUtc": "2026-11-13T10:01:03.682648+00:00",
+        "logSha256": "027f831c2cc164e96a34eb4d39572ea4959fe2628e2985a65dabe5689f4f4409"
+      },
+      {
+        "crate": "native/windows/unified-gateway-rust",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "remaining-five-unified-gateway-rust-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/unified-gateway-rust/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T10:18:32.792226+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/windows/unified-gateway-rust",
+        "check": "test",
+        "exitCode": 0,
+        "log": "remaining-five-unified-gateway-rust-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/unified-gateway-rust/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "finishedUtc": "2026-11-13T10:18:35.324032+00:00",
+        "logSha256": "83ad1ad591de2f0d1916ef8ef3bfa50e3d8b1f5abc33e3ad26a69daf32fec3a4"
+      },
+      {
+        "crate": "native/windows/unified-gateway-rust",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "remaining-five-unified-gateway-rust-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/unified-gateway-rust/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T10:18:36.430658+00:00",
+        "logSha256": "f6fcfc088aba4d7cc38e908a28c770789733362a7bb6ace17586443f3c291a9f"
+      },
+      {
+        "crate": "native/windows/unified-gateway-rust",
+        "check": "release",
+        "exitCode": 0,
+        "log": "remaining-five-unified-gateway-rust-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/unified-gateway-rust/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "finishedUtc": "2026-11-13T10:18:57.853046+00:00",
+        "logSha256": "86a3ed2815c590eb390214d7af61707ece61c82ae9223f73061baaaddebd3a3d"
+      },
+      {
+        "crate": "native/windows/memory-parity-rust",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "remaining-five-memory-parity-rust-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/memory-parity-rust/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T10:18:58.287086+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/windows/memory-parity-rust",
+        "check": "test",
+        "exitCode": 0,
+        "log": "remaining-five-memory-parity-rust-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/memory-parity-rust/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "finishedUtc": "2026-11-13T10:19:07.463246+00:00",
+        "logSha256": "6dbdde11d1b60861b1e846793001dad4f5dedef64917d5f86aa971647516120a"
+      },
+      {
+        "crate": "native/windows/memory-parity-rust",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "remaining-five-memory-parity-rust-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/memory-parity-rust/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T10:19:10.920539+00:00",
+        "logSha256": "f75f266009098963bda09a82870855c53771256e815eb9ab5c36024c54ba3216"
+      },
+      {
+        "crate": "native/windows/memory-parity-rust",
+        "check": "release",
+        "exitCode": 0,
+        "log": "remaining-five-memory-parity-rust-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/memory-parity-rust/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "finishedUtc": "2026-11-13T10:19:20.276012+00:00",
+        "logSha256": "0c0db6b582625d20066d536f976c491d19c9b9e13d72a20f94775acaffb7f819"
+      },
+      {
+        "crate": "native/windows/rc-stack-rust",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "remaining-five-rc-stack-rust-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rc-stack-rust/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T10:19:20.693369+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/windows/rc-stack-rust",
+        "check": "test",
+        "exitCode": 0,
+        "log": "remaining-five-rc-stack-rust-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rc-stack-rust/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "finishedUtc": "2026-11-13T10:19:30.217252+00:00",
+        "logSha256": "49d4059038fea7eee1553bece300f9abb0bb98f0d56496a9949396539028107a"
+      },
+      {
+        "crate": "native/windows/rc-stack-rust",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "remaining-five-rc-stack-rust-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rc-stack-rust/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T10:19:34.213225+00:00",
+        "logSha256": "fa18ce25f4ca616cd33874e0852a4c5b3743a455b213acddcac05f56a8a3e20c"
+      },
+      {
+        "crate": "native/windows/rc-stack-rust",
+        "check": "release",
+        "exitCode": 0,
+        "log": "remaining-five-rc-stack-rust-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/rc-stack-rust/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "finishedUtc": "2026-11-13T10:19:46.668376+00:00",
+        "logSha256": "6673bfe4da5d1ef252fd8e342a9beb75a24e56ac1be6023b28e98d51b92356c4"
+      },
+      {
+        "crate": "native/windows/source-packager-rust",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "remaining-five-source-packager-rust-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/source-packager-rust/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T10:19:47.091481+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/windows/source-packager-rust",
+        "check": "test",
+        "exitCode": 0,
+        "log": "remaining-five-source-packager-rust-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/source-packager-rust/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "finishedUtc": "2026-11-13T10:19:55.088795+00:00",
+        "logSha256": "0b7ccc11333654b8735ebf0d77119196aa8a5cc14fa825f82a9cdf2f4d4ce303"
+      },
+      {
+        "crate": "native/windows/source-packager-rust",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "remaining-five-source-packager-rust-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/source-packager-rust/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T10:19:57.610590+00:00",
+        "logSha256": "f44f3643df5d61bda2c0846d8e1cab2a954104eb6bab4eeedf457d1fb25edd8b"
+      },
+      {
+        "crate": "native/windows/source-packager-rust",
+        "check": "release",
+        "exitCode": 0,
+        "log": "remaining-five-source-packager-rust-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/source-packager-rust/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "finishedUtc": "2026-11-13T10:20:04.464707+00:00",
+        "logSha256": "f9055936ef1e25dc98cd47284baad3f3084f5b7e05c1f6dbbc9885844b96be2b"
+      },
+      {
+        "crate": "native/windows/release-evidence-rust",
+        "check": "fmt",
+        "exitCode": 0,
+        "log": "remaining-last-verified-release-evidence-rust-fmt.log",
+        "cargoArgs": [
+          "fmt",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/release-evidence-rust/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "finishedUtc": "2026-11-13T10:25:03.305353+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "crate": "native/windows/release-evidence-rust",
+        "check": "test",
+        "exitCode": 0,
+        "log": "remaining-last-verified-release-evidence-rust-test.log",
+        "cargoArgs": [
+          "test",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/release-evidence-rust/Cargo.toml",
+          "--locked",
+          "--all-targets"
+        ],
+        "finishedUtc": "2026-11-13T10:25:04.585703+00:00",
+        "logSha256": "253b4a8a6da1e5187e66af66e36b22e751f437765af90877ba72feb2e8c983bb"
+      },
+      {
+        "crate": "native/windows/release-evidence-rust",
+        "check": "clippy",
+        "exitCode": 0,
+        "log": "remaining-last-verified-release-evidence-rust-clippy.log",
+        "cargoArgs": [
+          "clippy",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/release-evidence-rust/Cargo.toml",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "finishedUtc": "2026-11-13T10:25:05.221201+00:00",
+        "logSha256": "ab5213bd711baf6bcb24df3c1582e35168172ed085a916080c2c3869a1d3c64f"
+      },
+      {
+        "crate": "native/windows/release-evidence-rust",
+        "check": "release",
+        "exitCode": 0,
+        "log": "remaining-last-verified-release-evidence-rust-release.log",
+        "cargoArgs": [
+          "build",
+          "--manifest-path",
+          "C:/Users/Ben/singularity-wave56-1258-native/source/native/windows/release-evidence-rust/Cargo.toml",
+          "--locked",
+          "--release"
+        ],
+        "finishedUtc": "2026-11-13T10:25:14.206180+00:00",
+        "logSha256": "611bb1eba22ad4dabc912414a5cc0109c7e1a1948c8e085c62c9b7b856ae174d"
+      }
+    ],
+    "crates": [
+      "harness/rust-authority",
+      "native/desktop-bridge",
+      "native/windows/rust-supervisor",
+      "native/windows/unified-gateway-rust",
+      "native/windows/memory-parity-rust",
+      "native/windows/rc-stack-rust",
+      "native/windows/source-packager-rust",
+      "native/windows/release-evidence-rust"
+    ],
+    "buildInputsSha256": "c74016c05ffde9a73046d2c6e7da5cb1cb3c20b53fe7638345d4394ecb694c40",
+    "allPassed": true,
+    "fullGatePass": false,
+    "liveAcceptance": "NOT_RUN",
+    "cutover": "NOT_RUN"
+  }
+}

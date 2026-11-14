@@ -1,3 +1,4 @@
+import { verifiedRustCompat } from "./rust-compat-policy.mjs";
 // gate-parser.mjs — parse and validate orchestration-gate-v2 JSON with a
 // legacy text-marker fallback (migration compatibility; remove legacy after
 // all bridges pass shadow tests).
@@ -285,7 +286,12 @@ export function tryParseLegacyGate(text, stage) {
 // Main entry: gate-v2 first, legacy fallback. Throws on invalid with no fallback.
 export function parseGate(text, stage) {
   const v2 = tryParseGateV2(text, stage);
-  if (v2) return { ...v2, compatibilityMode: false };
+  if (v2) {
+    const reference = { ...v2, compatibilityMode: false };
+    // The native parser may supply a V2 gate only after exact comparison.
+    // Legacy compatibility markers retain their original JavaScript shape.
+    return verifiedRustCompat("gate.parse", { text, stage }, reference);
+  }
   const legacy = tryParseLegacyGate(text, stage);
   if (legacy) return legacy;
   const e = new Error(`invalid gate response for stage=${stage}`);

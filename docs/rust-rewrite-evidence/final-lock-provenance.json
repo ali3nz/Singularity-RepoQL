@@ -1,0 +1,104 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "evidence/native/final-lock-provenance.json",
+    "original_sha256": "4489e35aa334d87d9c0fbccc670535a7f43f6fdccfa88ccbee680a06e9b21f18",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 0,
+      "home_path": 0,
+      "sid": 0,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": {
+    "schema": "singularity-rust-lock-release-gate/v1",
+    "checks": [
+      {
+        "crate": "harness/rust-authority",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 65,
+        "registryPackagesWithChecksums": 64,
+        "sha256": "ff19c46421c25497306bb8cee7bba72ddb220997a11cb68cc97d3c42b37a2a30"
+      },
+      {
+        "crate": "native/desktop-bridge",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 146,
+        "registryPackagesWithChecksums": 145,
+        "sha256": "4c53b1cf0f78de9e8abfa4ab1a1cce29d502dd3048a919265eb1cbbe32c9f78e"
+      },
+      {
+        "crate": "native/windows/rust-supervisor",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 12,
+        "registryPackagesWithChecksums": 11,
+        "sha256": "6fc2895f98704b41cfa148417f67c993684dd7953c613f6b04e8e78b9a87bb13"
+      },
+      {
+        "crate": "native/windows/unified-gateway-rust",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 120,
+        "registryPackagesWithChecksums": 119,
+        "sha256": "d633a05c156e2911136399fc4c954b3e6ea9cda1b9781713f475a394d661c66d"
+      },
+      {
+        "crate": "native/windows/memory-parity-rust",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 29,
+        "registryPackagesWithChecksums": 28,
+        "sha256": "a2c85f57bd3e8d63b4c865986ca2dace81a88b02495b21af12311e96f815c011"
+      },
+      {
+        "crate": "native/windows/rc-stack-rust",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 78,
+        "registryPackagesWithChecksums": 77,
+        "sha256": "0719f946baf817b139021096acff62c454e44b3038ae289bd5d39f1b225f6cbe"
+      },
+      {
+        "crate": "native/windows/source-packager-rust",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 45,
+        "registryPackagesWithChecksums": 44,
+        "sha256": "c8f3a806a2308a480f5b1f22fa256087397d6d8d459f40982e6717d9c34510c7"
+      },
+      {
+        "crate": "native/windows/release-evidence-rust",
+        "manifestPresent": true,
+        "lockfilePresent": true,
+        "lockfileValid": true,
+        "resolvedPackages": 84,
+        "registryPackagesWithChecksums": 83,
+        "sha256": "be0c2e080d1a1badcd4405d16406b1edb21a2e20907dab14166a9a65d7320722"
+      }
+    ],
+    "readyForRustDependencyReview": true,
+    "nativeWindowsBuildVerified": false,
+    "publisherProvenanceVerified": false,
+    "releaseReady": false
+  }
+}

@@ -47,7 +47,7 @@ const liveFetch = (calls, seeded = new Set()) => async (url, init) => {
   if (url.endsWith("/v3/conversation/search")) {
     const name = body.agent_id;
     const messages = seeded.has(name)
-      ? [{ id: `m-${name}`, session_id: `agent-profile-${name}`, content: `Persistent MemoryCore profile for OpenChamber agent "${name}" (Singularity-RepoQL). Role: x` }]
+      ? [{ id: `m-${name}`, session_id: `agent-profile-${name}`, content: `Persistent MemoryCore profile for Claude Code agent "${name}" (Singularity-RepoQL). Role: x` }]
       : [];
     return new Response(JSON.stringify({ code: 0, data: { messages } }), { status: 200 });
   }
@@ -75,7 +75,7 @@ test("charterFor names the agent and carries its role", () => {
 
 test("identityFor: agent name is agent_id; team and user are overridable", () => {
   assert.deepEqual(identityFor("board", {}, { user_id: "u1" }), {
-    team_id: "openchamber-agents",
+    team_id: "singularity-claude-agents",
     user_id: "u1",
     agent_id: "board",
   });
@@ -96,7 +96,7 @@ test("first run seeds each agent under its own scope; the second run verifies li
   assert.equal(first.failed, 0);
   assert.deepEqual(first.results.map((r) => r.status), ["seeded", "seeded"]);
   assert.deepEqual(calls.map((c) => c.body.agent_id), ["alpha", "beta"]);
-  assert.ok(calls.every((c) => c.body.team_id === "openchamber-agents" && c.body.user_id === "operator-test"));
+  assert.ok(calls.every((c) => c.body.team_id === "singularity-claude-agents" && c.body.user_id === "operator-test"));
   assert.ok(calls.every((c) => c.url === "http://memory.test/v3/conversation/add"));
   assert.match(calls[0].body.messages[0].content, /"alpha"/);
   assert.ok(existsSync(fx.ledgerPath));
@@ -218,7 +218,7 @@ test("identity map: an existing charter is verified and nothing is written", asy
   const calls = [];
   const out = await provisionAgentProfiles({
     agentsDir, ledgerPath, cfg, now, identityMap: mapFor(["board"]), env: {},
-    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [{ id: "m1", content: "Role charter (seeded 2026-10-19): ... for the OpenChamber agent role 'board'." }] } } }),
+    fetchImpl: routedFetch(calls, { search: { code: 0, data: { messages: [{ id: "m1", content: "Role charter (seeded 2026-10-19): ... for the Claude Code agent role 'board'." }] } } }),
   });
   assert.equal(out.failed, 0);
   assert.equal(out.results[0].status, "verified");
@@ -305,9 +305,9 @@ test("identity map: an unrelated stored message does NOT count as a charter (see
 
 test("isCharterFor accepts the seeder session and both charter wordings only", () => {
   assert.equal(isCharterFor({ session_id: "agent-profile-board", content: "x" }, "board", "agent-profile-board"), true);
-  assert.equal(isCharterFor({ content: "for the OpenChamber agent role 'board'." }, "board", "agent-profile-board"), true);
-  assert.equal(isCharterFor({ content: 'OpenChamber agent "board" seeded' }, "board", "agent-profile-board"), true);
-  assert.equal(isCharterFor({ content: "OpenChamber agent role 'explore'" }, "board", "agent-profile-board"), false);
+  assert.equal(isCharterFor({ content: "for the Claude Code agent role 'board'." }, "board", "agent-profile-board"), true);
+  assert.equal(isCharterFor({ content: 'Claude Code agent "board" seeded' }, "board", "agent-profile-board"), true);
+  assert.equal(isCharterFor({ content: "Claude Code agent role 'explore'" }, "board", "agent-profile-board"), false);
   assert.equal(isCharterFor({ content: "lunch" }, "board", "agent-profile-board"), false);
   assert.equal(isCharterFor(null, "board", "agent-profile-board"), false);
 });
@@ -326,22 +326,9 @@ test("a ledger entry under a different agent_id is re-verified, not reported pre
   assert.equal(calls[0].body.agent_id, "agt-board");
 });
 
-test("the shipped OpenChamber roster is fully provisionable, Ghost excepted", () => {
-  // Every shipped agent (nine; Ghost and the other retired roles are gone) needs a
-  // profile of its own, or its memory scope
-  // silently falls back to somebody else's.
-  const agentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "openchamber", "agents");
-  assert.deepEqual(listAgents(agentsDir), [
-    "board",
-    "code-reviewer",
-    "duel-coordinator",
-    "duo",
-    "explore",
-    "general",
-    "quad-coordinator",
-    "super",
-    "thinker",
-  ]);
+test("the shipped Claude Code roster contains delegated roles only", () => {
+  const agentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "adapters", "claude-code", "agents");
+  assert.deepEqual(listAgents(agentsDir), ["board", "code-reviewer", "explore", "general", "thinker"]);
 });
 
 

@@ -16,6 +16,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { HARNESS_PATHS } from "./kit-paths.mjs";
+import { nativeMemoryPolicyEnabled, nativeLiveSourceOrder } from "./native-memory-policy.mjs";
 
 // One JSONL line per RepoQL operation, so production behaviour is measurable
 // without a new service (Sol O1/O8, still open). Bounded, fail-open, off with
@@ -231,6 +232,48 @@ export function globToLike(glob) {
   const prefix = m ? m[1] : "%";
   const body = (m ? m[2] : String(glob ?? "")).split("**").join("%").split("*").join("%").split("?").join("_");
   return prefix + body;
+}
+
+// fleet#1202 — live-source preference (W4 exact identifiers). Retrieval can
+// return a file's backup siblings alongside it (`.pre-*`, `.bak`, `.candidate-*`,
+// `.before-*`, `.dup-removed-*`, `~`); for an exact symbol/file lookup the
+// canonical file must win. This is a deterministic ORDERING step only: scores
+// are untouched, no result is dropped, and an artifact is demoted only when a
+// non-artifact sibling with the SAME directory and the SAME canonical FILENAME
+// is present. The extension is part of that identity: repo-a/config.mjs.bak is
+// NOT a sibling of repo-b/config.mjs, and project/src/config.mjs.bak is NOT a
+// sibling of project/src/config.js (review corrections 1/2/3, 2026-11-11).
+const ARTIFACT_MARK = /\.(bak|orig|old|candidate|before-|dup-removed-|pre-)[^/]*$|~$/i;
+const baseName = (uri) => String(uri ?? "").split("/").pop() ?? "";
+const isArtifact = (uri) => ARTIFACT_MARK.test(baseName(uri));
+const canonicalName = (uri) => {
+  const base = baseName(uri);
+  const cut = base.search(ARTIFACT_MARK);
+  const core = cut >= 0 ? base.slice(0, cut) : base;
+  return core.toLowerCase(); // extension preserved: config.mjs !== config.js
+};
+const siblingKey = (uri) => `${String(uri ?? "").replace(/\/[^/]*$/, "")}\u0000${canonicalName(uri)}`;
+export function liveSourceOrder(results, query = "") {
+  if (nativeMemoryPolicyEnabled()) return nativeLiveSourceOrder(results, query);
+  const list = Array.isArray(results) ? results : [];
+  const canonical = new Set(list.filter((r) => !isArtifact(r?.uri)).map((r) => siblingKey(r?.uri)));
+  // Callers may pass a plain query string or a { q } plan entry.
+  const qRaw = typeof query === "string" ? query : (query?.q ?? "");
+  const qNorm = String(qRaw ?? "").toLowerCase().replace(/\s+/g, "");
+  const key = (r) => {
+    const name = canonicalName(r?.uri);
+    const stem = name.replace(/\.[a-z0-9]+$/i, "");
+    const artifact = isArtifact(r?.uri) && canonical.has(siblingKey(r?.uri)) ? 1 : 0;
+    // 2 = the query names this exact file (config.mjs); 1 = its stem only (config).
+    const exactName = (name.length >= 4 && qNorm.includes(name)) ? 2 : (stem.length >= 4 && qNorm.includes(stem) ? 1 : 0);
+    return { artifact, exactName };
+  };
+  return [...list].sort((a, b) => {
+    const ka = key(a), kb = key(b);
+    if (ka.artifact !== kb.artifact) return ka.artifact - kb.artifact;
+    if (ka.exactName !== kb.exactName) return kb.exactName - ka.exactName;
+    return (b.score ?? -Infinity) - (a.score ?? -Infinity);
+  });
 }
 
 export function createRepoqlClient({ timeoutMs, confidential = false, scopes = null } = {}) {
@@ -538,6 +581,11 @@ export function createRepoqlClient({ timeoutMs, confidential = false, scopes = n
         ? _g.slice(_g.indexOf("{") + 1, _g.lastIndexOf("}")).split(",").map((s) => _g.slice(0, _g.indexOf("{")) + s.trim())
         : [glob];
       const merged = [];
+      // fleet#1202: order over a small candidate surplus, then slice. The CLI is
+      // already asked for a token-budgeted result set, so this parses a few more
+      // of the rows we already received; without it a canonical file ranked just
+      // below the cut could never be promoted by liveSourceOrder().
+      const collect = Math.max(limit, Math.min(Math.max(limit * 2, limit + 4), 40)); // never below the caller's limit
       for (const g of alternatives) {
         // Key carries host identity and the exact scope glob, so two scopes can
         // never share an entry (Sol: a TTL does not fix a bad cache key).
@@ -559,7 +607,7 @@ export function createRepoqlClient({ timeoutMs, confidential = false, scopes = n
           if (Date.now() - e.at > EXPLORE_CACHE_MS) { exploreCache.delete(key); return null; }
           return e.value;
         })();
-        if (hit) { _cacheHits++; merged.push(...hit); if (merged.length >= limit) break; continue; }
+        if (hit) { _cacheHits++; merged.push(...hit); if (merged.length >= collect) break; continue; }
         let results;
         const prior = exploreInflight.get(key);
         if (prior) {
@@ -604,7 +652,7 @@ export function createRepoqlClient({ timeoutMs, confidential = false, scopes = n
                 if (base && !j.uri.startsWith(base)) continue;
               } else if (g && !uriMatch(j.uri, g)) continue;
               out.push({ uri: j.uri, score: typeof j.score === "number" ? j.score : null, headline: String(j.headline ?? "").slice(0, 160) });
-              if (out.length >= limit) break;
+              if (out.length >= collect) break;
             }
             if (EXPLORE_CACHE_MS > 0) {
               exploreCache.set(key, { at: Date.now(), value: out });
@@ -616,12 +664,26 @@ export function createRepoqlClient({ timeoutMs, confidential = false, scopes = n
           try { results = await work; } catch (e) { if (e?.rql) return e.rql; throw e; } finally { exploreInflight.delete(key); }
         }
         merged.push(...results);
-        if (merged.length >= limit) break;
+        if (merged.length >= collect) break;
       }
       // Evidence identity rides on every result set (plan §5.10).
-      merged.sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
+      // fleet#1202: deterministic live-source ordering (scores unchanged).
+      let ordered;
+      try {
+        ordered = liveSourceOrder(merged, q);
+      } catch (e) {
+        // The existing RepoQL boundary promises typed failures. An opt-in
+        // native failure cannot crash the coordinator or silently downgrade
+        // to JavaScript ranking with different evidence semantics.
+        metric({ op: "explore", glob, qHash: queryHash(q), qLen: q.length,
+          limit, results: merged.length, ms: Date.now() - _t0, ok: false,
+          code: "UNKNOWN_FAILURE", detail: "native ordering unavailable" });
+        return { ok: false, code: "UNKNOWN_FAILURE",
+          detail: `native ordering unavailable: ${String(e?.code ?? "failure").slice(0, 60)}`,
+          retryable: false, evidence: evidenceIdentity() };
+      }
       metric({ op: "explore", glob: glob, qHash: queryHash(q), qLen: q.length, limit, cacheHits: _cacheHits, results: merged.length, ms: Date.now() - _t0, ok: true, deadlineMs: _deadlineMs, callerDeadlineMs: timeoutMs ?? null });
-      return { ok: true, results: merged.slice(0, limit), mode: confidential ? "local-only" : "local", evidence: evidenceIdentity() };
+      return { ok: true, results: ordered.slice(0, limit), mode: confidential ? "local-only" : "local", evidence: evidenceIdentity() };
     },
 
     // Structured source read (typed failures + evidence identity)

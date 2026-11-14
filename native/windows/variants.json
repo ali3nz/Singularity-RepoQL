@@ -2,66 +2,20 @@
   "schema": 1,
   "platform": "windows-native",
   "variants": {
-    "1": {
-      "name": "Claude Desktop Code + Tencent MemoryCore",
-      "gui": "claude-desktop-code",
-      "features": {
-        "repoql_dashboard": true,
-        "tencent_connector": true,
-        "kanban": true,
-        "agent_chat": false,
-        "ghost": false,
-        "office": false,
-        "memory": true,
-        "repoql_mcp": true
-      },
-      "rustOfficeFeature": false,
-      "rustGhostFeature": false
-    },
     "2": {
-      "name": "Claude Desktop Code Complete (+ Claude Office)",
+      "name": "Claude Code Full (Kanzo, Tencent MemoryCore, RepoQL, Dashboard, Claude Office, OpenMausBots)",
       "gui": "claude-desktop-code",
       "features": {
         "repoql_dashboard": true,
         "tencent_connector": true,
         "kanban": true,
-        "agent_chat": false,
-        "ghost": false,
+        "agent_chat": true,
         "office": true,
         "memory": true,
-        "repoql_mcp": true
-      },
-      "rustOfficeFeature": true,
-      "rustGhostFeature": false
-    },
-    "3": {
-      "name": "OpenChamber Desktop + Tencent MemoryCore",
-      "gui": "openchamber-desktop",
-      "features": {
-        "repoql_dashboard": true,
-        "tencent_connector": true,
-        "kanban": true,
-        "agent_chat": false,
-        "ghost": false,
-        "office": false,
-        "memory": true,
-        "repoql_mcp": true
-      },
-      "rustOfficeFeature": false,
-      "rustGhostFeature": false
-    },
-    "4": {
-      "name": "OpenChamber Desktop Complete (+ Claude Office)",
-      "gui": "openchamber-desktop",
-      "features": {
-        "repoql_dashboard": true,
-        "tencent_connector": true,
-        "kanban": true,
-        "agent_chat": false,
-        "ghost": false,
-        "office": true,
-        "memory": true,
-        "repoql_mcp": true
+        "repoql_mcp": true,
+        "kanzo": true,
+        "openmausbot": true,
+        "ghost": false
       },
       "rustOfficeFeature": true,
       "rustGhostFeature": false
@@ -73,5 +27,9 @@
     "binary": "externally-installed-native-rql.exe",
     "versionPolicy": "exact-match-fail-closed",
     "upgradePolicy": "explicit-connector-migration-and-acceptance"
-  }
+  },
+  "installProfiles": [
+    "claude-code-full"
+  ],
+  "defaultVariant": 2
 }

@@ -19,6 +19,9 @@
 //   INSUFFICIENT — no gate-keeping evidence at all: report honestly, guess
 //                  nothing ("do not repeatedly ask the model to guess")
 
+import { isDeepStrictEqual } from "node:util";
+import { nativeMemoryPolicyEnabled, nativeAnswerability, NativeMemoryPolicyError } from "../native-memory-policy.mjs";
+
 export const ANSWERABILITY = ["SUFFICIENT", "PARTIAL", "CONFLICTED", "INSUFFICIENT"];
 
 // Required evidence dimensions by intent (planner INTENTS). A dimension is
@@ -67,7 +70,7 @@ function coverageOf(candidates, intent) {
 function sameSubjectKey(c) {
   return String(c.claimText ?? "").toLowerCase().split(/\s+/).slice(0, 12).join(" ");
 }
-export function detectConflicts(candidates) {
+function detectConflictsLocal(candidates) {
   const bySubject = new Map();
   for (const c of candidates) {
     const k = sameSubjectKey(c);
@@ -87,7 +90,7 @@ export function detectConflicts(candidates) {
   return conflicts;
 }
 
-export function judgePacket({ plan, fused, budgetMs = 250 }) {
+function judgePacketLocal({ plan, fused, budgetMs = 250 }) {
   if (!fused?.ok) {
     return { state: "INSUFFICIENT", reason: fused?.code ?? "no fused packet", missing: [], targetedExpansion: null };
   }
@@ -115,13 +118,43 @@ export function judgePacket({ plan, fused, budgetMs = 250 }) {
 
 // Second pass AFTER the caller execs one targeted expansion round. Returns
 // CONFLICTED when the expanded packet now contains conflicting authorities.
-export function judgeExpandedCancellation(plan, fusedNew) {
-  const base = judgePacket({ plan, fused: fusedNew });
-  const conflicts = detectConflicts(fusedNew?.candidates ?? []);
+function judgeExpandedLocal(plan, fusedNew) {
+  const base = judgePacketLocal({ plan, fused: fusedNew });
+  const conflicts = detectConflictsLocal(fusedNew?.candidates ?? []);
   if (conflicts.length) {
     return { ...base, state: "CONFLICTED", conflicts, reason: `${base.reason}; validity conflict detected (${conflicts[0].subject})` };
   }
   return base;
+}
+
+// This is a pure policy leaf. Storage, retrieval, expansion and LLM review
+// remain with their current owners. When explicitly enabled, the native
+// result must agree with the independently calculated JS verdict; disagreement
+// blocks packet emission instead of letting the Rust process decide authority.
+function selectedNativeVerdict(command, payload, expected) {
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const native = nativeAnswerability(command, payload);
+  // JSON CLI cannot preserve object fields whose value is undefined.
+  // Compare the actual cross-process contract, not in-memory JS-only keys.
+  if (!isDeepStrictEqual(native, JSON.parse(JSON.stringify(expected)))) {
+    throw new NativeMemoryPolicyError("NATIVE_ANSWERABILITY_MISMATCH");
+  }
+  return native;
+}
+
+export function detectConflicts(candidates) {
+  const expected = detectConflictsLocal(candidates);
+  return selectedNativeVerdict("answerability-conflicts", { candidates }, expected);
+}
+
+export function judgePacket({ plan, fused, budgetMs = 250 }) {
+  const expected = judgePacketLocal({ plan, fused, budgetMs });
+  return selectedNativeVerdict("answerability-packet", { plan, fused }, expected);
+}
+
+export function judgeExpandedCancellation(plan, fusedNew) {
+  const expected = judgeExpandedLocal(plan, fusedNew);
+  return selectedNativeVerdict("answerability-expanded", { plan, fused: fusedNew }, expected);
 }
 
 // DEEP-tier optional LLM judge (bounded): judge(text) -> "SUFFICIENT"|"PARTIAL"|

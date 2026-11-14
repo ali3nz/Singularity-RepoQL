@@ -1,0 +1,36 @@
+{
+  "_annotation": {
+    "schema": "singularity-handoff-historical-receipt/v1",
+    "historical": true,
+    "not_current_acceptance": true,
+    "note": "Historical receipt copied from the private Wave56 working evidence for provenance only. It records what was observed on that date and host; it is NOT acceptance of this reconciled tree, the installer, the GUI, upgrade/rollback or any live Windows run.",
+    "original_path": "evidence/gate1307-apply.json",
+    "original_sha256": "c786073fcfa54e45da0a97e133e59446a43e930dbf38a201989733a0f9fa071b",
+    "sanitized_utc": "2026-11-14T03:13:44Z",
+    "redactions": {
+      "win_user_path": 0,
+      "home_path": 0,
+      "sid": 4,
+      "email": 0
+    },
+    "redaction_rules": [
+      "Windows user profile paths -> %USERPROFILE%",
+      "POSIX home paths -> /home/<operator>",
+      "machine/user SID -> S-1-5-21-<machine>-<user>",
+      "e-mail addresses -> <redacted-email>"
+    ]
+  },
+  "receipt": {
+    "schema": "singularity-capability-install/v1",
+    "task": "fleet#1307",
+    "beforeSha256": "06712a58229436dda5081b202bbba3eade81b95d20f57a5a8086d7841051cfbf",
+    "afterSha256": "83cb3aef8838d1166d02a3637531a4940fbebd6d4fff32a9784a1da251d1113f",
+    "binarySha256": "5266e341fe14025f19d5e02cb72e5328115ffb42386a8555afb5d8a89a217457",
+    "policySha256": "e2934d2d946ca18950dd8cbf1739ef0d8d1abb4a1e3e76e00ee4d883caae5c60",
+    "settingsSddl": "O:S-1-5-21-<machine>-<user>G:S-1-5-21-<machine>-<user>D:AI(A;ID;0x1200a9;;;S-1-5-21-<machine>-<user>)(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;FA;;;S-1-5-21-<machine>-<user>)",
+    "onlyAppendedHooks": true,
+    "activeSessionsModified": false,
+    "alreadyStreamedAnswersRetracted": false,
+    "createdUtc": "2026-11-14T02:06:08.3884678Z"
+  }
+}

@@ -25,6 +25,8 @@ connectors are reported honestly as such and are not counted active.
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -234,6 +236,74 @@ def _inventory_from_payload(payload, now):
     }
 
 
+
+def _native_public_payload(payload):
+    """Do not forward registry secrets or private import metadata to Rust.
+
+    Preserve the reference projection's supported shapes and invalid-row
+    behaviour so the Rust result must still match the Python authority.
+    """
+    connector_keys = ('scheme', 'state', 'title', 'version', 'name',
+                      'display_name', 'id', 'status', 'description')
+    import_keys = ('kind', 'scheme', 'root', 'state', 'freshAsOf',
+                   'sweepIntervalSeconds', 'files', 'bytes')
+
+    def safe_rows(value, keys):
+        if not isinstance(value, list):
+            return None if value is None else False
+        return [({key: (val if isinstance(val := item[key], (str, int, float, bool))
+                        or val is None else None)
+                  for key in keys if key in item}
+                 if isinstance(item, dict) else None) for item in value]
+
+    if isinstance(payload, list):
+        return safe_rows(payload, connector_keys)
+    if not isinstance(payload, dict):
+        return None
+    clean = {}
+    if 'schema' in payload:
+        clean['schema'] = payload['schema'] if isinstance(payload['schema'], str) else None
+    for key in ('connectors', 'installed', 'items', 'results'):
+        if key in payload:
+            clean[key] = safe_rows(payload[key], connector_keys)
+    if 'imports' in payload:
+        clean['imports'] = safe_rows(payload['imports'], import_keys)
+    return clean
+
+
+def _native_checked(payload, moment, reference):
+    """Compare an explicit Rust connector projection to the Python authority.
+
+    The Rust process only receives the bounded local RepoQL CLI response and
+    the evaluation clock. A mismatch, malformed response or execution fault
+    must not turn an unverified connector into an active connector.
+    """
+    binary = os.environ.get('SINGULARITY_REPOQL_CONNECTORS_RUST_BINARY', '')
+    if not binary:
+        return reference
+    executable = Path(binary)
+    if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
+        raise RuntimeError('repoql_connectors_native_binary_invalid')
+    request = json.dumps({'payload': _native_public_payload(payload), 'now': moment.isoformat()},
+                         ensure_ascii=False)
+    if len(request.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('repoql_connectors_native_input_too_large')
+    try:
+        process = subprocess.run([str(executable)], input=request, text=True, encoding="utf-8",
+                                 capture_output=True, timeout=10, shell=False, check=False)
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('repoql_connectors_native_execution_failed') from exc
+    if process.returncode != 0 or len(process.stdout.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('repoql_connectors_native_execution_failed')
+    try:
+        actual = json.loads(process.stdout)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError('repoql_connectors_native_invalid_json') from exc
+    if actual != reference:
+        raise RuntimeError('repoql_connectors_native_mismatch')
+    return actual
+
+
 def connector_inventory(rql, *, now=None) -> dict:
     """Read-only connector inventory; cached for 30 seconds.
 
@@ -263,7 +333,8 @@ def connector_inventory(rql, *, now=None) -> dict:
         except (TypeError, ValueError):
             reasons.append('malformed_json')
             continue
-        result = _inventory_from_payload(payload, moment)
+        reference = _inventory_from_payload(payload, moment)
+        result = _native_checked(payload, moment, reference)
         if result is None:
             reasons.append('malformed_schema')
             continue

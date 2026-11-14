@@ -18,8 +18,8 @@ Ground rules for memory identity live in `WINDOWS-AGENT-MEMORY-POLICY.md`.
 ## 1. Retrieve (bounded; only when it can help)
 
 - **Delegated agents**: the installed `SubagentStart` hook (`memory-hook.mjs
-  subagent-start`) injects at most 4 L0 and 4 L1 records for the agent's own
-  mapped MemoryCore identity. You do not call anything; read what is injected.
+  subagent-start`) injects at most 5 L1 records, or at most 3 L0 records
+  only when L1 is empty or unavailable, for the agent's own mapped identity. You do not call anything; read what is injected.
 - **Docs and code**: search first — `node scripts/doc-ingest-node.mjs search
   "<topic>"` for indexed docs, and RepoQL `explore` then `read` for code and
   concepts. An empty result is not proof of absence: the index may be stale or

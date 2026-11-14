@@ -232,14 +232,24 @@ def test_verifier(tmp: Path, valid: bool) -> None:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--windows-source', action='store_true',
+                        help='test redaction and key verification without the excluded Linux launcher')
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="memory-key-test-") as name:
         tmp = Path(name)
         test_redaction(tmp)
         test_redaction_streams_prompts_and_buffers_split_keys(tmp)
-        test_wrapper(tmp)
+        if not args.windows_source:
+            test_wrapper(tmp)
         test_verifier(tmp, valid=False)  # HTTP 200/code 0 must not be enough.
         test_verifier(tmp, valid=True)
-    print("Memory key safety tests passed")
+    if args.windows_source:
+        print("Memory key safety tests passed (Linux launcher not included)")
+    else:
+        print("Memory key safety tests passed")
 
 
 if __name__ == "__main__":

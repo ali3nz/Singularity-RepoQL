@@ -1,0 +1,142 @@
+{
+  "schema": "singularity-rust-migration-source-inventory/v1",
+  "purpose": "Source inventory only. File counts do not establish active Windows runtime dependencies.",
+  "sourceFileCount": 1116,
+  "fileExtensions": {
+    "": 14,
+    ".cmd": 3,
+    ".cs": 1,
+    ".css": 7,
+    ".dot": 2,
+    ".example": 4,
+    ".go": 2,
+    ".html": 2,
+    ".ico": 1,
+    ".js": 24,
+    ".json": 51,
+    ".jsonc": 3,
+    ".jsonl": 12,
+    ".lock": 4,
+    ".md": 252,
+    ".mjs": 299,
+    ".p4-before": 2,
+    ".patch": 8,
+    ".png": 1,
+    ".ps1": 54,
+    ".py": 223,
+    ".rs": 65,
+    ".sh": 1,
+    ".sources": 1,
+    ".sql": 11,
+    ".svg": 16,
+    ".toml": 9,
+    ".ts": 4,
+    ".txt": 11,
+    ".webp": 14,
+    ".wxs": 9,
+    ".yaml": 2,
+    ".yml": 3,
+    ".zip": 1
+  },
+  "languagesByTopLevel": {
+    "adapters": {
+      ".mjs": 14
+    },
+    "bootstrapper": {
+      ".ps1": 5,
+      ".py": 1
+    },
+    "connectors": {
+      ".py": 4,
+      ".ts": 4
+    },
+    "dashboard": {
+      ".js": 17,
+      ".mjs": 5,
+      ".py": 81
+    },
+    "ghost": {
+      ".mjs": 9,
+      ".py": 3
+    },
+    "harness": {
+      ".mjs": 147,
+      ".py": 5,
+      ".rs": 24
+    },
+    "installer": {
+      ".ps1": 7,
+      ".py": 1
+    },
+    "memory": {
+      ".mjs": 8,
+      ".py": 4
+    },
+    "native": {
+      ".mjs": 45,
+      ".ps1": 41,
+      ".py": 107,
+      ".rs": 41
+    },
+    "openchamber": {
+      ".js": 7,
+      ".mjs": 6
+    },
+    "orchestration": {
+      ".mjs": 11
+    },
+    "scripts": {
+      ".mjs": 39,
+      ".ps1": 1,
+      ".py": 12
+    },
+    "tests": {
+      ".mjs": 15,
+      ".py": 5
+    }
+  },
+  "rustCrates": [
+    {
+      "manifest": "harness/rust-authority/Cargo.toml",
+      "lockfile": "harness/rust-authority/Cargo.lock",
+      "lockPresent": true
+    },
+    {
+      "manifest": "native/desktop-bridge/Cargo.toml",
+      "lockfile": "native/desktop-bridge/Cargo.lock",
+      "lockPresent": true
+    },
+    {
+      "manifest": "native/windows/memory-parity-rust/Cargo.toml",
+      "lockfile": "native/windows/memory-parity-rust/Cargo.lock",
+      "lockPresent": false
+    },
+    {
+      "manifest": "native/windows/rc-stack-rust/Cargo.toml",
+      "lockfile": "native/windows/rc-stack-rust/Cargo.lock",
+      "lockPresent": false
+    },
+    {
+      "manifest": "native/windows/release-evidence-rust/Cargo.toml",
+      "lockfile": "native/windows/release-evidence-rust/Cargo.lock",
+      "lockPresent": false
+    },
+    {
+      "manifest": "native/windows/rust-supervisor/Cargo.toml",
+      "lockfile": "native/windows/rust-supervisor/Cargo.lock",
+      "lockPresent": true
+    },
+    {
+      "manifest": "native/windows/source-packager-rust/Cargo.toml",
+      "lockfile": "native/windows/source-packager-rust/Cargo.lock",
+      "lockPresent": false
+    },
+    {
+      "manifest": "native/windows/unified-gateway-rust/Cargo.toml",
+      "lockfile": "native/windows/unified-gateway-rust/Cargo.lock",
+      "lockPresent": true
+    }
+  ],
+  "migrationAcceptance": "RUST_NATIVE_BUILD_AND_WINDOWS_RUNTIME_NOT_RUN",
+  "includesThisReport": true
+}

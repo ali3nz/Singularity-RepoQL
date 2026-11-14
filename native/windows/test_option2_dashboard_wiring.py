@@ -1,5 +1,5 @@
 """Focused source and pure helper checks; NOT Windows Task Scheduler acceptance."""
-import base64
+import hashlib
 import tempfile
 import unittest
 import json
@@ -23,7 +23,7 @@ class Option2DashboardWiring(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t, patch.dict(os.environ, {'LOCALAPPDATA': t}):
             local=Path(t)
             source=local/'Singularity'/'DashboardRuntime'/'release'/'source'
-            for name in ('dashboard/server.py','connectors/memorycore/manifest.yaml','connectors/kanzo/manifest.yaml'):
+            for name in ('dashboard/server.py','dashboard/dashboard_route_policy.py','dashboard/native_listener.py','connectors/memorycore/manifest.yaml','connectors/kanzo/manifest.yaml'):
                 p=source/name; p.parent.mkdir(parents=True,exist_ok=True); p.write_text('fixture')
             runtime=local/'Singularity'/'WindowsNative'/'current'; runtime.mkdir(parents=True)
             rql=local/'rql.exe'; rql.write_bytes(b'fixture')
@@ -69,6 +69,8 @@ class Option2DashboardWiring(unittest.TestCase):
             stage=root/'stage'
             (stage/'dashboard').mkdir(parents=True)
             (stage/'dashboard/server.py').write_text('')
+            (stage/'dashboard/dashboard_route_policy.py').write_text('')
+            (stage/'dashboard/native_listener.py').write_text('')
             for name in ('memorycore','kanzo'):
                 p=stage/'connectors'/name
                 p.mkdir(parents=True)
@@ -90,14 +92,42 @@ class Option2DashboardWiring(unittest.TestCase):
             env=environment(stage,root/'rql.exe',root,root/'state',18100,windows=True)
             self.assertEqual(env['SINGULARITY_INSTALL_VARIANT'],'2')
             self.assertEqual(env['SINGULARITY_BIND'],'127.0.0.1')
-            self.assertEqual(env['SINGULARITY_WINDOWS_OMB_PORT'],'18211')
-            for selected in (1024,8799,65534):
-                result=environment(stage,root/'rql.exe',root,root/'state',18100,windows=True,openmausbot_port=selected)
-                self.assertEqual(result['SINGULARITY_WINDOWS_OMB_PORT'],str(selected))
-            for selected in (True,False,1023,65535,'8799',None,8799.0):
-                with self.subTest(selected=selected), self.assertRaisesRegex(ValueError,'DASHBOARD_OPENMAUSBOT_PORT_INVALID'):
-                    environment(stage,root/'rql.exe',root,root/'state',18100,windows=True,openmausbot_port=selected)
-
+            key = 'SINGULARITY_DASHBOARD_ROUTE_RUST_BINARY'
+            self.assertNotIn(key, env)
+            binary = root / 'bin' / 'singularity-dashboard-routes.exe'
+            binary.parent.mkdir()
+            binary.write_bytes(b'fake binary fixture')
+            digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+            enabled = environment(stage, root/'rql.exe', root, root/'state', 18100,
+                                  rust_route_sha256=digest)
+            self.assertEqual(enabled[key], str(binary))
+            for bad, message in (('0'*64, 'HASH_DRIFT'), ('bad', 'DIGEST_INVALID')):
+                with self.assertRaisesRegex(ValueError, message):
+                    environment(stage, root/'rql.exe', root, root/'state', 18100, rust_route_sha256=bad)
+            with self.assertRaisesRegex(ValueError, 'VARIANT_INVALID'):
+                environment(stage, root/'rql.exe', root, root/'state', 18100,
+                            variant=1, rust_route_sha256=digest)
+            listener = binary.with_name('singularity-dashboard-listener.exe')
+            listener.write_bytes(binary.read_bytes())
+            listener_key = 'SINGULARITY_DASHBOARD_NATIVE_LISTENER'
+            self.assertNotIn(listener_key, env)
+            self.assertEqual(environment(stage, root/'rql.exe', root, root/'state', 18100,
+                                         rust_listener_sha256=digest)[listener_key], str(listener))
+            proxy = binary.with_name('singularity-unified-proxy.exe')
+            proxy.write_bytes(binary.read_bytes())
+            proxy_key = 'SINGULARITY_UNIFIED_PROXY_RUST_BINARY'
+            self.assertNotIn(proxy_key, env)
+            self.assertEqual(environment(stage, root/'rql.exe', root, root/'state', 18100,
+                                         rust_unified_proxy_sha256=digest)[proxy_key], str(proxy))
+            proxy.write_bytes(b'drift')
+            with self.assertRaisesRegex(ValueError, 'HASH_DRIFT'):
+                environment(stage, root/'rql.exe', root, root/'state', 18100, rust_unified_proxy_sha256=digest)
+            listener.write_bytes(b'drift')
+            with self.assertRaisesRegex(ValueError, 'HASH_DRIFT'):
+                environment(stage, root/'rql.exe', root, root/'state', 18100, rust_listener_sha256=digest)
+            binary.unlink()
+            with self.assertRaisesRegex(ValueError, 'BINARY_INVALID'):
+                environment(stage, root/'rql.exe', root, root/'state', 18100, rust_route_sha256=digest)
             for variant in (1,2,3,4):
                 result=environment(stage,root/'rql.exe',root,root/'state',18100,
                                    variant=variant,windows=True,**ghost_args)
@@ -107,36 +137,6 @@ class Option2DashboardWiring(unittest.TestCase):
                 self.assertFalse(any('GHOST' in key or 'NATIVE_BRIDGE' in key for key in result))
             with self.assertRaises(ValueError):environment(stage,root/'rql.exe',root,root/'state',80,windows=True,**ghost_args)
             with self.assertRaises(ValueError):environment(stage,root/'rql.exe',root,root/'state',18100,variant=5,windows=True,**ghost_args)
-
-    @unittest.skipUnless(os.name == 'nt', 'PowerShell receipt contract')
-    def test_openmausbot_receipt_port_matches_real_argument_tokens(self):
-        manager=ROOT/'native/windows/manage_claude_complete_dashboard.ps1'
-        script=r"""
-$ast=[System.Management.Automation.Language.Parser]::ParseFile('__MANAGER__',[ref]$null,[ref]$null)
-$fn=$ast.Find({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Assert-ReceiptOpenMausBotPort'},$true)
-Invoke-Expression $fn.Extent.Text
-$cases=@(
-  @{json='{"arguments":"legacy --mode serve"}'; ok=$true},
-  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 8799 --mode serve"}'; ok=$true},
-  @{json='{"openMausBotPort":1024,"arguments":"-B host --openmausbot-port 1024 --mode serve"}'; ok=$true},
-  @{json='{"openMausBotPort":65534,"arguments":"-B host --openmausbot-port 65534 --mode serve"}'; ok=$true},
-  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 18211 --mode serve"}'; ok=$false},
-  @{json='{"openMausBotPort":true,"arguments":"-B host --openmausbot-port 1 --mode serve"}'; ok=$false},
-  @{json='{"openMausBotPort":"8799","arguments":"-B host --openmausbot-port 8799 --mode serve"}'; ok=$false},
-  @{json='{"openMausBotPort":65535,"arguments":"-B host --openmausbot-port 65535 --mode serve"}'; ok=$false},
-  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 8799 --openmausbot-port 8799 --mode serve"}'; ok=$false},
-  @{json='{"openMausBotPort":8799,"arguments":"-B host --openmausbot-port 8799 --mode serve extra"}'; ok=$false}
-)
-foreach ($case in $cases) {
-  $accepted=$true
-  try { Assert-ReceiptOpenMausBotPort ($case.json | ConvertFrom-Json) } catch { $accepted=$false }
-  if ($accepted -ne $case.ok) { exit 1 }
-}
-"""
-        script=script.replace('__MANAGER__',str(manager).replace("'","''"))
-        encoded=base64.b64encode(script.encode('utf-16le')).decode('ascii')
-        result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,text=True)
-        self.assertEqual(result.returncode,0,result.stderr)
 
     def test_dashboard_registration_keeps_option_two_default_and_sets_selected_variant(self):
         manager=(ROOT/'native/windows/manage_claude_complete_dashboard.ps1').read_text()
@@ -160,6 +160,8 @@ foreach ($case in $cases) {
         self.assertIn("if ($NativeRuntimeRoot) { $arguments+=' --native-runtime-root",manager)
         self.assertIn("p.add_argument('--native-runtime-root',type=Path)",launcher)
         self.assertIn('native_runtime_root=a.native_runtime_root',launcher)
+        self.assertIn("'bin/singularity-unified-proxy.exe']='--rust-unified-proxy-sha256'", manager)
+        self.assertIn("os.environ.pop('SINGULARITY_UNIFIED_PROXY_RUST_BINARY', None)", launcher)
 
     def test_connector_inventory_fails_without_two_active_unique_rows(self):
         one=lambda scheme,active: {'id':scheme,'status':'active' if active else 'installed','active':active}

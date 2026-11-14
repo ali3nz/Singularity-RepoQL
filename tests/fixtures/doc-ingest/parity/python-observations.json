@@ -478,7 +478,6 @@
                 "00b1ead2"
               ],
               "ingested_at": "<ts>",
-              "reason": "chunk write failed",
               "session": null,
               "status": "DOC_INGEST_INDEXED",
               "task_ids": [
@@ -503,7 +502,6 @@
                 "504b3c26"
               ],
               "ingested_at": "<ts>",
-              "reason": "chunk write failed",
               "session": null,
               "status": "DOC_INGEST_INDEXED",
               "task_ids": [
@@ -857,7 +855,6 @@
                   "00b1ead2"
                 ],
                 "ingested_at": "<ts>",
-                "reason": "chunk write failed",
                 "session": null,
                 "status": "DOC_INGEST_INDEXED",
                 "task_ids": [
@@ -882,7 +879,6 @@
                   "504b3c26"
                 ],
                 "ingested_at": "<ts>",
-                "reason": "chunk write failed",
                 "session": null,
                 "status": "DOC_INGEST_INDEXED",
                 "task_ids": [

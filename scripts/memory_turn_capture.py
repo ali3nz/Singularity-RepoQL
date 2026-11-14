@@ -219,5 +219,27 @@ def main():
         cmd_status(args)
 
 
+
+def _delegate_to_native_when_enabled():
+    """Explicit opt-in to the Rust CLI; never run both implementations.
+
+    A missing/failed native executable is an error, not permission to fall
+    back and potentially write a second pending/confirmed record.
+    """
+    native = os.environ.get("SINGULARITY_RUST_TURN_CAPTURE_BIN", "")
+    if not native:
+        return
+    if not os.path.isabs(native) or not pathlib.Path(native).is_file():
+        print("REFUSED: Rust capture binary must be an existing absolute path", file=sys.stderr)
+        sys.exit(6)
+    try:
+        completed = subprocess.run([native, *sys.argv[1:]], check=False)
+    except OSError as exc:
+        print("REFUSED: Rust capture CLI could not start:", exc, file=sys.stderr)
+        sys.exit(6)
+    sys.exit(completed.returncode if completed.returncode >= 0 else 6)
+
+
 if __name__ == "__main__":
+    _delegate_to_native_when_enabled()
     main()

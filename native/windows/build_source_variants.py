@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic SOURCE REVIEW archives for four native Windows variants.
+"""Deterministic SOURCE REVIEW archives for one full Claude Code Windows profile.
 
 Not a Windows installer: no binaries, credentials, services or GUI changes.
 The same authoritative Node component classifier used by the legacy product
@@ -21,8 +21,7 @@ ZIP_DATE = (2026, 1, 1, 0, 0, 0)
 
 from windows_source_policy import (
     linux_deployment_asset,
-    windows_ghost_source,
-    windows_office_source,
+    windows_retired_source,
     windows_variant_excludes,
 )
 
@@ -54,27 +53,28 @@ def component_files():
 
 def build(variant: int, output: Path):
     policy = json.loads((ROOT/"native/windows/variants.json").read_text(encoding="utf-8"))
-    if str(variant) not in policy["variants"]:
-        raise ValueError("variant must be 1 through 4")
+    if variant != 2 or str(variant) not in policy["variants"]:
+        raise ValueError("only Claude Code Full is supported")
     parts = component_files()
     if parts["unclassified"]:
         raise ValueError("unclassified source cannot enter release source archive: " + ", ".join(parts["unclassified"][:8]))
-    office_enabled = variant in (2, 4)
+    office_enabled = True
     features = policy["variants"][str(variant)]["features"]
-    if features.get("ghost") is not False:
-        raise ValueError("Ghost must be disabled in every native Windows source variant")
-    if features.get("office") is not office_enabled:
-        raise ValueError("Office must be enabled only in options 2 and 4")
+    required_features = ("office", "repoql_dashboard", "tencent_connector", "kanzo", "openmausbot", "memory", "repoql_mcp")
+    if any(features.get(key) is not True for key in required_features) or features.get('ghost') is not False:
+        raise ValueError("Full Claude Code feature policy incomplete")
     selected = set(parts["core"] + parts["dashboard"] + (parts["office"] if office_enabled else [])) - {"SHA256SUMS"}
     paths = sorted(name for name in selected
                    if not linux_deployment_asset(name)
                    and not windows_variant_excludes(name, variant))
-    if any(windows_ghost_source(name) for name in paths):
-        raise ValueError("Ghost source leaked into native Windows archive")
+    if any(windows_retired_source(name) for name in paths):
+        raise ValueError("Retired source leaked into native Windows archive")
     if not paths:
         raise ValueError("empty source set")
-    if not office_enabled:
-        assert not any(windows_office_source(name) for name in paths)
+    required_paths = ("native/windows/openmausbot/", "connectors/kanzo/", "connectors/memorycore/", "dashboard/", "office/", "adapters/claude-code/")
+    for prefix in required_paths:
+        if not any(name.startswith(prefix) for name in paths):
+            raise ValueError("Full Claude Code component missing: " + prefix)
     output.parent.mkdir(parents=True,exist_ok=True)
     receipts = []
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=7) as dest:
@@ -88,7 +88,7 @@ def build(variant: int, output: Path):
             info.compress_type=zipfile.ZIP_DEFLATED
             info.external_attr=(0o644<<16)
             dest.writestr(info,data,compress_type=zipfile.ZIP_DEFLATED,compresslevel=7)
-        # Release-specific SHA256SUMS cannot list excluded Ghost/Office files.
+        # Release-specific SHA256SUMS lists only the full supported Windows source.
         checksums=''.join(f"{x['sha256']}  {x['path']}\n" for x in receipts)
         scoped_sha=zipfile.ZipInfo('SHA256SUMS',ZIP_DATE)
         scoped_sha.compress_type=zipfile.ZIP_DEFLATED
@@ -119,12 +119,71 @@ def build(variant: int, output: Path):
             'sha256':hashlib.sha256(output.read_bytes()).hexdigest()}
 
 
+
+def build_with_rust(binary: Path, output_dir: Path, variant: int | None = None):
+    """Opt-in native builder, independently checked by the existing scanner.
+
+    This is never selected implicitly by the installer or a host environment.
+    No previously published output is overwritten. Use only AFTER compiled
+    Rust parity has been independently established on the target machine.
+    """
+    if not binary.is_absolute() or not binary.is_file():
+        raise ValueError('Rust packager binary must be an existing absolute file')
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise ValueError('Rust output directory must be empty (no overwrite)')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    argv = [str(binary), 'build', str(ROOT), str(output_dir)]
+    if variant is not None:
+        argv.append(str(variant))
+    process = subprocess.run(argv, capture_output=True, text=True, timeout=180, check=False)
+    if process.returncode:
+        raise ValueError(f'Rust packager failed rc={process.returncode}: {process.stderr[:200]}')
+    try:
+        result = json.loads(process.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError('Rust packager returned invalid JSON') from exc
+    expected = [2]
+    outputs = result.get('outputs') if isinstance(result, dict) else None
+    if not isinstance(result, dict) or result.get('release_status') != 'NOT_READY' or not isinstance(outputs, list) or len(outputs) != len(expected):
+        raise ValueError('Rust packager returned an unexpected release manifest')
+    from scan_source_archive import scan
+    seen = set()
+    for row in outputs:
+        if not isinstance(row, dict) or type(row.get('variant')) is not int or row['variant'] not in expected:
+            raise ValueError('Rust packager returned an unexpected variant')
+        v = row['variant']
+        if v in seen:
+            raise ValueError('Rust packager returned a duplicate variant')
+        seen.add(v)
+        name = f'singularity-native-windows-option{v}-SOURCE-ONLY.zip'
+        if row.get('name') != name:
+            raise ValueError('Rust packager returned an unexpected archive name')
+        zip_path = output_dir / name
+        if not zip_path.is_file() or zip_path.is_symlink():
+            raise ValueError('Rust source archive missing or is a symlink')
+        raw = zip_path.read_bytes()
+        if row.get('bytes') != len(raw) or row.get('sha256') != hashlib.sha256(raw).hexdigest():
+            raise ValueError('Rust source archive digest or size mismatch')
+        receipt = scan(zip_path)
+        if not receipt['ok']:
+            raise ValueError('Rust source archive failed original release scanner: ' + ', '.join(receipt['issues']))
+    if seen != set(expected):
+        raise ValueError('Rust packager omitted a requested variant')
+    return result
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--output-dir',required=True,type=Path)
-    parser.add_argument('--variant',type=int,choices=[1,2,3,4],help='one variant; default all four')
+    parser.add_argument('--variant',type=int,choices=[2],help='legacy receipt identity, always 2')
+    parser.add_argument('--rust-binary', type=Path,
+                        help='explicit opt-in compiled Rust source packager; still scanned and not a Windows installer')
     args=parser.parse_args()
-    outputs=[build(i,args.output_dir/f'singularity-native-windows-option{i}-SOURCE-ONLY.zip') for i in ([args.variant] if args.variant else [1,2,3,4])]
+    if args.rust_binary is not None:
+        result = build_with_rust(args.rust_binary, args.output_dir, args.variant)
+        print(json.dumps(result, indent=2))
+        return
+    outputs=[build(2,args.output_dir/'singularity-native-windows-option2-SOURCE-ONLY.zip')]
     print(json.dumps({'release_status':'NOT_READY','outputs':outputs},indent=2))
 
 if __name__=='__main__':

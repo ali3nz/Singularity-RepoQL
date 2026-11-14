@@ -18,6 +18,7 @@ sys.path.insert(0,str(ROOT/'dashboard'))
 from repoql_bridge import Config, RepoQL
 from repoql_connectors import connector_inventory
 from native.windows.repoql_compat import preflight
+from rust_readonly_bridge import run_checked, RustReadOnlyBridgeError
 
 NEEDED=('kanzo','memorycore')
 
@@ -43,6 +44,7 @@ def main(argv=None):
     ap=argparse.ArgumentParser()
     ap.add_argument('--rql-exe',required=True,type=Path)
     ap.add_argument('--workspace',required=True,type=Path)
+    ap.add_argument('--rust-binary',type=Path,help='opt-in Rust inventory assessment; Python still collects live evidence')
     a=ap.parse_args(argv)
     if os.name!='nt' or not a.rql_exe.is_absolute() or not a.workspace.is_dir():
         print(json.dumps({'ok':False,'error':'NATIVE_WINDOWS_WORKSPACE_REQUIRED'}));return 2
@@ -53,9 +55,17 @@ def main(argv=None):
         rql=RepoQL(Config(workspace=a.workspace,rql=a.rql_exe,
                          state_dir=Path(os.environ['LOCALAPPDATA'])/'Singularity'/'Dashboard',
                          bind='127.0.0.1',port=18100))
-        result=evaluate(connector_inventory(rql))
+        inventory=connector_inventory(rql)
     except (OSError,subprocess.TimeoutExpired,ValueError,KeyError):
-        result=evaluate({'available':False})
+        inventory={'available':False}
+    result=evaluate(inventory)
+    if a.rust_binary is not None:
+        try:
+            result=run_checked(a.rust_binary,['connector-evaluate-stdin'],result,data=inventory)
+        except RustReadOnlyBridgeError:
+            # Do not leak collector details or silently accept Python fallback.
+            print(json.dumps({'ok':False,'error':'RUST_CONNECTOR_EVALUATION_UNVERIFIED'}))
+            return 2
     print(json.dumps(result,indent=2))
     return 0 if result['bothConnectorsActive'] else 1
 

@@ -1,0 +1,16 @@
+{
+  "schema": "singularity-l1-prompt-overlay/v1",
+  "upstream": "https://github.com/TencentDB/Agent-Memory",
+  "license": "MIT",
+  "commit": "99a1a2c251741658917e3fa700bf8e337ad15a5f",
+  "target": "src/core/prompts/l1-extraction.ts",
+  "normalization": "CRLF-to-LF",
+  "baseSha256": "4a443a170a5c6d754c8212728a2fa23b1d1f647d49f960b7e10b6a6cc5761816",
+  "overlaySha256": "89ba06ece0647f737734c34e022a4e5c1425b505739408d97d0dc39f4ba19660",
+  "sourceWork": "fleet#1268",
+  "changes": [
+    "Language-preserving scene and memory extraction",
+    "Engineering outcomes: decision, exact evidence, open work; not process narration",
+    "Explicit JSON array wrapper for single and multiple scenes in both prompt modes"
+  ]
+}

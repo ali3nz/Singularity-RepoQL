@@ -9,7 +9,7 @@
 // subagent-start: the hook payload's `agent_type` names the subagent. Only
 // Singularity agents (namespaced `singularity-*`, mapped in agent-map.mjs) are
 // acted on; every other subagent exits silently. A mapped agent gets a BOUNDED
-// recall from its own existing MemoryCore identity (≤4 L0 + ≤4 L1 items,
+// recall from its own existing MemoryCore identity (≤5 L1, or ≤3 L0 fallback,
 // clipped) returned as hookSpecificOutput.additionalContext — advisory context,
 // never instructions. MemoryCore being unreachable must never break the agent:
 // failures are logged to stderr and the hook still exits 0 (nothing is claimed
@@ -42,9 +42,10 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { callMemoryCore, loadGhostMemoryConfig } from "../../scripts/memory-config-loader.mjs";
+import { callMemoryCore, loadMemoryConfig } from "../../scripts/memory-config-loader.mjs";
 import { reconcileMemoryUnit } from "../../scripts/memory-reconcile-core.mjs";
 import { resolveSingularityAgent } from "./agent-map.mjs";
+import { nativeMemoryPolicyEnabled, requestNativeMemoryPolicy, NativeMemoryPolicyError } from "../../harness/kit/lib/native-memory-policy.mjs";
 
 const DEFAULT_TEAM = "openchamber-agents";
 const MAX_RECALL_ITEM_CHARS = 400;
@@ -65,6 +66,38 @@ export function redactSecrets(text) {
     .replace(/\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{10,}\b/g, "[REDACTED]")
     .replace(/\bAKIA[A-Z0-9]{12,}\b/g, "[REDACTED]")
     .replace(/\b(?:api[_-]?key|token|secret|password)\b(\s*[:=]\s*)"?[\w./+=-]{8,}"?/gi, (_m, sep) => `key${sep}[REDACTED]`);
+}
+
+// Native capture helpers remain opt-in. Exact comparison prevents a forged,
+// buggy or incompatible binary from changing the stored lesson or task ID.
+// Do not log the source text or native payload on disagreement.
+function captureRedacted(text) {
+  const input = String(text ?? "");
+  const expected = redactSecrets(input);
+  if (!nativeMemoryPolicyEnabled()) return expected;
+  const native = requestNativeMemoryPolicy("hook-redact", { text: input });
+  if (typeof native.text !== "string" || native.text !== expected) {
+    throw new NativeMemoryPolicyError("NATIVE_HOOK_REDACTION_MISMATCH");
+  }
+  return native.text;
+}
+
+function stableCaptureIds(parts, sessionKey) {
+  const expectedTaskId = `cc-${sha16(JSON.stringify(parts))}`;
+  const expectedSessionHash = sha8(sessionKey);
+  if (!nativeMemoryPolicyEnabled()) {
+    return { taskId: expectedTaskId, sessionHash8: expectedSessionHash };
+  }
+  // The native command intentionally handles only string parts. Rejecting a
+  // malformed event is safer than silently altering its task identity.
+  if (!parts.every(p => typeof p === "string")) {
+    throw new NativeMemoryPolicyError("INVALID_HOOK_ID_PARTS");
+  }
+  const native = requestNativeMemoryPolicy("hook-capture-id", { parts, sessionKey });
+  if (native.taskId !== expectedTaskId || native.sessionHash8 !== expectedSessionHash) {
+    throw new NativeMemoryPolicyError("NATIVE_HOOK_ID_MISMATCH");
+  }
+  return { taskId: native.taskId, sessionHash8: native.sessionHash8 };
 }
 
 // If the event omitted last_assistant_message, recover the last assistant text
@@ -209,7 +242,7 @@ export async function runMemoryHook(argv, opts = {}) {
 
   let cfg;
   try {
-    cfg = loadGhostMemoryConfig({ ...env, SINGULARITY_MEMORY_CONFIG: configPath });
+    cfg = loadMemoryConfig({ ...env, SINGULARITY_MEMORY_CONFIG: configPath });
   } catch {
     return { exitCode: 0, stdout: null, stderr: ["singularity memory hook: cannot read memory config; continuing without memory"] };
   }
@@ -228,16 +261,16 @@ export async function runMemoryHook(argv, opts = {}) {
       // to remember (interrupted/aborted turn): never write a hollow record.
       const turn = transcriptLastTurn(input.transcript_path ?? input.transcriptPath);
       const assistantRaw = turn.assistant || String(input.last_assistant_message ?? "").trim();
-      const assistantText = clip(redactSecrets(assistantRaw), MAX_PARENT_MESSAGE_CHARS).trim();
+      const assistantText = clip(captureRedacted(assistantRaw), MAX_PARENT_MESSAGE_CHARS).trim();
       if (!assistantText) return { exitCode: 0, stdout: null, stderr };
       // Short turns are valid parent turns: no MIN_LESSON_CHARS floor here.
-      const userText = clip(redactSecrets(turn.user), MAX_PARENT_MESSAGE_CHARS).trim()
+      const userText = clip(captureRedacted(turn.user), MAX_PARENT_MESSAGE_CHARS).trim()
         || "(no user prompt recovered from transcript)";
       const sessionKey = String(input.session_id ?? "unknown");
       // Deterministic identity: Stop, SessionEnd and hook retries all derive the
       // same task_id from the same turn, so capture is idempotent by design.
-      const task_id = `cc-${sha16(JSON.stringify([sessionKey, userText, assistantText]))}`;
-      const session_id = `${DEFAULT_MAIN_AGENT}-${sha8(sessionKey)}`;
+      const { taskId: task_id, sessionHash8 } = stableCaptureIds([sessionKey, userText, assistantText], sessionKey);
+      const session_id = `${DEFAULT_MAIN_AGENT}-${sessionHash8}`;
       const capturedAt = now();
       const unit = {
         session_id, task_id,
@@ -284,29 +317,38 @@ export async function runMemoryHook(argv, opts = {}) {
     }
 
     if (kind === "subagent-start") {
-      // Bounded recall: two searches, ≤4 items each, strictly clipped.
+      // One bounded L1 search first; L0 only for empty/unavailable L1.
       const query = clip(String(input.prompt ?? input.userPrompt ?? "").trim()
         || `${agent.memoryAgentId} prior experience and lessons`, 400);
-      const [l0, l1] = await Promise.all([
-        callMemoryCore("/v3/conversation/search", { ...identity, query, limit: 4 }, { ...cfg, identity }, fetchImpl).catch((e) => ({ _error: e, data: null })),
-        callMemoryCore("/v3/atomic/search", { ...identity, query, limit: 4 }, { ...cfg, identity }, fetchImpl).catch((e) => ({ _error: e, data: null })),
-      ]);
-      const failed = [l0, l1].filter((r) => r?._error || r?.error || (r?.code !== undefined && r.code !== 0));
-      if (failed.length) {
-        // Degraded, not fatal: report the failure, claim nothing, never block the harness.
-        stderr.push(`singularity memory hook: recall degraded, continuing without memory (memory core unreachable: ${failed.map((f) => f._error?.name || (f.code !== undefined && f.code !== 0 ? "api-error" : "error")).join(", ")})`);
-      }
-      const items = [];
-      for (const [r, layer] of [[l0, "L0"], [l1, "L1"]]) {
-        if (r?._error || r?.error || (r?.code !== undefined && r.code !== 0)) continue;
-        for (const m of r?.data?.messages || r?.data?.atoms || r?.data?.items || []) {
-          const text = clip(m.content ?? m.body, MAX_RECALL_ITEM_CHARS);
+      const recall = async (layer, limit) => {
+        const endpoint = layer === "L1" ? "/v3/atomic/search" : "/v3/conversation/search";
+        let result;
+        try { result = await callMemoryCore(endpoint, { ...identity, query, limit }, { ...cfg, identity }, fetchImpl); }
+        catch { result = { error: true }; }
+        if (!result || result.error || (result.code !== undefined && result.code !== 0)) {
+          stderr.push(`singularity memory hook: recall degraded: ${layer} recall unavailable; continuing without memory from that layer`);
+          return [];
+        }
+        const rows = layer === "L1"
+          ? (result.data?.atoms ?? result.data?.items ?? result.data?.memories ?? [])
+          : (result.data?.messages ?? result.data?.items ?? []);
+        if (!Array.isArray(rows)) {
+          stderr.push(`singularity memory hook: recall degraded: ${layer} recall unavailable (invalid response); continuing without memory from that layer`);
+          return [];
+        }
+        const items = [];
+        for (const m of rows.slice(0, limit)) {
+          if (!m || typeof m !== "object") continue;
+          const content = m.content ?? m.body;
+          if (typeof content !== "string") continue;
+          const text = clip(content, MAX_RECALL_ITEM_CHARS);
           if (!text.trim()) continue;
           items.push(`- [${layer}${m.timestamp || m.recorded_at ? ` ${clip(m.timestamp || m.recorded_at, 25)}` : ""}] ${text}`);
-          if (items.length >= 8) break;
         }
-        if (items.length >= 8) break;
-      }
+        return items;
+      };
+      let items = await recall("L1", 5);
+      if (!items.length) items = await recall("L0", 3);
       if (!items.length) return { exitCode: 0, stdout: null, stderr };
       const stdout = JSON.stringify({
         hookSpecificOutput: {
@@ -324,12 +366,13 @@ export async function runMemoryHook(argv, opts = {}) {
       if (!raw && input.agent_transcript_path) raw = clip(transcriptLastAssistant(input.agent_transcript_path), MAX_LESSON_CHARS).trim();
       if (raw.length < MIN_LESSON_CHARS) return { exitCode: 0, stdout: null, stderr }; // trivial output: nothing worth storing
 
-      const lesson = redactSecrets(raw);
+      const lesson = captureRedacted(raw);
       // Do NOT include wall-clock time in task identity: the hook is a fresh
       // process on every retry. A time-derived task_id silently duplicates
       // memories after restarts and breaks long-term self-learning integrity.
-      const task_id = `cc-${sha16(JSON.stringify([input.session_id ?? "unknown", agent.claudeAgent, lesson]))}`;
-      const session_id = `claude-code-${agent.memoryAgentId}-${sha8(String(input.session_id ?? "unknown"))}`;
+      const sessionKey = String(input.session_id ?? "unknown");
+      const { taskId: task_id, sessionHash8 } = stableCaptureIds([input.session_id ?? "unknown", agent.claudeAgent, lesson], sessionKey);
+      const session_id = `claude-code-${agent.memoryAgentId}-${sessionHash8}`;
       const capturedAt = now();
       const content = `Singularity lesson from ${agent.memoryAgentId} (Claude Code session ${clip(input.session_id ?? "unknown", 48)}, ${capturedAt}):\n${lesson}`;
       const unit = { session_id, task_id, messages: [{ role: "assistant", content, recorded_at: capturedAt }] };

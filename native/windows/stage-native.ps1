@@ -16,7 +16,7 @@ Neither operation implies any of the four profiles passed GUI acceptance.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
-  [ValidateRange(0,4)][int]$Option = 0,
+  [ValidateSet(0,2)][int]$Option = 0,
   [string]$SourceRoot = '',
   [string]$BridgeExe = '',
   [string]$SupervisorExe = '',
@@ -31,7 +31,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'NATIVE_WINDOWS_REQUIRED: WSL or POSIX not supported' }
 if (($Apply -and $Rollback) -or ($Rollback -and $PrepareSource)) { throw 'Choose one staging operation' }
-if (-not $Rollback -and $Option -notin @(1,2,3,4)) { throw 'OPTION_1_THROUGH_4_REQUIRED' }
+if (-not $Rollback -and $Option -ne 2) { throw 'CLAUDE_CODE_FULL_ONLY' }
 if ($PrepareSource -and ($BridgeExe -or $SupervisorExe -or $RepoqlExe -or $GuiExe)) { throw 'SOURCE_PREPARATION_BINARY_INPUTS_REFUSED' }
 if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { throw 'LOCALAPPDATA_REQUIRED' }
 $localRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Singularity'))
@@ -148,10 +148,10 @@ function Assert-Manifest([string]$Root, [int]$Selected) {
   $m = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
   if ($m.schema -ne 1 -or $m.variant -ne $Selected -or $m.release_status -ne 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER') { throw 'SOURCE_PROFILE_INVALID' }
   if ($m.repoql.requiredVersion -ne '1.7.18' -or $m.repoql.connectorContract -cne 'fetch-render') { throw 'REPOQL_VERSION_OR_CONTRACT_DRIFT' }
-  $complete = $Selected -in @(2,4)
+  $complete = $true
   if ($m.features.ghost -isnot [bool] -or [bool]$m.features.office -ne $complete -or [bool]$m.features.ghost) { throw 'SOURCE_FEATURE_MISMATCH' }
   if ($m.rustGhostFeature -isnot [bool] -or [bool]$m.rustOfficeFeature -ne $complete -or [bool]$m.rustGhostFeature) { throw 'SOURCE_RUST_FEATURE_MISMATCH' }
-  if ($m.gui -ne $(if ($Selected -le 2) { 'claude-desktop-code' } else { 'openchamber-desktop' })) { throw 'GUI_VARIANT_MISMATCH' }
+  if ($m.gui -ne 'claude-desktop-code') { throw 'GUI_VARIANT_MISMATCH' }
   $seen = @{}
   $seenWindows = @{}
   $reserved = '^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9]|LPT[1-9])($|\.)'
@@ -261,10 +261,10 @@ if ($Rollback) {
   } elseif (Test-Path -LiteralPath $previousSupervisor) { throw 'ROLLBACK_UNRECORDED_SUPERVISOR_REFUSED' }
   if ($receipt.PSObject.Properties['additionalBinaries']) {
     $extraNames=@{}
-    if (@($receipt.additionalBinaries).Count -gt 2) { throw 'ROLLBACK_ADDITIONAL_BINARY_INVALID' }
+    if (@($receipt.additionalBinaries).Count -gt 9) { throw 'ROLLBACK_ADDITIONAL_BINARY_INVALID' }
     foreach ($extra in @($receipt.additionalBinaries)) {
       $relative=[string]$extra.path
-      if ($relative -cnotin @('bin/singularity-windows-supervisorw.exe','bin/unified-repoql-control.exe') -or
+      if ($relative -cnotin @('bin/singularity-windows-supervisorw.exe','bin/unified-repoql-control.exe','bin/singularity-dashboard-routes.exe','bin/singularity-dashboard-listener.exe','bin/singularity-doc-ledger-commit.exe','bin/singularity-memorycore-writer.exe','bin/singularity-windows-setup.exe','bin/singularity-source-packager.exe','bin/singularity-unified-proxy.exe') -or
           [string]$extra.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $extraNames.ContainsKey($relative)) { throw 'ROLLBACK_ADDITIONAL_BINARY_INVALID' }
       $extraNames[$relative]=$true
       $extraPath=Join-Path $previous $relative
@@ -329,7 +329,7 @@ Assert-LocalExistingFile $BridgeExe 'Rust bridge'
 if ($SupervisorExe) { Assert-LocalExistingFile $SupervisorExe 'Rust supervisor'; Assert-PortableExecutable $SupervisorExe }
 $additionalInputs=@()
 if ($SupervisorExe) {
-  foreach ($name in @('singularity-windows-supervisorw.exe','unified-repoql-control.exe')) {
+  foreach ($name in @('singularity-windows-supervisorw.exe','unified-repoql-control.exe','singularity-dashboard-routes.exe','singularity-dashboard-listener.exe','singularity-doc-ledger-commit.exe','singularity-memorycore-writer.exe','singularity-windows-setup.exe','singularity-source-packager.exe','singularity-unified-proxy.exe')) {
     $extraPath=Join-Path (Split-Path -Parent $SupervisorExe) $name
     if (Test-Path -LiteralPath $extraPath -PathType Leaf) {
       Assert-LocalExistingFile $extraPath 'Additional product binary'
@@ -341,7 +341,7 @@ if ($SupervisorExe) {
 Assert-LocalExistingFile $RepoqlExe 'RepoQL'
 if ($GuiExe) { Assert-LocalExistingFile $GuiExe 'GUI executable' }
 Assert-PortableExecutable $BridgeExe
-$complete = $Option -in @(2,4)
+$complete = $true
 $bridgeInfo = Test-BridgeBuildInfo $BridgeExe $complete
 Assert-PortableExecutable $RepoqlExe
 if ($GuiExe) { Assert-PortableExecutable $GuiExe }
@@ -429,6 +429,21 @@ try {
     additionalBinaries=$additionalBinaries;
     guiExecutableProvided=[bool]$GuiExe; guiConfigured=$false; servicesInstalled=$false; acceptedOnWindows=$false }
   $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $staging 'STAGING_RECEIPT.json') -Encoding UTF8
+  $verifierRow=@($additionalInputs | Where-Object { $_.path -ceq 'bin/singularity-source-packager.exe' })
+  if ($verifierRow.Count -eq 1) {
+    # Execute the explicitly supplied and copy-verified candidate tool, never
+    # a verifier from the old/rollback snapshot whose trust is in question.
+    $verifierExe=[string]$verifierRow[0].source
+    $promotion=@(& $verifierExe 'promote-pending' $targetRoot ([IO.Path]::GetFileName($staging)))
+    if ($LASTEXITCODE -ne 0 -or $promotion.Count -ne 1 -or $promotion[0] -cne 'STAGING_PROMOTED') {
+      if ($promotion.Count -eq 1 -and $promotion[0] -cin @('RUST_PREVIOUS_SNAPSHOT_VERIFICATION_FAILED','STAGE_RECOVERY_INCOMPLETE_REVIEW_PREVIOUS_AND_PENDING')) {
+        throw ([string]$promotion[0])
+      }
+      throw 'RUST_STAGING_PROMOTION_UNCONFIRMED'
+    }
+    Write-Output 'SOURCE_STAGED_ONLY: no service or GUI configuration was modified; run Windows acceptance before release.'
+    return
+  }
   if (Test-Path -LiteralPath $current) {
     Move-Item -LiteralPath $current -Destination $previous
     $movedPrevious = $true

@@ -7,10 +7,13 @@ An operator must explicitly run this process under the native supervisor.
 from __future__ import annotations
 
 import argparse
+import json
+import math
 from contextlib import closing
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import subprocess
 import sqlite3
 import sys
 import time
@@ -134,12 +137,25 @@ def series(config: Config, period: str, periods: dict, *, now: int | None = None
         return {**result, 'reason': 'native_windows_cpu_history_unreadable'}
     if not rows:
         return {**result, 'reason': 'native_windows_cpu_history_no_samples'}
+    args = {'period': period, 'window': window, 'bucket': bucket,
+            'retention_days': config.cpu_retention_days,
+            'sample_interval_seconds': config.sample_interval_seconds}
+    expected = _project_rows_python(rows, **args)
+    return _native_checked_rows(rows, now=now, expected=expected, **args)
+
+
+def _project_rows_python(rows, *, period, window, bucket, retention_days, sample_interval_seconds):
+    """Reference grouping of already authenticated read-only Windows CPU rows."""
+    result = {'available': False, 'reason': 'native_windows_cpu_history_no_verified_samples',
+              'measurement_source': 'rust-win32-process-times', 'process_scale': 'percent-of-one-core',
+              'series': [], 'stats': {}, 'bucket_seconds': bucket,
+              'period': period, 'retention_days': retention_days}
     values_by_bucket: dict[int, list[float]] = {}
     all_values = []
     last_ts = None
     gaps = 0
     for ts, cpu, state in rows:
-        if last_ts is not None and ts - last_ts > max(1, config.sample_interval_seconds) * 2:
+        if last_ts is not None and ts - last_ts > max(1, sample_interval_seconds) * 2:
             gaps += 1
         last_ts = ts
         slot = ts // bucket * bucket
@@ -149,10 +165,10 @@ def series(config: Config, period: str, periods: dict, *, now: int | None = None
             all_values.append(cpu)
         else:
             gaps += 1
-    plotted = [{'ts': ts, 'avg': round(sum(vals)/len(vals), 2) if vals else None,
+    plotted = [{'ts': ts, 'avg': round(math.fsum(vals)/len(vals), 2) if vals else None,
                 'peak': round(max(vals), 2) if vals else None}
                for ts, vals in sorted(values_by_bucket.items())]
-    stats = {'avg': round(sum(all_values)/len(all_values), 2) if all_values else None,
+    stats = {'avg': round(math.fsum(all_values)/len(all_values), 2) if all_values else None,
              'peak': round(max(all_values), 2) if all_values else None,
              'samples': len(all_values), 'gaps': gaps,
              'last_sample': datetime.fromtimestamp(rows[-1][0], timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -160,6 +176,43 @@ def series(config: Config, period: str, periods: dict, *, now: int | None = None
     return {**result, 'available': bool(all_values),
             'reason': None if all_values else 'native_windows_cpu_history_no_verified_samples',
             'stats': stats, 'series': plotted}
+
+
+
+def _native_checked_rows(rows, *, period, now, window, bucket, retention_days, sample_interval_seconds, expected):
+    """Explicit, read-only Rust projection. No DB path, PID or process identity enters Rust."""
+    binary = os.environ.get('SINGULARITY_NATIVE_CPU_HISTORY_RUST_BINARY', '')
+    if not binary:
+        return expected
+    executable = Path(binary)
+    if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
+        raise RuntimeError('native_cpu_history_rust_binary_invalid')
+    if len(rows) > 20000:
+        raise RuntimeError('native_cpu_history_rust_input_too_large')
+    request = {'period': period, 'now': now, 'window': window, 'bucket': bucket,
+               'retention_days': retention_days, 'sample_interval_seconds': sample_interval_seconds,
+               'rows': rows}
+    try:
+        encoded = json.dumps(request, ensure_ascii=False, allow_nan=False)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise RuntimeError('native_cpu_history_rust_invalid_input') from exc
+    if len(encoded.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('native_cpu_history_rust_input_too_large')
+    try:
+        completed = subprocess.run([str(executable)], input=encoded, text=True,
+                                   encoding='utf-8', capture_output=True, timeout=10,
+                                   shell=False, check=False)
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('native_cpu_history_rust_execution_failed') from exc
+    if completed.returncode != 0 or len(completed.stdout.encode('utf-8')) > 2 * 1024 * 1024:
+        raise RuntimeError('native_cpu_history_rust_execution_failed')
+    try:
+        actual = json.loads(completed.stdout)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError('native_cpu_history_rust_invalid_json') from exc
+    if actual != expected:
+        raise RuntimeError('native_cpu_history_rust_mismatch')
+    return actual
 
 
 def main() -> int:

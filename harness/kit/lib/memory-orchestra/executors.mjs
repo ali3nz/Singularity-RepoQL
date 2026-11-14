@@ -106,16 +106,21 @@ function skillRow(s) {
 // Supported forms (measured): a file address, or a DIRECTORY address. Joined
 // `;` lists and `*`/`**` address forms return "No concepts are relevant".
 function addressForPaths(paths) {
-  const dirs = [];
+  const targets = [];
   for (const p of Array.isArray(paths) ? paths : []) {
     const s = String(p ?? "").trim();
     if (!s) continue;
     if (/^(concept|github|vocabulary):\/\//.test(s)) continue; // not edit targets
-    if (/^file:\/\//.test(s)) dirs.push(s.replace(/[^/]*$/, ""));
-    else if (s.startsWith("/")) dirs.push("file://" + s.replace(/[^/]*$/, ""));
+    // A single file must keep its file address: a bare directory returns a
+    // directory-level concept set that omits file-specific concepts (measured
+    // 2026-11-12: the capture-admission concept is applicable to the file
+    // address but absent from its parent-directory address).
+    if (/^file:\/\//.test(s)) targets.push(s);
+    else if (s.startsWith("/")) targets.push("file://" + s);
   }
-  if (!dirs.length) return null;
-  if (dirs.length === 1) return dirs[0];
+  if (!targets.length) return null;
+  const dirs = targets.map((t) => t.replace(/[^/]*$/, ""));
+  if (dirs.length === 1) return targets[0];
   const parts = dirs.map((d) => d.replace(/\/$/, "").split("/"));
   const min = Math.min(...parts.map((p) => p.length));
   let i = 0;
@@ -251,23 +256,36 @@ export function createPlannerExecutors({ memorycore = null, repoql = null, l23 =
       // common parent is used, falling back to the first target's directory when
       // the common parent would be too broad to be meaningful.
       const address = addressForPaths(scope?.affectedPaths ?? []);
+      // DUO Phase 2 (Sol 2026-11-12): when the backing store is in local mode
+      // with no scope registry, applicability is a retrieval dead end — it
+      // returns ZERO_RESULTS while the concept itself is discoverable via the
+      // semantic concepts query (probed 2026-11-12: 0.98). Fall through to the
+      // semantic path below only for that dead-end shape; a legitimate zero
+      // from a functioning registry keeps the existing handling, and semantic
+      // rows stay suggestions (concept-gate), never proof of applicability.
+      let applicabilityDeadEnd = false;
       if (address && typeof repoql.conceptApplicability === "function") {
         const a = await repoql.conceptApplicability({ scope: address, timeoutMs: deadlineMs });
         if (!a.ok) return a;
-        // Return EVERY applicable concept; the planner/fusion stage applies the
-        // channel's topK. Truncating here would silently drop universal capsules
-        // that the view explicitly reported as applicable.
-        const rows = (a.results ?? []).map((x) => ({
-          ...rqRow({ uri: x.uri, headline: x.uri, score: 1 }),
-          approvalStatus: "APPROVED",
-          verification: "concept-applicability",
-          applicability: a.status,
-        }));
-        return { ok: true, results: rows, applicabilityStatus: a.status, universalApplicable: a.universalApplicable ?? null, narrowShown: a.narrowShown ?? null, footer: a.footer ?? null };
+        applicabilityDeadEnd = a.status === "ZERO_RESULTS" && a.mode === "local" && a.evidence?.scopeRegistryVersion == null;
+        if (!applicabilityDeadEnd) {
+          // Return EVERY applicable concept; the planner/fusion stage applies the
+          // channel's topK. Truncating here would silently drop universal capsules
+          // that the view explicitly reported as applicable.
+          const rows = (a.results ?? []).map((x) => ({
+            ...rqRow({ uri: x.uri, headline: x.uri, score: 1 }),
+            approvalStatus: "APPROVED",
+            verification: "concept-applicability",
+            applicability: a.status,
+          }));
+          return { ok: true, results: rows, applicabilityStatus: a.status, universalApplicable: a.universalApplicable ?? null, narrowShown: a.narrowShown ?? null, footer: a.footer ?? null };
+        }
       }
-      const r = await repoql.query({ q: qForRepoQL(query), scope: "concepts", limit: topK, timeoutMs: deadlineMs });
+      const r = await repoql.query({ q: qForRepoQL(query) || qForRepoQL(address ?? ""), scope: "concepts", limit: topK, timeoutMs: deadlineMs });
       if (!r.ok) return r;
-      return { ok: true, results: (r.results ?? []).map((x) => ({ ...rqRow(x), approvalStatus: "APPROVED", verification: "concept-gate" })) };
+      const semanticOut = { ok: true, results: (r.results ?? []).map((x) => ({ ...rqRow(x), approvalStatus: "APPROVED", verification: "concept-gate" })) };
+      if (applicabilityDeadEnd) { semanticOut.applicabilityStatus = "ZERO_RESULTS"; semanticOut.applicabilityFallback = "semantic"; }
+      return semanticOut;
     },
     // P1 §7 (2026-10-23 remediation): the graph channel now has a REAL reader
     // over the existing memory lineage store (lib/memory-lineage.mjs) — the

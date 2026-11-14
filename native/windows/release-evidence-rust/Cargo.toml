@@ -1,0 +1,18 @@
+[package]
+name = "singularity-release-evidence"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+description = "Read-only Rust ports of Windows Singularity release evidence gates"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+hex = "0.4"
+regex = "1"
+serde_json = "1"
+sha2 = "0.10"
+toml = "0.8"
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3"

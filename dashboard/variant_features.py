@@ -19,15 +19,14 @@ def features(variant=None, *, native_windows=None):
     policy = json.loads(MANIFEST.read_text(encoding="utf-8"))
     if not variant:
         if native_windows:
-            raise ValueError("native Windows dashboard requires SINGULARITY_INSTALL_VARIANT=1..4")
+            raise ValueError("native Windows dashboard requires SINGULARITY_INSTALL_VARIANT=2")
         # Legacy installations which do not opt into native variant packaging
         # must not be silently given a different feature set.
-        return {"variant": None, "gui": "legacy", "features": {k: k != "ghost" for k in policy["variants"]["4"]["features"]}}
+        return {"variant": None, "gui": "legacy", "features": dict(policy["variants"]["2"]["features"])}
     row = policy["variants"].get(str(variant))
     if row is None:
-        raise ValueError("install variant must be one of 1, 2, 3, 4")
+        raise ValueError("only the full Claude Code installation profile 2 is supported")
     selected = dict(row["features"])
-    selected["ghost"] = False  # Ghost is retired from the Windows product.
     return {"variant": int(variant), "gui": row["gui"], "features": selected}
 
 

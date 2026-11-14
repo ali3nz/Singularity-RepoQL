@@ -24,6 +24,16 @@ DATE = (2026, 1, 1, 0, 0, 0)
 MAX_BINARY = 100 * 1024 * 1024
 BRIDGE = 'singularity-desktop-bridge.exe'
 SUPERVISOR = 'singularity-windows-supervisor.exe'
+SUPERVISORW = 'singularity-windows-supervisorw.exe'
+DASHBOARD_ROUTES = 'singularity-dashboard-routes.exe'
+DASHBOARD_LISTENER = 'singularity-dashboard-listener.exe'
+DOC_LEDGER_COMMIT = 'singularity-doc-ledger-commit.exe'
+DOC_WRITER = 'singularity-memorycore-writer.exe'
+SETUP = 'singularity-windows-setup.exe'
+SOURCE_PACKAGER = 'singularity-source-packager.exe'
+UNIFIED_PROXY = 'singularity-unified-proxy.exe'
+REQUIRED_BINARIES = (BRIDGE, SUPERVISOR)
+OPTIONAL_BINARIES = {name: 'bin/' + name for name in (SUPERVISORW, DASHBOARD_ROUTES, DASHBOARD_LISTENER, DOC_LEDGER_COMMIT, DOC_WRITER, SETUP, SOURCE_PACKAGER, UNIFIED_PROXY)}
 SOURCE = 'singularity-native-windows-option2-SOURCE-ONLY.zip'
 BOOTSTRAP_SOURCES = (
     'native/windows/prepare_option2_candidate.py',
@@ -38,7 +48,11 @@ BUNDLE_FILES = {
     SOURCE: 'source/' + SOURCE,
     **{name: 'bootstrap/' + name.rsplit('/', 1)[1] for name in BOOTSTRAP_SOURCES},
 }
-
+def binary_entries(entries) -> dict[str, str]:
+    return {
+        **{name: BUNDLE_FILES[name] for name in REQUIRED_BINARIES},
+        **{name: entry for name, entry in OPTIONAL_BINARIES.items() if entry in entries},
+    }
 
 
 def sha256(data: bytes) -> str:
@@ -79,7 +93,11 @@ def validate_amd64_pe(data: bytes) -> None:
 
 
 def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: Path,
-             *, native_windows: bool | None = None, commit: str | None = None) -> dict:
+             *, native_windows: bool | None = None, commit: str | None = None,
+             supervisorw_exe: Path | None = None, dashboard_routes_exe: Path | None = None,
+             doc_ledger_commit_exe: Path | None = None, dashboard_listener_exe: Path | None = None,
+             doc_writer_exe: Path | None = None, setup_exe: Path | None = None,
+             source_packager_exe: Path | None = None, unified_proxy_exe: Path | None = None) -> dict:
     if native_windows is None:
         native_windows = os.name == 'nt'
     if not native_windows:
@@ -89,6 +107,13 @@ def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: P
     if commit is not None and not re.fullmatch(r'[0-9a-fA-F]{40}', commit):
         raise ValueError('INVALID_COMMIT_ID')
     expected = {BRIDGE: bridge_exe, SUPERVISOR: supervisor_exe, SOURCE: source_zip}
+    optional = {name: path for name, path in (
+        (SUPERVISORW, supervisorw_exe), (DASHBOARD_ROUTES, dashboard_routes_exe),
+        (DOC_LEDGER_COMMIT, doc_ledger_commit_exe), (DASHBOARD_LISTENER, dashboard_listener_exe),
+        (DOC_WRITER, doc_writer_exe), (SETUP, setup_exe), (SOURCE_PACKAGER, source_packager_exe),
+        (UNIFIED_PROXY, unified_proxy_exe),
+    ) if path is not None}
+    expected.update(optional)
     if any(Path(p).name != name for name, p in expected.items()):
         raise ValueError('UNEXPECTED_INPUT_FILENAME')
     inputs = {
@@ -96,7 +121,11 @@ def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: P
         SUPERVISOR: check_local_file(supervisor_exe, max_bytes=MAX_BINARY),
         SOURCE: check_local_file(source_zip, max_bytes=96 * 1024 * 1024),
     }
-    for key in (BRIDGE, SUPERVISOR):
+    bundle_files = dict(BUNDLE_FILES)
+    for name, path in optional.items():
+        inputs[name] = check_local_file(path, max_bytes=MAX_BINARY)
+        bundle_files[name] = OPTIONAL_BINARIES[name]
+    for key in (*REQUIRED_BINARIES, *optional):
         validate_amd64_pe(inputs[key])
     scanned = scan(io.BytesIO(inputs[SOURCE]))
     if not scanned.get('ok') or scanned.get('variant') != 2 or scanned.get('release_ready') is not False:
@@ -120,7 +149,7 @@ def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: P
         for name in BOOTSTRAP_SOURCES:
             inputs[name] = nested.read(name)
     entries = [{
-        'path': BUNDLE_FILES[name], 'sha256': sha256(inputs[name]), 'bytes': len(inputs[name])
+        'path': bundle_files[name], 'sha256': sha256(inputs[name]), 'bytes': len(inputs[name])
     } for name in sorted(inputs)]
     receipt = {
         'schema': SCHEMA,
@@ -147,7 +176,7 @@ def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: P
     try:
         with zipfile.ZipFile(output, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=7) as z:
             for name in sorted(inputs):
-                zi = zipfile.ZipInfo(BUNDLE_FILES[name], DATE)
+                zi = zipfile.ZipInfo(bundle_files[name], DATE)
                 zi.compress_type = zipfile.ZIP_DEFLATED
                 zi.external_attr = 0o644 << 16
                 z.writestr(zi, inputs[name])
@@ -166,7 +195,9 @@ def assemble(source_zip: Path, bridge_exe: Path, supervisor_exe: Path, output: P
 def check_acceptance_bundle(path: Path) -> dict:
     with zipfile.ZipFile(path) as z:
         names = z.namelist()
-        expected_names = set(BUNDLE_FILES.values()) | {'ACCEPTANCE_BUNDLE_MANIFEST.json'}
+        binaries = binary_entries(names)
+        bundle_files = {**BUNDLE_FILES, **binaries}
+        expected_names = set(bundle_files.values()) | {'ACCEPTANCE_BUNDLE_MANIFEST.json'}
         if len(names) != len(expected_names) or set(names) != expected_names or z.testzip() is not None:
             raise ValueError('BUNDLE_ENTRIES_INVALID')
         receipt = json.loads(z.read('ACCEPTANCE_BUNDLE_MANIFEST.json'))
@@ -176,17 +207,17 @@ def check_acceptance_bundle(path: Path) -> dict:
             receipt.get('installer_included') is not False):
             raise ValueError('BUNDLE_RECEIPT_INVALID')
         files = receipt.get('files')
-        if not isinstance(files, list) or len(files) != len(BUNDLE_FILES):
+        if not isinstance(files, list) or len(files) != len(bundle_files):
             raise ValueError('BUNDLE_RECEIPT_INVALID')
         mapped = {row['path']: row for row in files}
-        if set(mapped) != set(BUNDLE_FILES.values()):
+        if set(mapped) != set(bundle_files.values()):
             raise ValueError('BUNDLE_FILE_INVENTORY_INVALID')
         for name in sorted(mapped):
             data = z.read(name)
             if len(data) != mapped[name]['bytes'] or sha256(data) != mapped[name]['sha256']:
                 raise ValueError('BUNDLE_DIGEST_MISMATCH')
-        for name in (BRIDGE, SUPERVISOR):
-            validate_amd64_pe(z.read(BUNDLE_FILES[name]))
+        for name in binaries:
+            validate_amd64_pe(z.read(bundle_files[name]))
         nested = scan(io.BytesIO(z.read(BUNDLE_FILES[SOURCE])))
         if not nested.get("ok") or nested.get("variant") != 2:
             raise ValueError("BUNDLED_SOURCE_INVALID")
@@ -202,10 +233,22 @@ def main() -> int:
     p.add_argument('--source', type=Path, required=True)
     p.add_argument('--bridge', type=Path, required=True)
     p.add_argument('--supervisor', type=Path, required=True)
+    p.add_argument('--supervisor-windowless', type=Path)
+    p.add_argument('--dashboard-routes', type=Path)
+    p.add_argument('--dashboard-listener', type=Path)
+    p.add_argument('--doc-ledger-commit', type=Path)
+    p.add_argument('--doc-writer', type=Path)
+    p.add_argument('--setup', type=Path)
+    p.add_argument('--source-packager', type=Path)
+    p.add_argument('--unified-proxy', type=Path)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--commit', help='Optional 40-hex-digit repository commit')
     args = p.parse_args()
-    result = assemble(args.source, args.bridge, args.supervisor, args.output, commit=args.commit)
+    result = assemble(args.source, args.bridge, args.supervisor, args.output, commit=args.commit,
+                      supervisorw_exe=args.supervisor_windowless, dashboard_routes_exe=args.dashboard_routes,
+                      doc_ledger_commit_exe=args.doc_ledger_commit, dashboard_listener_exe=args.dashboard_listener,
+                      doc_writer_exe=args.doc_writer, setup_exe=args.setup, source_packager_exe=args.source_packager,
+                      unified_proxy_exe=args.unified_proxy)
     print(json.dumps(result, indent=2))
     return 0
 

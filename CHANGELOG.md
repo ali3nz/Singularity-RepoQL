@@ -1,3 +1,49 @@
+## Windows Rust migration Wave 22 (source-only, November 13, 2026)
+
+- Added an opt-in Rust batch normalizer for dashboard model usage telemetry.
+  Python retains the SQLite journal, cursor, cost authority and privacy rules.
+- Preserved distinct outbound sender costs versus ChatGPT subscription reviews.
+  Every native result must match the Python normalization before the collector
+  source transaction commits. Native failures roll back and remain retryable.
+- Bounded native input to usage metadata only and 128 rows per call; no
+  credentials, prompts, private run IDs or network requests enter the binary.
+- Added source tests, 609 reference cases and Windows compiled parity gates.
+  Native Rust compilation and Windows acceptance remain NOT_RUN. See
+  `native/windows/RUST_WAVE22_HANDOVER.md`.
+
+## Windows Rust migration Wave 21 (source-only, November 12, 2026)
+
+- Added a separate, opt-in Rust `conversation/add` transport that accepts one
+  already-authorized, task-scoped write and never retries an uncertain delivery.
+  The default JavaScript transport is unchanged. Native mode requires a trusted
+  executable, a matching local credential configuration, a loopback endpoint,
+  valid message identity, and a confirmed application response.
+- Claude Code's existing query-before-write and readback remain the durability
+  authority. Native agent profile seeding now also requires live readback before
+  recording a successful charter in its local ledger.
+- Extended the Rust MemoryCore read client to cover conversation and atomic
+  count endpoints. Added local HTTP fixtures, Windows CI/native parity gates,
+  source inventory verification, and native engineering handover instructions.
+- Updated stale documentation chunk tests to assert the existing 7,000-character
+  limit even within fenced blocks; no production chunking behavior changed.
+- Rust compilation and live Windows acceptance are NOT_RUN here. Four other
+  crates still lack reviewed Cargo.lock files. Full Rust migration is incomplete.
+  See `native/windows/RUST_WAVE21_HANDOVER.md`.
+
+## Windows Rust migration Wave 20 (source-only, November 12, 2026)
+
+- Added a bounded, read-only native Rust MemoryCore HTTP client for both the local hub API and the Windows `/v3` conversation/atomic query API. No memory write capability was added.
+- Added exact-result opt-in bridges to the harness MemoryCore reader and the native Windows Claude memory config client; origin, binary, and result checks fail closed.
+- Fixed UTF-8 snippet budget truncation and refused redirected memory requests. Added independent loopback HTTP differential fixtures, Windows CI native gate, and source checksum verification.
+- Native Rust compilation, live Windows memory, Kanzo authorization, installation and rollback remain unverified. The four previously missing other-crate Cargo.lock files are still missing.
+
+## Windows Rust migration Wave 19 (source-only, November 12, 2026)
+
+- Added Rust documentation memory chunking, write-envelope planning and current-revision retrieval selection under explicit verified opt-in.
+- Corrected oversized physical lines exceeding the 7,000-character documentation chunk bound.
+- Added 840 source reference scenarios, fail-closed Python bridge tests and Windows native differential gates.
+- No compiled Rust or native Windows release acceptance is claimed. See `docs/RUST_MIGRATION_WAVE19.md`.
+
 # Changelog
 
 All notable changes to this release are recorded here. The repository is

@@ -1,6 +1,6 @@
 {
   "source": "generated offline from the pass-13 JavaScript authority; public export uses behavioural labels",
-  "count": 804,
+  "count": 904,
   "cases": [
     {
       "request": {
@@ -12423,6 +12423,4769 @@
         "role": null
       },
       "expected": false
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-000",
+            "runState": "COMPLETED",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": 123,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": "not_required",
+          "runId": "explicit-0",
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-0",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "complete",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-001",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "pending",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-001",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-002",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": null,
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-002",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-003",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "waiting_external",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-003",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-004",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": "stalled",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-004",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "stalled",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-005",
+            "retrievalNotes": null,
+            "workerLeaseState": "active",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-005",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "active",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-006",
+            "workerLeaseState": "expired",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-006",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-007",
+            "retrievalNotes": "healthy",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-007",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "accepted",
+        "evidence": "failed",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-008",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-008",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_gate",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-009",
+            "retrievalNotes": "unreachable",
+            "runState": "COMPLETED",
+            "workerLeaseState": null,
+            "gateState": "blocked",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-009",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "complete",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-010",
+            "retrievalNotes": "failed",
+            "workerLeaseState": "waiting_external",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": "explicit-10",
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-10",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-011",
+            "retrievalNotes": null,
+            "workerLeaseState": "stalled",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": 123,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-011",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "stalled",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-012",
+            "runState": "RUNNING",
+            "workerLeaseState": "active",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-012",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-013",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "expired",
+            "gateState": "not_required",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-013",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-014",
+            "retrievalNotes": "degraded",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-014",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "blocked",
+        "evidence": "failed",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-015",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "waiting_gate",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-015",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_gate",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-016",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": null,
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-016",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-017",
+            "retrievalNotes": null,
+            "workerLeaseState": "waiting_external",
+            "gateState": "accepted",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-017",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-018",
+            "runState": "COMPLETED",
+            "workerLeaseState": "stalled",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-018",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "complete",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "synced",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-019",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "active",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-019",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-020",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": "expired",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": "explicit-20",
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-20",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-021",
+            "retrievalNotes": "unreachable",
+            "gateState": "pending",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-021",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "pending",
+        "evidence": "failed",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-022",
+            "retrievalNotes": "failed",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": 123,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-022",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "waiting_gate",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-023",
+            "retrievalNotes": null,
+            "workerLeaseState": null,
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-023",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-024",
+            "runState": "RUNNING",
+            "workerLeaseState": "waiting_external",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-024",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-025",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "stalled",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-025",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-026",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": "active",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-026",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-027",
+            "retrievalNotes": "unreachable",
+            "runState": "COMPLETED",
+            "workerLeaseState": "expired",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-027",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "complete",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-028",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-028",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-029",
+            "retrievalNotes": null,
+            "workerLeaseState": "waiting_gate",
+            "gateState": "blocked",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-029",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_gate",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-030",
+            "workerLeaseState": null,
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": "explicit-30",
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-30",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-031",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "waiting_external",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-031",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-032",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": "stalled",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-032",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "stalled",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-033",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "active",
+            "gateState": "not_required",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": 123,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-033",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-034",
+            "retrievalNotes": "failed",
+            "workerLeaseState": "expired",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-034",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "expired",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-035",
+            "retrievalNotes": null,
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-035",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-036",
+            "runState": "COMPLETED",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-036",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "complete",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-037",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": null,
+            "gateState": "accepted",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-037",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-038",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": "waiting_external",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-038",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-039",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "stalled",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-039",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "stalled",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-040",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": "active",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": "explicit-40",
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-40",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-041",
+            "retrievalNotes": null,
+            "workerLeaseState": "expired",
+            "gateState": "pending",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-041",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-042",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-042",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "accepted",
+        "evidence": "failed",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-043",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-043",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-044",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": null,
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": 123,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-044",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "active",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-045",
+            "retrievalNotes": "unreachable",
+            "runState": "COMPLETED",
+            "workerLeaseState": "waiting_external",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-045",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "complete",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-046",
+            "retrievalNotes": "failed",
+            "workerLeaseState": "stalled",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-046",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "stalled",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-047",
+            "retrievalNotes": null,
+            "workerLeaseState": "active",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-047",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "active",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-048",
+            "runState": "RUNNING",
+            "workerLeaseState": "expired",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-048",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-049",
+            "retrievalNotes": "healthy",
+            "gateState": "blocked",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-049",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "blocked",
+        "evidence": "failed",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-050",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": "waiting_gate",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": "explicit-50",
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-50",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_gate",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-051",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": null,
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-051",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-052",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": "waiting_external",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-052",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "waiting_external",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-053",
+            "retrievalNotes": null,
+            "workerLeaseState": "stalled",
+            "gateState": "not_required",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-053",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "stalled",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-054",
+            "runState": "COMPLETED",
+            "workerLeaseState": "active",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-054",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "complete",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-055",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "expired",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": 123,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-055",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-056",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-056",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "not_required",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-057",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "accepted",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-057",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_gate",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-058",
+            "retrievalNotes": "failed",
+            "workerLeaseState": null,
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-058",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-059",
+            "retrievalNotes": null,
+            "workerLeaseState": "waiting_external",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-059",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-060",
+            "runState": "RUNNING",
+            "workerLeaseState": "stalled",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": "explicit-60",
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-60",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-061",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "active",
+            "gateState": "pending",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-061",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-062",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": "expired",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-062",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "expired",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-063",
+            "retrievalNotes": "unreachable",
+            "runState": "COMPLETED",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-063",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "complete",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-064",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-064",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "waiting_gate",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-065",
+            "retrievalNotes": null,
+            "workerLeaseState": null,
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-065",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "none",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-066",
+            "workerLeaseState": "waiting_external",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": 123,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-066",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-067",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "stalled",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-067",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-068",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": "active",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-068",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-069",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "expired",
+            "gateState": "blocked",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-069",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "expired",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-070",
+            "retrievalNotes": "failed",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": "explicit-70",
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-70",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-071",
+            "retrievalNotes": null,
+            "workerLeaseState": "waiting_gate",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-071",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_gate",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-072",
+            "runState": "COMPLETED",
+            "workerLeaseState": null,
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-072",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "complete",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-073",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "waiting_external",
+            "gateState": "not_required",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-073",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-074",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": "stalled",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-074",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "stalled",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-075",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "active",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-075",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "active",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-076",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": "expired",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-076",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-077",
+            "retrievalNotes": null,
+            "gateState": "accepted",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": 123,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-077",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "none",
+        "gate": "accepted",
+        "evidence": "failed",
+        "github": "synced",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-078",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-078",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "synced",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-079",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": null,
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-079",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-080",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": "waiting_external",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": "explicit-80",
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-80",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-081",
+            "retrievalNotes": "unreachable",
+            "runState": "COMPLETED",
+            "workerLeaseState": "stalled",
+            "gateState": "pending",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-081",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "complete",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-082",
+            "retrievalNotes": "failed",
+            "workerLeaseState": "active",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-082",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "active",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-083",
+            "retrievalNotes": null,
+            "workerLeaseState": "expired",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-083",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-084",
+            "runState": "RUNNING",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {}
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-084",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "blocked",
+        "evidence": "failed",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-085",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "waiting_gate",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-085",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "pending",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-086",
+            "retrievalNotes": "degraded",
+            "workerLeaseState": null,
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-086",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-087",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": "waiting_external",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-087",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_external",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-088",
+            "retrievalNotes": "failed",
+            "runState": "RUNNING",
+            "workerLeaseState": "stalled",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": 123,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-088",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "stalled",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-089",
+            "retrievalNotes": null,
+            "workerLeaseState": "active",
+            "gateState": "blocked",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-089",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "active",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-090",
+            "runState": "COMPLETED",
+            "workerLeaseState": "expired",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": null,
+          "runId": "explicit-90",
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "explicit-90",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "complete",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-091",
+            "retrievalNotes": "healthy",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": null,
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-091",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "pending",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-092",
+            "retrievalNotes": "degraded",
+            "runState": "RUNNING",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "accepted",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-092",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "waiting_gate",
+        "gate": "accepted",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-093",
+            "retrievalNotes": "unreachable",
+            "workerLeaseState": null,
+            "gateState": "not_required",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-093",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-094",
+            "retrievalNotes": "failed",
+            "workerLeaseState": "waiting_external",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-094",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "failed",
+        "worker": "waiting_external",
+        "gate": "blocked",
+        "evidence": "incomplete",
+        "github": "failed",
+        "learning": "pending"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-095",
+            "retrievalNotes": null,
+            "workerLeaseState": "stalled",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": [
+                "concept"
+              ]
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-095",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "stalled",
+        "gate": "not_required",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-096",
+            "runState": "RUNNING",
+            "workerLeaseState": "active",
+            "gateState": "pending",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": null,
+            "githubStatus": "pending",
+            "learningStatus": "failed",
+            "journalOutcomeAt": "2026-11-11T18:00:00Z",
+            "memory": {
+              "staging": true
+            }
+          },
+          "lease": {
+            "state": "waiting_external"
+          },
+          "ghStatus": "not_required",
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-096",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "waiting_external",
+        "gate": "not_required",
+        "evidence": "complete",
+        "github": "not_required",
+        "learning": "failed"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-097",
+            "retrievalNotes": "healthy",
+            "workerLeaseState": "expired",
+            "gateState": "accepted",
+            "gatePending": true,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": null,
+            "learningStatus": "captured",
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": {
+            "state": "expired"
+          },
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": [
+              {
+                "sha256": "aabbcc"
+              },
+              {
+                "sha256": ""
+              }
+            ]
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-097",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "healthy",
+        "worker": "expired",
+        "gate": "accepted",
+        "evidence": "incomplete",
+        "github": "not_required",
+        "learning": "captured"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-098",
+            "retrievalNotes": "degraded",
+            "gateState": "not_required",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": false
+              }
+            ],
+            "evidenceComplete": false,
+            "githubIssue": null,
+            "githubStatus": "synced",
+            "learningStatus": null,
+            "journalOutcomeAt": null,
+            "memory": {}
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": {
+            "entries": []
+          },
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-098",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "none",
+        "gate": "not_required",
+        "evidence": "failed",
+        "github": "synced",
+        "learning": "not_required"
+      }
+    },
+    {
+      "request": {
+        "op": "run_health.derive",
+        "inputs": {
+          "state": {
+            "runId": "run-099",
+            "retrievalNotes": "unreachable",
+            "runState": "COMPLETED",
+            "workerLeaseState": "waiting_gate",
+            "gateState": "blocked",
+            "gatePending": false,
+            "criteriaResults": [
+              {
+                "id": "check",
+                "ok": true
+              }
+            ],
+            "evidenceComplete": true,
+            "githubIssue": 123,
+            "githubStatus": "failed",
+            "learningStatus": "pending",
+            "journalOutcomeAt": null,
+            "memory": {
+              "stagedRefs": "legacy-text"
+            }
+          },
+          "lease": null,
+          "ghStatus": null,
+          "runId": null,
+          "evidenceManifest": null,
+          "generatedAt": "2026-11-12T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "runId": "run-099",
+        "generatedAt": "2026-11-12T00:00:00.000Z",
+        "retrieval": "degraded",
+        "worker": "complete",
+        "gate": "blocked",
+        "evidence": "complete",
+        "github": "failed",
+        "learning": "pending"
+      }
     }
   ]
 }

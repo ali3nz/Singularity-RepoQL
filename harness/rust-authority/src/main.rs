@@ -14,6 +14,7 @@ mod no_change;
 mod payload;
 mod phase_driver;
 mod resource_lease;
+mod run_health;
 mod run_state;
 mod run_summary;
 mod scope;

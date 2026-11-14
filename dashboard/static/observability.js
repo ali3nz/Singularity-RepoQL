@@ -288,9 +288,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
   let graph={nodes:[],edges:[]},positions=[],rendered={nodes:[],edges:[]};
   let selected=null,selectedEdge=null,hovered=null,hoveredEdge=null;
   let zoom=1,pan={x:0,y:0},drag=null,raf=0,disposed=false;
-  let viewMode=mode==='neural'||mode==='3d'?'neural':'network',frameAt=0;
-  // 3D: a WebGL cortex (brain3d_view.js) loaded on demand; it reuses this graph's filters, layout and selection.
-  let three=null,use3d=false,want3d=false,modePromise=Promise.resolve();
+  let viewMode=mode==='neural'?'neural':'network',frameAt=0;
   const pointers=new Map();let pinch=null;
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)');
   let opts={sources:['repoql','tencent','memories'],cross:true,query:'',detail:'all',connections:'all'};
@@ -314,7 +312,7 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
   // Only the travelling pulses animate, and only while the graph is on screen.
   // Brain mode is always alive while it is on screen (operator 2026-11-11): the impulses keep travelling
   // without any drag or click. It stops when the tab is hidden, the canvas is off screen or the page is left.
-  const animating=()=>!use3d&&viewMode==='neural'&&!document.hidden&&onScreen&&canvas.isConnected&&!canvas.hidden&&(pulseList.length>0||rendered.nodes.length>0);
+  const animating=()=>viewMode==='neural'&&!document.hidden&&onScreen&&canvas.isConnected&&!canvas.hidden&&(pulseList.length>0||rendered.nodes.length>0);
   function schedule(){
     if(disposed||raf||document.hidden||canvas.hidden||!canvas.isConnected)return;
     clearTimeout(animTimer);
@@ -434,7 +432,6 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
       drawGlow('rgba(255,195,90,.6)',mx,my,12);ctx.fillStyle='#ffe2a8';ctx.beginPath();ctx.arc(mx,my,4,0,TAU);ctx.fill();}}
   }
   function draw(){const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
-    if(use3d){three?.setGraph(rendered,renderVersion,selected?.id||null);return}
     const now=performance.now(),neural=viewMode==='neural',calm=isCalm(),d=Math.min(window.devicePixelRatio||1,2);
     const activeId=selected?.id||hovered?.id,m=Math.round(Math.min(w,h)*.3);
     const nv=[renderVersion,w,h,d,calm,neural,activeId||'',edgeKeyOf(selectedEdge),edgeKeyOf(hoveredEdge),opts.connections].join('|');
@@ -563,40 +560,22 @@ export function createKnowledgeGraph(canvas,{onSelect,mode='network'}={}) {
   document.addEventListener('visibilitychange',visibility);
   const watcher=new ResizeObserver(resize);watcher.observe(canvas);
   const seen=window.IntersectionObserver?new IntersectionObserver(([en])=>{const was=onScreen;onScreen=en.isIntersecting;if(onScreen&&!was)schedule()}):null;seen?.observe(canvas);
-  async function enter3d(){
-    if(use3d)return;
-    if(viewMode!=='neural'){viewMode='neural';positions=layoutNeuralGraph(graph);recalc();}
-    try{
-      if(!three){const mod=await import('./brain3d_view.js?v=3d6');
-        const made=await mod.createBrain3D(canvas,{onPick:id=>{selected=id?rendered.nodes.find(n=>n.id===id)||null:null;selectedEdge=null;notify();schedule()}});
-        if(disposed){made.dispose();return}three=made}
-      if(!want3d){three.hide();return}
-      use3d=true;canvas.style.visibility='hidden';three.show();schedule();
-    }catch(error){console.warn('3D brain unavailable, staying in Brain view',error);use3d=false;canvas.style.visibility=''}
-  }
-  function leave3d(){if(!use3d&&!three)return;use3d=false;canvas.style.visibility='';three?.hide();userMoved=false;if(canvas.clientWidth)fitView();schedule()}
-  const api={
+  return {
     update(data){graph=data||{nodes:[],edges:[]};positions=viewMode==='neural'?layoutNeuralGraph(graph):layoutGraph(graph);recalc();},
-    setMode(mode){
-      if(mode==='3d'){want3d=true;modePromise=enter3d();return modePromise}
-      want3d=false;leave3d();
-      const next=mode==='neural'?'neural':'network';if(viewMode===next)return;
+    setMode(mode){const next=mode==='neural'?'neural':'network';if(viewMode===next)return;
       viewMode=next;positions=next==='neural'?layoutNeuralGraph(graph):layoutGraph(graph);recalc();this.fit();},
-    settled(){return modePromise},
-    getMode(){return use3d?'3d':viewMode},
+    getMode(){return viewMode},
     redraw(){schedule()},
-    zoomBy(factor){if(use3d){three?.zoomBy(factor);return}const r=canvas.getBoundingClientRect();zoomAt(zoom*factor,r.left+r.width/2,r.top+r.height/2);},
+    zoomBy(factor){const r=canvas.getBoundingClientRect();zoomAt(zoom*factor,r.left+r.width/2,r.top+r.height/2);},
     filter(filter){opts={...opts,...filter};recalc();},
     getOptions(){return {...opts}},
-    focus(id){selected=rendered.nodes.find(n=>n.id===id)||null;selectedEdge=null;if(use3d&&selected)three?.focusNode(id);
+    focus(id){selected=rendered.nodes.find(n=>n.id===id)||null;selectedEdge=null;
       if(selected){userMoved=true;pan.x=-zoom*selected.x;pan.y=-zoom*selected.y;}notify();schedule()},
     focusEdge(id){selectedEdge=rendered.edges.find(e=>e.id===id)||null;selected=null;notify();schedule()},
-    fit(){if(use3d){three?.fit();return}fitView()},
+    fit(){fitView()},
     reset(){this.fit()},getVisible(){return rendered},
-    dispose(){disposed=true;three?.dispose();three=null;clearTimeout(settleTimer);clearTimeout(animTimer);scene=null;bg=null;pointers.clear();watcher.disconnect();seen?.disconnect();cancelAnimationFrame(raf);
+    dispose(){disposed=true;clearTimeout(settleTimer);clearTimeout(animTimer);scene=null;bg=null;pointers.clear();watcher.disconnect();seen?.disconnect();cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange',visibility);
       for(const [ev,fn] of [['pointerdown',down],['pointermove',move],['pointerup',up],['pointercancel',cancel],['lostpointercapture',cancel],['wheel',wheel],['keydown',keys],['pointerleave',leave]])canvas.removeEventListener(ev,fn)}
   };
-  if(mode==='3d')queueMicrotask(()=>api.setMode('3d'));
-  return api;
 }

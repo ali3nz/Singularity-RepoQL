@@ -19,6 +19,11 @@ if ($build.StartsWith($repo+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 
 $runtime=Join-Path $env:LOCALAPPDATA 'Singularity\Runtime'
 $python=Join-Path $runtime 'python\python.exe'
 $node=Join-Path $runtime 'node\node.exe'
+# The reviewed profile excludes the manager required by Complete-Setup.ps1.
+# Do not publish an executable that would fail midway through setup.
+$sourcePolicy=Join-Path $repo 'native\windows\windows_source_policy.py'
+& $python -B -c "import runpy,sys; p=runpy.run_path(sys.argv[1]); sys.exit(1 if p['windows_variant_excludes']('native/windows/manage_native_windows.ps1',2) else 0)" $sourcePolicy
+if ($LASTEXITCODE -ne 0) { throw 'LEGACY_GUI_SETUP_UNAVAILABLE_USE_PHASED_CLAUDE_COMPLETE_INSTALLER' }
 $null=New-Item -ItemType Directory -Path $build
 $stage=Join-Path $build 'payload'
 $null=New-Item -ItemType Directory -Path $stage

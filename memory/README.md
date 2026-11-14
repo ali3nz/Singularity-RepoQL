@@ -4,6 +4,14 @@ This directory holds the memory stack: a vendored upstream quickstart
 (`upstream/`), an environment template (`.env.example`), and how Singularity
 wires them together.
 
+## Native Windows
+
+The container quickstart below is legacy reference, not the native installer.
+Use [NATIVE-MEMORY-STACK](../docs/NATIVE-MEMORY-STACK.md) and the
+[Windows memory policy](../docs/WINDOWS-AGENT-MEMORY-POLICY.md). The
+[2026-11-13 sync](../docs/DOCKERHOST-SYNC-2026-11-13.md) records the bounded
+L1-first hook and hash-pinned extraction prompt without copying runtime data.
+
 ## What runs
 
 | Service | Container | Port | Role |

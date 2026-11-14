@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Transactional, narrow-scope Claude Code settings + agent installer for the
- * native Windows *configuration* layer. NEVER provisions Ghost/Office/services.
+ * native Windows *configuration* layer. NEVER provisions Office or services.
  * Actual writes are Windows-only and require explicit --apply. All changes are
  * confined to the selected user's .claude directory. A durable journal permits
  * recovery after partial writes; foreign agents are never overwritten.
@@ -237,8 +237,10 @@ export function renderClaudeSkill(name, sourceBytes) {
 const HOOK_IMPORT_CLOSURE = [
   'adapters/claude-code/agent-map.mjs',
   'scripts/memory-config-loader.mjs',
+  'scripts/native-memorycore-reader.mjs',
   'scripts/memory-reconcile-core.mjs',
   'scripts/doc-policy.mjs',
+  'scripts/document-learning-rust.mjs',
   'scripts/selflearn-candidates.mjs',
   'scripts/doc-ingest-node.mjs',
   'adapters/claude-code/singularity-workflow.md',
@@ -347,7 +349,6 @@ function verifyRoot(source, variant) {
   const manifest = readObject(join(source, 'NATIVE_WINDOWS_SOURCE_MANIFEST.json'));
   if (manifest.variant !== variant || manifest.gui !== 'claude-desktop-code' ||
       manifest.repoql?.requiredVersion !== '1.7.18' ||
-      manifest.features?.ghost !== false ||
       manifest.features?.office !== (variant === 2)) fail('WRONG_OR_UNVERIFIED_SOURCE_VARIANT');
   if (!Array.isArray(manifest.files) || manifest.files.length < 19 + HOOK_IMPORT_CLOSURE.length) fail('MANIFEST_FILE_HASHES_REQUIRED');
   const checks = new Map(manifest.files.map(row=>[row.path,row.sha256]));
@@ -357,7 +358,7 @@ function verifyRoot(source, variant) {
     ...(variant===2 ? ['adapters/claude-code/office-hook.mjs'] : []),
     ...HOOK_IMPORT_CLOSURE,
     ...NAMES.map(name=>`adapters/claude-code/agents/${name}.md`),
-    ...skillsFor(variant).map(name=>`openchamber/skills/${name}/SKILL.md`),
+    ...skillsFor(variant).map(name=>`adapters/claude-code/skills/${name}/SKILL.md`),
   ];
   for (const name of ownedFiles) {
     const file = join(source,...name.split('/'));
@@ -368,7 +369,7 @@ function verifyRoot(source, variant) {
 
 /** Exported for isolated filesystem tests. The command-line apply/rollback paths
  * additionally require process.platform === win32; tests never write user's settings. */
-export function prepareConfiguration({source, home, nodeExe, memoryConfig, officeConfig, variant, parentMemoryProxy, mainProxyUrl: mainProxyUrlOption = null, mainProxyModel = null}) {
+export function prepareConfiguration({source, home, nodeExe, memoryConfig, officeConfig, variant, rustDocWriterSha256, parentMemoryProxy, mainProxyUrl: mainProxyUrlOption = null, mainProxyModel = null}) {
   if (variant !== 1 && variant !== 2) fail('CLAUDE_VARIANT_1_OR_2_ONLY');
   // An arbitrary .exe path would turn a Claude hook into an unrelated process
   // launcher. Match the read-only planner and require the actual Node basename.
@@ -415,6 +416,14 @@ export function prepareConfiguration({source, home, nodeExe, memoryConfig, offic
   const scriptPath = join(source, 'adapters', 'claude-code', 'memory-hook.mjs');
   const env = {SINGULARITY_REPO_ROOT:source,SINGULARITY_MEMORY_CONFIG:memoryConfig,REPOQL_NO_BOOTSTRAP:'1',
     ...(variant===2?{OFFICE_CONFIG:officeConfig}:{})};
+  if (rustDocWriterSha256 !== undefined) {
+    const writer = join(dirname(source), 'bin', 'singularity-memorycore-writer.exe');
+    assertPlainAncestors(writer);
+    if (variant !== 2 || !/^[a-f0-9]{64}$/.test(rustDocWriterSha256) ||
+        fileHash(writer) !== rustDocWriterSha256) fail('RUST_DOC_WRITER_PROVENANCE_MISMATCH');
+    env.SINGULARITY_DOC_WRITE_RUST_BIN = writer;
+    env.SINGULARITY_DOC_WRITE_RUST_SHA256 = rustDocWriterSha256;
+  }
   // Silent preservation of a stale override would result in hooks running with
   // the wrong memory namespace. Refuse rather than mutating a user preference.
   for (const [key, value] of Object.entries(env)) {
@@ -556,7 +565,7 @@ export function prepareConfiguration({source, home, nodeExe, memoryConfig, offic
   const ruleWrites=[{src:workflowSrc,target:workflowTarget,sha256:workflowHash,create:presentWorkflowHash===null}];
   const skillWrites = [];
   for (const name of skillsFor(variant)) {
-    const src = join(source,'openchamber','skills',name,'SKILL.md');
+    const src = join(source,'adapters','claude-code','skills',name,'SKILL.md');
     const directory = join(skillsDir,name);
     const target = join(directory,'SKILL.md');
     assertPlainAncestors(src);assertPlainAncestors(directory);assertPlainAncestors(target);
@@ -603,6 +612,7 @@ export function applyConfiguration(config) {
       skills:p.skillWrites.filter(a=>a.create).map(a=>({path:a.target,sha256:a.sha256})),
       // store only installation-controlled keys/paths; no settings or secrets
       env:p.newEnv,repoqlPluginOwned:p.repoqlPluginOwned,scriptPath:p.scriptPath,nodeExe:config.nodeExe,memoryConfig:config.memoryConfig,
+      ...(config.rustDocWriterSha256 ? {rustDocWriterSha256:config.rustDocWriterSha256} : {}),
       // ownership record only: the proxy token is never journalled or logged
       ...(p.parentProxy?.configured ? {parentMemory:{baseUrl:p.parentProxy.baseUrl,envWritten:p.parentProxy.envWritten,prevEnv:p.parentProxy.prevEnv}} : {}),
       ...(p.variant===2?{officeScript:p.officeScript,officeConfig:p.officeConfig}:{}),
@@ -637,7 +647,7 @@ export function applyConfiguration(config) {
       atomicWrite(p.receiptPath,json({...journal,state:'APPLIED'}));
       return {state:'CONFIGURED_UNVERIFIED',agentDefinitions:NAMES.length,skillsInstalled:skillsFor(p.variant).length,workflowRuleInstalled:true,
         newlyCreatedAgents:journal.agents.length,settingsChanged:p.changedSettings,
-        fullProductInstalled:false,officeRuntimeInstalled:false,ghostRuntimeInstalled:false,
+        fullProductInstalled:false,officeRuntimeInstalled:false,
         repoqlPluginRequested:true,repoqlPluginSkillsVerified:false,repoqlVersionPinned:'1.7.18',
         officeEventHooksConfigured:p.variant===2,officeEventHooksVerified:false,
         parentProxyConfigured:Boolean(p.parentProxy?.configured),parentProxyVerified:false,
@@ -911,6 +921,16 @@ export function verifyConfiguration({home}) {
   const settings=existsSync(j.settingsPath)?readObject(j.settingsPath):{};
   if (settings.env?.SINGULARITY_REPO_ROOT!==j.source ||
       settings.env?.SINGULARITY_MEMORY_CONFIG!==j.memoryConfig) issues.push('MEMORY_ENV_DRIFT');
+  if (j.rustDocWriterSha256 !== undefined) {
+    const writer = join(dirname(j.source), 'bin', 'singularity-memorycore-writer.exe');
+    try {
+      assertPlainAncestors(writer);
+      if (settings.env?.SINGULARITY_DOC_WRITE_RUST_BIN !== writer ||
+          settings.env?.SINGULARITY_DOC_WRITE_RUST_SHA256 !== j.rustDocWriterSha256 ||
+          !/^[a-f0-9]{64}$/.test(j.rustDocWriterSha256) ||
+          fileHash(writer) !== j.rustDocWriterSha256) issues.push('RUST_DOC_WRITER_DRIFT');
+    } catch { issues.push('RUST_DOC_WRITER_DRIFT'); }
+  }
   if(j.variant===2){
     if(!j.officeConfig || settings.env?.OFFICE_CONFIG!==j.officeConfig ||
        !pathLstat(j.officeConfig)?.isFile() || !validOfficeConfig(j.officeConfig))issues.push('OFFICE_CONFIG_DRIFT');
@@ -973,7 +993,7 @@ export function verifyConfiguration({home}) {
   }
   for(const name of skillsFor(j.variant)) {
     const target=join(claude,'skills',name,'SKILL.md');
-    const sourceFile=join(j.source,'openchamber','skills',name,'SKILL.md');
+    const sourceFile=join(j.source,'adapters','claude-code','skills',name,'SKILL.md');
     assertPlainAncestors(target);
     const expected=fileHash(sourceFile)===null ? null : HASH(renderClaudeSkill(name,readFileSync(sourceFile)));
     const actual=fileHash(target);
@@ -981,7 +1001,7 @@ export function verifyConfiguration({home}) {
   }
   const repoqlAssets=inspectRepoqlSkillAssets({home});
   return {configured:issues.length===0,variant:j.variant,agentsExpected:NAMES.length,skillsExpected:skillsFor(j.variant).length,hookEventsExpected:expectedHookEvents(j.variant),
-    issues:[...new Set(issues)],runtimeVerified:false,officeRuntimeVerified:false,ghostRuntimeVerified:false,
+    issues:[...new Set(issues)],runtimeVerified:false,officeRuntimeVerified:false,
     repoqlPluginRequested:j.repoqlPluginOwned!==undefined,officeEventHooksConfigured:j.variant===2 && !issues.some(x=>x.startsWith('OFFICE_')),
     officeEventHooksVerified:false,repoqlPluginSkillAssets:repoqlAssets,
     repoqlPluginCacheComplete:repoqlAssets.skillAssetsPresent,
@@ -992,7 +1012,7 @@ function parse(argv) {
   const options={};
   for (let i=0;i<argv.length;i++) {
     const arg=argv[i];
-    if (!['--mode','--variant','--source','--home','--node-exe','--memory-config','--office-config','--apply'].includes(arg)) fail('UNKNOWN_ARGUMENT');
+    if (!['--mode','--variant','--source','--home','--node-exe','--memory-config','--office-config','--rust-doc-writer-sha256','--apply'].includes(arg)) fail('UNKNOWN_ARGUMENT');
     if (arg==='--apply') {options.apply=true;continue;}
     if (!argv[i+1] || argv[i+1].startsWith('--')) fail('MISSING_ARGUMENT');
     if (options[arg]!==undefined) fail('DUPLICATE_ARGUMENT');
@@ -1017,7 +1037,7 @@ function main(argv) {
   if (mode==='rollback') {
     process.stdout.write(JSON.stringify(rollbackConfiguration({home:o['--home']}))+'\n');return;
   }
-  const config={source:o['--source'],home:o['--home'],nodeExe,memoryConfig:o['--memory-config'],officeConfig:o['--office-config'],variant:Number(o['--variant'])};
+  const config={source:o['--source'],home:o['--home'],nodeExe,memoryConfig:o['--memory-config'],officeConfig:o['--office-config'],rustDocWriterSha256:o['--rust-doc-writer-sha256'],variant:Number(o['--variant'])};
   if (mode==='plan') {
     const p=prepareConfiguration(config);
     process.stdout.write(JSON.stringify({state:'CLAUDE_CONFIGURATION_PLAN_ONLY',variant:p.variant,

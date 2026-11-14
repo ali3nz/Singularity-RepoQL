@@ -23,7 +23,7 @@ function fixture(variant=2) {
   if(variant===2)writeFileSync(join(adapter,'office-hook.mjs'),'// source office hook\n');
   writeFileSync(join(adapter,'singularity-workflow.md'),'# Workflow test rule\n');
   const closure=['agent-map.mjs'].map(n=>'adapters/claude-code/'+n).concat([
-    'memory-config-loader.mjs','memory-reconcile-core.mjs','doc-policy.mjs',
+    'memory-config-loader.mjs','native-memorycore-reader.mjs','memory-reconcile-core.mjs','doc-policy.mjs','document-learning-rust.mjs',
     'selflearn-candidates.mjs','doc-ingest-node.mjs',
   ].map(n=>'scripts/'+n));
   for(const name of closure) {
@@ -34,21 +34,42 @@ function fixture(variant=2) {
     .concat(closure,['adapters/claude-code/singularity-workflow.md'], Object.keys(AGENT_MAP).map(n=>'adapters/claude-code/agents/'+n+'.md'));
   const skillList=CLAUDE_SKILLS.filter(n=>variant===2||n!=='claude-office-visual');
   for(const name of skillList){
-    const target=join(source,'openchamber','skills',name,'SKILL.md');
-    mkdirSync(join(source,'openchamber','skills',name),{recursive:true});
+    const target=join(source,'adapters','claude-code','skills',name,'SKILL.md');
+    mkdirSync(join(source,'adapters','claude-code','skills',name),{recursive:true});
     writeFileSync(target,`---\nname: ${name}\ndescription: test\n---\n`);
-    files.push('openchamber/skills/'+name+'/SKILL.md');
+    files.push('adapters/claude-code/skills/'+name+'/SKILL.md');
   }
   const checks=files.map(name=>({path:name,sha256:createHash('sha256').update(readFileSync(join(source,...name.split('/')))).digest('hex')}));
   writeFileSync(join(source,'NATIVE_WINDOWS_SOURCE_MANIFEST.json'),JSON.stringify({
     variant,gui:'claude-desktop-code',repoql:{requiredVersion:'1.7.18'},
-    features:{ghost:false,office:variant===2},files:checks}));
+    features:{office:variant===2},files:checks}));
   writeFileSync(nodeExe,'fake-executable-fixture');writeFileSync(memoryConfig,'private-do-not-log');writeFileSync(officeConfig,JSON.stringify({endpoint:'http://127.0.0.1:8000',ingestKey:'do-not-log-office-key'}));
   const config={source,home,nodeExe,memoryConfig,officeConfig,variant};
   return {base,source,home,config,claude:join(home,'.claude'),cleanup(){rmSync(base,{recursive:true,force:true})}};
 }
 function writeSettings(f,value){mkdirSync(f.claude,{recursive:true});writeFileSync(join(f.claude,'settings.json'),JSON.stringify(value,null,2)+'\n');}
 function getSettings(f){return JSON.parse(readFileSync(join(f.claude,'settings.json'),'utf8'));}
+
+test('optional staged Rust document writer is bound to its digest and journal', () => {
+  const f=fixture();
+  try {
+    const dir=join(f.base,'bin'), writer=join(dir,'singularity-memorycore-writer.exe');
+    mkdirSync(dir);
+    writeFileSync(writer,'fixture native writer');
+    const digest=createHash('sha256').update(readFileSync(writer)).digest('hex');
+    assert.throws(()=>prepareConfiguration({...f.config,rustDocWriterSha256:'0'.repeat(64)}),
+      /RUST_DOC_WRITER_PROVENANCE_MISMATCH/);
+    const cfg={...f.config,rustDocWriterSha256:digest};
+    applyConfiguration(cfg);
+    assert.equal(getSettings(f).env.SINGULARITY_DOC_WRITE_RUST_BIN,writer);
+    assert.equal(getSettings(f).env.SINGULARITY_DOC_WRITE_RUST_SHA256,digest);
+    assert.equal(verifyConfiguration({home:f.home}).configured,true);
+    writeFileSync(writer,'fixture native drift');
+    assert.ok(verifyConfiguration({home:f.home}).issues.includes('RUST_DOC_WRITER_DRIFT'));
+    rollbackConfiguration({home:f.home});
+    assert.equal(existsSync(join(f.claude,'settings.json')),false);
+  } finally {f.cleanup()}
+});
 
 test('complete Claude option writes four native hooks and 9 agents; reconfiguration requires explicit rollback',()=>{
   const f=fixture();try {
@@ -401,7 +422,7 @@ test('Claude lean excludes Office skill, and foreign skill names block installat
 });
 
 test('skill frontmatter is normalized and Office skill deploy guidance refuses Docker',()=>{
-  const source=join(fileURLToPath(new URL('../..',import.meta.url)),'openchamber','skills','claude-office-visual','SKILL.md');
+  const source=join(fileURLToPath(new URL('../..',import.meta.url)),'adapters','claude-code','skills','claude-office-visual','SKILL.md');
   const installed=renderClaudeSkill('claude-office-visual',readFileSync(source)).toString('utf8');
   assert.match(installed,/^name: claude-office-visual$/m);
   assert.match(installed,/verified native Windows Claude Office service/);

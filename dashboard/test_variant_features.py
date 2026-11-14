@@ -1,28 +1,23 @@
 import unittest
 from variant_features import features, route_allowed
 
-class VariantMatrix(unittest.TestCase):
-    def test_all_four_variants(self):
-        for n in (1, 2, 3, 4):
-            f = features(n, native_windows=True)
-            expected = n in (2, 4)
-            self.assertFalse(f["features"]["ghost"])
-            self.assertEqual(f["features"]["office"], expected)
-            for key in ("memory", "repoql_dashboard", "kanban", "tencent_connector", "repoql_mcp"):
-                self.assertTrue(f["features"][key], (n, key))
-            for path in ("/api/embed/office/handshake", "/embed/office/index.html", "/api/harness/office"):
-                self.assertEqual(route_allowed(path,f), expected, (n, path))
-            self.assertFalse(f["features"]["agent_chat"])
-            self.assertFalse(route_allowed("/api/agentchat/feed", f))
-            for path in ("/embed/kanzo/index.html", "/api/embed/kanzo/handshake", "/api/embed/repoql/handshake", "/api/connectors"):
-                self.assertTrue(route_allowed(path, f), (n, path))
-    def test_windows_requires_variant(self):
-        with self.assertRaises(ValueError): features("", native_windows=True)
-    def test_invalid_variant_refused(self):
-        for value in ("0", "5", "garbage"):
-            with self.assertRaises(ValueError): features(value, native_windows=True)
-    def test_legacy_unchanged(self):
-        self.assertTrue(features("", native_windows=False)["features"]["office"])
-        self.assertFalse(features("", native_windows=False)["features"]["ghost"])
+class FullClaudeCodeDashboard(unittest.TestCase):
+    def test_single_complete_windows_profile(self):
+        f=features(2,native_windows=True)
+        self.assertEqual(f['gui'],'claude-desktop-code')
+        self.assertFalse(f['features']['ghost'])
+        for key in ('office','memory','repoql_dashboard','kanban','agent_chat','kanzo',
+                    'openmausbot','tencent_connector','repoql_mcp'):
+            self.assertTrue(f['features'][key],key)
+        for path in ('/api/embed/office/handshake','/embed/office/index.html',
+                     '/api/harness/office','/api/agentchat/feed','/embed/kanzo/index.html',
+                     '/api/embed/kanzo/handshake','/api/connectors'):
+            self.assertTrue(route_allowed(path,f),path)
+    def test_windows_requires_explicit_single_profile(self):
+        with self.assertRaises(ValueError): features('',native_windows=True)
+        for value in ('0','1','3','4','5','garbage'):
+            with self.assertRaises(ValueError): features(value,native_windows=True)
+    def test_legacy_linux_defaults_are_not_changed(self):
+        self.assertTrue(features('',native_windows=False)['features']['office'])
 
-if __name__ == "__main__": unittest.main()
+if __name__=='__main__':unittest.main()

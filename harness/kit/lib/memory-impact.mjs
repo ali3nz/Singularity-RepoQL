@@ -4,6 +4,7 @@
 // it surfaces candidates for human/review judgment, never rewrites knowledge.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { nativeMemoryPolicyEnabled, nativeMemoryImpactFiles } from "./native-memory-policy.mjs";
 
 // tokens from a changed file path + optional subsystem hint
 function scopeTokens(changedFiles = [], subsystemHint = null) {
@@ -43,6 +44,10 @@ export function mexKnowledgeFiles(mexDir) {
 // Score each knowledge file against the changed scope. Returns ranked
 // candidates with the matched tokens as evidence (deterministic, auditable).
 export function computeMemoryImpact({ changedFiles = [], subsystemHint = null, mexDir = null, knowledgeFiles = null, minScore = 1 }) {
+  if (nativeMemoryPolicyEnabled()) {
+    const files = knowledgeFiles ?? (mexDir ? mexKnowledgeFiles(mexDir) : []);
+    return nativeMemoryImpactFiles({ changedFiles, subsystemHint, minScore, files });
+  }
   const toks = scopeTokens(changedFiles, subsystemHint);
   if (!toks.length) return { tokens: [], impacted: [] };
   const files = knowledgeFiles ?? (mexDir ? mexKnowledgeFiles(mexDir) : []);

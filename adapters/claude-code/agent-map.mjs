@@ -7,7 +7,7 @@
 //   surface: "subagent" — a delegation target. Claude Code spawns it through the
 //     Agent tool; it reuses the role's MemoryCore identity (team_id / user_id /
 //     agent_id). The SubagentStart/SubagentStop hooks recall and capture under
-//     that identity, so an OpenChamber agent and its Claude Code twin share one
+//     that identity, so an Claude Code delegated role uses one
 //     persistent profile and neither gets a duplicate scope.
 //
 //   surface: "main" — a main-session agent, launched with
@@ -19,7 +19,7 @@
 //     main-session turn to a subagent identity.
 //
 // Roster rule: the surface always mirrors the source definition's `mode` in
-// openchamber/agents/. A `mode: subagent` role is a delegation target; a
+// adapters/claude-code/agents/. A `mode: subagent` role is a delegation target; a
 // `mode: primary` role is a main-session surface. Nothing is invented here, and
 // a role that has no source definition cannot be added.
 //
@@ -31,17 +31,17 @@
 
 export const AGENT_MAP = Object.freeze({
   // --- delegation targets (mode: subagent) ----------------------------------
-  "singularity-code-reviewer": { surface: "subagent", memoryAgentId: "code-reviewer", sourceDef: "openchamber/agents/code-reviewer.md" },
-  "singularity-thinker": { surface: "subagent", memoryAgentId: "thinker", sourceDef: "openchamber/agents/thinker.md" },
-  "singularity-explore": { surface: "subagent", memoryAgentId: "explore", sourceDef: "openchamber/agents/explore.md" },
-  "singularity-general": { surface: "subagent", memoryAgentId: "general", sourceDef: "openchamber/agents/general.md" },
-  "singularity-board": { surface: "subagent", memoryAgentId: "board", sourceDef: "openchamber/agents/board.md" },
+  "singularity-code-reviewer": { surface: "subagent", memoryAgentId: "code-reviewer", sourceDef: "adapters/claude-code/agents/singularity-code-reviewer.md" },
+  "singularity-thinker": { surface: "subagent", memoryAgentId: "thinker", sourceDef: "adapters/claude-code/agents/singularity-thinker.md" },
+  "singularity-explore": { surface: "subagent", memoryAgentId: "explore", sourceDef: "adapters/claude-code/agents/singularity-explore.md" },
+  "singularity-general": { surface: "subagent", memoryAgentId: "general", sourceDef: "adapters/claude-code/agents/singularity-general.md" },
+  "singularity-board": { surface: "subagent", memoryAgentId: "board", sourceDef: "adapters/claude-code/agents/singularity-board.md" },
 
   // --- main-session surfaces (mode: primary) --------------------------------
-  "singularity-duel-coordinator": { surface: "main", memoryAgentId: null, sourceDef: "openchamber/agents/duel-coordinator.md" },
-  "singularity-quad-coordinator": { surface: "main", memoryAgentId: null, sourceDef: "openchamber/agents/quad-coordinator.md" },
-  "singularity-duo": { surface: "main", memoryAgentId: null, sourceDef: "openchamber/agents/duo.md" },
-  "singularity-super": { surface: "main", memoryAgentId: null, sourceDef: "openchamber/agents/super.md" },
+  "singularity-duel-coordinator": { surface: "main", memoryAgentId: null, sourceDef: "adapters/claude-code/agents/singularity-duel-coordinator.md" },
+  "singularity-quad-coordinator": { surface: "main", memoryAgentId: null, sourceDef: "adapters/claude-code/agents/singularity-quad-coordinator.md" },
+  "singularity-duo": { surface: "main", memoryAgentId: null, sourceDef: "adapters/claude-code/agents/singularity-duo.md" },
+  "singularity-super": { surface: "main", memoryAgentId: null, sourceDef: "adapters/claude-code/agents/singularity-super.md" },
 });
 
 /** Resolve a Claude Code hook `agent_type` to its Singularity memory identity role.

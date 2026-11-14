@@ -29,9 +29,9 @@
 // exports its helpers so the tests can drive fake services and fault cases.
 
 import { spawn as spawnChild, execFileSync } from "node:child_process";
+import { applyMemoryPromptOverlay } from "./native-memory-prompt.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  copyFileSync,
   chmodSync,
   closeSync,
   cpSync,
@@ -919,7 +919,7 @@ export function preparePlan(config) {
     const sourceDir = join(config.sourceRoot ?? join(config.root, "source"), nameLabel(component.kind));
     const steps = [];
     if (component.kind === "core") {
-      steps.push("stage", "apply-patch", "transform-package", "npm-install", "esbuild-install");
+      steps.push("stage", "apply-patch", "apply-prompt-override", "transform-package", "npm-install", "esbuild-install");
     } else {
       steps.push("stage", "npm-install", "npm-build");
       if (component.kind === "knowledge") steps.push("loopback-transform");
@@ -973,34 +973,6 @@ export function applyKnowledgeLoopbackSource(sourceText) {
   );
 }
 
-
-/**
- * Windows-only fixes to the built MemoryKnowledge bundle (staged copy only):
- *  - wiki path checks assume "/" separators; with backslash paths every wiki
- *    write failed with "invalid path: traversal detected".
- *  - page refs must stay "/"-separated.
- * Idempotent. Needs Node 22 (better-sqlite3 is built for it) and is started
- * through knowledge-windows-main.mjs because dist/server.mjs only auto-starts
- * when import.meta.url matches a POSIX argv[1].
- */
-export function applyKnowledgeWindowsPaths(distText) {
-  const SEP = '(process.platform === "win32" ? "\\\\" : "/")';
-  let out = distText;
-  let hits = 0;
-  out = out.replace(/(\w+)\.endsWith\("\/"\) \? \1 : \1 \+ "\/"/g, (_m, v) => {
-    hits += 1;
-    return `${v}.endsWith(${SEP}) ? ${v} : ${v} + ${SEP}`;
-  });
-  out = out.replace(/abs\.slice\(prefix\.length\)\.replace\(\/\\\.md\$\/, ""\)/, () => {
-    hits += 1;
-    return 'abs.slice(prefix.length).replace(/\\\\/g, "/").replace(/\\.md$/, "")';
-  });
-  if (hits === 0 && !out.includes('process.platform === "win32"')) {
-    throw new SupervisorError("knowledge Windows path transform matched nothing (upstream changed?)", "PROVENANCE");
-  }
-  return out;
-}
-
 export function assertKnowledgeLoopback(distText) {
   if (!/hostname:\s*process\.env\.HOST\s*\?\?\s*["']127\.0\.0\.1["']/.test(distText)) {
     throw new SupervisorError(
@@ -1041,6 +1013,8 @@ export async function prepareStack(config, { clean = false, dryRun = false, exec
         exec("C:\\Program Files\\Git\\usr\\bin\\patch.exe", ["-p1", "-E", "--batch", "--forward", "-i", config.patchFile], { cwd: step.buildDir });
         log(`${step.name}: applied ${config.patchFile}`);
       }
+      const prompt = applyMemoryPromptOverlay(step.buildDir);
+      log(`${step.name}: prompt overlay sha256=${prompt.sha256} changed=${prompt.changed}`);
       const pkgPath = join(step.buildDir, "package.json");
       writeFileSync(pkgPath, transformCorePackage(readFileSync(pkgPath, "utf8")));
       log(`${step.name}: applied documented package transform`);
@@ -1053,13 +1027,7 @@ export async function prepareStack(config, { clean = false, dryRun = false, exec
       const npm = config.npmCli11 ?? config.npmCli;
       exec(config.node, [npm, "install", "--no-audit", "--no-fund"], { cwd: step.buildDir });
       exec(config.node, [npm, "run", "build"], { cwd: step.buildDir });
-      const distFile = join(step.buildDir, "dist", "server.mjs");
-      assertKnowledgeLoopback(readFileSync(distFile, "utf8"));
-      if (process.platform === "win32") {
-        writeFileSync(distFile, applyKnowledgeWindowsPaths(readFileSync(distFile, "utf8")));
-        copyFileSync(join(dirname(fileURLToPath(import.meta.url)), "knowledge-windows-main.mjs"), join(step.buildDir, "ks_main.mjs"));
-        log(`${step.name}: applied Windows path transform and ks_main.mjs launcher`);
-      }
+      assertKnowledgeLoopback(readFileSync(join(step.buildDir, "dist", "server.mjs"), "utf8"));
     } else if (step.kind === "panel") {
       exec(config.node, [config.npmCli, "install", "--no-audit", "--no-fund"], { cwd: step.buildDir });
       exec(config.node, [config.npmCli, "run", "build"], { cwd: step.buildDir });

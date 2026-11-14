@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed SOURCE-only ZIP gate for Windows options 1..4.
+"""Fail-closed SOURCE-only ZIP gate for the full Windows Claude Code profile.
 
 Does not imply an installable or tested Windows binary. Never extracts archive.
 """
@@ -8,7 +8,7 @@ import hashlib
 import json
 import zipfile
 
-from windows_source_policy import linux_deployment_asset, windows_ghost_source
+from windows_source_policy import linux_deployment_asset, windows_retired_source
 
 FORBIDDEN_SUFFIXES = ('.db', '.sqlite', '.sqlite3', '.key', '.pem', '.pfx', '.p12', '.log', '.kdbx')
 FORBIDDEN_SEGMENTS = {'node_modules', '__pycache__', '.git', 'secrets', '.venv', 'runs'}
@@ -33,8 +33,8 @@ def windows_safe_member(name: str) -> bool:
 
 
 OPTIONAL_MODULES = {
-    'office': ('office/', 'openchamber/plugins/product-office/', 'native/desktop-bridge/src/office.rs',
-               'dashboard/office_bridge.py', 'native/gui-plugins/openchamber/singularity-office.mjs'),
+    'office': ('office/', 'native/desktop-bridge/src/office.rs',
+               'dashboard/office_bridge.py'),
 }
 
 
@@ -79,22 +79,25 @@ def scan(path):
             return {'ok': False, 'issues': sorted(set(issues + ['missing manifest/checksums']))}
         manifest = json.loads(z.read('NATIVE_WINDOWS_SOURCE_MANIFEST.json'))
         variant = manifest.get('variant')
-        if variant not in (1, 2, 3, 4) or manifest.get('release_status') != 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER':
+        if variant != 2 or manifest.get('release_status') != 'SOURCE_ONLY_UNCOMPILED_NOT_INSTALLER':
             issues.append('invalid source-only profile')
         if manifest.get('repoql', {}).get('requiredVersion') != '1.7.18':
             issues.append('RepoQL 1.7.18 pin missing')
         if (manifest.get('repoql', {}).get('connectorContract') != 'fetch-render'
                 or 'connectorAbi' in manifest.get('repoql', {})):
             issues.append('current fetch/render connector contract missing')
-        complete = variant in (2, 4)
         feature = manifest.get('features', {})
-        if (feature.get('office') is not complete or feature.get('ghost') is not False
-                or manifest.get('rustOfficeFeature') is not complete
-                or manifest.get('rustGhostFeature') is not False):
-            issues.append('variant feature leak')
+        required = ('office', 'repoql_dashboard', 'tencent_connector', 'kanzo', 'openmausbot', 'memory', 'repoql_mcp')
+        if (any(feature.get(key) is not True for key in required)
+                or feature.get('ghost') is not False or manifest.get('rustGhostFeature') is not False
+                or manifest.get('rustOfficeFeature') is not True):
+            issues.append('full Claude Code feature contract missing')
+        required_sources = ('native/windows/openmausbot/', 'connectors/kanzo/', 'connectors/memorycore/', 'dashboard/', 'office/', 'adapters/claude-code/')
+        if any(not any(name.startswith(prefix) for name in all_names) for prefix in required_sources):
+            issues.append('full Claude Code component source missing')
         names = set(all_names) - {'NATIVE_WINDOWS_SOURCE_MANIFEST.json'}
-        if any(windows_ghost_source(name) for name in names):
-            issues.append('Ghost source leaked into Windows source package')
+        if any(windows_retired_source(name) for name in names):
+            issues.append('Retired component entered Windows source package')
         if any(linux_deployment_asset(name) for name in names):
             issues.append('Linux/Docker deployment entrypoint in Windows source package')
         if manifest.get('no_wsl_required_for_intended_runtime') is True:
@@ -120,8 +123,6 @@ def scan(path):
                 if hashlib.sha256(z.read(name)).hexdigest() != digest:
                     issues.append('SHA256SUMS digest mismatch')
                     break
-        if not complete and any(n.startswith(OPTIONAL_MODULES['office']) for n in all_names):
-            issues.append('optional Office module leaked into lean variant')
         for member in all_names:
             if member.lower().endswith(('.exe', '.dll', '.msi', '.msix')):
                 issues.append('binary executable in source-only package')

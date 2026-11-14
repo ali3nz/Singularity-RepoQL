@@ -21,6 +21,8 @@
 // Scheduled generation reuses the existing host cron mechanism — this module
 // introduces NO daemon and NO scheduler (plan §2/§17).
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { nativeMemoryPolicyEnabled, nativeSynthesisValidation, NativeMemoryPolicyError } from "./native-memory-policy.mjs";
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { recordDerivation, recordLineageState, getDescendants, flags as lineageFlags, LINEAGE_DIR_DEFAULT } from "./memory-lineage.mjs";
@@ -48,7 +50,15 @@ export function validateSynthesisSpec(spec = {}) {
   if (!sources.length) problems.push("sourceClaimIds: synthesis requires at least one valid source claim (plan §14)");
   if (sources.length > MAX_SOURCES_PER_ITEM) problems.push(`sourceClaimIds: exceeds ${MAX_SOURCES_PER_ITEM}`);
   if (new Set(sources).size !== sources.length) problems.push("sourceClaimIds: duplicates not allowed");
-  return { ok: problems.length === 0, problems, type, summary, sources };
+  const original = { ok: problems.length === 0, problems, type, summary, sources };
+  if (!nativeMemoryPolicyEnabled()) return original;
+  // The original spec validator remains the runtime contract until native
+  // Windows differential acceptance. Native output cannot loosen provenance.
+  const native = nativeSynthesisValidation(spec);
+  if (!isDeepStrictEqual(native, original)) {
+    throw new NativeMemoryPolicyError("NATIVE_SYNTHESIS_MISMATCH");
+  }
+  return native;
 }
 
 // Persist one synthesis record: lineage sidecar (recordKind="synthesis",

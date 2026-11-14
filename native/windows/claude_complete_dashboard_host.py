@@ -7,7 +7,9 @@ connector contract before issuing a capability or binding the loopback server.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
+import re
 import os
 from pathlib import Path
 import stat
@@ -72,11 +74,26 @@ def _native_office_environment(source_root: Path, state_dir: Path, runtime_root:
     return env
 
 
+def _verified_route_binary(source_root: Path, digest: str, *, name='singularity-dashboard-routes.exe') -> str:
+    if not re.fullmatch(r'[0-9a-f]{64}', digest):
+        raise ValueError('DASHBOARD_RUST_ROUTE_DIGEST_INVALID')
+    binary = source_root.parent / 'bin' / name
+    _assert_no_reparse(binary)
+    if not binary.is_file() or not 1 <= binary.stat().st_size <= 100 * 1024 * 1024:
+        raise ValueError('DASHBOARD_RUST_ROUTE_BINARY_INVALID')
+    with binary.open('rb') as stream:
+        actual = hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            actual.update(chunk)
+    if actual.hexdigest() != digest:
+        raise ValueError('DASHBOARD_RUST_ROUTE_HASH_DRIFT')
+    return str(binary)
+
+
 def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, port: int, *, variant=2, windows=True,
                 native_bridge_exe: Path | None = None, ghost_control_config: Path | None = None,
-                native_runtime_root: Path | None = None, openmausbot_port: int = 18211):
-    if type(openmausbot_port) is not int or not 1024 <= openmausbot_port <= 65534:
-        raise ValueError('DASHBOARD_OPENMAUSBOT_PORT_INVALID')
+                native_runtime_root: Path | None = None, rust_route_sha256: str | None = None,
+                rust_listener_sha256: str | None = None, rust_unified_proxy_sha256: str | None = None):
     paths=(source_root,rql,workspace,state_dir)
     if not windows or not all(p.is_absolute() for p in paths):
         raise ValueError('NATIVE_WINDOWS_ABSOLUTE_PATH_REQUIRED')
@@ -99,13 +116,13 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         if not native_runtime_root.is_dir():
             raise ValueError('DASHBOARD_RUNTIME_ROOT_INVALID')
         runtime_root = native_runtime_root
-    if not (source_root/'dashboard/server.py').is_file() or not (source_root/'connectors/memorycore/manifest.yaml').is_file() or not (source_root/'connectors/kanzo/manifest.yaml').is_file():
+    if not (source_root/'dashboard/server.py').is_file() or not (source_root/'dashboard/dashboard_route_policy.py').is_file() or not (source_root/'dashboard/native_listener.py').is_file() or not (source_root/'connectors/memorycore/manifest.yaml').is_file() or not (source_root/'connectors/kanzo/manifest.yaml').is_file():
         raise ValueError('DASHBOARD_OR_CONNECTOR_SOURCE_MISSING')
     if rql.name.lower()!='rql.exe' or not rql.is_file() or not workspace.is_dir() or not state_dir.is_dir():
         raise ValueError('DASHBOARD_DEPENDENCY_MISSING')
     env = {
         'SINGULARITY_WINDOWS_NATIVE':'1',
-        'SINGULARITY_WINDOWS_OMB_PORT':str(openmausbot_port),
+        'SINGULARITY_WINDOWS_OMB_PORT':'18211',
         'SINGULARITY_LOCAL_ACCOUNT_AUTH':'1',
         'PYTHONDONTWRITEBYTECODE':'1',
         'SINGULARITY_INSTALL_VARIANT':str(variant),
@@ -125,6 +142,19 @@ def environment(source_root: Path, rql: Path, workspace: Path, state_dir: Path, 
         'UNIFIED_SERVICE_BASE':'http://127.0.0.1:18101',
         'UNIFIED_GATEWAY_TOKEN_FILE':str(state_dir / 'unified-gateway.token'),
     }
+    if rust_route_sha256 is not None:
+        if variant != 2:
+            raise ValueError('DASHBOARD_RUST_ROUTE_VARIANT_INVALID')
+        env['SINGULARITY_DASHBOARD_ROUTE_RUST_BINARY'] = _verified_route_binary(source_root, rust_route_sha256)
+    if rust_listener_sha256 is not None:
+        if variant != 2:
+            raise ValueError('DASHBOARD_RUST_LISTENER_VARIANT_INVALID')
+        env['SINGULARITY_DASHBOARD_NATIVE_LISTENER'] = _verified_route_binary(source_root, rust_listener_sha256, name='singularity-dashboard-listener.exe')
+    if rust_unified_proxy_sha256 is not None:
+        if variant != 2:
+            raise ValueError('DASHBOARD_RUST_PROXY_VARIANT_INVALID')
+        env['SINGULARITY_UNIFIED_PROXY_RUST_BINARY'] = _verified_route_binary(
+            source_root, rust_unified_proxy_sha256, name='singularity-unified-proxy.exe')
     # The native MemoryCore provisioning process creates this existing owner
     # identity. Do not mint a parallel dashboard key or copy a secret into the UI.
     # The path is derived from the staged user-owned runtime, not user input.
@@ -149,14 +179,22 @@ def main(argv=None):
         p.add_argument('--'+arg,required=True,type=Path)
     p.add_argument('--port',type=int,default=18100)
     p.add_argument('--variant',type=int,choices=(1,2,3,4),default=2)
-    p.add_argument('--openmausbot-port',type=int,default=18211)
     # Retained for older scheduled-task command lines; deliberately ignored.
     p.add_argument('--native-bridge-exe',type=Path)
     p.add_argument('--ghost-control-config',type=Path)
     p.add_argument('--native-runtime-root',type=Path)
+    p.add_argument('--rust-route-sha256')
+    p.add_argument('--rust-listener-sha256')
+    p.add_argument('--rust-unified-proxy-sha256')
     p.add_argument('--mode',choices=('serve','check'),default='serve')
     a=p.parse_args(argv)
-    env=environment(a.source_root,a.rql_exe,a.workspace,a.state_dir,a.port,variant=a.variant,windows=(os.name=='nt'), native_runtime_root=a.native_runtime_root, openmausbot_port=a.openmausbot_port)
+    env=environment(a.source_root,a.rql_exe,a.workspace,a.state_dir,a.port,variant=a.variant,windows=(os.name=='nt'), native_runtime_root=a.native_runtime_root,
+                    rust_route_sha256=a.rust_route_sha256, rust_listener_sha256=a.rust_listener_sha256,
+                    rust_unified_proxy_sha256=a.rust_unified_proxy_sha256)
+    # Only the task's staged digest opts in, not ambient global configuration.
+    os.environ.pop('SINGULARITY_DASHBOARD_ROUTE_RUST_BINARY', None)
+    os.environ.pop('SINGULARITY_DASHBOARD_NATIVE_LISTENER', None)
+    os.environ.pop('SINGULARITY_UNIFIED_PROXY_RUST_BINARY', None)
     os.environ.update(env)
     # Import only from the verified staged dashboard path, not from PATH or cwd.
     sys.path.insert(0,str(a.source_root/'dashboard'))

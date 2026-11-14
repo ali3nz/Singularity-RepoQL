@@ -1,3 +1,4 @@
+import { verifiedRustCompat } from "./rust-compat-policy.mjs";
 // lib/worker-completion.mjs — ticket 164 Wave-1 foundation (plan §7.5, §19.6).
 // Workers return machine-readable completion info BEFORE narrative prose; the
 // coordinator consumes THESE fields. A prose "done" never overrides a failed
@@ -75,7 +76,7 @@ export function validateWorkerCompletion(rec) {
 //  - a missing/invalid record (problems.length > 0)
 //  - a blocking known issue
 //  - status !== "complete"
-export function completionGateDecision({ found, completion, problems }) {
+function completionGateDecisionReference({ found, completion, problems }) {
   if (!found) return { allow: false, reason: "NO_COMPLETION_RECORD", advisory: "prose-only completion claims do not pass" };
   if (problems.length) return { allow: false, reason: "INVALID_COMPLETION_RECORD", detail: problems.join("; ") };
   if (completion.status !== "complete") return { allow: false, reason: `STATUS_${String(completion.status).toUpperCase()}` };
@@ -84,4 +85,11 @@ export function completionGateDecision({ found, completion, problems }) {
   const blocking = (completion.knownIssues ?? []).filter((k) => /block/i.test(String(k)));
   if (blocking.length) return { allow: false, reason: "BLOCKING_KNOWN_ISSUE", detail: blocking.join("; ").slice(0, 160) };
   return { allow: true, reason: "OK" };
+}
+
+// Preserve the coordinator's existing decision contract: the Rust port can
+// only supply the verdict if it exactly matches this independent reference.
+export function completionGateDecision(extraction) {
+  const expected = completionGateDecisionReference(extraction);
+  return verifiedRustCompat("worker.decision", { extraction }, expected);
 }

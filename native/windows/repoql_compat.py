@@ -150,7 +150,7 @@ def manifest_contract(path: Path, expected_scheme: str | None = None) -> tuple[d
 
 
 def preflight(*, binary: str | None = None, root: Path = ROOT, runner=subprocess.run,
-              system: str | None = None) -> dict:
+              system: str | None = None, rust_binary: Path | None = None) -> dict:
     system = system or sys.platform
     windows = system == "win32"
     chosen = binary or os.environ.get("SINGULARITY_RQL_EXE") or shutil.which("rql.exe" if windows else "rql")
@@ -189,6 +189,34 @@ def preflight(*, binary: str | None = None, root: Path = ROOT, runner=subprocess
     report["actual_version"] = actual
     if actual != REQUIRED_VERSION:
         report["errors"].append(f"unsupported RepoQL version {actual or 'unknown'}: pinned to {REQUIRED_VERSION}; connector installation BLOCKED")
+    # Optional native Rust check is an additional mandatory verdict, not a
+    # substitute for this live source and installed-binary verification.
+    # The Rust binary bundles reviewed connector manifests at compile time;
+    # Python also checks the current project source to catch drift.
+    if rust_binary is not None and not report["errors"]:
+        native = Path(rust_binary)
+        if not windows or not native.is_absolute() or not native.is_file() or native.is_symlink():
+            report["errors"].append("native Rust RepoQL preflight binary is unverified")
+        else:
+            try:
+                native_result = subprocess.run(
+                    [str(native), "repoql-preflight", "--rql", str(chosen)],
+                    capture_output=True, text=True, timeout=14, check=False,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                native_json = json.loads(native_result.stdout)
+                expected_true = ("ok", "kanzo_contract_compatible",
+                                 "memorycore_contract_compatible", "native_binary",
+                                 "connector_installation_allowed")
+                passed = (native_result.returncode == 0 and isinstance(native_json, dict)
+                          and all(native_json.get(key) is True for key in expected_true)
+                          and native_json.get("required_version") == REQUIRED_VERSION
+                          and native_json.get("actual_version") == actual
+                          and native_json.get("required_connector_contract") == REQUIRED_CONNECTOR_CONTRACT)
+            except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError):
+                passed = False
+            if not passed:
+                report["errors"].append("native Rust RepoQL preflight failed; connector installation blocked")
     report["ok"] = not report["errors"]
     return report
 
@@ -196,8 +224,9 @@ def preflight(*, binary: str | None = None, root: Path = ROOT, runner=subprocess
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Read-only native RepoQL 1.7.18 connector preflight")
     parser.add_argument("--rql", default=None, help="Path to externally installed rql.exe")
+    parser.add_argument("--rust-binary", type=Path, help="opt-in compiled native desktop bridge RepoQL preflight")
     args = parser.parse_args(argv)
-    result = preflight(binary=args.rql)
+    result = preflight(binary=args.rql, rust_binary=args.rust_binary)
     print(json.dumps(result, indent=2))
     return 0 if result["ok"] else 2
 

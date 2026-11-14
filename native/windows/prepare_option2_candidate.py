@@ -20,7 +20,7 @@ import tempfile
 import zipfile
 
 from build_option2_acceptance_bundle import (
-    BRIDGE, SUPERVISOR, SOURCE, BUNDLE_FILES, check_acceptance_bundle,
+    SOURCE, BUNDLE_FILES, binary_entries, check_acceptance_bundle,
 )
 from scan_source_archive import scan
 
@@ -29,7 +29,7 @@ OUTPUT_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$')
 RESERVED_OUTPUTS = {'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'} | {
     f'{prefix}{n}' for prefix in ('COM', 'LPT') for n in range(1, 10)
 }
-MAX_BUNDLE_BYTES = 220 * 1024 * 1024
+MAX_BUNDLE_BYTES = 1004 * 1024 * 1024
 
 
 def _digest(content: bytes) -> str:
@@ -111,7 +111,7 @@ def prepare(candidate: Path, destination: Path, *, native_windows: bool | None =
         source_bytes = outer.read(BUNDLE_FILES[SOURCE])
         if not scan(io.BytesIO(source_bytes)).get('ok'):
             raise ValueError('SOURCE_INVENTORY_INVALID')
-        binary_bytes = {name: outer.read(BUNDLE_FILES[name]) for name in (BRIDGE, SUPERVISOR)}
+        binary_bytes = {name: outer.read(entry) for name, entry in binary_entries(outer.namelist()).items()}
         with zipfile.ZipFile(io.BytesIO(source_bytes)) as nested:
             manifest = json.loads(nested.read('NATIVE_WINDOWS_SOURCE_MANIFEST.json'))
             inventory = {row['path']: row for row in manifest['files']}
@@ -123,7 +123,7 @@ def prepare(candidate: Path, destination: Path, *, native_windows: bool | None =
             try:
                 (pending / 'bin').mkdir()
                 (pending / 'source').mkdir()
-                for name in (BRIDGE, SUPERVISOR):
+                for name in binary_bytes:
                     (pending / 'bin' / name).write_bytes(binary_bytes[name])
                 for name, row in sorted(inventory.items()):
                     target = pending / 'source' / Path(*name.split('/'))
@@ -143,7 +143,7 @@ def prepare(candidate: Path, destination: Path, *, native_windows: bool | None =
                     nested.read('NATIVE_WINDOWS_SOURCE_MANIFEST.json'))
                 prepared = dict(result)
                 prepared['status'] = 'PREPARED_ONLY_NOT_STAGED_NOT_INSTALLED'
-                prepared['prepared_file_count'] = len(inventory) + 3
+                prepared['prepared_file_count'] = len(inventory) + len(binary_bytes) + 1
                 (pending / 'PREPARATION_RECEIPT.json').write_text(
                     json.dumps(prepared, indent=2, sort_keys=True) + '\n', encoding='utf-8')
                 _assert_no_reparse(destination)

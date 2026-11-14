@@ -33,9 +33,9 @@ fn temp_path(path: &Path) -> PathBuf {
     ))
 }
 
-fn sync_parent(path: &Path) -> Result<(), String> {
+fn sync_parent(_path: &Path) -> Result<(), String> {
     #[cfg(unix)]
-    if let Some(parent) = path.parent() {
+    if let Some(parent) = _path.parent() {
         File::open(parent)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
@@ -67,16 +67,28 @@ fn commit_temp(temp: &Path, path: &Path) -> Result<(), String> {
         return fs::rename(temp, path).map_err(|e| e.to_string());
     }
     let wide = |p: &Path| -> Vec<u16> {
-        p.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+        p.as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     };
     let target = wide(path);
     let source = wide(temp);
     let rc = unsafe {
-        ReplaceFileW(target.as_ptr(), source.as_ptr(), std::ptr::null(),
-                     0, std::ptr::null_mut(), std::ptr::null_mut())
+        ReplaceFileW(
+            target.as_ptr(),
+            source.as_ptr(),
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
     };
     if rc == 0 {
-        Err(format!("STATE_ATOMIC_REPLACE_FAILED: {}", std::io::Error::last_os_error()))
+        Err(format!(
+            "STATE_ATOMIC_REPLACE_FAILED: {}",
+            std::io::Error::last_os_error()
+        ))
     } else {
         Ok(())
     }
@@ -97,6 +109,8 @@ pub(crate) fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         file.write_all(data).map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
+        // ReplaceFileW needs the replacement's write handle closed first.
+        drop(file);
         commit_temp(&temp, path)?;
         sync_parent(path)
     })();
@@ -330,6 +344,39 @@ mod tests {
             now_ms()
         ))
     }
+    #[test]
+    fn atomic_write_replaces_existing_bytes() {
+        let root = dir("atomic-replace");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("state.json");
+        atomic_write(&path, b"old").unwrap();
+        atomic_write(&path, b"new").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"new");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn atomic_write_preserves_old_bytes_when_replacement_is_blocked() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = dir("atomic-blocked");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("state.json");
+        atomic_write(&path, b"old").unwrap();
+        let blocker = OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&path)
+            .unwrap();
+        let error = atomic_write(&path, b"new").unwrap_err();
+        assert!(error.starts_with("STATE_ATOMIC_REPLACE_FAILED:"));
+        drop(blocker);
+        assert_eq!(fs::read(&path).unwrap(), b"old");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn revision_compare_and_swap_blocks_stale() {
         let path = dir("cas");

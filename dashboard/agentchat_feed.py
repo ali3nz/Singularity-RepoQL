@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 from pathlib import Path
 
 def default_state_root(*, platform=None, env=None, home=None):
@@ -79,7 +80,7 @@ def _files(root: Path):
     return result[:MAX_FILES]
 
 
-def read_feed(after=0, limit=80, *, root: Path | None = None) -> dict:
+def _read_feed_python(after=0, limit=80, *, root: Path | None = None) -> dict:
     root = root if root is not None else ROOT
     if not root.is_dir():
         return {'available': False, 'reason': 'Agent Chat state directory unavailable',
@@ -121,7 +122,7 @@ def read_feed(after=0, limit=80, *, root: Path | None = None) -> dict:
             'source': 'durable-inbox', 'read_only': True}
 
 
-def read_presence(*, root: Path | None = None, now=None) -> dict:
+def _read_presence_python(*, root: Path | None = None, now=None) -> dict:
     """Return recent observed sender roles, never asserting actual worker activity."""
     from datetime import datetime, timezone, timedelta
     root = root if root is not None else ROOT
@@ -152,3 +153,49 @@ def read_presence(*, root: Path | None = None, now=None) -> dict:
         for role, when in sorted(observed.items())
     ], 'source': 'durable-inbox-recent-senders', 'read_only': True,
         'working_status_verified': False}
+
+
+def _native_checked(mode: str, root: Path, args: list[str], reference: dict) -> dict:
+    """Explicit read-only Rust opt-in, checked against Python before display.
+
+    A failed or mismatching native projection cannot add unexpected messages
+    or forge a sender-presence status. No network or cursor writes occur here.
+    """
+    binary = os.environ.get('SINGULARITY_AGENTCHAT_RUST_BINARY', '')
+    if not binary:
+        return reference
+    executable = Path(binary)
+    if (not executable.is_absolute() or executable.is_symlink()
+            or not executable.is_file() or not root.is_absolute()):
+        raise RuntimeError('agentchat_native_binary_invalid')
+    try:
+        result = subprocess.run([str(executable), mode, str(root), *args],
+                                capture_output=True, text=True, timeout=5,
+                                check=False, shell=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('agentchat_native_execution_failed') from exc
+    if result.returncode or len(result.stdout) > 2 * 1024 * 1024:
+        raise RuntimeError('agentchat_native_execution_failed')
+    try:
+        actual = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError('agentchat_native_invalid_json') from exc
+    if actual != reference:
+        raise RuntimeError('agentchat_native_mismatch')
+    return actual
+
+
+def read_feed(after=0, limit=80, *, root: Path | None = None) -> dict:
+    root = root if root is not None else ROOT
+    reference = _read_feed_python(after, limit, root=root)
+    # Match the same bounds and cursor as the authoritative Python projection.
+    return _native_checked('feed', root, [str(max(0, int(after))),
+                                         str(min(150, max(1, int(limit))))], reference)
+
+
+def read_presence(*, root: Path | None = None, now=None) -> dict:
+    from datetime import datetime, timezone
+    root = root if root is not None else ROOT
+    instant = now if now is not None else datetime.now(timezone.utc)
+    reference = _read_presence_python(root=root, now=instant)
+    return _native_checked('presence', root, [instant.isoformat()], reference)

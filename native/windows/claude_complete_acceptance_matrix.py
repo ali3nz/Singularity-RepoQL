@@ -16,6 +16,8 @@ from pathlib import Path
 import re
 import stat
 
+from rust_release_policy import checked_policy
+
 SCHEMA = 'singularity-claude-complete-acceptance-evidence/v1'
 RECEIPT_SCHEMA = 'singularity-claude-complete-gate-evidence/v1'
 MAX_RECEIPT = 8192
@@ -111,7 +113,7 @@ def matrix(evidence_dir: Path | None = None) -> dict:
         rows = [_read_gate(evidence_dir, gate) for gate in GATES]
     statuses = [row['status'] for row in rows]
     commits = {row.get('source_commit') for row in rows if row['status'] != 'NOT_RUN'}
-    return {
+    reference = {
         'schema': SCHEMA,
         'scope': 'Claude Code Complete native Windows',
         'required_gates': len(GATES),
@@ -123,6 +125,7 @@ def matrix(evidence_dir: Path | None = None) -> dict:
         'release_ready': False,
         'gate_results': rows,
     }
+    return checked_policy('acceptance-matrix-stdin', {'gateResults': rows}, reference)
 
 
 def main() -> int:

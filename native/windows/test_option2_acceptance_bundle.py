@@ -84,6 +84,14 @@ class CandidateTests(unittest.TestCase):
                 self.assembled()
             self.assertFalse(self.out.exists())
 
+    def test_rejects_invalid_optional_windowless_binary(self):
+        windowless = self.dir / assembler.SUPERVISORW
+        windowless.write_bytes(pe(0x14c))
+        with self.assertRaisesRegex(ValueError, 'NOT_AMD64_PE'):
+            assembler.assemble(self.src, self.bridge, self.supervisor, self.out,
+                               native_windows=True, supervisorw_exe=windowless)
+        self.assertFalse(self.out.exists())
+
     def test_rejects_symlink_input(self):
         other=self.dir/'real.exe'
         other.write_bytes(pe())
@@ -159,9 +167,9 @@ class CandidateTests(unittest.TestCase):
 
     def test_rejects_wrong_source_profile(self):
         variant_one=self.dir/'singularity-native-windows-option2-SOURCE-ONLY.zip'
-        build(1,variant_one)
-        with self.assertRaisesRegex(ValueError,'SOURCE_ARCHIVE_NOT_OPTION2_SOURCE_ONLY'):
-            assembler.assemble(variant_one,self.bridge,self.supervisor,self.out,native_windows=True)
+        with self.assertRaisesRegex(ValueError,'only Claude Code Full'):
+            build(1,variant_one)
+        self.assertFalse(variant_one.exists())
 
 
 if __name__=='__main__':unittest.main()

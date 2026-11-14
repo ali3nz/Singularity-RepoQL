@@ -28,6 +28,15 @@ ROUTES = {
     ('POST', '/api/unified/tencent/invoke'): '/v1/tencent/invoke',
 }
 
+NATIVE_ROUTES = {
+    ('GET', '/api/unified/health'): 'health',
+    ('GET', '/api/unified/graph'): 'graph',
+    ('GET', '/api/unified/usage'): 'usage',
+    ('GET', '/api/unified/openrouter'): 'openrouter',
+    ('GET', '/api/unified/tencent/catalog'): 'tencent_catalog',
+    ('POST', '/api/unified/tencent/invoke'): 'tencent_invoke',
+}
+
 # Stale-while-revalidate cache for the slow (~10 s, ~0.6 MB) graph route only.
 GRAPH_FRESH_S = 60
 GRAPH_STALE_S = 900
@@ -261,6 +270,9 @@ def _fetch_upstream(method, path, params=None, body=None):
     local_error = _native_origin_failure()
     if local_error is not None:
         return local_error
+    native = os.environ.get('SINGULARITY_UNIFIED_PROXY_RUST_BINARY')
+    if native and os.environ.get('SINGULARITY_WINDOWS_NATIVE') == '1':
+        return _native_fetch(native, host, port, method, path, params, body)
     try:
         secret = SECRET_FILE.read_text(encoding='utf-8').strip()
     except OSError:
@@ -300,3 +312,47 @@ def _fetch_upstream(method, path, params=None, body=None):
         return json.loads(raw)
     except (ValueError, UnicodeDecodeError):
         return {'available': False, 'error': 'unified_invalid_response'}
+
+
+def _native_fetch(binary, host, port, method, path, params, body):
+    from native_listener import trusted_binary
+
+    route = NATIVE_ROUTES.get((method, path))
+    if route is None:
+        raise FileNotFoundError('unknown unified route')
+    failure = {'available': False, 'error': 'unified_native_transport_unavailable'}
+    try:
+        executable = trusted_binary(binary)
+        frame = json.dumps({
+            'host': host, 'port': port, 'route': route,
+            'token_file': str(SECRET_FILE.absolute()),
+            'query': urlencode(params or {}) if method == 'GET' else '',
+            'body': json.dumps(body or {}) if method == 'POST' else None,
+        }, separators=(',', ':')).encode('utf-8')
+        if len(frame) > 6 * 1024 * 1024:
+            return failure
+        safe_env = {k:v for k,v in os.environ.items() if k.upper() in {'SYSTEMROOT','WINDIR'}}
+        result = subprocess.run([str(executable)], input=frame, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, env=safe_env, shell=False, check=False,
+                                timeout=78 if route == 'graph' else 21,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if result.returncode or len(result.stdout) > 12 * 1024 * 1024:
+            return failure
+        output = json.loads(result.stdout)
+        if type(output) is not dict:
+            return failure
+        if output.get('ok') is True and set(output) == {'ok','payload'}:
+            return output['payload']
+        if output.get('available') is False and set(output) == {'available','error'}:
+            code = output['error']
+            if code in {'unified_native_request_refused','unified_gateway_not_configured',
+                        'unified_service_unavailable','unified_upstream_redirect_refused',
+                        'unified_response_too_large','unified_invalid_response'}:
+                return output
+            if isinstance(code, str) and code.startswith('unified_http_'):
+                status = code.removeprefix('unified_http_')
+                if len(status) == 3 and status.isascii() and status.isdecimal():
+                    return output
+    except (ValueError, TypeError, OSError, subprocess.SubprocessError):
+        pass
+    return failure

@@ -1,0 +1,21 @@
+[package]
+name = "singularity-memory-parity"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+description = "Source-only Rust migration of pure Singularity Windows memory policies"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["now", "std"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[[bin]]
+name = "singularity-memory-turn-capture"
+path = "src/bin/memory-turn-capture.rs"
+
+[[bin]]
+name = "singularity-memory-parity"
+path = "src/main.rs"
